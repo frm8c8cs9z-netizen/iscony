@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.log
+media/
+staticfiles/
+.agents/
+.codex/
+Stage対応CSV/
+stpro_LeagueEntryへ方針転換前/
+*.dump
+*.sqlite3
+*.zip
+*.html.[0-9][0-9][0-9]

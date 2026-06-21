@@ -1,0 +1,63 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    {{ group.category.name }}
+    {{ group.name }}リーグ 順位入力
+</h2>
+
+<form method="post">
+    {% csrf_token %}
+
+    <table>
+        <tr>
+            <th>枠番号</th>
+            <th>所属</th>
+            <th>選手</th>
+            <th>勝</th>
+            <th>敗</th>
+            <th>順位</th>
+        </tr>
+
+        {% for ranking in rankings %}
+        <tr>
+            <td>{{ ranking.pair.code }}</td>
+            <td>{{ ranking.pair.display_organization }}</td>
+            <td>
+                {{ ranking.pair.display_name }}
+            </td>
+            <td>{{ ranking.wins }}</td>
+            <td>{{ ranking.losses }}</td>
+            <td>
+                <input
+                    type="number"
+                    name="rank_{{ ranking.id }}"
+                    value="{{ ranking.rank|default_if_none:'' }}"
+                    min="1"
+                    style="width:70px; text-align:center;"
+                >
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <button type="submit">
+        順位を保存
+    </button>
+    <button
+        type="submit"
+        name="recalculate"
+        value="1"
+    >
+        このリーグを再計算
+    </button>
+</form>
+
+<p>
+    <a href="{% url 'category_detail' group.category.id %}">
+        戻る
+    </a>
+</p>
+
+{% endblock %}

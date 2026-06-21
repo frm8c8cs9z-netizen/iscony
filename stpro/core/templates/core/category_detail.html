@@ -1,0 +1,300 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+{{ category.name }}
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    {{ category.name }}
+</h2>
+<p>
+
+    <a href="{% url 'calculate_category_ranking' category.id %}">
+        順位計算
+    </a>
+
+</p>
+<p>
+
+    <a href="{% url 'generate_group_matches' category.id %}">
+        リーグ戦生成
+    </a>
+
+</p>
+<p>
+
+    <a href="{% url 'schedule_view' tournament.code %}">
+        試合進行表
+    </a>
+
+</p>
+
+{% for data in group_data %}
+
+<div class="group-box" id="group-{{ data.group.id }}">
+
+    <h3>
+        {{ data.group.name }}リーグ
+    </h3>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <tr>
+
+                <th></th>
+                <th></th>
+
+                {% for pair in data.pairs %}
+
+                    <th class="{% if pair.retired %}retired-pair{% endif %}">
+                        {{ pair.pair_code }}
+                    </th>
+
+                {% endfor %}
+
+                <th>勝</th>
+                <th>敗</th>
+                <th>順位</th>
+
+            </tr>
+
+            {% for row in data.table_rows %}
+
+            <tr>
+
+                <th class="{% if row.pair.retired %}retired-pair{% endif %}">
+
+                    {% if row.pair and row.pair.id %}
+
+                        {% if row.pair.retired %}
+                            <span style="color:red;">{{ row.pair.pair_code }}</span>
+                        {% else %}
+                            <a
+                                href="{% url 'retire_pair' row.pair.id %}"
+                                onclick="return confirm('本当にこのペアをリタイア扱いにしますか？未入力試合は相手の勝ちになります。');"
+                            >
+                                {{ row.pair.pair_code }}
+                            </a>
+                        {% endif %}
+
+                    {% endif %}
+
+                </th>
+                <th class="{% if row.pair.retired %}retired-pair{% endif %}">
+                    {{ row.pair.display_name}}<br>
+                    ({{ row.pair.display_organization}})<br>
+                </th>
+
+                {% for score in row.scores %}
+
+                    {% if score.type == "self" %}
+
+                        <td class="self-cell">
+                            -
+                        </td>
+
+                    {% else %}
+ 
+                        <td class="{{ score.type }} hover-cell">
+
+                            {% if score.match %}
+                                <!--x
+                                <a href="{% url 'input_match_score' score.match.id %}" class="score-link">
+                                -->
+                                    <a
+                                    href="{% url 'input_match_score' score.match.id %}?next={% url 'category_detail' category.id %}#group-{{ data.group.id }}"
+                                    class="score-link"
+                                >
+                                    {% if score.retired_self %}
+                                        R
+                                    {% else %}
+                                        {{ score.value|default_if_none:"" }}
+                                    {% endif %}
+                                </a>
+
+                            {% else %}
+
+                                {{ score.value }}
+
+                            {% endif %}
+
+                        </td>
+
+                    {% endif %}
+
+                {% endfor %}
+
+                {% if row.ranking %}
+
+                    <td>
+                        {{ row.ranking.wins }}
+                    </td>
+
+                    <td>
+                        {{ row.ranking.losses }}
+                    </td>
+
+                    <td>
+                        {{ row.ranking.rank|default_if_none:"" }}
+                    </td>
+
+                {% else %}
+
+                    <td colspan="3">
+                        未集計
+                    </td>
+
+                {% endif %}
+
+            </tr>
+
+            {% endfor %}
+
+        </table>
+        <p>
+            <a href="{% url 'edit_group_ranking' data.group.id %}">
+                順位入力
+            </a>
+        </p>
+
+{% for tie_table in data.tie_tables %}
+
+    <h4>
+        同率順位決定補助表
+        （{{ tie_table.wins }}勝）
+    </h4>
+
+    <table border="1">
+
+        <tr>
+            <th></th>
+            <th></th>
+
+            {% for pair in tie_table.pairs %}
+                <th>
+                    {{ pair.pair_code }}
+                </th>
+            {% endfor %}
+
+            <th>得</th>
+            <th>失</th>
+            <th>差</th>
+        </tr>
+
+        {% for row in tie_table.rows %}
+
+            <tr>
+                <th>
+                    {{ row.pair.pair_code }}
+                </th>
+
+                <th>
+                    {{ row.pair.display_name }}
+                    <br>
+                    ({{ row.pair.display_organization }})
+                </th>
+
+                {% for score in row.scores %}
+
+                    {% if score.type == "self" %}
+                        <td class="self-cell">-</td>
+                    {% else %}
+                        <td class="{{ score.type }}">
+                            {{ score.value|default_if_none:"" }}
+                        </td>
+                    {% endif %}
+
+                {% endfor %}
+
+                <td>{{ row.stat.games_won }}</td>
+                <td>{{ row.stat.games_lost }}</td>
+                <td>{{ row.stat.game_diff }}</td>
+            </tr>
+
+        {% endfor %}
+
+    </table>
+
+{% endfor %}
+
+
+
+
+    </div>
+
+</div>
+
+{% endfor %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const tables = document.querySelectorAll("table");
+
+    tables.forEach(function (table) {
+
+        const hoverCells = table.querySelectorAll("td.hover-cell");
+
+        hoverCells.forEach(function (cell) {
+
+            cell.addEventListener("mouseenter", function () {
+
+                const row = cell.parentElement;
+
+                const rowIndex = row.rowIndex;
+
+                const cellIndex = cell.cellIndex;
+
+                // -----------------------------
+                // 行全体
+                // -----------------------------
+                row.querySelectorAll("th, td").forEach(function (el) {
+                    el.classList.add("hover-row");
+                });
+
+                // -----------------------------
+                // 列全体
+                // -----------------------------
+                table.querySelectorAll("tr").forEach(function (tr) {
+
+                    const target = tr.children[cellIndex];
+
+                    if (target) {
+                        target.classList.add("hover-col");
+                    }
+
+                });
+
+                // -----------------------------
+                // セル自身
+                // -----------------------------
+                cell.classList.add("hover-current");
+
+            });
+
+            cell.addEventListener("mouseleave", function () {
+
+                table.querySelectorAll(".hover-row").forEach(function (el) {
+                    el.classList.remove("hover-row");
+                });
+
+                table.querySelectorAll(".hover-col").forEach(function (el) {
+                    el.classList.remove("hover-col");
+                });
+
+                table.querySelectorAll(".hover-current").forEach(function (el) {
+                    el.classList.remove("hover-current");
+                });
+
+            });
+
+        });
+
+    });
+
+});
+</script>
+{% endblock %}

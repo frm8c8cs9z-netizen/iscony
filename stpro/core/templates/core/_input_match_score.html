@@ -1,0 +1,158 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>リーグ試合結果入力</h2>
+
+<p>
+    {{ match.group.category.name }} /
+    {{ match.group.name }}リーグ
+</p>
+
+<p>
+    {{ match.match_games }}ゲームマッチ
+    （{{ winning_games }}ゲーム先取）
+</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    <table>
+        <tr>
+            <td id="pair1_box">
+                <strong>{{ match.pair1.code }}</strong><br>
+                {{ match.pair1.dispaly_player1_name }}<br>
+                {{ match.pair1.display_player2_name }}<br>
+                （{{ match.pair1.display_organization }}）<br>
+
+                <button type="button" onclick="setWinner('pair1')">
+                    勝ち
+                </button>
+            </td>
+
+            <td>
+                <input
+                    type="number"
+                    id="pair1_games"
+                    name="pair1_games"
+                    min="0"
+                    max="{{ winning_games }}"
+                    value="{{ match.pair1_games|default_if_none:'' }}"
+                    class="score-input"
+                >
+            </td>
+
+            <td rowspan="2">vs</td>
+
+            <td>
+                <input
+                    type="number"
+                    id="pair2_games"
+                    name="pair2_games"
+                    min="0"
+                    max="{{ winning_games }}"
+                    value="{{ match.pair2_games|default_if_none:'' }}"
+                    class="score-input"
+                >
+            </td>
+
+            <td id="pair2_box">
+                <strong>{{ match.pair2.code }}</strong><br>
+                {{ match.pair2.display_player1_name }}<br>
+                {{ match.pair2.display_player2_name }}<br>
+                （{{ match.pair2.display_organization }}）<br>
+
+                <button type="button" onclick="setWinner('pair2')">
+                    勝ち
+                </button>
+            </td>
+        </tr>
+    </table>
+
+    <p>
+        <button type="submit" name="action" value="save" class="primary-button">
+            保存
+        </button>
+
+        {% if match.pair1_games != None and match.pair2_games != None %}
+            <button
+                type="submit"
+                name="action"
+                value="delete"
+                class="danger-button"
+                onclick="return confirm('結果を削除しますか？');"
+            >
+                結果削除
+            </button>
+        {% endif %}
+    </p>
+</form>
+
+<style>
+.score-input {
+    width: 80px;
+    font-size: 28px;
+    text-align: center;
+}
+
+.winner-box {
+    background: #e8ffe8;
+    border: 2px solid #2e8b57;
+}
+
+.loser-box {
+    opacity: 0.75;
+}
+
+.primary-button {
+    font-size: 18px;
+    padding: 8px 24px;
+}
+
+.danger-button {
+    margin-left: 16px;
+    color: #b00020;
+}
+</style>
+
+<script>
+function setWinner(winner) {
+    const winningGames = {{ winning_games }};
+
+    const pair1Input = document.getElementById("pair1_games");
+    const pair2Input = document.getElementById("pair2_games");
+
+    const pair1Box = document.getElementById("pair1_box");
+    const pair2Box = document.getElementById("pair2_box");
+
+    pair1Input.readOnly = false;
+    pair2Input.readOnly = false;
+
+    pair1Box.classList.remove("winner-box", "loser-box");
+    pair2Box.classList.remove("winner-box", "loser-box");
+
+    if (winner === "pair1") {
+        pair1Input.value = winningGames;
+        pair2Input.value = "";
+
+        pair1Input.readOnly = true;
+        pair2Input.focus();
+
+        pair1Box.classList.add("winner-box");
+        pair2Box.classList.add("loser-box");
+    }
+
+    if (winner === "pair2") {
+        pair2Input.value = winningGames;
+        pair1Input.value = "";
+
+        pair2Input.readOnly = true;
+        pair1Input.focus();
+
+        pair2Box.classList.add("winner-box");
+        pair1Box.classList.add("loser-box");
+    }
+}
+</script>
+
+{% endblock %}

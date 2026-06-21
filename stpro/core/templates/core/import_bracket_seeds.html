@@ -1,0 +1,32 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>トーナメント1回戦ペアCSV取込</h2>
+
+<p>
+    {{ bracket.category.name }} /
+    {{ bracket.name }}
+</p>
+
+{% if errors %}
+    <ul style="color:red;">
+        {% for error in errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        取込
+    </button>
+
+</form>
+
+{% endblock %}

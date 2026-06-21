@@ -1,0 +1,96 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+トーナメント進行
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    {{ bracket.category.name }}
+    /
+    {{ bracket.name }}
+    コート進行
+</h2>
+
+<table border="1">
+
+    <tr>
+        <th>コート</th>
+        <th>試合順</th>
+        <th>回戦</th>
+        <th>対戦</th>
+        <th>スコア</th>
+    </tr>
+
+    {% for schedule in schedules %}
+
+    {% with match=schedule.tournament_match %}
+
+    <tr>
+
+        <td>
+            {{ schedule.court.name }}
+        </td>
+
+        <td>
+            {{ schedule.order }}
+        </td>
+
+        <td>
+            {{ match.round_number }}回戦
+        </td>
+
+        <td>
+
+            {% if match.pair1 %}
+                {{ match.pair1.code }}
+            {% else %}
+                未定
+            {% endif %}
+
+            vs
+
+            {% if match.pair2 %}
+                {{ match.pair2.code }}
+            {% else %}
+                未定
+            {% endif %}
+
+        </td>
+
+        <td>
+
+            {% if match.pair1_games != None and match.pair2_games != None %}
+
+                {{ match.pair1_games }}
+                -
+                {{ match.pair2_games }}
+
+            {% else %}
+
+                未入力
+
+            {% endif %}
+
+        </td>
+
+    </tr>
+
+    {% endwith %}
+
+    {% empty %}
+
+    <tr>
+
+        <td colspan="5">
+            試合がありません
+        </td>
+
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+{% endblock %}

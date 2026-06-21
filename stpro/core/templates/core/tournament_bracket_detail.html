@@ -1,0 +1,180 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+{{ bracket.category.name }} / {{ bracket.name }}
+{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>
+            {{ bracket.category.name }} / {{ bracket.name }}
+        </h2>
+        <p class="subtle-text">
+            {{ tournament.name }}
+        </p>
+    </div>
+
+    <div class="action-row">
+        <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
+            メンテナンス
+        </a>
+        <a
+            href="{% url 'tournament_first_round_score_sheets_pdf' tournament.code bracket.id %}"
+            target="_blank"
+        >
+            1回戦採点票PDF
+        </a>
+    </div>
+</div>
+
+{% if round_data %}
+
+    <div class="bracket-scroll">
+        <div class="tournament-bracket">
+
+            {% for round in round_data %}
+
+                <section class="bracket-round {% if forloop.last %}last-round{% endif %}">
+
+                    <h3>
+                        {{ round.label }}
+                    </h3>
+
+                    <div class="round-matches">
+
+                        {% for match in round.matches %}
+
+                            <article class="bracket-match {% if match.match_code|slice:':1' == 'S' %}seed-match{% endif %}">
+
+                                <div class="match-header">
+                                    <span>
+                                        {{ match.match_label|default:match.match_code }}
+                                    </span>
+
+                                    {% if match.pair1_games != None and match.pair2_games != None %}
+                                        <span class="match-status finished-status">
+                                            完了
+                                        </span>
+                                    {% elif match.match_code|slice:":1" == "S" %}
+                                        <span class="match-status seed-status">
+                                            シード
+                                        </span>
+                                    {% elif not match.pair1 or not match.pair2 %}
+                                        <span class="match-status pending-status">
+                                            未確定
+                                        </span>
+                                    {% else %}
+                                        <span class="match-status ready-status">
+                                            入力待ち
+                                        </span>
+                                    {% endif %}
+                                </div>
+
+                                {% if match.match_code|slice:":1" != "S" or match.pair1 %}
+                                    <div class="entry-row {% if match.winner == match.pair1 %}winner{% endif %}">
+                                        <div class="entry-seed">
+                                            {% if match.pair1 %}
+                                                {{ match.pair1.display_order }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="entry-main">
+                                            {% if match.pair1 %}
+                                                <div class="entry-name">
+                                                    {{ match.pair1.display_name }}
+                                                </div>
+                                                <div class="entry-meta">
+                                                    {{ match.pair1.display_organization }}
+                                                </div>
+                                            {% else %}
+                                                <div class="bye">
+                                                    bye
+                                                </div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="entry-score">
+                                            {{ match.pair1_games|default_if_none:"" }}
+                                        </div>
+                                    </div>
+                                {% endif %}
+
+                                {% if match.match_code|slice:":1" != "S" or match.pair2 %}
+                                    <div class="entry-row {% if match.winner == match.pair2 %}winner{% endif %}">
+                                        <div class="entry-seed">
+                                            {% if match.pair2 %}
+                                                {{ match.pair2.display_order }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="entry-main">
+                                            {% if match.pair2 %}
+                                                <div class="entry-name">
+                                                    {{ match.pair2.display_name }}
+                                                </div>
+                                                <div class="entry-meta">
+                                                    {{ match.pair2.display_organization }}
+                                                </div>
+                                            {% else %}
+                                                <div class="bye">
+                                                    bye
+                                                </div>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="entry-score">
+                                            {{ match.pair2_games|default_if_none:"" }}
+                                        </div>
+                                    </div>
+                                {% endif %}
+
+                                <div class="match-actions">
+                                    {% if match.match_code|slice:":1" == "S" %}
+                                        <span>
+                                            シード通過
+                                        </span>
+                                    {% elif match.pair1 and match.pair2 %}
+                                        <a href="{% url 'input_tournament_match_score' tournament.code match.id %}">
+                                            結果入力
+                                        </a>
+                                        <a
+                                            href="{% url 'tournament_match_score_sheet_pdf' tournament.code match.id %}"
+                                            target="_blank"
+                                        >
+                                            採点票PDF
+                                        </a>
+                                    {% else %}
+                                        <span>
+                                            対戦未確定
+                                        </span>
+                                    {% endif %}
+                                </div>
+
+                            </article>
+
+                        {% endfor %}
+
+                    </div>
+
+                </section>
+
+            {% endfor %}
+
+        </div>
+    </div>
+
+{% else %}
+
+    <p>
+        トーナメント枠がありません。
+    </p>
+
+{% endif %}
+
+{% endblock %}

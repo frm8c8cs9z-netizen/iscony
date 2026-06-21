@@ -1,0 +1,43 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>{{ category.name }} リーグ枠メンテナンス</h2>
+
+<table>
+    <tr>
+        <th>リーグ</th>
+        <th>順</th>
+        <th>No</th>
+        <th>所属</th>
+        <th>選手</th>
+        <th>状態</th>
+        <th>編集</th>
+    </tr>
+
+    {% for pair in pairs %}
+    <tr>
+        <td>{{ pair.group.name }}</td>
+        <td>{{ pair.display_order }}</td>
+        <td>{{ pair.code }}</td>
+        <td>{{ pair.display_organization }}</td>
+        <td>
+            {{ pair.display_name }}
+        </td>
+        <td>
+            {% if pair.retired %}
+                RET
+            {% else %}
+                出場
+            {% endif %}
+        </td>
+        <td>
+            <a href="{% url 'edit_pair' pair.id %}">
+                編集
+            </a>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

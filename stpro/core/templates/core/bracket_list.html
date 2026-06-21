@@ -1,0 +1,119 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    トーナメント一覧・CSV取込
+</h2>
+
+<p>
+    <a href="{% url 'add_tournament_bracket' tournament.code %}">
+        トーナメント追加
+    </a>
+</p>
+
+<table border="1">
+
+    <tr>
+        <th>カテゴリ</th>
+        <th>Stage順</th>
+        <th>Stageコード</th>
+        <th>Stage名</th>
+        <th>トーナメント名</th>
+        <th>表示方式</th>
+        <th>操作</th>
+    </tr>
+
+    {% for bracket in brackets %}
+
+    <tr>
+
+        <td>
+            {{ bracket.category.name }}
+        </td>
+
+        <td>
+            {% if bracket.stage %}
+                {{ bracket.stage.display_order }}
+            {% else %}
+                -
+            {% endif %}
+        </td>
+
+        <td>
+            {% if bracket.stage %}
+                {{ bracket.stage.code }}
+            {% else %}
+                -
+            {% endif %}
+        </td>
+
+        <td>
+            {% if bracket.stage %}
+                {{ bracket.stage.name }}
+            {% else %}
+                -
+            {% endif %}
+        </td>
+
+        <td>
+            {{ bracket.name }}
+        </td>
+
+        <td>
+            {{ bracket.get_layout_type_display }}
+        </td>
+
+        <td>
+
+            <a href="{% url 'tournament_bracket_detail' tournament.code bracket.id %}">
+                表示
+            </a>
+
+            |
+
+            <a href="{% url 'generate_tournament_matches' tournament.code bracket.id %}">
+                枠生成
+            </a>
+
+            |
+
+            <a href="{% url 'import_bracket_positions' tournament.code bracket.id %}">
+                トーナメント枠CSV
+            </a>
+
+            |
+
+            <a href="{% url 'import_tournament_schedule' tournament.code bracket.id %}">
+                トーナメント進行CSV
+            </a>
+
+            |
+
+            <a href="{% url 'tournament_schedule_view' tournament.code bracket.id %}">
+                コート進行
+            </a>
+
+            |
+
+            <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
+                メンテナンス
+            </a>
+
+        </td>
+
+    </tr>
+
+    {% empty %}
+
+    <tr>
+        <td colspan="7">
+            トーナメントがありません。先に「トーナメント追加」から作成してください。
+        </td>
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+{% endblock %}

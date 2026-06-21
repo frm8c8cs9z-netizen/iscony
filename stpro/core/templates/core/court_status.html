@@ -1,0 +1,96 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+コート進行
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    {{ tournament.name }}
+    コート進行
+</h2>
+
+{% for block in block_data %}
+
+{% if block_data|length > 1 %}
+    <h2>{{ block.block.name }}</h2>
+{% endif %}
+
+{% for court in block.court_data %}
+
+<div class="court-box">
+
+    <h3>{{ court.court.name }}</h3>
+
+    {% for schedule in court.schedules %}
+
+        {% with match=schedule.match %}
+
+        <div class="schedule-card">
+
+            <p>
+                <strong>
+                    第{{ schedule.order }}試合
+                </strong>
+            </p>
+
+            <p>
+                {% if schedule.is_round_robin %}
+                    {{ match.group.category.name }}
+                    /
+                    {{ match.group.name }}
+                {% elif schedule.is_tournament %}
+                    {{ match.bracket.category.name }}
+                    /
+                    {{ match.bracket.name }}
+                    /
+                    {{ match.match_label }}
+                {% endif %}
+            </p>
+
+            <p>
+                {% if match.pair1 %}
+                    {{ match.pair1.code }}
+                {% else %}
+                    未定
+                {% endif %}
+
+                vs
+
+                {% if match.pair2 %}
+                    {{ match.pair2.code }}
+                {% else %}
+                    未定
+                {% endif %}
+            </p>
+
+            {% if match.pair1_games != None and match.pair2_games != None %}
+                <p>
+                    {{ match.pair1_games }}
+                    -
+                    {{ match.pair2_games }}
+                </p>
+            {% else %}
+                <p>
+                    未入力
+                </p>
+            {% endif %}
+
+        </div>
+
+        {% endwith %}
+
+    {% empty %}
+
+        <p>試合がありません</p>
+
+    {% endfor %}
+
+</div>
+
+{% endfor %}
+
+{% endfor %}
+
+{% endblock %}

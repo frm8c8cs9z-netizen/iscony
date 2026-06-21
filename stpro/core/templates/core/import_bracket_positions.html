@@ -1,0 +1,73 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    トーナメント初期配置CSV取込
+</h2>
+
+<p>
+    {{ bracket.category.name }}
+    /
+    {{ bracket.name }}
+</p>
+
+<p>
+    <a href="{% url 'download_bracket_positions_sample' tournament.code bracket.id %}">
+        サンプルCSVをダウンロード
+    </a>
+</p>
+
+<div class="csv-spec">
+    <h3>CSV仕様</h3>
+
+    <table>
+        <tr>
+            <th>列名</th>
+            <th>必須</th>
+            <th>内容</th>
+        </tr>
+        <tr>
+            <td>pair_code</td>
+            <td>必須</td>
+            <td>トーナメント上の枠番号です。表示や確認用に使います。</td>
+        </tr>
+        <tr>
+            <td>display_order</td>
+            <td>必須</td>
+            <td>初期配置の並び順です。小さい順にトーナメント枠へ配置します。</td>
+        </tr>
+        <tr>
+            <td>entry_code</td>
+            <td>必須</td>
+            <td>参加者CSVで登録した参加者コードです。</td>
+        </tr>
+    </table>
+
+    <p>
+        取込時は、このトーナメントの配置・結果・勝者をリセットしてから再配置します。
+        シード/byeは自動で次の試合へ反映されます。
+    </p>
+</div>
+
+{% if errors %}
+    <ul style="color:red;">
+        {% for error in errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        取込
+    </button>
+
+</form>
+
+{% endblock %}

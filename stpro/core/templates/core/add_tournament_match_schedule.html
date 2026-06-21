@@ -1,0 +1,55 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    トーナメント試合を進行表へ追加
+</h2>
+
+<p>
+    {{ match.bracket.category.name }}
+    /
+    {{ match.bracket.name }}
+</p>
+
+<p>
+    {{ match.match_code }}
+    /
+    {{ match.match_label }}
+</p>
+
+<p>
+    {% if match.pair1 %}
+        {{ match.pair1.code }}
+        {{ match.pair1.display_name }}
+    {% else %}
+        未定
+    {% endif %}
+
+    vs
+
+    {% if match.pair2 %}
+        {{ match.pair2.code }}
+        {{ match.pair2.display_name }}
+    {% else %}
+        未定
+    {% endif %}
+</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        進行表へ追加
+    </button>
+</form>
+
+<p>
+    <a href="{% url 'schedule_maintenance' tournament.code %}">
+        戻る
+    </a>
+</p>
+
+{% endblock %}

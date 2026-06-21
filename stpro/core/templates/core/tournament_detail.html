@@ -1,0 +1,58 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h1>
+    {{ tournament.name }}
+</h1>
+
+<p>
+    大会コード:
+    {{ tournament.code }}
+</p>
+
+<div class="menu">
+
+    <a href="{% url 'maintenance_menu' tournament.code %}">
+        管理メニュー
+    </a>
+
+    <a href="{% url 'schedule_view' tournament.code %}">
+        試合進行表
+    </a>
+
+    <a href="{% url 'add_category' tournament.code %}">
+        カテゴリ追加
+    </a>
+
+</div>
+
+<hr>
+
+<h2>
+    カテゴリ一覧
+</h2>
+
+<ul>
+
+    {% for category in categories %}
+
+        <li>
+
+            <a href="{% url 'category_detail' category.id %}">
+                {{ category.name }}
+            </a>
+
+        </li>
+
+    {% empty %}
+
+        <li>
+            カテゴリがありません
+        </li>
+
+    {% endfor %}
+
+</ul>
+
+{% endblock %}

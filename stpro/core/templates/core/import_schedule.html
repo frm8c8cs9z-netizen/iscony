@@ -1,0 +1,127 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+コート割CSVインポート
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    統合進行CSVインポート
+</h2>
+
+<p>
+    {{ tournament.name }}
+</p>
+
+<p>
+    <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
+        CSVフォーマットをダウンロード
+    </a>
+    （UTF-8 BOM付き）
+</p>
+
+<div class="csv-spec">
+    <h3>CSV仕様</h3>
+
+    <p>
+        リーグとトーナメントの進行順を同じCSVで登録できます。
+        旧リーグ進行CSVも、対象リーグを一意に特定できる場合は利用できます。
+    </p>
+
+    <table>
+        <tr>
+            <th>列名</th>
+            <th>内容</th>
+        </tr>
+        <tr>
+            <td>schedule_block</td>
+            <td>任意。開催日や時間帯を分ける名前です。例: 1日目、2日目。空欄時は「本日程」を使用します。</td>
+        </tr>
+        <tr>
+            <td>category</td>
+            <td>必須。大会に登録されているカテゴリ名です。</td>
+        </tr>
+        <tr>
+            <td>stage_code</td>
+            <td>推奨。対象Stageの固定コードです。Stage名を変更しても同じStageを特定できます。</td>
+        </tr>
+        <tr>
+            <td>stage</td>
+            <td>任意。stage_codeを使わない場合に対象Stage名を指定します。</td>
+        </tr>
+        <tr>
+            <td>stage_type</td>
+            <td>旧形式CSVとの互換用です。新しいCSVフォーマットには含まれず、stage_codeから自動判定します。</td>
+        </tr>
+        <tr>
+            <td>group / pair1 / pair2</td>
+            <td>旧形式CSVとの互換用です。新しいCSVフォーマットには含まれませんが、従来どおり取り込めます。</td>
+        </tr>
+        <tr>
+            <td>bracket</td>
+            <td>トーナメント行で使用するトーナメント表名です。同じステージ内に複数の表がある場合は必須です。</td>
+        </tr>
+        <tr>
+            <td>court</td>
+            <td>必須。試合を割り当てるコート名です。未登録のコートは自動作成します。</td>
+        </tr>
+        <tr>
+            <td>order</td>
+            <td>必須。日程区分内における、そのコートの試合順です。1以上の整数を指定します。</td>
+        </tr>
+        <tr>
+            <td>slot1_code</td>
+            <td>リーグ行では必須。対戦する一方のslot_codeです。</td>
+        </tr>
+        <tr>
+            <td>slot2_code</td>
+            <td>リーグ行では必須。対戦するもう一方のslot_codeです。2枠は同じGroupに所属している必要があります。</td>
+        </tr>
+        <tr>
+            <td>match_code</td>
+            <td>トーナメント行では必須。対象トーナメント表内の試合コードです。例: M1。</td>
+        </tr>
+        <tr>
+            <td>match_label</td>
+            <td>任意。トーナメント試合の表示名です。例: ①。内部のmatch_codeは変更しません。</td>
+        </tr>
+        <tr>
+            <td>match_games</td>
+            <td>任意。ゲーム数です。リーグ行で空欄の場合は7、トーナメント行で空欄の場合は現在の設定を使用します。</td>
+        </tr>
+    </table>
+</div>
+
+{% if errors %}
+
+    <ul>
+
+        {% for error in errors %}
+
+            <li>
+                {{ error }}
+            </li>
+
+        {% endfor %}
+
+    </ul>
+
+{% endif %}
+
+<form
+    method="post"
+    enctype="multipart/form-data"
+>
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        アップロード
+    </button>
+
+</form>
+
+{% endblock %}

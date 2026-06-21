@@ -1,0 +1,120 @@
+<article
+    class="draw-match {{ side }}-draw-match {% if match.match_code|slice:':1' == 'S' %}seed-match{% endif %} {% if not show_entries %}draw-advance-match{% endif %}"
+    title="{% if match.pair1 %}{{ match.pair1.display_name }}{% endif %} vs {% if match.pair2 %}{{ match.pair2.display_name }}{% endif %}"
+>
+
+    <div class="draw-match-label">
+        {{ match.match_label|default:match.match_code }}
+    </div>
+
+    {% if show_entries and match.match_code|slice:":1" == "S" %}
+
+        <div class="draw-entry seed-entry">
+            <div class="draw-entry-no">
+                {% if match.pair1 %}
+                    {{ match.pair1.display_order }}
+                {% elif match.pair2 %}
+                    {{ match.pair2.display_order }}
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </div>
+
+            <div class="draw-entry-name">
+                {% if match.pair1 %}
+                    {{ match.pair1.display_name }}
+                    <span>
+                        {{ match.pair1.display_organization }}
+                    </span>
+                {% elif match.pair2 %}
+                    {{ match.pair2.display_name }}
+                    <span>
+                        {{ match.pair2.display_organization }}
+                    </span>
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </div>
+
+            <div class="draw-score">
+                &nbsp;
+            </div>
+        </div>
+
+    {% else %}
+
+        <div class="draw-entry {% if match.winner == match.pair1 %}winner{% endif %}">
+            <div class="draw-entry-no">
+                {% if match.pair1 and show_entries %}
+                    {{ match.pair1.display_order }}
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </div>
+
+            <div class="draw-entry-name">
+                {% if match.pair1 and show_entries %}
+                    {{ match.pair1.display_name }}
+                    <span>
+                        {{ match.pair1.display_organization }}
+                    </span>
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </div>
+
+            <div class="draw-score">
+                {{ match.pair1_games|default_if_none:"" }}
+            </div>
+        </div>
+
+        <div class="draw-entry {% if match.winner == match.pair2 %}winner{% endif %}">
+            <div class="draw-entry-no">
+                {% if match.pair2 and show_entries %}
+                    {{ match.pair2.display_order }}
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </div>
+
+            <div class="draw-entry-name">
+                {% if match.pair2 and show_entries %}
+                    {{ match.pair2.display_name }}
+                    <span>
+                        {{ match.pair2.display_organization }}
+                    </span>
+                {% else %}
+                    &nbsp;
+                {% endif %}
+            </div>
+
+            <div class="draw-score">
+                {{ match.pair2_games|default_if_none:"" }}
+            </div>
+        </div>
+
+    {% endif %}
+
+    <div class="draw-actions">
+        {% if match.pair1 and match.pair2 %}
+            <a href="{% url 'input_tournament_match_score' tournament.code match.id %}">
+                結果
+            </a>
+            <a
+                href="{% url 'tournament_match_score_sheet_pdf' tournament.code match.id %}"
+                target="_blank"
+            >
+                採点票
+            </a>
+        {% elif match.match_code|slice:":1" == "S" %}
+            <span>
+                シード
+            </span>
+        {% else %}
+            <span>
+                未確定
+            </span>
+        {% endif %}
+    </div>
+
+</article>

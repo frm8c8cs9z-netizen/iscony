@@ -1,0 +1,96 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+コート割CSVインポート
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    コート割CSVインポート
+</h2>
+
+<p>
+    {{ tournament.name }}
+</p>
+
+<p>
+    {{ bracket.category.name }}
+    /
+    {{ bracket.name }}
+</p>
+
+<p>
+    <a href="{% url 'download_tournament_schedule_sample' tournament.code bracket.id %}">
+        サンプルCSVをダウンロード
+    </a>
+</p>
+
+<div class="csv-spec">
+    <h3>CSV仕様</h3>
+
+    <table>
+        <tr>
+            <th>列名</th>
+            <th>必須</th>
+            <th>内容</th>
+        </tr>
+        <tr>
+            <td>court</td>
+            <td>必須</td>
+            <td>コート名です。未登録のコート名は自動作成します。</td>
+        </tr>
+        <tr>
+            <td>order</td>
+            <td>必須</td>
+            <td>そのコート内の試合順です。同じコート・同じ順番は使えません。</td>
+        </tr>
+        <tr>
+            <td>match_code</td>
+            <td>必須</td>
+            <td>トーナメント試合の固定IDです。例: M1, M2</td>
+        </tr>
+        <tr>
+            <td>match_label</td>
+            <td>任意</td>
+            <td>画面や採点票に出す表示名です。空欄なら既存の表示名を使います。</td>
+        </tr>
+    </table>
+
+    <p>
+        取込時は、このトーナメントの既存コート割を削除してから登録し直します。
+    </p>
+</div>
+
+{% if errors %}
+
+    <ul>
+
+        {% for error in errors %}
+
+            <li>
+                {{ error }}
+            </li>
+
+        {% endfor %}
+
+    </ul>
+
+{% endif %}
+
+<form
+    method="post"
+    enctype="multipart/form-data"
+>
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        アップロード
+    </button>
+
+</form>
+
+{% endblock %}

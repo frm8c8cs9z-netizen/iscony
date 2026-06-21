@@ -1,0 +1,106 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    {{ bracket.category.name }}
+    {{ bracket.name }}
+    メンテナンス
+</h2>
+
+<p>
+    <a href="{% url 'tournament_bracket_detail' tournament.code bracket.id %}">
+        トーナメント表へ
+    </a>
+    |
+    <a href="{% url 'generate_tournament_matches' tournament.code bracket.id %}">
+        枠一括作成
+    </a>
+    |
+    <a href="{% url 'import_bracket_positions' tournament.code bracket.id %}">
+        初期配置CSV
+    </a>
+    |
+    <a href="{% url 'import_tournament_schedule' tournament.code bracket.id %}">
+        進行CSV
+    </a>
+</p>
+
+<table>
+    <tr>
+        <th>固定ID</th>
+        <th>表示名</th>
+        <th>回戦</th>
+        <th>試合</th>
+        <th>pair1</th>
+        <th>pair2</th>
+        <th>ゲーム</th>
+        <th>状態</th>
+        <th>次試合</th>
+        <th>次枠</th>
+        <th>編集</th>
+    </tr>
+
+    {% for match in matches %}
+    <tr>
+        <td>{{ match.match_code }}</td>
+        <td>{{ match.match_label }}</td>
+        <td>{{ match.round_number }}</td>
+        <td>{{ match.match_number }}</td>
+
+        <td class="{% if match.winner == match.pair1 %}winner-cell{% endif %}">
+            {% if match.pair1 %}
+                {{ match.pair1.code }}
+                {{ match.pair1.display_name }}
+            {% else %}
+                未定
+            {% endif %}
+        </td>
+
+        <td class="{% if match.winner == match.pair2 %}winner-cell{% endif %}">
+            {% if match.pair2 %}
+                {{ match.pair2.code }}
+                {{ match.pair2.display_name }}
+            {% else %}
+                未定
+            {% endif %}
+        </td>
+
+        <td>{{ match.match_games }}</td>
+
+        <td>
+            {% if match.match_code|slice:":1" == "S" %}
+                内部通過
+            {% elif match.pair1_games != None and match.pair2_games != None %}
+                完了
+            {% elif not match.pair1 or not match.pair2 %}
+                未確定
+            {% else %}
+                <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
+                    入力待ち
+                </a>
+            {% endif %}
+        </td>
+
+        <td>
+            {% if match.next_match %}
+                {{ match.next_match.match_code }}
+                /
+                {{ match.next_match.match_label }}
+            {% else %}
+                -
+            {% endif %}
+        </td>
+
+        <td>{{ match.next_slot|default:"-" }}</td>
+
+        <td>
+            <a href="{% url 'edit_tournament_match' tournament.code match.id %}">
+                編集
+            </a>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

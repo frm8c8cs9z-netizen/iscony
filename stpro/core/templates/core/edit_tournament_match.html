@@ -1,0 +1,90 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    トーナメント試合編集
+</h2>
+
+<p>
+    {{ match.bracket.category.name }}
+    /
+    {{ match.bracket.name }}
+</p>
+
+<table border="1">
+    <tr>
+        <th>固定ID</th>
+        <td>{{ match.match_code }}</td>
+    </tr>
+    <tr>
+        <th>表示名</th>
+        <td>{{ match.match_label }}</td>
+    </tr>
+    <tr>
+        <th>回戦</th>
+        <td>{{ match.round_number }}</td>
+    </tr>
+    <tr>
+        <th>試合番号</th>
+        <td>{{ match.match_number }}</td>
+    </tr>
+    <tr>
+        <th>pair1</th>
+        <td>
+            {% if match.pair1 %}
+                {{ match.pair1.code }}
+                {{ match.pair1.display_name }}
+            {% else %}
+                未定
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <th>pair2</th>
+        <td>
+            {% if match.pair2 %}
+                {{ match.pair2.code }}
+                {{ match.pair2.display_name }}
+            {% else %}
+                未定
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <th>次試合</th>
+        <td>
+            {% if match.next_match %}
+                {{ match.next_match.match_code }}
+                /
+                {{ match.next_match.match_label }}
+            {% else %}
+                -
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <th>次枠</th>
+        <td>{{ match.next_slot|default:"-" }}</td>
+    </tr>
+</table>
+
+<form method="post">
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        保存
+    </button>
+
+</form>
+
+<p>
+    <a href="{% url 'tournament_match_maintenance' tournament.code match.bracket.id %}">
+        戻る
+    </a>
+</p>
+
+{% endblock %}

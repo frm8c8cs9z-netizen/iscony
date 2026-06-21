@@ -1,0 +1,55 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<div class="score-sheet">
+
+    <h2>
+        トーナメント採点票
+    </h2>
+
+    <p>
+        {{ match.bracket.category.name }}
+        /
+        {{ match.bracket.name }}
+    </p>
+
+    <p>
+        {{ match.round_number }}回戦
+        第{{ match.match_number }}試合
+    </p>
+
+    <table>
+
+        <tr>
+            <th>ペア</th>
+            <th>ゲーム数</th>
+        </tr>
+
+        <tr>
+            <td>
+                {% if match.pair1 %}
+                    {{ match.pair1.display_name }}
+                    （{{ match.pair1.display_organization }}）
+                {% endif %}
+            </td>
+
+            <td style="height:60px;"></td>
+        </tr>
+
+        <tr>
+            <td>
+                {% if match.pair2 %}
+                    {{ match.pair2.display_name }}
+                    （{{ match.pair2.display_organization }}）
+                {% endif %}
+            </td>
+
+            <td></td>
+        </tr>
+
+    </table>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+リーグ枠検索
+{% endblock %}
+
+{% block content %}
+
+<h2>リーグ枠検索</h2>
+
+<form method="get">
+
+    <div class="search-box">
+
+        <input
+            type="text"
+            name="q"
+            value="{{ query }}"
+            placeholder="枠番号を入力"
+        >
+
+        <button type="submit">
+            検索
+        </button>
+
+    </div>
+
+</form>
+
+{% if query %}
+
+    <h3>
+        "{{ query }}" の検索結果
+    </h3>
+
+    {% for pair in pairs %}
+
+        <div class="schedule-card">
+
+            <p>
+
+                <strong>
+                    {{ pair.code }}
+                </strong>
+
+            </p>
+
+            <p>
+
+                {{ pair.display_name }}
+
+            </p>
+
+            <p>
+
+                {{ pair.display_organization }}
+
+            </p>
+
+            <p>
+
+                {{ pair.category.tournament.name }}
+
+            </p>
+
+            <p>
+
+                {{ pair.category.name }}
+                /
+                {{ pair.group.name }}
+
+            </p>
+
+        </div>
+
+    {% empty %}
+
+        <p>
+            該当なし
+        </p>
+
+    {% endfor %}
+
+{% endif %}
+
+{% endblock %}

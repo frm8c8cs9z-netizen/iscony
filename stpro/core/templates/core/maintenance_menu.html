@@ -1,0 +1,89 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>{{ tournament.name }} メンテナンス</h2>
+
+<h3>基本CSV取込</h3>
+
+<p>
+    <a href="{% url 'import_participants' tournament.code %}">
+        参加者CSV取込
+    </a>
+</p>
+
+<p>
+    <a href="{% url 'import_stage_slots' tournament.code %}">
+        ステージ枠CSV取込
+    </a>
+    ／
+    <a href="{% url 'export_stage_slots' tournament.code %}">
+        現在のCSVをダウンロード
+    </a>
+</p>
+
+<p>
+    <a href="{% url 'import_pairs' tournament.code %}">
+        リーグ枠CSV取込
+    </a>
+</p>
+
+<p>
+    <a href="{% url 'import_schedule' tournament.code %}">
+        統合進行CSV取込
+    </a>
+    ／
+    <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
+        CSVフォーマットをダウンロード
+    </a>
+</p>
+
+<h3>ステージ確認</h3>
+
+<p>
+    <a href="{% url 'advancement_source_list' tournament.code %}">
+        進出元一覧
+    </a>
+</p>
+
+<h3>トーナメント</h3>
+
+<p>
+    <a href="{% url 'bracket_list' tournament.code %}">
+        トーナメント一覧・CSV取込
+    </a>
+</p>
+
+<h3>リーグ枠メンテナンス</h3>
+
+<ul>
+    {% for category in categories %}
+        <li>
+            <a href="{% url 'pair_maintenance' category.id %}">
+                {{ category.name }}
+            </a>
+        </li>
+    {% endfor %}
+</ul>
+
+<h3>進行メンテナンス</h3>
+
+<p>
+    <a href="{% url 'schedule_maintenance' tournament.code %}">
+        統合進行メンテナンス
+    </a>
+</p>
+
+<p>
+    <a href="{% url 'order_maintenance' tournament.code %}">
+        カテゴリ・リーグ表示順メンテナンス
+    </a>
+</p>
+
+<p>
+    <a href="{% url 'court_order_maintenance' tournament.code %}">
+        コート表示順メンテナンス
+    </a>
+</p>
+
+{% endblock %}

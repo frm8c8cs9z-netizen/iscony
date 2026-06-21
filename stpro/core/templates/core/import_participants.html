@@ -1,0 +1,75 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>参加者CSV取込</h2>
+
+<p>
+    {{ tournament.name }}
+</p>
+
+<p>
+    <a href="{% url 'download_csv_format' tournament.code 'participants' %}">
+        CSVフォーマットをダウンロード
+    </a>
+    （UTF-8 BOM付き）
+</p>
+
+<div class="csv-spec">
+    <h3>CSV仕様</h3>
+
+    <p>
+        CSVに含まれるカテゴリの参加者名簿を、CSVの内容で置き換えます。
+        CSVに含まれないカテゴリの参加者は変更しません。
+        大会に存在しないカテゴリ名は自動的に作成します。
+    </p>
+
+    <table>
+        <tr>
+            <th>列名</th>
+            <th>内容</th>
+        </tr>
+        <tr>
+            <td>category</td>
+            <td>必須。参加するカテゴリ名です。例: 男子A、女子B。</td>
+        </tr>
+        <tr>
+            <td>entry_code</td>
+            <td>必須。カテゴリ内で参加者を識別する重複しないコードです。Stage枠CSVから参加者を指定するときにも使用します。</td>
+        </tr>
+        <tr>
+            <td>player1_name</td>
+            <td>必須。ペアの1人目の選手名です。</td>
+        </tr>
+        <tr>
+            <td>player2_name</td>
+            <td>必須。ペアの2人目の選手名です。</td>
+        </tr>
+        <tr>
+            <td>organization</td>
+            <td>任意。所属チーム、学校、クラブなどを入力します。</td>
+        </tr>
+    </table>
+</div>
+
+{% if errors %}
+    <ul style="color:red;">
+        {% for error in errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        取込
+    </button>
+
+</form>
+
+{% endblock %}

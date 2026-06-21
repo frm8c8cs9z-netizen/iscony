@@ -1,0 +1,37 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+大会一覧
+{% endblock %}
+
+{% block content %}
+
+<h2>大会一覧</h2>
+
+<ul>
+
+    {% for tournament in tournaments %}
+
+        <li>
+
+            <a href="{% url 'tournament_detail' tournament.code %}">
+                {{ tournament.name }}
+            </a>
+
+            {% if tournament.start_date %}
+                ({{ tournament.start_date }})
+            {% endif %}
+
+        </li>
+
+    {% empty %}
+
+        <li>
+            公開中の大会はありません
+        </li>
+
+    {% endfor %}
+
+</ul>
+
+{% endblock %}

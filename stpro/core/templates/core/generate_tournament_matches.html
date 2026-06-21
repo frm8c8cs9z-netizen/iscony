@@ -1,0 +1,40 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    トーナメント枠一括作成
+</h2>
+
+<p>
+    {{ bracket.category.name }}
+    /
+    {{ bracket.name }}
+</p>
+
+<p style="color:red;">
+    既存のトーナメント試合は削除されます。
+</p>
+
+<form method="post">
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button
+        type="submit"
+        onclick="return confirm('既存の試合を削除して、トーナメント枠を作成します。よろしいですか？');"
+    >
+        作成
+    </button>
+
+</form>
+
+<p>
+    <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
+        戻る
+    </a>
+</p>
+
+{% endblock %}

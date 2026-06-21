@@ -1,0 +1,219 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>{{ tournament.name }} 進行メンテナンス</h2>
+
+<h3>コート進行状況</h3>
+
+<table class="table table-bordered">
+
+    <tr>
+        <th>日程区分</th>
+        <th>コート</th>
+        <th>完了</th>
+        <th>次</th>
+    </tr>
+
+    {% for item in court_statuses %}
+
+    <tr>
+
+        <td>{{ item.block.name }}</td>
+
+        <td>
+            {{ item.court.name }}
+        </td>
+
+        <td>
+            {% if item.last_finished %}
+                第{{ item.last_finished.order }}試合
+            {% else %}
+                -
+            {% endif %}
+        </td>
+
+        <td>
+            {% if item.next_unfinished %}
+                第{{ item.next_unfinished.order }}試合
+            {% else %}
+                全試合終了
+            {% endif %}
+        </td>
+
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+{% if unscheduled_matches %}
+
+    <div
+        style="
+            background:#fff3cd;
+            padding:12px;
+            margin-bottom:20px;
+            border:1px solid #e0b100;
+        "
+    >
+
+        <h3>未割当M試合</h3>
+
+        <ul>
+            {% for match in unscheduled_matches %}
+                <li>
+                    {{ match.match_code }}
+                    /
+                    {{ match.bracket.category.name }}
+                    /
+                    {{ match.bracket.name }}
+                    /
+                    {{ match.round_number }}回戦
+                    /
+                    {{ match.match_label }}
+
+                    <a href="{% url 'add_tournament_match_schedule' tournament.code match.id %}">
+                        進行に追加
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+
+    </div>
+
+{% endif %}
+
+<table>
+    <tr>
+        <th>日程区分</th>
+        <th>コート</th>
+        <th>試合順</th>
+        <th>種別</th>
+        <th>カテゴリ</th>
+        <th>区分</th>
+        <th>対戦</th>
+        <th>スコア</th>
+        <th>状態</th>
+        <th>編集</th>
+    </tr>
+
+    {% for schedule in schedules %}
+
+        {% with match=schedule.match %}
+
+        <tr
+            class="
+                {% if schedule.finished %}
+                    finished-row
+                {% elif schedule.started %}
+                    started-row
+                {% elif schedule.called %}
+                    called-row
+                {% endif %}
+            "
+        >
+            <td>{{ schedule.schedule_block.name }}</td>
+            <td>{{ schedule.court.name }}</td>
+            <td>{{ schedule.order }}</td>
+
+            <td>
+                {% if schedule.is_round_robin %}
+                    リーグ
+                {% elif schedule.is_tournament %}
+                    トーナメント
+                {% endif %}
+            </td>
+
+            <td>
+                {% if schedule.is_round_robin %}
+                    {{ schedule.round_robin_match.group.category.name }}
+                {% elif schedule.is_tournament %}
+                    {{ schedule.tournament_match.bracket.category.name }}
+                {% endif %}
+            </td>
+
+            <td>
+                {% if schedule.is_round_robin %}
+                    {{ schedule.round_robin_match.group.name }}
+                {% elif schedule.is_tournament %}
+
+                    {{ schedule.tournament_match.bracket.name }}
+                    /
+                    {{ schedule.tournament_match.round_number }}回戦
+                    <br>
+                    {{ schedule.tournament_match.match_code }}
+                    /
+                    {{ schedule.tournament_match.match_label }}
+
+                    {% endif %}
+            </td>
+
+            <td>
+
+                <span class="{% if match.winner == match.pair1 %}winner-cell{% endif %}">
+                    {% if match.pair1 %}
+                        {{ match.pair1.code }}
+                        {{ match.pair1.display_name }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </span>
+
+                vs
+
+                <span class="{% if match.winner == match.pair2 %}winner-cell{% endif %}">
+                    {% if match.pair2 %}
+                        {{ match.pair2.code }}
+                        {{ match.pair2.display_name }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </span>
+
+            </td>
+            <td>
+                {{ match.pair1_games|default_if_none:"" }}
+                -
+                {{ match.pair2_games|default_if_none:"" }}
+            </td>
+
+            <td>
+
+                {% if schedule.finished %}
+                    <strong style="color:green;">完了</strong>
+                {% elif schedule.started %}
+                    <strong style="color:orange;">試合中</strong>
+                {% elif schedule.called %}
+                    <strong style="color:blue;">呼出済</strong>
+                {% else %}
+                    未着手
+                {% endif %}
+
+            </td>
+
+            <td>
+                <a
+                    href="{% url 'edit_schedule' schedule.id %}"
+                    class="btn btn-sm btn-primary"
+                >
+                    編集
+                </a>
+
+                {% if not schedule.is_locked_for_move %}
+                    <a
+                        href="{% url 'move_schedule' schedule.id %}"
+                        class="btn btn-sm btn-warning"
+                    >
+                        移動
+                    </a>
+                {% endif %}
+            </td>
+        </tr>
+
+        {% endwith %}
+
+    {% endfor %}
+</table>
+
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h1>{{ tournament.name }} 採点表</h1>
+
+<button onclick="window.print()">
+    印刷
+</button>
+
+{% for court in court_data %}
+
+    <h2>{{ court.court.name }}</h2>
+
+    {% for schedule in court.schedules %}
+
+        {% with match=schedule.match %}
+
+        <div class="score-sheet">
+
+            <h3>
+                {{ court.court.name }}
+                第{{ schedule.order }}試合
+            </h3>
+
+            <p>
+
+                {% if schedule.is_round_robin %}
+
+                    {{ match.group.category.name }}
+                    /
+                    {{ match.group.name }}リーグ
+
+                {% elif schedule.is_tournament %}
+
+                    {{ match.bracket.category.name }}
+                    /
+                    {{ match.bracket.name }}
+                    /
+                    {{ match.round_number }}回戦
+
+                {% endif %}
+
+            </p>
+
+            <table>
+
+                <tr>
+                    <th>ペア</th>
+                    <th>選手</th>
+                    <th>所属</th>
+                    <th>ゲーム数</th>
+                </tr>
+
+                <tr>
+
+                    <td>
+                        {% if match.pair1 %}
+                            {{ match.pair1.code }}
+                        {% endif %}
+                    </td>
+
+                    <td>
+
+                        {% if match.pair1 %}
+
+                            {{ match.pair1.display_name }}
+
+                        {% endif %}
+
+                    </td>
+
+                    <td>
+
+                        {% if match.pair1 %}
+                            {{ match.pair1.display_organization }}
+                        {% endif %}
+
+                    </td>
+
+                    <td></td>
+
+                </tr>
+
+                <tr>
+
+                    <td>
+
+                        {% if match.pair2 %}
+                            {{ match.pair2.code }}
+                        {% endif %}
+
+                    </td>
+
+                    <td>
+
+                        {% if match.pair2 %}
+
+                            {{ match.pair2.display_name }}
+
+                        {% endif %}
+
+                    </td>
+
+                    <td>
+
+                        {% if match.pair2 %}
+                            {{ match.pair2.display_organization }}
+                        {% endif %}
+
+                    </td>
+
+                    <td></td>
+
+                </tr>
+
+            </table>
+
+            <p>
+                勝者：
+                __________________________
+            </p>
+
+            <p>
+                審判：
+                __________________________
+            </p>
+
+        </div>
+
+        {% endwith %}
+
+    {% endfor %}
+
+    <div class="page-break"></div>
+
+{% endfor %}
+
+{% endblock %}

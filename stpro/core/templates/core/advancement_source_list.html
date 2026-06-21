@@ -1,0 +1,79 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+進出元一覧
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    進出元一覧
+</h2>
+
+<p>
+    {{ tournament.name }}
+</p>
+
+<p>
+    <a href="{% url 'maintenance_menu' tournament.code %}">
+        メンテナンスへ戻る
+    </a>
+</p>
+
+{% if rows %}
+    <table>
+        <tr>
+            <th>カテゴリ</th>
+            <th>進出先ステージ</th>
+            <th>種別</th>
+            <th>リーグ/トーナメント</th>
+            <th>枠</th>
+            <th>表示順</th>
+            <th>進出元ラベル</th>
+            <th>進出元詳細</th>
+            <th>現在表示</th>
+        </tr>
+
+        {% for row in rows %}
+            <tr>
+                <td>
+                    {{ row.target.category.name }}
+                </td>
+                <td>
+                    {% if row.target.stage %}
+                        {{ row.target.stage.name }}
+                    {% else %}
+                        未設定
+                    {% endif %}
+                </td>
+                <td>
+                    {{ row.target.type }}
+                </td>
+                <td>
+                    {{ row.target.container }}
+                </td>
+                <td>
+                    {{ row.target.slot_code }}
+                </td>
+                <td>
+                    {{ row.target.display_order }}
+                </td>
+                <td>
+                    {{ row.source.label }}
+                </td>
+                <td>
+                    {{ row.source_detail }}
+                </td>
+                <td>
+                    {{ row.target.entry.display_name }}
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% else %}
+    <p>
+        進出元設定はありません。
+    </p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>試合移動</h2>
+
+<div class="card mb-3">
+    <div class="card-body">
+
+        <p>
+            <strong>現在位置</strong>
+        </p>
+
+        <p>
+            {{ schedule.court.name }}
+            第{{ schedule.order }}試合
+        </p>
+
+        {% if schedule.round_robin_match %}
+
+            <p>
+                {{ schedule.round_robin_match.group.category.name }}
+                /
+                {{ schedule.round_robin_match.pair1.pair_code }}
+                -
+                {{ schedule.round_robin_match.pair2.pair_code }}
+            </p>
+
+        {% elif schedule.tournament_match %}
+
+            <p>
+                {{ schedule.tournament_match.bracket.category.name }}
+                /
+                {{ schedule.tournament_match.match_code }}
+            </p>
+
+        {% endif %}
+
+    </div>
+</div>
+
+{% if schedule.is_locked_for_move %}
+
+    <p style="color:red;">
+        この試合は呼出済・試合中・完了・結果入力済のため移動できません。
+    </p>
+
+{% endif %}
+
+<form method="post">
+
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+            {{ form.non_field_errors }}
+        </div>
+    {% endif %}
+
+    <table class="table">
+
+        <tr>
+            <th>
+                {{ form.target_court.label }}
+            </th>
+            <td>
+                {{ form.target_court }}
+            </td>
+        </tr>
+
+        <tr>
+            <th>
+                {{ form.target_order.label }}
+            </th>
+            <td>
+                {{ form.target_order }}
+                <br>
+                <small class="text-muted">
+                    指定した試合順の前に挿入します
+                </small>
+            </td>
+        </tr>
+
+    </table>
+
+    <button
+        type="submit"
+        class="btn btn-primary"
+        {% if schedule.is_locked_for_move %}disabled{% endif %}
+    >
+        移動する
+    </button>
+
+    <a
+        href="{% url 'schedule_maintenance' schedule.court.tournament.code %}"
+        class="btn btn-secondary"
+    >
+        戻る
+    </a>
+
+</form>
+
+<h3>
+    {{ target_court.name }} の現在予定
+</h3>
+
+<table border="1">
+    <tr>
+        <th>試合順</th>
+        <th>対戦</th>
+        <th>状態</th>
+    </tr>
+
+    {% for item in target_schedules %}
+        <tr>
+            <td>
+                第{{ item.order }}試合
+            </td>
+
+            <td>
+                {% with match=item.match %}
+                    {% if item.is_round_robin %}
+                        {{ match.group.category.name }}
+                        /
+                        {{ match.pair1.code }}
+                        vs
+                        {{ match.pair2.code }}
+                    {% elif item.is_tournament %}
+                        {{ match.bracket.category.name }}
+                        /
+                        {{ match.match_label }}
+                        /
+                        {% if match.pair1 %}
+                            {{ match.pair1.code }}
+                        {% else %}
+                            未定
+                        {% endif %}
+                        vs
+                        {% if match.pair2 %}
+                            {{ match.pair2.code }}
+                        {% else %}
+                            未定
+                        {% endif %}
+                    {% endif %}
+                {% endwith %}
+            </td>
+
+            <td>
+                {% if item.finished %}
+                    完了
+                {% elif item.started %}
+                    試合中
+                {% elif item.called %}
+                    呼出済
+                {% else %}
+                    未着手
+                {% endif %}
+            </td>
+        </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

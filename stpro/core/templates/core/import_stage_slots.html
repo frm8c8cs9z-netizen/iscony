@@ -1,0 +1,111 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+ステージ枠CSVインポート
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    ステージ枠CSVインポート
+</h2>
+
+<p>
+    {{ tournament.name }}
+</p>
+
+<p>
+    <a href="{% url 'download_csv_format' tournament.code 'stage_slots' %}">
+        CSVフォーマットをダウンロード
+    </a>
+    （UTF-8 BOM付き）
+    ／
+    <a href="{% url 'export_stage_slots' tournament.code %}">
+        現在のステージ枠CSVをダウンロード
+    </a>
+</p>
+
+<div class="csv-spec">
+    <h3>CSV仕様</h3>
+
+    <p>
+        カンマ区切りCSVとタブ区切りCSVの両方を読み込めます。
+        stage_type は L または T、source_type は LR または TR を指定します。
+    </p>
+
+    <p>
+        CSVに含まれるStageだけを置き換えます。初回はCSVでの登場順をStageの表示順とし、
+        再取込では既存Stageの順番を維持します。新しいStageはカテゴリ内の末尾へ追加します。
+        GroupとBracketは各Stage内での登場順になります。
+    </p>
+
+    <p>
+        stage_codeは任意です。空欄の場合はアプリがSTG1、STG2のように自動発番します。
+        既存のstage_codeを指定して異なるstage名を読み込むと、同じStageの名称を変更できます。
+        source_stage_codeを指定すると、進出元Stageも名称に依存せず参照できます。
+    </p>
+
+    <table>
+        <tr>
+            <th>列名</th>
+            <th>内容</th>
+        </tr>
+        <tr>
+            <td>category / stage_code / stage / stage_type</td>
+            <td>カテゴリ、任意のStageコード、ステージ名、L/Tです。</td>
+        </tr>
+        <tr>
+            <td>group / bracket</td>
+            <td>Lではgroup、Tではbracketを指定します。</td>
+        </tr>
+        <tr>
+            <td>slot_code / display_order</td>
+            <td>枠番号と表示順です。</td>
+        </tr>
+        <tr>
+            <td>entry_code</td>
+            <td>参加者を直接入れる枠で使います。</td>
+        </tr>
+        <tr>
+            <td>source_type</td>
+            <td>LRはリーグ順位、TRはトーナメント結果です。</td>
+        </tr>
+        <tr>
+            <td>source_stage / source_stage_code / source_group / source_rank</td>
+            <td>LRで使用します。source_stage_codeを指定した場合は、source_stageより優先します。</td>
+        </tr>
+        <tr>
+            <td>source_stage / source_stage_code / source_bracket / source_match / source_result</td>
+            <td>TRで使用します。source_resultは win または lose です。同じステージ内にM1が複数ある場合はsource_bracketが必要です。</td>
+        </tr>
+    </table>
+</div>
+
+{% if form.errors %}
+    <div style="color:red;">
+        {{ form.errors }}
+    </div>
+{% endif %}
+
+{% if errors %}
+    <ul style="color:red;">
+        {% for error in errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
+<form
+    method="post"
+    enctype="multipart/form-data"
+>
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        アップロード
+    </button>
+</form>
+
+{% endblock %}

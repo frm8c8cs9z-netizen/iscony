@@ -1,0 +1,31 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    トーナメント追加
+</h2>
+
+<p>
+    {{ tournament.name }}
+</p>
+
+<form method="post">
+
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        保存
+    </button>
+
+</form>
+
+<p>
+    <a href="{% url 'bracket_list' tournament.code %}">
+        戻る
+    </a>
+</p>
+
+{% endblock %}
