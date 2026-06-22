@@ -196,6 +196,48 @@
             </table>
         {% endif %}
 
+        {% if data.replacement_histories %}
+            <h4>進行枠の差し替え</h4>
+            <table>
+                <tr>
+                    <th>進行位置</th>
+                    <th>元の試合</th>
+                    <th>追加試合</th>
+                    <th>操作</th>
+                </tr>
+                {% for history in data.replacement_histories %}
+                    <tr>
+                        <td>
+                            {{ history.original_schedule_block.name }} /
+                            {{ history.original_court.name }} /
+                            第{{ history.original_order }}試合
+                        </td>
+                        <td>
+                            {{ history.original_match.pair1.pair_code }}
+                            vs
+                            {{ history.original_match.pair2.pair_code }}
+                        </td>
+                        <td>
+                            {{ history.replacement_match.pair1.pair_code }}
+                            vs
+                            {{ history.replacement_match.pair2.pair_code }}
+                        </td>
+                        <td>
+                            <form method="post" action="{% url 'undo_extra_match_replacement' history.id %}">
+                                {% csrf_token %}
+                                <button
+                                    type="submit"
+                                    onclick="return confirm('追加試合を削除して、元の進行枠へ戻しますか？');"
+                                >
+                                    差し替えを取り消す
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% endif %}
+
         <p>
             <a href="{% url 'edit_group_ranking' data.group.id %}">
                 順位入力

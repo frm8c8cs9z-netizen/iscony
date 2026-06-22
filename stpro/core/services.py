@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Max, Q
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from .models import (
     AdvancementSource,
@@ -9,6 +10,7 @@ from .models import (
     GroupRanking,
     RoundRobinMatch,
     Schedule,
+    ScheduleReplacementHistory,
     Stage,
     TournamentEntry,
     TournamentMatch,
@@ -290,6 +292,19 @@ def insert_round_robin_schedule(
             target_schedule
             and target_schedule.is_replaceable_retirement_slot
         ):
+            original_match = target_schedule.round_robin_match
+            ScheduleReplacementHistory.objects.create(
+                schedule=target_schedule,
+                original_match=original_match,
+                replacement_match=match,
+                replacement_label=str(match),
+                original_schedule_block=target_schedule.schedule_block,
+                original_court=target_schedule.court,
+                original_order=target_schedule.order,
+                original_called=target_schedule.called,
+                original_started=target_schedule.started,
+                original_finished=target_schedule.finished,
+            )
             target_schedule.round_robin_match = match
             target_schedule.tournament_match = None
             target_schedule.called = False
@@ -339,6 +354,65 @@ def insert_round_robin_schedule(
             order=order,
             round_robin_match=match,
         )
+
+
+def undo_schedule_replacement(history):
+    """未開始の追加対戦を削除し、差し替え前の進行枠へ戻す。"""
+
+    with transaction.atomic():
+        history = ScheduleReplacementHistory.objects.select_for_update().get(
+            id=history.id
+        )
+
+        if history.reverted_at:
+            raise ValidationError("この差し替えはすでに取り消されています。")
+
+        schedule = Schedule.objects.select_for_update().get(
+            id=history.schedule_id
+        )
+        replacement_match = history.replacement_match
+
+        if not replacement_match:
+            raise ValidationError("差し替え後の追加試合が見つかりません。")
+
+        if schedule.round_robin_match_id != replacement_match.id:
+            raise ValidationError("進行枠がその後変更されているため取り消せません。")
+
+        if (
+            schedule.schedule_block_id != history.original_schedule_block_id
+            or schedule.court_id != history.original_court_id
+            or schedule.order != history.original_order
+        ):
+            raise ValidationError("進行枠の位置が変更されているため取り消せません。")
+
+        if schedule.called or schedule.started or schedule.finished:
+            raise ValidationError("追加試合の進行が始まっているため取り消せません。")
+
+        if (
+            replacement_match.pair1_games is not None
+            or replacement_match.pair2_games is not None
+        ):
+            raise ValidationError("追加試合の結果が入力済みのため取り消せません。")
+
+        schedule.round_robin_match = history.original_match
+        schedule.called = history.original_called
+        schedule.started = history.original_started
+        schedule.finished = history.original_finished
+        schedule.save(
+            update_fields=[
+                "round_robin_match",
+                "called",
+                "started",
+                "finished",
+            ]
+        )
+
+        history.reverted_at = timezone.now()
+        history.save(update_fields=["reverted_at"])
+
+        replacement_match.delete()
+
+        return schedule
 
 def move_schedule(
     schedule,

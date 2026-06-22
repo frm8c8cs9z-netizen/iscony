@@ -1359,4 +1359,59 @@ class Schedule(models.Model):
         )
 
 
+class ScheduleReplacementHistory(models.Model):
+    """リタイア不戦の進行枠を追加対戦へ差し替えた履歴。"""
+
+    schedule = models.ForeignKey(
+        Schedule,
+        related_name="replacement_histories",
+        on_delete=models.CASCADE,
+    )
+    original_match = models.ForeignKey(
+        RoundRobinMatch,
+        related_name="replacement_original_histories",
+        on_delete=models.CASCADE,
+    )
+    replacement_match = models.ForeignKey(
+        RoundRobinMatch,
+        null=True,
+        blank=True,
+        related_name="replacement_histories",
+        on_delete=models.SET_NULL,
+    )
+    replacement_label = models.CharField(
+        max_length=200,
+        blank=True,
+    )
+    original_schedule_block = models.ForeignKey(
+        ScheduleBlock,
+        related_name="+",
+        on_delete=models.CASCADE,
+    )
+    original_court = models.ForeignKey(
+        Court,
+        related_name="+",
+        on_delete=models.CASCADE,
+    )
+    original_order = models.IntegerField()
+    original_called = models.BooleanField(default=False)
+    original_started = models.BooleanField(default=False)
+    original_finished = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reverted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    @property
+    def is_active(self):
+        return self.reverted_at is None
+
+    def __str__(self):
+        return (
+            f"{self.original_court.name} 第{self.original_order}試合 "
+            f"差し替え履歴"
+        )
+
+
 

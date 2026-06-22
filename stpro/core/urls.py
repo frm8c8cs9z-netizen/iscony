@@ -139,6 +139,12 @@ urlpatterns = [
     ),
 
     path(
+        "schedule-replacement/<int:history_id>/undo/",
+        league_views.undo_extra_match_replacement,
+        name="undo_extra_match_replacement",
+    ),
+
+    path(
         "schedule/<int:schedule_id>/score-sheet/",
         pdf_views.score_sheet_pdf,
         name="score_sheet_pdf",

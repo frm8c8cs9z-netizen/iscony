@@ -17,6 +17,7 @@ from .models import (
     LeagueEntry,
     RoundRobinMatch,
     Schedule,
+    ScheduleReplacementHistory,
     ScheduleBlock,
     Stage,
     Tournament,
@@ -31,9 +32,11 @@ from .pdf_views import get_score_sheet_template_settings
 from .services import (
     advance_tournament_bye_winners,
     apply_stage_advancements,
+    insert_round_robin_schedule,
     move_schedule,
     save_tournament_score,
     swap_advancement_sources,
+    undo_schedule_replacement,
     update_group_ranking,
     validate_tournament_score_change,
 )
@@ -891,6 +894,74 @@ class RoundRobinMeetingTests(TestCase):
         self.assertFalse(schedule.finished)
         self.assertEqual(cancelled_match.pair1_games, 4)
         self.assertEqual(cancelled_match.pair2_games, 0)
+
+        history = ScheduleReplacementHistory.objects.get(
+            replacement_match=extra_match
+        )
+        undo_response = self.client.post(
+            reverse(
+                "undo_extra_match_replacement",
+                kwargs={"history_id": history.id},
+            )
+        )
+
+        self.assertEqual(undo_response.status_code, 302)
+        schedule.refresh_from_db()
+        history.refresh_from_db()
+        self.assertEqual(schedule.round_robin_match, cancelled_match)
+        self.assertTrue(schedule.called)
+        self.assertTrue(schedule.started)
+        self.assertTrue(schedule.finished)
+        self.assertIsNotNone(history.reverted_at)
+        self.assertFalse(
+            RoundRobinMatch.objects.filter(id=extra_match.id).exists()
+        )
+
+    def test_replacement_with_entered_score_cannot_be_undone(self):
+        original_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=0,
+            pair2_games=4,
+            completed=True,
+            result_type=RoundRobinMatch.RESULT_RETIREMENT,
+        )
+        extra_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            meeting_number=2,
+        )
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        schedule = Schedule.objects.create(
+            schedule_block=block,
+            court=court,
+            order=1,
+            round_robin_match=original_match,
+            finished=True,
+        )
+        insert_round_robin_schedule(extra_match, block, court, 1)
+        history = ScheduleReplacementHistory.objects.get(
+            replacement_match=extra_match
+        )
+        extra_match.pair1_games = 4
+        extra_match.pair2_games = 1
+        extra_match.save(update_fields=["pair1_games", "pair2_games"])
+
+        with self.assertRaises(ValidationError):
+            undo_schedule_replacement(history)
+
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.round_robin_match, extra_match)
+        self.assertIsNone(history.reverted_at)
 
 
 class ImportPairsCsvTests(TestCase):

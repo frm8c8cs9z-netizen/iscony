@@ -20,8 +20,24 @@ from .models import (
     AdvancementSource,
     ScoreSheetTemplate,
     Schedule,
+    ScheduleReplacementHistory,
     
 )
+
+
+@admin.register(ScheduleReplacementHistory)
+class ScheduleReplacementHistoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "schedule",
+        "original_match",
+        "replacement_match",
+        "created_at",
+        "reverted_at",
+    )
+    list_filter = (
+        "created_at",
+        "reverted_at",
+    )
 
 
 # =========================================================
