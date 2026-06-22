@@ -13,6 +13,7 @@ from .models import (
     AdvancementSource,
     Court,
     Group,
+    GroupRanking,
     LeagueEntry,
     RoundRobinMatch,
     Schedule,
@@ -32,6 +33,7 @@ from .services import (
     move_schedule,
     save_tournament_score,
     swap_advancement_sources,
+    update_group_ranking,
     validate_tournament_score_change,
 )
 
@@ -596,6 +598,122 @@ class CourtOrderMaintenanceTests(TestCase):
         self.court2.refresh_from_db()
         self.assertEqual(self.court1.display_order, 1)
         self.assertEqual(self.court2.display_order, 2)
+
+
+class RoundRobinMeetingTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="追加対戦テスト大会",
+            code="MEETING",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+        )
+        self.entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="1",
+            display_order=1,
+            player1_name="選手1A",
+            player2_name="選手1B",
+        )
+        self.entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="2",
+            display_order=2,
+            player1_name="選手2A",
+            player2_name="選手2B",
+        )
+
+    def test_same_pair_can_have_multiple_meetings(self):
+        first = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        second = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            meeting_number=2,
+            note="リタイアに伴う追加対戦",
+        )
+
+        self.assertEqual(first.meeting_number, 1)
+        self.assertEqual(second.meeting_number, 2)
+        self.assertEqual(RoundRobinMatch.objects.count(), 2)
+
+    def test_non_ranking_meeting_is_excluded_from_ranking(self):
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            meeting_number=2,
+            counts_for_ranking=False,
+            pair1_games=0,
+            pair2_games=3,
+            completed=True,
+        )
+
+        update_group_ranking(self.group, reset_rank=True)
+
+        ranking1 = GroupRanking.objects.get(
+            group=self.group,
+            pair=self.entry1,
+        )
+        ranking2 = GroupRanking.objects.get(
+            group=self.group,
+            pair=self.entry2,
+        )
+        self.assertEqual((ranking1.wins, ranking1.losses), (1, 0))
+        self.assertEqual((ranking2.wins, ranking2.losses), (0, 1))
+
+    def test_extra_meeting_is_displayed_below_league_table(self):
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            meeting_number=2,
+            note="リタイアに伴う追加対戦",
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "追加試合")
+        self.assertContains(response, "2回目")
+        self.assertContains(response, "リタイアに伴う追加対戦")
 
 
 class ImportPairsCsvTests(TestCase):
@@ -1634,6 +1752,38 @@ class ImportScheduleCsvTests(TestCase):
         )
         self.assertFalse(Schedule.objects.exists())
 
+    def test_multiple_meetings_can_be_scheduled_separately(self):
+        stage, group, first_match = self._create_league_match(
+            "予選リーグ",
+        )
+        second_match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=first_match.pair1,
+            pair2=first_match.pair2,
+            meeting_number=2,
+            note="追加対戦",
+        )
+
+        response = self._post_csv(
+            "category,stage_code,court,order,slot1_code,slot2_code,meeting_number\n"
+            f"男子A,{stage.code},1コート,1,1,2,1\n"
+            f"男子A,{stage.code},1コート,2,1,2,2\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            Schedule.objects.filter(
+                round_robin_match=first_match,
+                order=1,
+            ).exists()
+        )
+        self.assertTrue(
+            Schedule.objects.filter(
+                round_robin_match=second_match,
+                order=2,
+            ).exists()
+        )
+
     def test_same_court_and_order_can_be_used_in_different_blocks(self):
         _, _, first_day_match = self._create_league_match(
             "予選リーグ",
@@ -1722,6 +1872,7 @@ class CsvFormatDownloadTests(TestCase):
         self.assertNotIn("group", header)
         self.assertNotIn("pair1", header)
         self.assertNotIn("pair2", header)
+        self.assertIn("meeting_number", header)
 
 
 class AdvancementSourceListViewTests(TestCase):

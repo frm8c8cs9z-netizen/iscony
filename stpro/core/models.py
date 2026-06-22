@@ -2,6 +2,7 @@
 
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 
 
 # =========================================================
@@ -523,6 +524,20 @@ class RoundRobinMatch(models.Model):
         on_delete=models.CASCADE
     )
 
+    meeting_number = models.PositiveSmallIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+    )
+
+    counts_for_ranking = models.BooleanField(
+        default=True,
+    )
+
+    note = models.CharField(
+        max_length=200,
+        blank=True,
+    )
+
     pair1_games = models.IntegerField(
         null=True,
         blank=True
@@ -550,7 +565,8 @@ class RoundRobinMatch(models.Model):
         unique_together = (
             "group",
             "pair1",
-            "pair2"
+            "pair2",
+            "meeting_number",
         )
 
     def winner(self):
@@ -602,7 +618,8 @@ class RoundRobinMatch(models.Model):
             f"{self.group} : "
             f"{self.pair1.pair_code}"
             f" vs "
-            f"{self.pair2.pair_code}"
+            f"{self.pair2.pair_code} "
+            f"({self.meeting_number}回目)"
         )
 
 

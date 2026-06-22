@@ -185,7 +185,8 @@ def update_group_ranking(
         }
 
     matches = RoundRobinMatch.objects.filter(
-        group=group
+        group=group,
+        counts_for_ranking=True,
     )
 
     all_matches_finished = (

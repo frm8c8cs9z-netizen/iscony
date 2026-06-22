@@ -91,6 +91,7 @@ CSV_FORMAT_HEADERS = {
         "order",
         "slot1_code",
         "slot2_code",
+        "meeting_number",
         "match_code",
         "match_label",
         "match_games",
@@ -1857,6 +1858,15 @@ def import_schedule(request, tournament_code):
                 match_code = _cell(row, "match_code")
                 court_name = _cell(row, "court")
                 match_label = _cell(row, "match_label")
+                meeting_number = _parse_positive_int(
+                    _cell(row, "meeting_number") or "1",
+                    row_number,
+                    "meeting_number",
+                    errors,
+                )
+
+                if meeting_number is None:
+                    continue
 
                 if not category_name:
                     errors.append(
@@ -2022,12 +2032,15 @@ def import_schedule(request, tournament_code):
                     ).filter(
                         Q(pair1=pair1, pair2=pair2)
                         | Q(pair1=pair2, pair2=pair1)
+                    ).filter(
+                        meeting_number=meeting_number,
                     ).first()
 
                     if not match:
                         errors.append(
                             f"{row_number}行目: 試合が存在しません。"
-                            f"{group.name} / {pair1_code} vs {pair2_code}"
+                            f"{group.name} / {pair1_code} vs {pair2_code} / "
+                            f"{meeting_number}回目"
                         )
                         continue
 

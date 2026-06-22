@@ -66,10 +66,27 @@ def category_detail(request, category_id):
         )
 
         matches = RoundRobinMatch.objects.filter(
-            group=group
+            group=group,
+            meeting_number=1,
         ).select_related(
             "pair1",
             "pair2",
+        )
+
+        extra_matches = RoundRobinMatch.objects.filter(
+            group=group,
+            meeting_number__gt=1,
+        ).select_related(
+            "pair1",
+            "pair2",
+        ).order_by(
+            "meeting_number",
+            "pair1__display_order",
+            "pair2__display_order",
+        )
+        ranking_matches = RoundRobinMatch.objects.filter(
+            group=group,
+            counts_for_ranking=True,
         )
 
         # pair1/pair2 の向きに関係なく試合を引けるよう、両向きで保持する。
@@ -165,8 +182,8 @@ def category_detail(request, category_id):
         tie_tables = []
 
         all_matches_finished = (
-            not matches.filter(pair1_games__isnull=True).exists()
-            and not matches.filter(pair2_games__isnull=True).exists()
+            not ranking_matches.filter(pair1_games__isnull=True).exists()
+            and not ranking_matches.filter(pair2_games__isnull=True).exists()
         )
 
         if all_matches_finished:
@@ -216,6 +233,7 @@ def category_detail(request, category_id):
                     group=group,
                     pair1__id__in=tied_pair_ids,
                     pair2__id__in=tied_pair_ids,
+                    counts_for_ranking=True,
                 )
 
                 for match in related_matches:
@@ -319,6 +337,7 @@ def category_detail(request, category_id):
             "pairs": pairs,
             "table_rows": table_rows,
             "tie_tables": tie_tables,
+            "extra_matches": extra_matches,
         })
 
     return render(

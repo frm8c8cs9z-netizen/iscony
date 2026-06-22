@@ -155,6 +155,41 @@
             {% endfor %}
 
         </table>
+
+        {% if data.extra_matches %}
+            <h4>追加試合</h4>
+            <table border="1">
+                <tr>
+                    <th>対戦</th>
+                    <th>回数</th>
+                    <th>結果</th>
+                    <th>順位計算</th>
+                    <th>理由</th>
+                </tr>
+                {% for match in data.extra_matches %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'input_match_score' match.id %}?next={% url 'category_detail' category.id %}#group-{{ data.group.id }}">
+                                {{ match.pair1.pair_code }} {{ match.pair1.short_name }}
+                                vs
+                                {{ match.pair2.pair_code }} {{ match.pair2.short_name }}
+                            </a>
+                        </td>
+                        <td>{{ match.meeting_number }}回目</td>
+                        <td>{{ match.score_display }}</td>
+                        <td>
+                            {% if match.counts_for_ranking %}
+                                対象
+                            {% else %}
+                                対象外
+                            {% endif %}
+                        </td>
+                        <td>{{ match.note|default:"-" }}</td>
+                    </tr>
+                {% endfor %}
+            </table>
+        {% endif %}
+
         <p>
             <a href="{% url 'edit_group_ranking' data.group.id %}">
                 順位入力
