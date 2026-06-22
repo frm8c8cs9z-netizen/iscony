@@ -4,6 +4,7 @@ from . import advancement_views
 from . import csv_views
 from . import league_views
 from . import pdf_views
+from . import stage_views
 from . import views
 from . import tournament_views
 
@@ -35,6 +36,12 @@ urlpatterns = [
         'category/<int:category_id>/',
         league_views.category_detail,
         name='category_detail'
+    ),
+
+    path(
+        "category/<int:category_id>/stages/",
+        stage_views.category_stage_overview,
+        name="category_stage_overview",
     ),
 
     # =====================================================

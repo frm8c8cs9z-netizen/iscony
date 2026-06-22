@@ -1,0 +1,119 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ category.name }} Stage進行{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ category.name }} Stage進行</h2>
+        <p class="subtle-text">{{ tournament.name }}</p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'schedule_view' tournament.code %}">試合進行表</a>
+        <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
+    </div>
+</div>
+
+{% for row in stage_rows %}
+    <section class="stage-section" id="stage-{{ row.stage.id }}">
+        <div class="stage-heading">
+            <div>
+                <span class="stage-order">{{ row.stage.display_order }}</span>
+                <h3>{{ row.stage.name }}</h3>
+                <span class="stage-code">{{ row.stage.code }}</span>
+            </div>
+            <div>
+                {{ row.stage.get_stage_type_display }} /
+                {% if row.ready %}
+                    <strong>結果確定</strong>
+                {% else %}
+                    進行中
+                {% endif %}
+            </div>
+        </div>
+
+        {% if row.stage.stage_type == "league" %}
+            <table class="stage-table">
+                <tr>
+                    <th>リーグ</th>
+                    <th>参加枠</th>
+                    <th>試合</th>
+                    <th>順位</th>
+                    <th>操作</th>
+                </tr>
+                {% for data in row.containers %}
+                    <tr>
+                        <td>{{ data.group.name }}リーグ</td>
+                        <td>{{ data.entry_count }}</td>
+                        <td>{{ data.finished_count }} / {{ data.match_count }}</td>
+                        <td>
+                            {% if data.ranking_confirmed %}
+                                確定
+                            {% else %}
+                                {{ data.ranking_count }} / {{ data.entry_count }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'category_detail' category.id %}#group-{{ data.group.id }}">リーグ表</a>
+                            |
+                            <a href="{% url 'edit_group_ranking' data.group.id %}">順位入力</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5">リーグがありません。</td></tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <table class="stage-table">
+                <tr>
+                    <th>トーナメント</th>
+                    <th>参加枠</th>
+                    <th>試合</th>
+                    <th>操作</th>
+                </tr>
+                {% for data in row.containers %}
+                    <tr>
+                        <td>{{ data.bracket.name }}</td>
+                        <td>{{ data.entry_count }}</td>
+                        <td>{{ data.finished_count }} / {{ data.match_count }}</td>
+                        <td>
+                            <a href="{% url 'tournament_bracket_detail' tournament.code data.bracket.id %}">トーナメント表</a>
+                            |
+                            <a href="{% url 'tournament_match_maintenance' tournament.code data.bracket.id %}">結果入力</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4">トーナメントがありません。</td></tr>
+                {% endfor %}
+            </table>
+        {% endif %}
+
+        {% if row.targets %}
+            <div class="stage-transition">
+                <div>
+                    <strong>後続Stage</strong>
+                    {% for target in row.targets %}
+                        <span>
+                            {{ target.stage.name }}
+                            （{{ target.filled_count }}/{{ target.slot_count }}枠反映済み）
+                        </span>
+                    {% endfor %}
+                </div>
+                <form method="post" action="{% url 'apply_stage_results' row.stage.id %}">
+                    {% csrf_token %}
+                    <button
+                        type="submit"
+                        onclick="return confirm('{{ row.stage.name }}の確定結果を後続Stageへ反映しますか？');"
+                    >
+                        後続Stageへ反映
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+    </section>
+{% empty %}
+    <p>Stageがありません。</p>
+{% endfor %}
+
+{% endblock %}

@@ -215,4 +215,7 @@ def apply_stage_results(request, stage_id):
             f"後続{applied_count}枠へ反映しました。",
         )
 
-    return redirect("advancement_source_list", code=tournament.code)
+    return redirect(
+        "category_stage_overview",
+        category_id=stage.category_id,
+    )

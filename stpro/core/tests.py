@@ -2490,6 +2490,92 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(self.target.participant, self.participant2)
 
 
+class CategoryStageOverviewTests(TestCase):
+
+    def test_league_and_tournament_are_displayed_in_stage_order(self):
+        tournament = Tournament.objects.create(
+            name="Stage進行大会",
+            code="STAGEFLOW",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        tournament_stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        league_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=league_stage,
+            name="A",
+        )
+        LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=tournament_stage,
+            name="本戦",
+        )
+        target_entry = TournamentEntry.objects.create(
+            bracket=bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="",
+            player2_name="",
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=league_stage,
+            source_group=group,
+            source_rank=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertLess(
+            content.index(f'id="stage-{league_stage.id}"'),
+            content.index(f'id="stage-{tournament_stage.id}"'),
+        )
+        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "本戦")
+        self.assertContains(response, "決勝トーナメント")
+        self.assertContains(response, "0/1枠反映済み")
+        self.assertContains(response, "後続Stageへ反映")
+        self.assertContains(
+            response,
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            ),
+        )
+
+
 class TournamentScheduleBehaviorTests(TestCase):
 
     def setUp(self):
