@@ -30,6 +30,7 @@ from .pdf_views import get_score_sheet_template_settings
 
 from .services import (
     advance_tournament_bye_winners,
+    apply_stage_advancements,
     move_schedule,
     save_tournament_score,
     swap_advancement_sources,
@@ -809,6 +810,88 @@ class RoundRobinMeetingTests(TestCase):
         )
         self.assertEqual(RoundRobinMatch.objects.count(), 1)
 
+    def test_retirement_walkover_schedule_is_replaced_by_extra_meeting(self):
+        retired_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        cancelled_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=retired_entry,
+        )
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        schedule = Schedule.objects.create(
+            schedule_block=block,
+            court=court,
+            order=1,
+            round_robin_match=cancelled_match,
+        )
+
+        self.client.get(
+            reverse(
+                "retire_pair",
+                kwargs={"pair_id": retired_entry.id},
+            )
+        )
+
+        cancelled_match.refresh_from_db()
+        schedule.refresh_from_db()
+        self.assertEqual(
+            cancelled_match.result_type,
+            RoundRobinMatch.RESULT_RETIREMENT,
+        )
+        self.assertTrue(schedule.finished)
+
+        response = self.client.post(
+            reverse(
+                "add_extra_round_robin_match",
+                kwargs={"group_id": self.group.id},
+            ),
+            {
+                "pair1": self.entry1.id,
+                "pair2": self.entry2.id,
+                "counts_for_ranking": "on",
+                "note": "リタイアに伴う追加対戦",
+                "add_to_schedule": "on",
+                "schedule_block": block.id,
+                "court": court.id,
+                "order": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        extra_match = RoundRobinMatch.objects.get(
+            pair1=self.entry1,
+            pair2=self.entry2,
+            meeting_number=2,
+        )
+        schedule.refresh_from_db()
+        cancelled_match.refresh_from_db()
+        self.assertEqual(schedule.round_robin_match, extra_match)
+        self.assertEqual(schedule.order, 1)
+        self.assertFalse(schedule.called)
+        self.assertFalse(schedule.started)
+        self.assertFalse(schedule.finished)
+        self.assertEqual(cancelled_match.pair1_games, 4)
+        self.assertEqual(cancelled_match.pair2_games, 0)
+
 
 class ImportPairsCsvTests(TestCase):
 
@@ -1485,6 +1568,39 @@ class ImportStageSlotsCsvTests(TestCase):
             source_match,
         )
 
+    def test_source_type_requires_source_stage_or_code(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="C",
+        )
+
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_stage_code,source_group,source_rank,source_match,source_result\n"
+            "女子A,２位リーグ,L,2位リーグ１,,C2,1,,LR,,,C,2,,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "2行目: source_typeを指定する場合は、source_stage または source_stage_code が必要です。",
+        )
+        self.assertFalse(
+            Stage.objects.filter(
+                category=category,
+                name="２位リーグ",
+            ).exists()
+        )
+
     def test_source_bracket_disambiguates_tournament_result_sources(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -2089,6 +2205,200 @@ class AdvancementSourceListViewTests(TestCase):
         self.assertContains(response, "敗者リーグ")
         self.assertContains(response, "予選T / Aブロック / M1 / 敗者")
         self.assertContains(response, "M1敗者")
+
+
+class ApplyStageAdvancementsTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="進出反映大会",
+            code="ADVAPPLY",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        self.preliminary_stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.preliminary_group = Group.objects.create(
+            category=self.category,
+            stage=self.preliminary_stage,
+            name="A",
+        )
+        self.final_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.final_group = Group.objects.create(
+            category=self.category,
+            stage=self.final_stage,
+            name="1位",
+        )
+        self.participant1 = Participant.objects.create(
+            category=self.category,
+            entry_code="E1",
+            organization="第一クラブ",
+            player1_name="一番 A",
+            player2_name="一番 B",
+        )
+        self.participant2 = Participant.objects.create(
+            category=self.category,
+            entry_code="E2",
+            organization="第二クラブ",
+            player1_name="二番 A",
+            player2_name="二番 B",
+        )
+        self.entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.preliminary_group,
+            participant=self.participant1,
+            pair_code="A1",
+            display_order=1,
+            organization=self.participant1.organization,
+            player1_name=self.participant1.player1_name,
+            player2_name=self.participant1.player2_name,
+        )
+        self.entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.preliminary_group,
+            participant=self.participant2,
+            pair_code="A2",
+            display_order=2,
+            organization=self.participant2.organization,
+            player1_name=self.participant2.player1_name,
+            player2_name=self.participant2.player2_name,
+        )
+        self.target = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.final_group,
+            pair_code="F1",
+            display_order=1,
+            player1_name="",
+            player2_name="",
+        )
+        self.source = AdvancementSource.objects.create(
+            target_league_entry=self.target,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.preliminary_stage,
+            source_group=self.preliminary_group,
+            source_rank=1,
+        )
+
+    def _finish_preliminary_group(self):
+        RoundRobinMatch.objects.create(
+            group=self.preliminary_group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=1,
+            completed=True,
+        )
+        GroupRanking.objects.create(
+            group=self.preliminary_group,
+            pair=self.entry1,
+            wins=1,
+            losses=0,
+            rank=1,
+        )
+        GroupRanking.objects.create(
+            group=self.preliminary_group,
+            pair=self.entry2,
+            wins=0,
+            losses=1,
+            rank=2,
+        )
+
+    def test_league_rank_is_applied_to_downstream_entry(self):
+        self._finish_preliminary_group()
+
+        applied_count = apply_stage_advancements(self.preliminary_stage)
+
+        self.assertEqual(applied_count, 1)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant, self.participant1)
+        self.assertEqual(self.target.organization, "第一クラブ")
+        self.assertEqual(self.target.player1_name, "一番 A")
+
+    def test_unfinished_source_does_not_change_any_target(self):
+        with self.assertRaises(ValidationError):
+            apply_stage_advancements(self.preliminary_stage)
+
+        self.target.refresh_from_db()
+        self.assertIsNone(self.target.participant)
+
+    def test_apply_stage_results_view_reports_success(self):
+        self._finish_preliminary_group()
+
+        response = self.client.post(
+            reverse(
+                "apply_stage_results",
+                kwargs={"stage_id": self.preliminary_stage.id},
+            ),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "後続1枠へ反映しました")
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant, self.participant1)
+
+    def test_tournament_loser_can_be_applied_to_league_entry(self):
+        tournament_stage = Stage.objects.create(
+            category=self.category,
+            name="予選トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=tournament_stage,
+            name="予選",
+        )
+        tournament_entry1 = TournamentEntry.objects.create(
+            bracket=bracket,
+            participant=self.participant1,
+            pair_code="T1",
+            display_order=1,
+            organization=self.participant1.organization,
+            player1_name=self.participant1.player1_name,
+            player2_name=self.participant1.player2_name,
+        )
+        tournament_entry2 = TournamentEntry.objects.create(
+            bracket=bracket,
+            participant=self.participant2,
+            pair_code="T2",
+            display_order=2,
+            organization=self.participant2.organization,
+            player1_name=self.participant2.player1_name,
+            player2_name=self.participant2.player2_name,
+        )
+        match = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=tournament_entry1,
+            pair2=tournament_entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=tournament_entry1,
+        )
+        self.source.delete()
+        AdvancementSource.objects.create(
+            target_league_entry=self.target,
+            source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            source_stage=tournament_stage,
+            source_match=match,
+            source_result=AdvancementSource.RESULT_LOSER,
+        )
+
+        apply_stage_advancements(tournament_stage)
+
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant, self.participant2)
 
 
 class TournamentScheduleBehaviorTests(TestCase):

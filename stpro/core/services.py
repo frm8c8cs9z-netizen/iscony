@@ -9,9 +9,152 @@ from .models import (
     GroupRanking,
     RoundRobinMatch,
     Schedule,
+    Stage,
+    TournamentEntry,
     TournamentMatch,
     
 )
+
+
+def _resolved_advancement_entry(source):
+    """進出元設定から、確定した参加枠を1件取得する。"""
+
+    if source.source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
+        if RoundRobinMatch.objects.filter(
+            group=source.source_group,
+            counts_for_ranking=True,
+        ).filter(
+            Q(pair1_games__isnull=True)
+            | Q(pair2_games__isnull=True)
+        ).exists():
+            raise ValidationError(
+                f"{source.label}: 順位計算対象の試合が完了していません。"
+            )
+
+        rankings = GroupRanking.objects.filter(
+            group=source.source_group,
+            rank=source.source_rank,
+        ).select_related("pair")
+
+        if rankings.count() != 1:
+            raise ValidationError(
+                f"{source.label}: {source.source_rank}位を1ペアに確定してください。"
+            )
+
+        return rankings.first().pair
+
+    if source.source_type == AdvancementSource.SOURCE_TOURNAMENT_RESULT:
+        match = source.source_match
+
+        if not match or not match.winner:
+            raise ValidationError(
+                f"{source.label}: トーナメント結果が確定していません。"
+            )
+
+        if source.source_result == AdvancementSource.RESULT_WINNER:
+            return match.winner
+
+        if source.source_result == AdvancementSource.RESULT_LOSER:
+            if not match.pair1 or not match.pair2:
+                raise ValidationError(
+                    f"{source.label}: 対戦ペアが確定していません。"
+                )
+
+            return match.pair2 if match.winner_id == match.pair1_id else match.pair1
+
+    raise ValidationError(f"{source.label}: 進出元設定を確認してください。")
+
+
+def _target_has_score(target):
+    """進出先の枠を使う試合で結果入力が始まっているか確認する。"""
+
+    if isinstance(target, LeagueEntry):
+        return RoundRobinMatch.objects.filter(
+            Q(pair1=target) | Q(pair2=target)
+        ).filter(
+            Q(pair1_games__isnull=False)
+            | Q(pair2_games__isnull=False)
+        ).exists()
+
+    return TournamentMatch.objects.filter(
+        Q(pair1=target) | Q(pair2=target)
+    ).filter(
+        Q(pair1_games__isnull=False)
+        | Q(pair2_games__isnull=False)
+    ).exists()
+
+
+def apply_stage_advancements(source_stage):
+    """確定済みStage結果をAdvancementSourceに従って後続枠へ反映する。"""
+
+    if not isinstance(source_stage, Stage):
+        raise ValidationError("反映元Stageを指定してください。")
+
+    with transaction.atomic():
+        sources = list(
+            AdvancementSource.objects.select_for_update().filter(
+                source_stage=source_stage,
+            )
+        )
+
+        if not sources:
+            raise ValidationError("このStageを参照する後続枠はありません。")
+
+        resolved = []
+
+        # 先に全件を検査し、途中まで反映されることを防ぐ。
+        for source in sources:
+            source_entry = _resolved_advancement_entry(source)
+
+            if source.target_league_entry_id:
+                target = LeagueEntry.objects.select_for_update().get(
+                    id=source.target_league_entry_id
+                )
+            else:
+                target = TournamentEntry.objects.select_for_update().get(
+                    id=source.target_tournament_entry_id
+                )
+
+            if not source_entry.participant_id:
+                raise ValidationError(
+                    f"{source.label}: 進出元の参加者情報がありません。"
+                )
+
+            if (
+                target.participant_id
+                and target.participant_id != source_entry.participant_id
+                and _target_has_score(target)
+            ):
+                raise ValidationError(
+                    f"{target.code}: 後続枠の試合結果が入力済みのため変更できません。"
+                )
+
+            resolved.append((target, source_entry))
+
+        for target, source_entry in resolved:
+            target.participant = source_entry.participant
+            target.organization = source_entry.display_organization
+            target.player1_name = source_entry.participant.player1_name
+            target.player2_name = source_entry.participant.player2_name
+
+            update_fields = [
+                "participant",
+                "organization",
+                "player1_name",
+                "player2_name",
+            ]
+
+            if isinstance(target, TournamentEntry):
+                target.source_pair = (
+                    source_entry
+                    if isinstance(source_entry, LeagueEntry)
+                    else None
+                )
+                update_fields.append("source_pair")
+
+            target.save(update_fields=update_fields)
+
+        return len(resolved)
 
 
 def swap_advancement_sources(source_a, source_b):
@@ -140,6 +283,28 @@ def insert_round_robin_schedule(
             court=court,
             order=order,
         ).first()
+
+        # リタイアで不戦となった試合は結果を残し、使わなくなった
+        # コート進行枠だけを追加対戦へ差し替える。
+        if (
+            target_schedule
+            and target_schedule.is_replaceable_retirement_slot
+        ):
+            target_schedule.round_robin_match = match
+            target_schedule.tournament_match = None
+            target_schedule.called = False
+            target_schedule.started = False
+            target_schedule.finished = False
+            target_schedule.save(
+                update_fields=[
+                    "round_robin_match",
+                    "tournament_match",
+                    "called",
+                    "started",
+                    "finished",
+                ]
+            )
+            return target_schedule
 
         if target_schedule and target_schedule.is_locked_for_move:
             raise ValidationError(
@@ -388,6 +553,7 @@ def delete_round_robin_score(match):
     match.pair1_games = None
     match.pair2_games = None
     match.completed = False
+    match.result_type = RoundRobinMatch.RESULT_NORMAL
 
     match.save()
 
@@ -424,6 +590,7 @@ def save_round_robin_score(
     match.pair1_games = pair1_games
     match.pair2_games = pair2_games
     match.completed = True
+    match.result_type = RoundRobinMatch.RESULT_NORMAL
 
     match.save()
 

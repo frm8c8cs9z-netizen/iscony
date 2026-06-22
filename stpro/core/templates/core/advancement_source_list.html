@@ -20,6 +20,24 @@
     </a>
 </p>
 
+{% if source_stages %}
+    <h3>確定結果の反映</h3>
+    <p>
+        全試合と順位を確認してから、後続Stageへ参加者を反映します。
+    </p>
+    {% for stage in source_stages %}
+        <form method="post" action="{% url 'apply_stage_results' stage.id %}" style="display:inline-block; margin:0 1em 0.5em 0;">
+            {% csrf_token %}
+            <button
+                type="submit"
+                onclick="return confirm('{{ stage.category.name }} / {{ stage.name }} の確定結果を後続Stageへ反映しますか？');"
+            >
+                {{ stage.category.name }} / {{ stage.name }} を反映
+            </button>
+        </form>
+    {% endfor %}
+{% endif %}
+
 {% if rows %}
     <table>
         <tr>

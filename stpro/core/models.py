@@ -507,6 +507,14 @@ MATCH_GAMES_CHOICES = [
 # =========================================================
 class RoundRobinMatch(models.Model):
 
+    RESULT_NORMAL = "normal"
+    RESULT_RETIREMENT = "retirement"
+
+    RESULT_TYPE_CHOICES = [
+        (RESULT_NORMAL, "通常"),
+        (RESULT_RETIREMENT, "リタイアによる不戦"),
+    ]
+
     group = models.ForeignKey(
         Group,
         on_delete=models.CASCADE
@@ -536,6 +544,12 @@ class RoundRobinMatch(models.Model):
     note = models.CharField(
         max_length=200,
         blank=True,
+    )
+
+    result_type = models.CharField(
+        max_length=20,
+        choices=RESULT_TYPE_CHOICES,
+        default=RESULT_NORMAL,
     )
 
     pair1_games = models.IntegerField(
@@ -1328,6 +1342,14 @@ class Schedule(models.Model):
             or self.started
             or self.finished
             or self.match_has_score
+        )
+
+    @property
+    def is_replaceable_retirement_slot(self):
+        return (
+            self.is_round_robin
+            and self.round_robin_match.result_type
+            == RoundRobinMatch.RESULT_RETIREMENT
         )
 
     def __str__(self):

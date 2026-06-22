@@ -962,6 +962,16 @@ def import_stage_slots(request, tournament_code):
                     )
                     continue
 
+                if source_type and not (
+                    source_stage
+                    or source_stage_code
+                ):
+                    errors.append(
+                        f"{row_number}行目: source_typeを指定する場合は、"
+                        "source_stage または source_stage_code が必要です。"
+                    )
+                    continue
+
                 source_rank = None
 
                 if source_type == AdvancementSource.SOURCE_LEAGUE_RANK:

@@ -780,6 +780,7 @@ def retire_pair(request, pair_id):
             match.pair2_games = 0
 
         match.completed = True
+        match.result_type = RoundRobinMatch.RESULT_RETIREMENT
         match.save()
 
         Schedule.objects.filter(

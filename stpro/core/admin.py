@@ -196,6 +196,7 @@ class RoundRobinMatchAdmin(admin.ModelAdmin):
         "match_games",
         "pair1_games",
         "pair2_games",
+        "result_type",
         "completed",
     )
 
@@ -206,6 +207,7 @@ class RoundRobinMatchAdmin(admin.ModelAdmin):
 
     list_filter = (
         "group",
+        "result_type",
         "completed",
     )
 

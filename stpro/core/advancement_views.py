@@ -5,13 +5,17 @@ core.advancement_views
 確認する画面を扱う。
 """
 
+from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db.models import Q
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from .models import (
     AdvancementSource,
+    Stage,
     Tournament,
 )
+from .services import apply_stage_advancements
 
 
 def _target_context(source):
@@ -156,11 +160,59 @@ def advancement_source_list(request, code):
         )
     )
 
+    source_stages = []
+    seen_stage_ids = set()
+
+    for row in rows:
+        stage = row["source"].source_stage
+
+        if not stage or stage.id in seen_stage_ids:
+            continue
+
+        seen_stage_ids.add(stage.id)
+        source_stages.append(stage)
+
+    source_stages.sort(
+        key=lambda stage: (
+            stage.category.display_order,
+            stage.category.name,
+            stage.display_order,
+            stage.name,
+        )
+    )
+
     return render(
         request,
         "core/advancement_source_list.html",
         {
             "tournament": tournament,
             "rows": rows,
+            "source_stages": source_stages,
         }
     )
+
+
+def apply_stage_results(request, stage_id):
+    """確定したStage結果を後続のリーグ・トーナメント枠へ反映する。"""
+
+    stage = get_object_or_404(
+        Stage.objects.select_related("category__tournament"),
+        id=stage_id,
+    )
+    tournament = stage.category.tournament
+
+    if request.method != "POST":
+        return redirect("advancement_source_list", code=tournament.code)
+
+    try:
+        applied_count = apply_stage_advancements(stage)
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            f"{stage.category.name} / {stage.name} の結果を"
+            f"後続{applied_count}枠へ反映しました。",
+        )
+
+    return redirect("advancement_source_list", code=tournament.code)

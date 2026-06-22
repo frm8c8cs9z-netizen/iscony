@@ -163,6 +163,12 @@ urlpatterns = [
     ),
 
     path(
+        "stage/<int:stage_id>/apply-results/",
+        advancement_views.apply_stage_results,
+        name="apply_stage_results",
+    ),
+
+    path(
         "category/<int:category_id>/pairs/maintenance/",
         league_views.pair_maintenance,
         name="pair_maintenance",

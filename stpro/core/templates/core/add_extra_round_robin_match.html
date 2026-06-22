@@ -16,6 +16,10 @@
     {{ group.name }}リーグ
 </p>
 
+<p>
+    挿入位置がリタイアによる不戦試合の場合は、その進行枠を追加対戦に差し替えます。
+</p>
+
 <form method="post">
     {% csrf_token %}
     {{ form.as_p }}
