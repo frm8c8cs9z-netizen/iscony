@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Max, Q
 
 from django.core.exceptions import ValidationError
 
@@ -71,6 +72,108 @@ def swap_advancement_sources(source_a, source_b):
             ]
         )
 
+
+def create_extra_round_robin_match(
+    group,
+    pair1,
+    pair2,
+    counts_for_ranking=True,
+    note="",
+):
+    """同じ2枠の次のmeeting_numberで追加対戦を作成する。"""
+
+    if pair1.id == pair2.id:
+        raise ValidationError("異なる2枠を選択してください。")
+
+    if pair1.group_id != group.id or pair2.group_id != group.id:
+        raise ValidationError("選択した枠が対象Groupに属していません。")
+
+    if pair1.retired or pair2.retired:
+        raise ValidationError("リタイア済みの枠は追加対戦に選択できません。")
+
+    with transaction.atomic():
+        existing_matches = RoundRobinMatch.objects.select_for_update().filter(
+            group=group,
+        ).filter(
+            Q(pair1=pair1, pair2=pair2)
+            | Q(pair1=pair2, pair2=pair1)
+        )
+        next_meeting_number = (
+            existing_matches.aggregate(
+                Max("meeting_number")
+            )["meeting_number__max"]
+            or 0
+        ) + 1
+
+        return RoundRobinMatch.objects.create(
+            group=group,
+            pair1=pair1,
+            pair2=pair2,
+            meeting_number=next_meeting_number,
+            counts_for_ranking=counts_for_ranking,
+            note=note,
+        )
+
+
+def insert_round_robin_schedule(
+    match,
+    schedule_block,
+    court,
+    order,
+):
+    """追加対戦を指定位置へ挿入し、後続の未開始試合を後ろへずらす。"""
+
+    tournament_id = match.group.category.tournament_id
+
+    if (
+        schedule_block.tournament_id != tournament_id
+        or court.tournament_id != tournament_id
+    ):
+        raise ValidationError("日程区分・コート・試合の大会が一致しません。")
+
+    if Schedule.objects.filter(round_robin_match=match).exists():
+        raise ValidationError("この追加対戦はすでに進行表へ登録されています。")
+
+    with transaction.atomic():
+        target_schedule = Schedule.objects.select_for_update().filter(
+            schedule_block=schedule_block,
+            court=court,
+            order=order,
+        ).first()
+
+        if target_schedule and target_schedule.is_locked_for_move:
+            raise ValidationError(
+                "呼出済・試合中・完了・結果入力済の試合の前には追加できません。"
+            )
+
+        target_schedules = list(
+            Schedule.objects.select_for_update().filter(
+                schedule_block=schedule_block,
+                court=court,
+                order__gte=order,
+                order__lt=1000000,
+            ).order_by("-order")
+        )
+
+        if any(item.is_locked_for_move for item in target_schedules):
+            raise ValidationError(
+                "呼出済・試合中・完了・結果入力済の試合より前には追加できません。"
+            )
+
+        for item in target_schedules:
+            item.order += 1000000
+            item.save(update_fields=["order"])
+
+        for item in reversed(target_schedules):
+            item.order = item.order - 1000000 + 1
+            item.save(update_fields=["order"])
+
+        return Schedule.objects.create(
+            schedule_block=schedule_block,
+            court=court,
+            order=order,
+            round_robin_match=match,
+        )
 
 def move_schedule(
     schedule,

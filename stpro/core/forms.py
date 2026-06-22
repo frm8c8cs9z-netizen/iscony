@@ -7,12 +7,118 @@ from .models import (
     TournamentBracket,
     TournamentMatch,
     Schedule,
+    ScheduleBlock,
     Court,
 )
 
 
 class CSVUploadForm(forms.Form):
     file = forms.FileField()
+
+
+class LeagueEntryChoiceField(forms.ModelChoiceField):
+
+    def label_from_instance(self, obj):
+        return f"{obj.pair_code} {obj.display_name}"
+
+
+class ExtraRoundRobinMatchForm(forms.Form):
+
+    pair1 = LeagueEntryChoiceField(
+        queryset=LeagueEntry.objects.none(),
+        label="対戦枠1",
+    )
+    pair2 = LeagueEntryChoiceField(
+        queryset=LeagueEntry.objects.none(),
+        label="対戦枠2",
+    )
+    counts_for_ranking = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="順位計算に含める",
+    )
+    note = forms.CharField(
+        required=False,
+        max_length=200,
+        initial="リタイアに伴う追加対戦",
+        label="理由",
+    )
+    add_to_schedule = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="進行表へ追加する",
+    )
+    schedule_block = forms.ModelChoiceField(
+        queryset=ScheduleBlock.objects.none(),
+        required=False,
+        label="日程区分",
+    )
+    court = forms.ModelChoiceField(
+        queryset=Court.objects.none(),
+        required=False,
+        label="コート",
+    )
+    order = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="挿入位置",
+    )
+
+    def __init__(self, *args, group=None, tournament=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.group = group
+        self.tournament = tournament
+
+        if group:
+            entries = LeagueEntry.objects.filter(
+                group=group,
+                retired=False,
+            ).order_by(
+                "display_order",
+                "pair_code",
+            )
+            self.fields["pair1"].queryset = entries
+            self.fields["pair2"].queryset = entries
+
+        if tournament:
+            self.fields["schedule_block"].queryset = (
+                ScheduleBlock.objects.filter(
+                    tournament=tournament,
+                ).order_by(
+                    "display_order",
+                    "id",
+                )
+            )
+            self.fields["court"].queryset = Court.objects.filter(
+                tournament=tournament,
+            ).order_by(
+                "display_order",
+                "name",
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        pair1 = cleaned_data.get("pair1")
+        pair2 = cleaned_data.get("pair2")
+
+        if pair1 and pair2 and pair1 == pair2:
+            raise forms.ValidationError(
+                "異なる2枠を選択してください。"
+            )
+
+        if cleaned_data.get("add_to_schedule"):
+            for field_name in [
+                "schedule_block",
+                "court",
+                "order",
+            ]:
+                if not cleaned_data.get(field_name):
+                    self.add_error(
+                        field_name,
+                        "進行表へ追加する場合は必須です。",
+                    )
+
+        return cleaned_data
 
 
 class LeagueEntryEditForm(forms.ModelForm):

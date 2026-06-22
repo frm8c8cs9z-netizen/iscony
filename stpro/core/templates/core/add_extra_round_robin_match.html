@@ -1,0 +1,32 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>追加対戦</h2>
+
+<p>
+    {{ tournament.name }}
+    /
+    {{ group.category.name }}
+    /
+    {% if group.stage %}
+        {{ group.stage.name }}
+        /
+    {% endif %}
+    {{ group.name }}リーグ
+</p>
+
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+
+    <button type="submit">追加対戦を作成</button>
+</form>
+
+<p>
+    <a href="{% url 'category_detail' group.category.id %}#group-{{ group.id }}">
+        リーグ表へ戻る
+    </a>
+</p>
+
+{% endblock %}

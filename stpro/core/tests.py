@@ -715,6 +715,100 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, "2回目")
         self.assertContains(response, "リタイアに伴う追加対戦")
 
+    def test_extra_meeting_can_be_created_and_inserted_into_schedule(self):
+        first_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        existing_schedule = Schedule.objects.create(
+            schedule_block=block,
+            court=court,
+            order=1,
+            round_robin_match=first_match,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_extra_round_robin_match",
+                kwargs={"group_id": self.group.id},
+            ),
+            {
+                "pair1": self.entry1.id,
+                "pair2": self.entry2.id,
+                "counts_for_ranking": "on",
+                "note": "リタイアに伴う追加対戦",
+                "add_to_schedule": "on",
+                "schedule_block": block.id,
+                "court": court.id,
+                "order": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        extra_match = RoundRobinMatch.objects.get(meeting_number=2)
+        extra_schedule = Schedule.objects.get(
+            round_robin_match=extra_match,
+        )
+        existing_schedule.refresh_from_db()
+        self.assertEqual(extra_schedule.order, 1)
+        self.assertEqual(existing_schedule.order, 2)
+        self.assertTrue(extra_match.counts_for_ranking)
+
+    def test_failed_schedule_insertion_rolls_back_extra_meeting(self):
+        first_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        Schedule.objects.create(
+            schedule_block=block,
+            court=court,
+            order=1,
+            round_robin_match=first_match,
+            finished=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_extra_round_robin_match",
+                kwargs={"group_id": self.group.id},
+            ),
+            {
+                "pair1": self.entry1.id,
+                "pair2": self.entry2.id,
+                "counts_for_ranking": "on",
+                "note": "追加対戦",
+                "add_to_schedule": "on",
+                "schedule_block": block.id,
+                "court": court.id,
+                "order": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "呼出済・試合中・完了・結果入力済の試合の前には追加できません。",
+        )
+        self.assertEqual(RoundRobinMatch.objects.count(), 1)
+
 
 class ImportPairsCsvTests(TestCase):
 

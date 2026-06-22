@@ -102,6 +102,12 @@ urlpatterns = [
         league_views.generate_group_matches,
         name='generate_group_matches'
     ),
+
+    path(
+        'group/<int:group_id>/extra-match/',
+        league_views.add_extra_round_robin_match,
+        name='add_extra_round_robin_match'
+    ),
     
     path(
         "tournament/<str:tournament_code>/schedule/",

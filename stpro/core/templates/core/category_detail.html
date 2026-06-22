@@ -39,6 +39,12 @@
         {{ data.group.name }}リーグ
     </h3>
 
+    <p>
+        <a href="{% url 'add_extra_round_robin_match' data.group.id %}">
+            追加対戦
+        </a>
+    </p>
+
     <div class="table-wrapper">
 
         <table>
