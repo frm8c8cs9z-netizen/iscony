@@ -32,6 +32,7 @@ from .pdf_views import get_score_sheet_template_settings
 from .services import (
     advance_tournament_bye_winners,
     apply_stage_advancements,
+    create_extra_round_robin_match,
     insert_round_robin_schedule,
     move_schedule,
     save_tournament_score,
@@ -659,6 +660,23 @@ class RoundRobinMeetingTests(TestCase):
         self.assertEqual(first.meeting_number, 1)
         self.assertEqual(second.meeting_number, 2)
         self.assertEqual(RoundRobinMatch.objects.count(), 2)
+
+    def test_extra_meeting_inherits_match_games_from_previous_meeting(self):
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            match_games=5,
+        )
+
+        extra_match = create_extra_round_robin_match(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        self.assertEqual(extra_match.meeting_number, 2)
+        self.assertEqual(extra_match.match_games, 5)
 
     def test_non_ranking_meeting_is_excluded_from_ranking(self):
         RoundRobinMatch.objects.create(

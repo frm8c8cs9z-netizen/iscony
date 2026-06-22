@@ -243,18 +243,34 @@ def create_extra_round_robin_match(
             Q(pair1=pair1, pair2=pair2)
             | Q(pair1=pair2, pair2=pair1)
         )
+        previous_match = existing_matches.order_by(
+            "-meeting_number",
+            "-id",
+        ).first()
         next_meeting_number = (
             existing_matches.aggregate(
                 Max("meeting_number")
             )["meeting_number__max"]
             or 0
         ) + 1
+        match_games = (
+            previous_match.match_games
+            if previous_match
+            else RoundRobinMatch.objects.filter(
+                group=group
+            ).order_by("id").values_list(
+                "match_games",
+                flat=True,
+            ).first()
+            or 7
+        )
 
         return RoundRobinMatch.objects.create(
             group=group,
             pair1=pair1,
             pair2=pair2,
             meeting_number=next_meeting_number,
+            match_games=match_games,
             counts_for_ranking=counts_for_ranking,
             note=note,
         )
