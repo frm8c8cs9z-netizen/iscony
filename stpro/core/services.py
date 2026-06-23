@@ -689,6 +689,95 @@ def delete_round_robin_score(match):
     return None
 
 
+def cancel_pair_retirement(pair):
+    """リーグ枠のリタイアを取り消し、自動不戦結果だけを戻す。"""
+
+    with transaction.atomic():
+        pair = LeagueEntry.objects.select_for_update().get(id=pair.id)
+
+        if not pair.retired:
+            raise ValidationError("この枠はリタイア扱いではありません。")
+
+        matches = RoundRobinMatch.objects.select_for_update().filter(
+            group=pair.group,
+        ).filter(
+            Q(pair1=pair) | Q(pair2=pair)
+        )
+        retirement_matches = matches.filter(
+            result_type=RoundRobinMatch.RESULT_RETIREMENT,
+        )
+
+        if ScheduleReplacementHistory.objects.filter(
+            original_match__in=retirement_matches,
+            reverted_at__isnull=True,
+        ).exists():
+            raise ValidationError(
+                "追加対戦へ差し替え済みの進行枠があります。"
+                "先に差し替えを取り消してください。"
+            )
+
+        pair.retired = False
+        pair.retired_reason = ""
+        pair.save(
+            update_fields=[
+                "retired",
+                "retired_reason",
+            ]
+        )
+
+        reset_count = 0
+
+        for match in retirement_matches:
+            opponent = (
+                match.pair2
+                if match.pair1_id == pair.id
+                else match.pair1
+            )
+
+            if opponent.retired:
+                win_games = match.winning_games()
+
+                if match.pair1_id == pair.id:
+                    match.pair1_games = win_games
+                    match.pair2_games = 0
+                else:
+                    match.pair1_games = 0
+                    match.pair2_games = win_games
+
+                match.completed = True
+                match.result_type = RoundRobinMatch.RESULT_RETIREMENT
+                match.save()
+                Schedule.objects.filter(
+                    round_robin_match=match
+                ).update(
+                    called=True,
+                    started=True,
+                    finished=True,
+                )
+                continue
+
+            match.pair1_games = None
+            match.pair2_games = None
+            match.completed = False
+            match.result_type = RoundRobinMatch.RESULT_NORMAL
+            match.save()
+            Schedule.objects.filter(
+                round_robin_match=match
+            ).update(
+                called=False,
+                started=False,
+                finished=False,
+            )
+            reset_count += 1
+
+        update_group_ranking(
+            pair.group,
+            reset_rank=False
+        )
+
+        return reset_count
+
+
 def save_round_robin_score(
     match,
     pair1_games,

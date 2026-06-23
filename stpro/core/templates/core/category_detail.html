@@ -78,6 +78,19 @@
 
                         {% if row.pair.retired %}
                             <span style="color:red;">{{ row.pair.pair_code }}</span>
+                            <form
+                                method="post"
+                                action="{% url 'cancel_retire_pair' row.pair.id %}"
+                                style="display:inline;"
+                            >
+                                {% csrf_token %}
+                                <button
+                                    type="submit"
+                                    onclick="return confirm('この枠のリタイアを取り消しますか？自動不戦結果は未入力に戻ります。');"
+                                >
+                                    取消
+                                </button>
+                            </form>
                         {% else %}
                             <a
                                 href="{% url 'retire_pair' row.pair.id %}"

@@ -146,6 +146,12 @@ urlpatterns = [
     ),
 
     path(
+        "pair/<int:pair_id>/retire/cancel/",
+        league_views.cancel_retire_pair,
+        name="cancel_retire_pair",
+    ),
+
+    path(
         "schedule-replacement/<int:history_id>/undo/",
         league_views.undo_extra_match_replacement,
         name="undo_extra_match_replacement",

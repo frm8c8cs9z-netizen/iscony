@@ -27,6 +27,7 @@ from .models import (
     ScheduleReplacementHistory,
 )
 from .services import (
+    cancel_pair_retirement,
     create_extra_round_robin_match,
     delete_round_robin_score,
     insert_round_robin_schedule,
@@ -850,6 +851,40 @@ def retire_pair(request, pair_id):
     return redirect(
         "category_detail",
         category_id=pair.category.id
+    )
+
+
+def cancel_retire_pair(request, pair_id):
+    """リーグ枠のリタイア扱いを取り消す。"""
+
+    pair = get_object_or_404(
+        LeagueEntry,
+        id=pair_id,
+    )
+
+    if request.method != "POST":
+        return redirect(
+            "category_detail",
+            category_id=pair.category.id,
+        )
+
+    try:
+        reset_count = cancel_pair_retirement(pair)
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            (
+                f"{pair.group.name} / {pair.pair_code} の"
+                f"リタイアを取り消しました。"
+                f"自動不戦結果{reset_count}試合を未入力へ戻しました。"
+            ),
+        )
+
+    return redirect(
+        "category_detail",
+        category_id=pair.category.id,
     )
 
 

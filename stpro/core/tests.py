@@ -32,6 +32,7 @@ from .pdf_views import get_score_sheet_template_settings
 from .services import (
     advance_tournament_bye_winners,
     apply_stage_advancements,
+    cancel_pair_retirement,
     create_extra_round_robin_match,
     insert_round_robin_schedule,
     move_schedule,
@@ -1009,6 +1010,157 @@ class RoundRobinMeetingTests(TestCase):
         self.assertFalse(
             RoundRobinMatch.objects.filter(id=extra_match.id).exists()
         )
+
+    def test_cancel_retirement_resets_only_retirement_results(self):
+        retired_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+        )
+        completed_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=retired_entry,
+            pair1_games=4,
+            pair2_games=2,
+            completed=True,
+        )
+        walkover_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry2,
+            pair2=retired_entry,
+        )
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        schedule = Schedule.objects.create(
+            schedule_block=block,
+            court=court,
+            order=1,
+            round_robin_match=walkover_match,
+        )
+
+        self.client.get(
+            reverse(
+                "retire_pair",
+                kwargs={"pair_id": retired_entry.id},
+            )
+        )
+
+        reset_count = cancel_pair_retirement(retired_entry)
+
+        retired_entry.refresh_from_db()
+        completed_match.refresh_from_db()
+        walkover_match.refresh_from_db()
+        schedule.refresh_from_db()
+
+        self.assertEqual(reset_count, 1)
+        self.assertFalse(retired_entry.retired)
+        self.assertEqual(completed_match.pair1_games, 4)
+        self.assertEqual(completed_match.pair2_games, 2)
+        self.assertEqual(walkover_match.pair1_games, None)
+        self.assertEqual(walkover_match.pair2_games, None)
+        self.assertFalse(walkover_match.completed)
+        self.assertEqual(
+            walkover_match.result_type,
+            RoundRobinMatch.RESULT_NORMAL,
+        )
+        self.assertFalse(schedule.called)
+        self.assertFalse(schedule.started)
+        self.assertFalse(schedule.finished)
+
+    def test_cancel_retirement_button_is_displayed_for_retired_entry(self):
+        retired_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+            retired=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse(
+                "cancel_retire_pair",
+                kwargs={"pair_id": retired_entry.id},
+            ),
+        )
+        self.assertContains(response, "取消")
+
+    def test_cancel_retirement_blocks_active_schedule_replacement(self):
+        retired_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+        )
+        cancelled_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=retired_entry,
+        )
+        extra_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            meeting_number=2,
+        )
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        schedule = Schedule.objects.create(
+            schedule_block=block,
+            court=court,
+            order=1,
+            round_robin_match=extra_match,
+        )
+
+        self.client.get(
+            reverse(
+                "retire_pair",
+                kwargs={"pair_id": retired_entry.id},
+            )
+        )
+        ScheduleReplacementHistory.objects.create(
+            schedule=schedule,
+            original_match=cancelled_match,
+            replacement_match=extra_match,
+            replacement_label="追加試合",
+            original_schedule_block=block,
+            original_court=court,
+            original_order=1,
+            original_called=True,
+            original_started=True,
+            original_finished=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            cancel_pair_retirement(retired_entry)
 
     def test_replacement_with_entered_score_cannot_be_undone(self):
         original_match = RoundRobinMatch.objects.create(
