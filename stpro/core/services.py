@@ -86,6 +86,15 @@ def _target_has_score(target):
     ).exists()
 
 
+def _advancement_target(source):
+    """進出元設定が紐づいている進出先枠を返す。"""
+
+    return (
+        source.target_league_entry
+        or source.target_tournament_entry
+    )
+
+
 def apply_stage_advancements(source_stage):
     """確定済みStage結果をAdvancementSourceに従って後続枠へ反映する。"""
 
@@ -178,6 +187,15 @@ def swap_advancement_sources(source_a, source_b):
         a_target_tournament_entry = source_a.target_tournament_entry
         b_target_league_entry = source_b.target_league_entry
         b_target_tournament_entry = source_b.target_tournament_entry
+
+        for target in (
+            _advancement_target(source_a),
+            _advancement_target(source_b),
+        ):
+            if target and _target_has_score(target):
+                raise ValidationError(
+                    "結果入力済みの試合に含まれる枠は入れ替えできません。"
+                )
 
         source_a.target_league_entry = None
         source_a.target_tournament_entry = None

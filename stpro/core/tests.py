@@ -433,6 +433,81 @@ class AdvancementSourceModelTests(TestCase):
         self.assertEqual(entry_a4.display_name, "F2")
         self.assertEqual(entry_b2.display_name, "D2")
 
+    def test_advancement_sources_cannot_be_swapped_after_league_score(self):
+        entry_2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="2",
+            display_order=2,
+            player1_name="選手2A",
+            player2_name="選手2B",
+        )
+        source_1 = AdvancementSource.objects.create(
+            target_league_entry=self.league_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+        source_2 = AdvancementSource.objects.create(
+            target_league_entry=entry_2,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=2,
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entry,
+            pair2=entry_2,
+            pair1_games=4,
+            pair2_games=1,
+        )
+
+        with self.assertRaises(ValidationError):
+            swap_advancement_sources(
+                source_1,
+                source_2,
+            )
+
+    def test_advancement_sources_cannot_be_swapped_after_tournament_score(self):
+        tournament_entry_2 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="未定2A",
+            player2_name="未定2B",
+        )
+        source_1 = AdvancementSource.objects.create(
+            target_tournament_entry=self.tournament_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+        source_2 = AdvancementSource.objects.create(
+            target_tournament_entry=tournament_entry_2,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=2,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            pair1=self.tournament_entry,
+            pair2=tournament_entry_2,
+            pair1_games=4,
+            pair2_games=2,
+        )
+
+        with self.assertRaises(ValidationError):
+            swap_advancement_sources(
+                source_1,
+                source_2,
+            )
+
     def test_target_must_be_either_league_entry_or_tournament_entry(self):
         source = AdvancementSource(
             target_league_entry=self.league_entry,
