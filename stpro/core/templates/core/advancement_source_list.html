@@ -20,6 +20,11 @@
     </a>
 </p>
 
+<p>
+    進出元の入れ替えは、同じカテゴリ・同じ進出先Stage内の枠同士で行います。
+    予選終了後の所属調整などで、D2 と F2 のような進出元ラベルを入れ替える操作です。
+</p>
+
 {% if source_stages %}
     <h3>確定結果の反映</h3>
     <p>
@@ -50,6 +55,7 @@
             <th>進出元ラベル</th>
             <th>進出元詳細</th>
             <th>現在表示</th>
+            <th>入れ替え</th>
         </tr>
 
         {% for row in rows %}
@@ -84,6 +90,36 @@
                 </td>
                 <td>
                     {{ row.target.entry.display_name }}
+                </td>
+                <td>
+                    {% if row.swap_options %}
+                        <form
+                            method="post"
+                            action="{% url 'swap_advancement_source' tournament.code %}"
+                        >
+                            {% csrf_token %}
+                            <input
+                                type="hidden"
+                                name="source_a"
+                                value="{{ row.source.id }}"
+                            >
+                            <select name="source_b">
+                                {% for option in row.swap_options %}
+                                    <option value="{{ option.source.id }}">
+                                        {{ option.label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <button
+                                type="submit"
+                                onclick="return confirm('進出元を入れ替えますか？');"
+                            >
+                                入れ替え
+                            </button>
+                        </form>
+                    {% else %}
+                        -
+                    {% endif %}
                 </td>
             </tr>
         {% endfor %}

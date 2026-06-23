@@ -15,7 +15,10 @@ from .models import (
     Stage,
     Tournament,
 )
-from .services import apply_stage_advancements
+from .services import (
+    apply_stage_advancements,
+    swap_advancement_sources,
+)
 
 
 def _target_context(source):
@@ -95,6 +98,30 @@ def _source_detail(source):
         )
 
     return "未定"
+
+
+def _target_stage(source):
+    """入れ替え候補を同じ進出先Stage内に絞るためのStageを返す。"""
+
+    if source.target_league_entry:
+        return source.target_league_entry.group.stage
+
+    if source.target_tournament_entry:
+        return source.target_tournament_entry.bracket.stage
+
+    return None
+
+
+def _swap_option_label(row):
+    """入れ替え先プルダウンに表示する短い説明を作る。"""
+
+    target = row["target"]
+
+    return (
+        f"{target['container']} / "
+        f"{target['slot_code']} / "
+        f"{row['source'].label}"
+    )
 
 
 def advancement_source_list(request, code):
@@ -181,6 +208,36 @@ def advancement_source_list(request, code):
         )
     )
 
+    for row in rows:
+        target = row["target"]
+        target_stage_id = target["stage"].id if target["stage"] else None
+        target_category_id = target["category"].id
+        options = []
+
+        for option_row in rows:
+            option_target = option_row["target"]
+            option_stage_id = (
+                option_target["stage"].id
+                if option_target["stage"]
+                else None
+            )
+
+            if option_row["source"].id == row["source"].id:
+                continue
+
+            if option_target["category"].id != target_category_id:
+                continue
+
+            if option_stage_id != target_stage_id:
+                continue
+
+            options.append({
+                "source": option_row["source"],
+                "label": _swap_option_label(option_row),
+            })
+
+        row["swap_options"] = options
+
     return render(
         request,
         "core/advancement_source_list.html",
@@ -190,6 +247,82 @@ def advancement_source_list(request, code):
             "source_stages": source_stages,
         }
     )
+
+
+def swap_advancement_source(request, code):
+    """2つの進出元設定が紐づく枠を入れ替える。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code
+    )
+
+    if request.method != "POST":
+        return redirect("advancement_source_list", code=tournament.code)
+
+    source_a = get_object_or_404(
+        AdvancementSource.objects.select_related(
+            "target_league_entry__category",
+            "target_league_entry__group__stage",
+            "target_tournament_entry__bracket__category",
+            "target_tournament_entry__bracket__stage",
+        ),
+        id=request.POST.get("source_a"),
+    )
+    source_b = get_object_or_404(
+        AdvancementSource.objects.select_related(
+            "target_league_entry__category",
+            "target_league_entry__group__stage",
+            "target_tournament_entry__bracket__category",
+            "target_tournament_entry__bracket__stage",
+        ),
+        id=request.POST.get("source_b"),
+    )
+
+    target_a = _target_context(source_a)
+    target_b = _target_context(source_b)
+    stage_a = _target_stage(source_a)
+    stage_b = _target_stage(source_b)
+
+    if (
+        target_a["category"].tournament_id != tournament.id
+        or target_b["category"].tournament_id != tournament.id
+    ):
+        messages.error(request, "別大会の進出元は入れ替えできません。")
+        return redirect("advancement_source_list", code=tournament.code)
+
+    if source_a.id == source_b.id:
+        messages.error(request, "入れ替え元と入れ替え先が同じです。")
+        return redirect("advancement_source_list", code=tournament.code)
+
+    if target_a["category"].id != target_b["category"].id:
+        messages.error(request, "別カテゴリの進出元は入れ替えできません。")
+        return redirect("advancement_source_list", code=tournament.code)
+
+    if (
+        not stage_a
+        or not stage_b
+        or stage_a.id != stage_b.id
+    ):
+        messages.error(request, "別Stageの進出元は入れ替えできません。")
+        return redirect("advancement_source_list", code=tournament.code)
+
+    try:
+        swap_advancement_sources(source_a, source_b)
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            (
+                f"{target_a['category'].name} / {stage_a.name} の "
+                f"{target_a['container']} {target_a['slot_code']} と "
+                f"{target_b['container']} {target_b['slot_code']} の"
+                "進出元を入れ替えました。"
+            ),
+        )
+
+    return redirect("advancement_source_list", code=tournament.code)
 
 
 def apply_stage_results(request, stage_id):

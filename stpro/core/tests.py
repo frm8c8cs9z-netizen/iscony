@@ -2295,6 +2295,174 @@ class AdvancementSourceListViewTests(TestCase):
         self.assertContains(response, "予選T / Aブロック / M1 / 敗者")
         self.assertContains(response, "M1敗者")
 
+    def test_advancement_source_list_shows_swap_options_in_same_stage(self):
+        preliminary_stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        group_d = Group.objects.create(
+            category=self.category,
+            stage=preliminary_stage,
+            name="D",
+        )
+        group_f = Group.objects.create(
+            category=self.category,
+            stage=preliminary_stage,
+            name="F",
+        )
+        final_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝2位リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        final_group_a = Group.objects.create(
+            category=self.category,
+            stage=final_stage,
+            name="A",
+        )
+        final_group_b = Group.objects.create(
+            category=self.category,
+            stage=final_stage,
+            name="B",
+        )
+        entry_a4 = LeagueEntry.objects.create(
+            category=self.category,
+            group=final_group_a,
+            pair_code="4",
+            display_order=4,
+            player1_name="",
+            player2_name="",
+        )
+        entry_b2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=final_group_b,
+            pair_code="2",
+            display_order=2,
+            player1_name="",
+            player2_name="",
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=entry_a4,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=preliminary_stage,
+            source_group=group_d,
+            source_rank=2,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=entry_b2,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=preliminary_stage,
+            source_group=group_f,
+            source_rank=2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "advancement_source_list",
+                kwargs={
+                    "code": self.tournament.code,
+                }
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "進出元の入れ替え")
+        self.assertContains(response, "A / 4 / D2")
+        self.assertContains(response, "B / 2 / F2")
+        self.assertContains(response, "advancement-sources/swap")
+
+    def test_advancement_sources_can_be_swapped_from_view(self):
+        preliminary_stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        group_d = Group.objects.create(
+            category=self.category,
+            stage=preliminary_stage,
+            name="D",
+        )
+        group_f = Group.objects.create(
+            category=self.category,
+            stage=preliminary_stage,
+            name="F",
+        )
+        final_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝2位リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        final_group_a = Group.objects.create(
+            category=self.category,
+            stage=final_stage,
+            name="A",
+        )
+        final_group_b = Group.objects.create(
+            category=self.category,
+            stage=final_stage,
+            name="B",
+        )
+        entry_a4 = LeagueEntry.objects.create(
+            category=self.category,
+            group=final_group_a,
+            pair_code="4",
+            display_order=4,
+            player1_name="",
+            player2_name="",
+        )
+        entry_b2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=final_group_b,
+            pair_code="2",
+            display_order=2,
+            player1_name="",
+            player2_name="",
+        )
+        source_d2 = AdvancementSource.objects.create(
+            target_league_entry=entry_a4,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=preliminary_stage,
+            source_group=group_d,
+            source_rank=2,
+        )
+        source_f2 = AdvancementSource.objects.create(
+            target_league_entry=entry_b2,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=preliminary_stage,
+            source_group=group_f,
+            source_rank=2,
+        )
+
+        response = self.client.post(
+            reverse(
+                "swap_advancement_source",
+                kwargs={
+                    "code": self.tournament.code,
+                }
+            ),
+            {
+                "source_a": source_d2.id,
+                "source_b": source_f2.id,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "advancement_source_list",
+                kwargs={
+                    "code": self.tournament.code,
+                }
+            ),
+        )
+
+        entry_a4.refresh_from_db()
+        entry_b2.refresh_from_db()
+
+        self.assertEqual(entry_a4.advancement_source.label, "F2")
+        self.assertEqual(entry_b2.advancement_source.label, "D2")
+
 
 class ApplyStageAdvancementsTests(TestCase):
 

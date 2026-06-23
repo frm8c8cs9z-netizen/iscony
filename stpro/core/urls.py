@@ -176,6 +176,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/advancement-sources/swap/",
+        advancement_views.swap_advancement_source,
+        name="swap_advancement_source",
+    ),
+
+    path(
         "stage/<int:stage_id>/apply-results/",
         advancement_views.apply_stage_results,
         name="apply_stage_results",
