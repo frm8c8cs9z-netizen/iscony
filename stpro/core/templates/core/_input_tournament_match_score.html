@@ -34,7 +34,16 @@
         <tr>
 
             <!-- pair1 -->
-            <td id="pair1_box">
+            <td
+                id="pair1_box"
+                class="winner-select-cell"
+                {% if match.pair1 %}
+                    onclick="setWinner('pair1')"
+                    role="button"
+                    tabindex="0"
+                    onkeydown="handleWinnerCellKey(event, 'pair1')"
+                {% endif %}
+            >
 
                 {% if match.pair1 %}
 
@@ -54,7 +63,7 @@
 
                     <button
                         type="button"
-                        onclick="setWinner('pair1')"
+                        onclick="event.stopPropagation(); setWinner('pair1')"
                     >
                         勝ち
                     </button>
@@ -102,7 +111,16 @@
             </td>
 
             <!-- pair2 -->
-            <td id="pair2_box">
+            <td
+                id="pair2_box"
+                class="winner-select-cell"
+                {% if match.pair2 %}
+                    onclick="setWinner('pair2')"
+                    role="button"
+                    tabindex="0"
+                    onkeydown="handleWinnerCellKey(event, 'pair2')"
+                {% endif %}
+            >
 
                 {% if match.pair2 %}
 
@@ -122,7 +140,7 @@
 
                     <button
                         type="button"
-                        onclick="setWinner('pair2')"
+                        onclick="event.stopPropagation(); setWinner('pair2')"
                     >
                         勝ち
                     </button>
@@ -183,6 +201,10 @@
 
 .loser-box {
     opacity: 0.7;
+}
+
+.winner-select-cell {
+    cursor: pointer;
 }
 
 .primary-button {
@@ -271,6 +293,13 @@ function setWinner(winner) {
         pair1Box.classList.add(
             "loser-box"
         );
+    }
+}
+
+function handleWinnerCellKey(event, winner) {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setWinner(winner);
     }
 }
 

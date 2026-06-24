@@ -36,13 +36,20 @@
 
     <table>
         <tr>
-            <td id="pair1_box">
+            <td
+                id="pair1_box"
+                class="winner-select-cell"
+                onclick="setWinner('pair1')"
+                role="button"
+                tabindex="0"
+                onkeydown="handleWinnerCellKey(event, 'pair1')"
+            >
                 <strong>{{ match.pair1.code }}</strong><br>
                 {{ match.pair1.display_player1_name }}<br>
                 {{ match.pair1.display_player2_name }}<br>
                 （{{ match.pair1.display_organization }}）<br>
 
-                <button type="button" onclick="setWinner('pair1')">
+                <button type="button" onclick="event.stopPropagation(); setWinner('pair1')">
                     勝ち
                 </button>
             </td>
@@ -73,13 +80,20 @@
                 >
             </td>
 
-            <td id="pair2_box">
+            <td
+                id="pair2_box"
+                class="winner-select-cell"
+                onclick="setWinner('pair2')"
+                role="button"
+                tabindex="0"
+                onkeydown="handleWinnerCellKey(event, 'pair2')"
+            >
                 <strong>{{ match.pair2.code }}</strong><br>
                 {{ match.pair2.display_player1_name }}<br>
                 {{ match.pair2.display_player2_name }}<br>
                 （{{ match.pair2.display_organization }}）<br>
 
-                <button type="button" onclick="setWinner('pair2')">
+                <button type="button" onclick="event.stopPropagation(); setWinner('pair2')">
                     勝ち
                 </button>
             </td>
@@ -125,6 +139,10 @@
 
 .loser-box {
     opacity: 0.75;
+}
+
+.winner-select-cell {
+    cursor: pointer;
 }
 
 .primary-button {
@@ -174,6 +192,13 @@ function setWinner(winner) {
 
         pair2Box.classList.add("winner-box");
         pair1Box.classList.add("loser-box");
+    }
+}
+
+function handleWinnerCellKey(event, winner) {
+    if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setWinner(winner);
     }
 }
 </script>
