@@ -70,6 +70,12 @@ urlpatterns = [
     ),
 
     path(
+        "snapshot/<int:snapshot_id>/restore/tournament/",
+        snapshot_views.restore_tournament_snapshot_view,
+        name="restore_tournament_snapshot",
+    ),
+
+    path(
         "snapshot/<int:snapshot_id>/restore/category-block/",
         snapshot_views.restore_tournament_snapshot_category_block_view,
         name="restore_tournament_snapshot_category_block",

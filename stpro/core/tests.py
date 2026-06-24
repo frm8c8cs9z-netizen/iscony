@@ -49,6 +49,7 @@ from .snapshot_services import (
     restore_category_snapshot,
     restore_category_schedule_block_from_tournament_snapshot,
     restore_category_from_tournament_snapshot,
+    restore_tournament_snapshot,
 )
 
 
@@ -1802,6 +1803,109 @@ class CategorySnapshotTests(TestCase):
         )
         restored_schedule = Schedule.objects.get(id=second_schedule.id)
         self.assertEqual(restored_schedule.order, 1)
+
+    def test_tournament_snapshot_restores_all_categories(self):
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        other_stage = Stage.objects.create(
+            category=other_category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        other_group = Group.objects.create(
+            category=other_category,
+            stage=other_stage,
+            name="A",
+        )
+        other_entry1 = LeagueEntry.objects.create(
+            category=other_category,
+            group=other_group,
+            pair_code="1",
+            display_order=1,
+            player1_name="他1A",
+            player2_name="他1B",
+        )
+        other_entry2 = LeagueEntry.objects.create(
+            category=other_category,
+            group=other_group,
+            pair_code="2",
+            display_order=2,
+            player1_name="他2A",
+            player2_name="他2B",
+        )
+        other_match = RoundRobinMatch.objects.create(
+            group=other_group,
+            pair1=other_entry1,
+            pair2=other_entry2,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=2,
+            round_robin_match=other_match,
+        )
+        snapshot = create_tournament_snapshot(
+            self.tournament,
+            label="開始前",
+        )
+
+        self.match.pair1_games = 1
+        self.match.pair2_games = 3
+        self.match.completed = True
+        self.match.save()
+        other_entry1.retired = True
+        other_entry1.save(update_fields=["retired"])
+        other_match.pair1_games = 0
+        other_match.pair2_games = 3
+        other_match.completed = True
+        other_match.save()
+
+        result = restore_tournament_snapshot(snapshot)
+
+        self.match.refresh_from_db()
+        other_entry1.refresh_from_db()
+        other_match.refresh_from_db()
+
+        self.assertIsNone(self.match.pair1_games)
+        self.assertIsNone(self.match.pair2_games)
+        self.assertFalse(self.match.completed)
+        self.assertFalse(other_entry1.retired)
+        self.assertIsNone(other_match.pair1_games)
+        self.assertIsNone(other_match.pair2_games)
+        self.assertFalse(other_match.completed)
+        self.assertEqual(result["categories"], 2)
+        self.assertEqual(result["schedules"], 2)
+
+    def test_tournament_snapshot_restore_view(self):
+        snapshot = create_tournament_snapshot(
+            self.tournament,
+            label="開始前",
+        )
+        self.match.pair1_games = 1
+        self.match.pair2_games = 3
+        self.match.completed = True
+        self.match.save()
+
+        response = self.client.post(
+            reverse(
+                "restore_tournament_snapshot",
+                kwargs={"snapshot_id": snapshot.id},
+            ),
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_snapshot_list",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        self.match.refresh_from_db()
+        self.assertIsNone(self.match.pair1_games)
+        self.assertIsNone(self.match.pair2_games)
+        self.assertFalse(self.match.completed)
 
     def test_category_snapshot_restore_blocks_other_category_schedule_slot(self):
         snapshot = create_category_snapshot(

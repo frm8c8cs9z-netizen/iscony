@@ -359,19 +359,29 @@ def _validate_schedule_restore_conflicts(category, schedule_items):
             )
 
 
-def _restore_category_payload(category, payload):
+def _restore_category_payload(
+    category,
+    payload,
+    *,
+    validate_conflicts=True,
+    delete_existing_schedules=True,
+):
     """カテゴリ単位のJSONから進行・結果状態を復元する。"""
 
     if payload.get("category_id") != category.id:
         raise ValidationError("スナップショットとカテゴリが一致しません。")
 
-    _validate_category_restore_conflicts(category, payload)
+    if validate_conflicts:
+        _validate_category_restore_conflicts(category, payload)
 
     with transaction.atomic():
         current_rr_ids, _ = _current_category_match_ids(category)
 
         _category_replacement_history_queryset(category).delete()
-        _category_schedule_queryset(category).delete()
+
+        if delete_existing_schedules:
+            _category_schedule_queryset(category).delete()
+
         GroupRanking.objects.filter(group__category=category).delete()
         AdvancementSource.objects.filter(
             Q(target_league_entry__category=category)
@@ -541,6 +551,67 @@ def restore_category_from_tournament_snapshot(snapshot, category):
     payload = _find_category_payload(snapshot, category)
 
     return _restore_category_payload(category, payload)
+
+
+def restore_tournament_snapshot(snapshot):
+    """大会全体スナップショットから、大会全体の進行・結果状態を復元する。"""
+
+    if snapshot.scope_type != OperationSnapshot.SCOPE_TOURNAMENT:
+        raise ValidationError("大会全体スナップショットだけ復元できます。")
+
+    payload = snapshot.snapshot_json
+
+    if payload.get("tournament_id") != snapshot.tournament_id:
+        raise ValidationError("スナップショットと大会が一致しません。")
+
+    category_payloads = payload.get("categories", [])
+    category_ids = [
+        category_payload.get("category_id")
+        for category_payload in category_payloads
+    ]
+    categories = {
+        category.id: category
+        for category in Category.objects.filter(
+            tournament=snapshot.tournament,
+            id__in=category_ids,
+        )
+    }
+    missing_category_ids = [
+        category_id
+        for category_id in category_ids
+        if category_id not in categories
+    ]
+
+    if missing_category_ids:
+        raise ValidationError(
+            "スナップショット内のカテゴリが現在の大会に見つかりません。"
+        )
+
+    totals = {
+        "categories": 0,
+        "round_robin_matches": 0,
+        "schedules": 0,
+        "deleted_extra_matches": 0,
+    }
+
+    with transaction.atomic():
+        for category in categories.values():
+            _category_schedule_queryset(category).delete()
+
+        for category_payload in category_payloads:
+            category = categories[category_payload["category_id"]]
+            result = _restore_category_payload(
+                category,
+                category_payload,
+                validate_conflicts=False,
+                delete_existing_schedules=False,
+            )
+            totals["categories"] += 1
+            totals["round_robin_matches"] += result["round_robin_matches"]
+            totals["schedules"] += result["schedules"]
+            totals["deleted_extra_matches"] += result["deleted_extra_matches"]
+
+    return totals
 
 
 def restore_category_schedule_block_from_tournament_snapshot(

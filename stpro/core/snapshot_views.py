@@ -10,6 +10,7 @@ from .snapshot_services import (
     restore_category_snapshot,
     restore_category_schedule_block_from_tournament_snapshot,
     restore_category_from_tournament_snapshot,
+    restore_tournament_snapshot,
 )
 
 
@@ -179,6 +180,42 @@ def restore_tournament_snapshot_category_view(request, snapshot_id):
             (
                 f"{category.name} を大会スナップショット「{snapshot.label}」"
                 "から復元しました。"
+                f"進行{result['schedules']}件、"
+                f"リーグ試合{result['round_robin_matches']}件を復元しました。"
+            ),
+        )
+
+    return redirect(
+        "tournament_snapshot_list",
+        code=snapshot.tournament.code,
+    )
+
+
+def restore_tournament_snapshot_view(request, snapshot_id):
+    """大会全体スナップショットから大会全体を復元する。"""
+
+    snapshot = get_object_or_404(
+        OperationSnapshot.objects.select_related("tournament"),
+        id=snapshot_id,
+    )
+
+    if request.method != "POST":
+        return redirect(
+            "tournament_snapshot_list",
+            code=snapshot.tournament.code,
+        )
+
+    try:
+        result = restore_tournament_snapshot(snapshot)
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            (
+                f"{snapshot.tournament.name} 全体を"
+                f"大会スナップショット「{snapshot.label}」から復元しました。"
+                f"カテゴリ{result['categories']}件、"
                 f"進行{result['schedules']}件、"
                 f"リーグ試合{result['round_robin_matches']}件を復元しました。"
             ),
