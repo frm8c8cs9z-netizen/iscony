@@ -329,18 +329,8 @@ def _validate_category_restore_conflicts(category, payload):
             )
 
 
-def restore_category_snapshot(snapshot):
-    """カテゴリ単位のスナップショットから進行・結果状態を復元する。"""
-
-    if snapshot.scope_type != OperationSnapshot.SCOPE_CATEGORY:
-        raise ValidationError("カテゴリ単位のスナップショットだけ復元できます。")
-
-    category = snapshot.category
-
-    if not isinstance(category, Category):
-        raise ValidationError("スナップショットのカテゴリが見つかりません。")
-
-    payload = snapshot.snapshot_json
+def _restore_category_payload(category, payload):
+    """カテゴリ単位のJSONから進行・結果状態を復元する。"""
 
     if payload.get("category_id") != category.id:
         raise ValidationError("スナップショットとカテゴリが一致しません。")
@@ -476,3 +466,48 @@ def restore_category_snapshot(snapshot):
         "schedules": len(payload["schedules"]),
         "deleted_extra_matches": deleted_extra_count,
     }
+
+
+def restore_category_snapshot(snapshot):
+    """カテゴリ単位のスナップショットから進行・結果状態を復元する。"""
+
+    if snapshot.scope_type != OperationSnapshot.SCOPE_CATEGORY:
+        raise ValidationError("カテゴリ単位のスナップショットだけ復元できます。")
+
+    category = snapshot.category
+
+    if not isinstance(category, Category):
+        raise ValidationError("スナップショットのカテゴリが見つかりません。")
+
+    return _restore_category_payload(category, snapshot.snapshot_json)
+
+
+def _find_category_payload(snapshot, category):
+    """大会全体スナップショットから指定カテゴリのJSONを取り出す。"""
+
+    payload = snapshot.snapshot_json
+
+    if payload.get("tournament_id") != category.tournament_id:
+        raise ValidationError("スナップショットとカテゴリの大会が一致しません。")
+
+    for category_payload in payload.get("categories", []):
+        if category_payload.get("category_id") == category.id:
+            return category_payload
+
+    raise ValidationError(
+        f"スナップショット内に {category.name} のデータがありません。"
+    )
+
+
+def restore_category_from_tournament_snapshot(snapshot, category):
+    """大会全体スナップショットから、指定カテゴリだけを復元する。"""
+
+    if snapshot.scope_type != OperationSnapshot.SCOPE_TOURNAMENT:
+        raise ValidationError("大会全体スナップショットだけ指定できます。")
+
+    if snapshot.tournament_id != category.tournament_id:
+        raise ValidationError("スナップショットとカテゴリの大会が一致しません。")
+
+    payload = _find_category_payload(snapshot, category)
+
+    return _restore_category_payload(category, payload)

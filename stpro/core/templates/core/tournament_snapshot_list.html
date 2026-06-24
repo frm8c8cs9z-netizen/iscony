@@ -18,7 +18,7 @@
 
 <p>
     大会全体の進行・結果・リタイア状態・追加対戦・差し替え履歴を保存します。
-    まずは広く保存しておき、復元範囲の選択は次の実装で追加します。
+    復元時は、まずカテゴリ単位で戻せるようにしています。
 </p>
 
 <h3>
@@ -64,6 +64,7 @@
             <th>ラベル</th>
             <th>メモ</th>
             <th>件数</th>
+            <th>操作</th>
         </tr>
         {% for snapshot in snapshots %}
             <tr>
@@ -78,6 +79,28 @@
                 </td>
                 <td>
                     カテゴリ {{ snapshot.snapshot_json.categories|length }}
+                </td>
+                <td>
+                    <form
+                        method="post"
+                        action="{% url 'restore_tournament_snapshot_category' snapshot.id %}"
+                    >
+                        {% csrf_token %}
+                        <select name="category_id" required>
+                            <option value="">カテゴリを選択</option>
+                            {% for category in categories %}
+                                <option value="{{ category.id }}">
+                                    {{ category.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button
+                            type="submit"
+                            onclick="return confirm('選択したカテゴリを大会スナップショットの状態へ復元します。現在の進行・結果・追加対戦は上書きされます。本当に実行しますか？');"
+                        >
+                            カテゴリ復元
+                        </button>
+                    </form>
                 </td>
             </tr>
         {% endfor %}

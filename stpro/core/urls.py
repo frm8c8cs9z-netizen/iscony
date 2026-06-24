@@ -63,6 +63,12 @@ urlpatterns = [
         name="restore_category_snapshot",
     ),
 
+    path(
+        "snapshot/<int:snapshot_id>/restore/category/",
+        snapshot_views.restore_tournament_snapshot_category_view,
+        name="restore_tournament_snapshot_category",
+    ),
+
     # =====================================================
     # コート進行表示
     # =====================================================

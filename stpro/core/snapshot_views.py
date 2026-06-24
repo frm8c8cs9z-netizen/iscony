@@ -8,6 +8,7 @@ from .snapshot_services import (
     create_category_snapshot,
     create_tournament_snapshot,
     restore_category_snapshot,
+    restore_category_from_tournament_snapshot,
 )
 
 
@@ -42,12 +43,16 @@ def tournament_snapshot_list(request, code):
         scope_type=OperationSnapshot.SCOPE_TOURNAMENT,
         tournament=tournament,
     )
+    categories = Category.objects.filter(
+        tournament=tournament
+    ).order_by("display_order", "id")
 
     return render(
         request,
         "core/tournament_snapshot_list.html",
         {
             "tournament": tournament,
+            "categories": categories,
             "snapshots": snapshots,
         },
     )
@@ -132,4 +137,49 @@ def restore_category_snapshot_view(request, snapshot_id):
     return redirect(
         "category_snapshot_list",
         category_id=category.id,
+    )
+
+
+def restore_tournament_snapshot_category_view(request, snapshot_id):
+    """大会全体スナップショットからカテゴリ単位で復元する。"""
+
+    snapshot = get_object_or_404(
+        OperationSnapshot.objects.select_related("tournament"),
+        id=snapshot_id,
+    )
+
+    if request.method != "POST":
+        return redirect(
+            "tournament_snapshot_list",
+            code=snapshot.tournament.code,
+        )
+
+    category_id = request.POST.get("category_id")
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        id=category_id,
+        tournament=snapshot.tournament,
+    )
+
+    try:
+        result = restore_category_from_tournament_snapshot(
+            snapshot,
+            category,
+        )
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            (
+                f"{category.name} を大会スナップショット「{snapshot.label}」"
+                "から復元しました。"
+                f"進行{result['schedules']}件、"
+                f"リーグ試合{result['round_robin_matches']}件を復元しました。"
+            ),
+        )
+
+    return redirect(
+        "tournament_snapshot_list",
+        code=snapshot.tournament.code,
     )
