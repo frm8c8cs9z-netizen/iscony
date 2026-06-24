@@ -412,13 +412,6 @@ def undo_schedule_replacement(history):
         if schedule.round_robin_match_id != replacement_match.id:
             raise ValidationError("進行枠がその後変更されているため取り消せません。")
 
-        if (
-            schedule.schedule_block_id != history.original_schedule_block_id
-            or schedule.court_id != history.original_court_id
-            or schedule.order != history.original_order
-        ):
-            raise ValidationError("進行枠の位置が変更されているため取り消せません。")
-
         if schedule.called or schedule.started or schedule.finished:
             raise ValidationError("追加試合の進行が始まっているため取り消せません。")
 
