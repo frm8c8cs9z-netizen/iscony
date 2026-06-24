@@ -894,6 +894,67 @@ class RoundRobinMeetingTests(TestCase):
         )
         self.assertFalse(self.entry1.retired)
 
+    def test_retire_pair_post_redirects_to_group_anchor(self):
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.post(
+            reverse(
+                "retire_pair",
+                kwargs={"pair_id": self.entry1.id},
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "category_detail",
+                    kwargs={"category_id": self.category.id},
+                )
+                + f"#group-{self.group.id}"
+            ),
+            fetch_redirect_response=False,
+        )
+
+    def test_cancel_retire_pair_post_redirects_to_group_anchor(self):
+        match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=0,
+            pair2_games=3,
+            result_type=RoundRobinMatch.RESULT_RETIREMENT,
+            completed=True,
+        )
+        self.entry1.retired = True
+        self.entry1.save(update_fields=["retired"])
+
+        response = self.client.post(
+            reverse(
+                "cancel_retire_pair",
+                kwargs={"pair_id": self.entry1.id},
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "category_detail",
+                    kwargs={"category_id": self.category.id},
+                )
+                + f"#group-{self.group.id}"
+            ),
+            fetch_redirect_response=False,
+        )
+        match.refresh_from_db()
+        self.assertIsNone(match.pair1_games)
+        self.assertIsNone(match.pair2_games)
+
     def test_extra_meeting_can_be_created_and_inserted_into_schedule(self):
         first_match = RoundRobinMatch.objects.create(
             group=self.group,

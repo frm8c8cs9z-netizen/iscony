@@ -855,8 +855,8 @@ def retire_pair(request, pair_id):
     )
 
     return redirect(
-        "category_detail",
-        category_id=pair.category.id
+        f"{reverse('category_detail', kwargs={'category_id': pair.category.id})}"
+        f"#group-{pair.group_id}"
     )
 
 
@@ -935,8 +935,8 @@ def cancel_retire_pair(request, pair_id):
         )
 
     return redirect(
-        "category_detail",
-        category_id=pair.category.id,
+        f"{reverse('category_detail', kwargs={'category_id': pair.category.id})}"
+        f"#group-{pair.group_id}"
     )
 
 
