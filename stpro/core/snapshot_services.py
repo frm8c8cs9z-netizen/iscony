@@ -12,6 +12,7 @@ from .models import (
     OperationSnapshot,
     RoundRobinMatch,
     Schedule,
+    ScheduleBlock,
     ScheduleReplacementHistory,
     Tournament,
     TournamentEntry,
@@ -329,6 +330,35 @@ def _validate_category_restore_conflicts(category, payload):
             )
 
 
+def _validate_schedule_restore_conflicts(category, schedule_items):
+    """進行表だけの復元で、別カテゴリの枠を上書きしないことを確認する。"""
+
+    for item in schedule_items:
+        schedule = Schedule.objects.filter(
+            schedule_block_id=item["schedule_block_id"],
+            court_id=item["court_id"],
+            order=item["order"],
+        ).select_related(
+            "round_robin_match__group__category",
+            "tournament_match__bracket__category",
+        ).first()
+
+        if not schedule:
+            continue
+
+        if schedule.round_robin_match_id:
+            schedule_category = schedule.round_robin_match.group.category
+        else:
+            schedule_category = schedule.tournament_match.bracket.category
+
+        if schedule_category.id != category.id:
+            raise ValidationError(
+                "復元先の進行枠が別カテゴリで使用されています。"
+                f"{schedule.court.name} 第{schedule.order}試合: "
+                f"{schedule_category.name}"
+            )
+
+
 def _restore_category_payload(category, payload):
     """カテゴリ単位のJSONから進行・結果状態を復元する。"""
 
@@ -511,3 +541,58 @@ def restore_category_from_tournament_snapshot(snapshot, category):
     payload = _find_category_payload(snapshot, category)
 
     return _restore_category_payload(category, payload)
+
+
+def restore_category_schedule_block_from_tournament_snapshot(
+    snapshot,
+    category,
+    schedule_block,
+):
+    """大会全体スナップショットから、指定カテゴリ・日程区分の進行だけ戻す。"""
+
+    if snapshot.scope_type != OperationSnapshot.SCOPE_TOURNAMENT:
+        raise ValidationError("大会全体スナップショットだけ指定できます。")
+
+    if snapshot.tournament_id != category.tournament_id:
+        raise ValidationError("スナップショットとカテゴリの大会が一致しません。")
+
+    if not isinstance(schedule_block, ScheduleBlock):
+        raise ValidationError("日程区分が見つかりません。")
+
+    if schedule_block.tournament_id != category.tournament_id:
+        raise ValidationError("日程区分とカテゴリの大会が一致しません。")
+
+    payload = _find_category_payload(snapshot, category)
+    schedule_items = [
+        item
+        for item in payload.get("schedules", [])
+        if item["schedule_block_id"] == schedule_block.id
+    ]
+
+    _validate_schedule_restore_conflicts(category, schedule_items)
+
+    with transaction.atomic():
+        _category_schedule_queryset(category).filter(
+            schedule_block=schedule_block,
+        ).delete()
+
+        created_count = 0
+
+        for item in schedule_items:
+            Schedule.objects.create(
+                id=item["id"],
+                schedule_block_id=item["schedule_block_id"],
+                court_id=item["court_id"],
+                order=item["order"],
+                round_robin_match_id=item["round_robin_match_id"],
+                tournament_match_id=item["tournament_match_id"],
+                called=item["called"],
+                started=item["started"],
+                finished=item["finished"],
+            )
+            created_count += 1
+
+    return {
+        "schedules": created_count,
+        "schedule_block_id": schedule_block.id,
+    }

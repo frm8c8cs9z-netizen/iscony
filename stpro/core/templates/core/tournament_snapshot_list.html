@@ -64,7 +64,8 @@
             <th>ラベル</th>
             <th>メモ</th>
             <th>件数</th>
-            <th>操作</th>
+            <th>カテゴリ復元</th>
+            <th>進行表だけ復元</th>
         </tr>
         {% for snapshot in snapshots %}
             <tr>
@@ -99,6 +100,36 @@
                             onclick="return confirm('選択したカテゴリを大会スナップショットの状態へ復元します。現在の進行・結果・追加対戦は上書きされます。本当に実行しますか？');"
                         >
                             カテゴリ復元
+                        </button>
+                    </form>
+                </td>
+                <td>
+                    <form
+                        method="post"
+                        action="{% url 'restore_tournament_snapshot_category_block' snapshot.id %}"
+                    >
+                        {% csrf_token %}
+                        <select name="category_id" required>
+                            <option value="">カテゴリを選択</option>
+                            {% for category in categories %}
+                                <option value="{{ category.id }}">
+                                    {{ category.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <select name="schedule_block_id" required>
+                            <option value="">日程区分を選択</option>
+                            {% for schedule_block in schedule_blocks %}
+                                <option value="{{ schedule_block.id }}">
+                                    {{ schedule_block.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button
+                            type="submit"
+                            onclick="return confirm('選択したカテゴリ・日程区分の進行表だけをスナップショットの状態へ復元します。試合結果やリタイア状態は変更しません。本当に実行しますか？');"
+                        >
+                            進行だけ復元
                         </button>
                     </form>
                 </td>

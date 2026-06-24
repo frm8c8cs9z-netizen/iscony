@@ -3,11 +3,12 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .models import Category, OperationSnapshot, Tournament
+from .models import Category, OperationSnapshot, ScheduleBlock, Tournament
 from .snapshot_services import (
     create_category_snapshot,
     create_tournament_snapshot,
     restore_category_snapshot,
+    restore_category_schedule_block_from_tournament_snapshot,
     restore_category_from_tournament_snapshot,
 )
 
@@ -46,6 +47,9 @@ def tournament_snapshot_list(request, code):
     categories = Category.objects.filter(
         tournament=tournament
     ).order_by("display_order", "id")
+    schedule_blocks = ScheduleBlock.objects.filter(
+        tournament=tournament
+    ).order_by("display_order", "id")
 
     return render(
         request,
@@ -53,6 +57,7 @@ def tournament_snapshot_list(request, code):
         {
             "tournament": tournament,
             "categories": categories,
+            "schedule_blocks": schedule_blocks,
             "snapshots": snapshots,
         },
     )
@@ -176,6 +181,55 @@ def restore_tournament_snapshot_category_view(request, snapshot_id):
                 "から復元しました。"
                 f"進行{result['schedules']}件、"
                 f"リーグ試合{result['round_robin_matches']}件を復元しました。"
+            ),
+        )
+
+    return redirect(
+        "tournament_snapshot_list",
+        code=snapshot.tournament.code,
+    )
+
+
+def restore_tournament_snapshot_category_block_view(request, snapshot_id):
+    """大会全体スナップショットからカテゴリ・日程区分の進行表だけ復元する。"""
+
+    snapshot = get_object_or_404(
+        OperationSnapshot.objects.select_related("tournament"),
+        id=snapshot_id,
+    )
+
+    if request.method != "POST":
+        return redirect(
+            "tournament_snapshot_list",
+            code=snapshot.tournament.code,
+        )
+
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        id=request.POST.get("category_id"),
+        tournament=snapshot.tournament,
+    )
+    schedule_block = get_object_or_404(
+        ScheduleBlock,
+        id=request.POST.get("schedule_block_id"),
+        tournament=snapshot.tournament,
+    )
+
+    try:
+        result = restore_category_schedule_block_from_tournament_snapshot(
+            snapshot,
+            category,
+            schedule_block,
+        )
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        messages.success(
+            request,
+            (
+                f"{category.name} / {schedule_block.name} の進行表を"
+                f"大会スナップショット「{snapshot.label}」から復元しました。"
+                f"進行{result['schedules']}件を復元しました。"
             ),
         )
 

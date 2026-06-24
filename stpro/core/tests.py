@@ -47,6 +47,7 @@ from .snapshot_services import (
     create_category_snapshot,
     create_tournament_snapshot,
     restore_category_snapshot,
+    restore_category_schedule_block_from_tournament_snapshot,
     restore_category_from_tournament_snapshot,
 )
 
@@ -1717,6 +1718,90 @@ class CategorySnapshotTests(TestCase):
         self.assertIsNone(self.match.pair1_games)
         self.assertIsNone(self.match.pair2_games)
         self.assertFalse(self.match.completed)
+
+    def test_category_schedule_block_can_be_restored_from_tournament_snapshot(self):
+        second_block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="2日目",
+            display_order=2,
+        )
+        second_schedule = Schedule.objects.create(
+            schedule_block=second_block,
+            court=self.court,
+            order=1,
+            round_robin_match=self.match,
+        )
+        snapshot = create_tournament_snapshot(
+            self.tournament,
+            label="開始前",
+        )
+
+        second_schedule.order = 3
+        second_schedule.called = True
+        second_schedule.started = True
+        second_schedule.save()
+        self.match.pair1_games = 1
+        self.match.pair2_games = 3
+        self.match.completed = True
+        self.match.save()
+
+        result = restore_category_schedule_block_from_tournament_snapshot(
+            snapshot,
+            self.category,
+            second_block,
+        )
+
+        self.match.refresh_from_db()
+        restored_schedule = Schedule.objects.get(id=second_schedule.id)
+
+        self.assertEqual(restored_schedule.order, 1)
+        self.assertFalse(restored_schedule.called)
+        self.assertFalse(restored_schedule.started)
+        self.assertEqual(self.match.pair1_games, 1)
+        self.assertEqual(self.match.pair2_games, 3)
+        self.assertTrue(self.match.completed)
+        self.assertEqual(result["schedules"], 1)
+
+    def test_tournament_snapshot_category_block_restore_view(self):
+        second_block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="2日目",
+            display_order=2,
+        )
+        second_schedule = Schedule.objects.create(
+            schedule_block=second_block,
+            court=self.court,
+            order=1,
+            round_robin_match=self.match,
+        )
+        snapshot = create_tournament_snapshot(
+            self.tournament,
+            label="開始前",
+        )
+
+        second_schedule.order = 3
+        second_schedule.save()
+
+        response = self.client.post(
+            reverse(
+                "restore_tournament_snapshot_category_block",
+                kwargs={"snapshot_id": snapshot.id},
+            ),
+            {
+                "category_id": self.category.id,
+                "schedule_block_id": second_block.id,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_snapshot_list",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        restored_schedule = Schedule.objects.get(id=second_schedule.id)
+        self.assertEqual(restored_schedule.order, 1)
 
     def test_category_snapshot_restore_blocks_other_category_schedule_slot(self):
         snapshot = create_category_snapshot(
