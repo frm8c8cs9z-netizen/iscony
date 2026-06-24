@@ -13,7 +13,7 @@
         <th>選手</th>
         <th>状態</th>
         <th>編集</th>
-        <th>リタイア</th>
+        <th>操作</th>
     </tr>
 
     {% for pair in pairs %}
@@ -38,23 +38,9 @@
             </a>
         </td>
         <td>
-            {% if pair.retired %}
-                <form
-                    method="post"
-                    action="{% url 'cancel_retire_pair' pair.id %}"
-                    style="display:inline;"
-                >
-                    {% csrf_token %}
-                    <button
-                        type="submit"
-                        onclick="return confirm('この枠のリタイアを取り消しますか？自動不戦結果は未入力に戻ります。');"
-                    >
-                        取消
-                    </button>
-                </form>
-            {% else %}
-                -
-            {% endif %}
+            <a href="{% url 'league_entry_action' pair.id %}">
+                操作
+            </a>
         </td>
     </tr>
     {% endfor %}

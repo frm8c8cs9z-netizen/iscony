@@ -1,0 +1,141 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+リーグ枠操作
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    リーグ枠操作
+</h2>
+
+<p>
+    <a href="{% url 'category_detail' pair.category.id %}#group-{{ pair.group.id }}">
+        リーグ表へ戻る
+    </a>
+</p>
+
+<table>
+    <tr>
+        <th>大会</th>
+        <td>{{ pair.category.tournament.name }}</td>
+    </tr>
+    <tr>
+        <th>カテゴリ</th>
+        <td>{{ pair.category.name }}</td>
+    </tr>
+    <tr>
+        <th>Stage</th>
+        <td>
+            {% if pair.group.stage %}
+                {{ pair.group.stage.name }}
+            {% else %}
+                未設定
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <th>リーグ</th>
+        <td>{{ pair.group.name }}</td>
+    </tr>
+    <tr>
+        <th>枠</th>
+        <td>{{ pair.pair_code }}</td>
+    </tr>
+    <tr>
+        <th>参加者</th>
+        <td>{{ pair.display_name }}</td>
+    </tr>
+    <tr>
+        <th>所属</th>
+        <td>{{ pair.display_organization }}</td>
+    </tr>
+    <tr>
+        <th>状態</th>
+        <td>
+            {% if pair.retired %}
+                リタイア
+            {% else %}
+                出場
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <th>結果入力済み</th>
+        <td>{{ scored_count }} / {{ matches|length }} 試合</td>
+    </tr>
+    <tr>
+        <th>自動不戦結果</th>
+        <td>{{ auto_retirement_count }} 試合</td>
+    </tr>
+    <tr>
+        <th>差し替え中の進行枠</th>
+        <td>{{ active_replacement_count }} 件</td>
+    </tr>
+</table>
+
+<h3>
+    操作
+</h3>
+
+{% if pair.retired %}
+    <form
+        method="post"
+        action="{% url 'cancel_retire_pair' pair.id %}"
+    >
+        {% csrf_token %}
+        <button
+            type="submit"
+            onclick="return confirm('この枠のリタイアを取り消しますか？自動不戦結果は未入力に戻ります。');"
+        >
+            リタイアを取り消す
+        </button>
+    </form>
+{% else %}
+    <form
+        method="post"
+        action="{% url 'retire_pair' pair.id %}"
+    >
+        {% csrf_token %}
+        <button
+            type="submit"
+            onclick="return confirm('本当にこの枠をリタイア扱いにしますか？未入力試合は相手の勝ちになります。');"
+        >
+            リタイアにする
+        </button>
+    </form>
+{% endif %}
+
+<h3>
+    関連試合
+</h3>
+
+<table>
+    <tr>
+        <th>回数</th>
+        <th>対戦</th>
+        <th>スコア</th>
+        <th>状態</th>
+    </tr>
+    {% for match in matches %}
+        <tr>
+            <td>{{ match.meeting_number }}</td>
+            <td>
+                {{ match.pair1.display_name }}
+                -
+                {{ match.pair2.display_name }}
+            </td>
+            <td>{{ match.score_display }}</td>
+            <td>{{ match.get_result_type_display }}</td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="4">
+                関連試合はありません。
+            </td>
+        </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

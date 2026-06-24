@@ -813,6 +813,78 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, "2回目")
         self.assertContains(response, "リタイアに伴う追加対戦")
 
+    def test_league_entry_action_link_is_displayed_on_player_name(self):
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        action_url = reverse(
+            "league_entry_action",
+            kwargs={"pair_id": self.entry1.id},
+        )
+        retire_url = reverse(
+            "retire_pair",
+            kwargs={"pair_id": self.entry1.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, action_url)
+        self.assertNotContains(response, retire_url)
+
+    def test_league_entry_action_page_shows_retirement_operation(self):
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "league_entry_action",
+                kwargs={"pair_id": self.entry1.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "リーグ枠操作")
+        self.assertContains(response, self.entry1.display_name)
+        self.assertContains(response, "リタイアにする")
+        self.assertContains(
+            response,
+            reverse(
+                "retire_pair",
+                kwargs={"pair_id": self.entry1.id},
+            ),
+        )
+
+    def test_retire_pair_get_does_not_apply_retirement(self):
+        response = self.client.get(
+            reverse(
+                "retire_pair",
+                kwargs={"pair_id": self.entry1.id},
+            )
+        )
+
+        self.entry1.refresh_from_db()
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "league_entry_action",
+                kwargs={"pair_id": self.entry1.id},
+            ),
+        )
+        self.assertFalse(self.entry1.retired)
+
     def test_extra_meeting_can_be_created_and_inserted_into_schedule(self):
         first_match = RoundRobinMatch.objects.create(
             group=self.group,
@@ -941,7 +1013,7 @@ class RoundRobinMeetingTests(TestCase):
             round_robin_match=cancelled_match,
         )
 
-        self.client.get(
+        self.client.post(
             reverse(
                 "retire_pair",
                 kwargs={"pair_id": retired_entry.id},
@@ -1048,7 +1120,7 @@ class RoundRobinMeetingTests(TestCase):
             round_robin_match=walkover_match,
         )
 
-        self.client.get(
+        self.client.post(
             reverse(
                 "retire_pair",
                 kwargs={"pair_id": retired_entry.id},
@@ -1077,7 +1149,7 @@ class RoundRobinMeetingTests(TestCase):
         self.assertFalse(schedule.started)
         self.assertFalse(schedule.finished)
 
-    def test_cancel_retirement_button_is_displayed_for_retired_entry(self):
+    def test_cancel_retirement_button_is_displayed_on_action_page(self):
         retired_entry = LeagueEntry.objects.create(
             category=self.category,
             group=self.group,
@@ -1090,8 +1162,8 @@ class RoundRobinMeetingTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "category_detail",
-                kwargs={"category_id": self.category.id},
+                "league_entry_action",
+                kwargs={"pair_id": retired_entry.id},
             )
         )
 
@@ -1103,7 +1175,7 @@ class RoundRobinMeetingTests(TestCase):
                 kwargs={"pair_id": retired_entry.id},
             ),
         )
-        self.assertContains(response, "取消")
+        self.assertContains(response, "リタイアを取り消す")
 
     def test_cancel_retirement_blocks_active_schedule_replacement(self):
         retired_entry = LeagueEntry.objects.create(
@@ -1140,7 +1212,7 @@ class RoundRobinMeetingTests(TestCase):
             round_robin_match=extra_match,
         )
 
-        self.client.get(
+        self.client.post(
             reverse(
                 "retire_pair",
                 kwargs={"pair_id": retired_entry.id},

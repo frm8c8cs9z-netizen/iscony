@@ -805,6 +805,12 @@ def retire_pair(request, pair_id):
         id=pair_id
     )
 
+    if request.method != "POST":
+        return redirect(
+            "league_entry_action",
+            pair_id=pair.id,
+        )
+
     pair.retired = True
     pair.save()
 
@@ -854,6 +860,52 @@ def retire_pair(request, pair_id):
     )
 
 
+def league_entry_action(request, pair_id):
+    """リーグ枠に対する運営操作の入口を表示する。"""
+
+    pair = get_object_or_404(
+        LeagueEntry.objects.select_related(
+            "category__tournament",
+            "group__stage",
+            "participant",
+        ),
+        id=pair_id,
+    )
+    matches = RoundRobinMatch.objects.filter(
+        group=pair.group,
+    ).filter(
+        Q(pair1=pair) | Q(pair2=pair)
+    )
+    auto_retirement_count = matches.filter(
+        result_type=RoundRobinMatch.RESULT_RETIREMENT,
+    ).count()
+    scored_count = matches.filter(
+        pair1_games__isnull=False,
+        pair2_games__isnull=False,
+    ).count()
+    active_replacement_count = ScheduleReplacementHistory.objects.filter(
+        original_match__in=matches.filter(
+            result_type=RoundRobinMatch.RESULT_RETIREMENT,
+        ),
+        reverted_at__isnull=True,
+    ).count()
+
+    return render(
+        request,
+        "core/league_entry_action.html",
+        {
+            "pair": pair,
+            "matches": matches.order_by(
+                "meeting_number",
+                "id",
+            ),
+            "auto_retirement_count": auto_retirement_count,
+            "scored_count": scored_count,
+            "active_replacement_count": active_replacement_count,
+        }
+    )
+
+
 def cancel_retire_pair(request, pair_id):
     """リーグ枠のリタイア扱いを取り消す。"""
 
@@ -864,8 +916,8 @@ def cancel_retire_pair(request, pair_id):
 
     if request.method != "POST":
         return redirect(
-            "category_detail",
-            category_id=pair.category.id,
+            "league_entry_action",
+            pair_id=pair.id,
         )
 
     try:

@@ -140,6 +140,12 @@ urlpatterns = [
     ),
 
     path(
+        "pair/<int:pair_id>/action/",
+        league_views.league_entry_action,
+        name="league_entry_action",
+    ),
+
+    path(
         "pair/<int:pair_id>/retire/",
         league_views.retire_pair,
         name="retire_pair",
