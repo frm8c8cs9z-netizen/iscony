@@ -14,10 +14,14 @@ from .models import (
     Schedule,
     ScheduleBlock,
     ScheduleReplacementHistory,
+    Stage,
     Tournament,
     TournamentEntry,
     TournamentMatch,
 )
+
+
+AUTO_TYPE_STAGE_ADVANCEMENT = "before_stage_advancement"
 
 
 def _category_schedule_queryset(category):
@@ -284,6 +288,48 @@ def create_tournament_snapshot(tournament, label, note=""):
     snapshot.save()
 
     return snapshot
+
+
+def create_stage_advancement_snapshot_once(stage):
+    """後続Stage反映前の大会全体スナップショットを、Stageごとに1回だけ作る。"""
+
+    if not isinstance(stage, Stage):
+        raise ValidationError("反映元Stageを指定してください。")
+
+    tournament = stage.category.tournament
+
+    for snapshot in OperationSnapshot.objects.filter(
+        tournament=tournament,
+        scope_type=OperationSnapshot.SCOPE_TOURNAMENT,
+    ):
+        auto = snapshot.snapshot_json.get("auto", {})
+
+        if (
+            auto.get("type") == AUTO_TYPE_STAGE_ADVANCEMENT
+            and auto.get("source_stage_id") == stage.id
+        ):
+            return snapshot, False
+
+    payload = build_tournament_snapshot_payload(tournament)
+    payload["auto"] = {
+        "type": AUTO_TYPE_STAGE_ADVANCEMENT,
+        "source_stage_id": stage.id,
+        "source_stage_name": stage.name,
+        "source_category_id": stage.category_id,
+        "source_category_name": stage.category.name,
+    }
+
+    snapshot = OperationSnapshot(
+        tournament=tournament,
+        scope_type=OperationSnapshot.SCOPE_TOURNAMENT,
+        label=f"自動: {stage.category.name} / {stage.name} 反映前",
+        note="後続Stage反映の直前に自動作成",
+        snapshot_json=payload,
+    )
+    snapshot.full_clean()
+    snapshot.save()
+
+    return snapshot, True
 
 
 def _current_category_match_ids(category):

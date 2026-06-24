@@ -3558,6 +3558,39 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(self.target.organization, "第一クラブ")
         self.assertEqual(self.target.player1_name, "一番 A")
 
+    def test_auto_snapshot_is_created_before_stage_advancement(self):
+        self._finish_preliminary_group()
+
+        apply_stage_advancements(self.preliminary_stage)
+
+        snapshot = OperationSnapshot.objects.get()
+        auto = snapshot.snapshot_json["auto"]
+        target_entry_payload = next(
+            item
+            for item in snapshot.snapshot_json["categories"][0]["league_entries"]
+            if item["id"] == self.target.id
+        )
+
+        self.assertEqual(snapshot.scope_type, OperationSnapshot.SCOPE_TOURNAMENT)
+        self.assertEqual(snapshot.label, "自動: 女子A / 予選リーグ 反映前")
+        self.assertEqual(auto["type"], "before_stage_advancement")
+        self.assertEqual(auto["source_stage_id"], self.preliminary_stage.id)
+        self.assertIsNone(target_entry_payload["participant_id"])
+
+    def test_auto_snapshot_is_not_created_when_stage_advancement_fails(self):
+        with self.assertRaises(ValidationError):
+            apply_stage_advancements(self.preliminary_stage)
+
+        self.assertEqual(OperationSnapshot.objects.count(), 0)
+
+    def test_auto_snapshot_is_not_duplicated_for_same_stage(self):
+        self._finish_preliminary_group()
+
+        apply_stage_advancements(self.preliminary_stage)
+        apply_stage_advancements(self.preliminary_stage)
+
+        self.assertEqual(OperationSnapshot.objects.count(), 1)
+
     def test_unfinished_source_does_not_change_any_target(self):
         with self.assertRaises(ValidationError):
             apply_stage_advancements(self.preliminary_stage)

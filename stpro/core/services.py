@@ -16,6 +16,7 @@ from .models import (
     TournamentMatch,
     
 )
+from .snapshot_services import create_stage_advancement_snapshot_once
 
 
 def _resolved_advancement_entry(source):
@@ -141,6 +142,8 @@ def apply_stage_advancements(source_stage):
                 )
 
             resolved.append((target, source_entry))
+
+        create_stage_advancement_snapshot_once(source_stage)
 
         for target, source_entry in resolved:
             target.participant = source_entry.participant
