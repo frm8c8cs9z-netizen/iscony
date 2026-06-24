@@ -1,0 +1,91 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+大会スナップショット
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    {{ tournament.name }} 大会スナップショット
+</h2>
+
+<p>
+    <a href="{% url 'maintenance_menu' tournament.code %}">
+        メンテナンスへ戻る
+    </a>
+</p>
+
+<p>
+    大会全体の進行・結果・リタイア状態・追加対戦・差し替え履歴を保存します。
+    まずは広く保存しておき、復元範囲の選択は次の実装で追加します。
+</p>
+
+<h3>
+    作成
+</h3>
+
+<form method="post">
+    {% csrf_token %}
+    <p>
+        <label>
+            ラベル
+            <input
+                type="text"
+                name="label"
+                placeholder="例: 2日目開始前"
+            >
+        </label>
+    </p>
+    <p>
+        <label>
+            メモ<br>
+            <textarea
+                name="note"
+                rows="3"
+                cols="60"
+                placeholder="例: リタイア対応前の大会全体バックアップ"
+            ></textarea>
+        </label>
+    </p>
+    <button type="submit">
+        大会全体のスナップショットを作成
+    </button>
+</form>
+
+<h3>
+    一覧
+</h3>
+
+{% if snapshots %}
+    <table>
+        <tr>
+            <th>作成日時</th>
+            <th>ラベル</th>
+            <th>メモ</th>
+            <th>件数</th>
+        </tr>
+        {% for snapshot in snapshots %}
+            <tr>
+                <td>
+                    {{ snapshot.created_at|date:"Y-m-d H:i" }}
+                </td>
+                <td>
+                    {{ snapshot.label }}
+                </td>
+                <td>
+                    {{ snapshot.note|linebreaksbr }}
+                </td>
+                <td>
+                    カテゴリ {{ snapshot.snapshot_json.categories|length }}
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% else %}
+    <p>
+        大会スナップショットはまだありません。
+    </p>
+{% endif %}
+
+{% endblock %}

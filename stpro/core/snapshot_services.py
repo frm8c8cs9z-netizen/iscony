@@ -13,6 +13,7 @@ from .models import (
     RoundRobinMatch,
     Schedule,
     ScheduleReplacementHistory,
+    Tournament,
     TournamentEntry,
     TournamentMatch,
 )
@@ -231,6 +232,49 @@ def create_category_snapshot(category, label, note=""):
         tournament=category.tournament,
         category=category,
         scope_type=OperationSnapshot.SCOPE_CATEGORY,
+        label=label,
+        note=note,
+        snapshot_json=payload,
+    )
+    snapshot.full_clean()
+    snapshot.save()
+
+    return snapshot
+
+
+def build_tournament_snapshot_payload(tournament):
+    """大会全体を、カテゴリ単位スナップショットの束としてJSON化する。"""
+
+    categories = []
+
+    for category in Category.objects.filter(
+        tournament=tournament
+    ).order_by("display_order", "id"):
+        categories.append(build_category_snapshot_payload(category))
+
+    return {
+        "version": 1,
+        "scope_type": OperationSnapshot.SCOPE_TOURNAMENT,
+        "tournament_id": tournament.id,
+        "created_at": timezone.now().isoformat(),
+        "categories": categories,
+    }
+
+
+def create_tournament_snapshot(tournament, label, note=""):
+    """大会全体の進行・結果スナップショットを作成する。"""
+
+    if not isinstance(tournament, Tournament):
+        raise ValidationError("スナップショット対象の大会が見つかりません。")
+
+    if not label:
+        label = timezone.localtime().strftime("%Y-%m-%d %H:%M")
+
+    payload = build_tournament_snapshot_payload(tournament)
+
+    snapshot = OperationSnapshot(
+        tournament=tournament,
+        scope_type=OperationSnapshot.SCOPE_TOURNAMENT,
         label=label,
         note=note,
         snapshot_json=payload,

@@ -52,6 +52,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/snapshots/",
+        snapshot_views.tournament_snapshot_list,
+        name="tournament_snapshot_list",
+    ),
+
+    path(
         "snapshot/<int:snapshot_id>/restore/",
         snapshot_views.restore_category_snapshot_view,
         name="restore_category_snapshot",

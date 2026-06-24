@@ -45,6 +45,7 @@ from .services import (
 )
 from .snapshot_services import (
     create_category_snapshot,
+    create_tournament_snapshot,
     restore_category_snapshot,
 )
 
@@ -1536,6 +1537,82 @@ class CategorySnapshotTests(TestCase):
         self.assertEqual(snapshot.label, "リタイア前")
         self.assertEqual(snapshot.scope_type, OperationSnapshot.SCOPE_CATEGORY)
         self.assertEqual(snapshot.category, self.category)
+
+    def test_tournament_snapshot_can_be_created_from_view(self):
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        other_stage = Stage.objects.create(
+            category=other_category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        other_group = Group.objects.create(
+            category=other_category,
+            stage=other_stage,
+            name="A",
+        )
+        other_entry1 = LeagueEntry.objects.create(
+            category=other_category,
+            group=other_group,
+            pair_code="1",
+            display_order=1,
+            player1_name="他1A",
+            player2_name="他1B",
+        )
+        other_entry2 = LeagueEntry.objects.create(
+            category=other_category,
+            group=other_group,
+            pair_code="2",
+            display_order=2,
+            player1_name="他2A",
+            player2_name="他2B",
+        )
+        RoundRobinMatch.objects.create(
+            group=other_group,
+            pair1=other_entry1,
+            pair2=other_entry2,
+        )
+
+        response = self.client.post(
+            reverse(
+                "tournament_snapshot_list",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "label": "大会全体",
+                "note": "テスト",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_snapshot_list",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        snapshot = OperationSnapshot.objects.get()
+        self.assertEqual(snapshot.label, "大会全体")
+        self.assertEqual(snapshot.scope_type, OperationSnapshot.SCOPE_TOURNAMENT)
+        self.assertIsNone(snapshot.category)
+        self.assertEqual(snapshot.tournament, self.tournament)
+        self.assertEqual(len(snapshot.snapshot_json["categories"]), 2)
+
+    def test_tournament_snapshot_service_stores_category_payloads(self):
+        snapshot = create_tournament_snapshot(
+            self.tournament,
+            label="開始前",
+        )
+
+        self.assertEqual(snapshot.scope_type, OperationSnapshot.SCOPE_TOURNAMENT)
+        self.assertEqual(snapshot.snapshot_json["tournament_id"], self.tournament.id)
+        self.assertEqual(len(snapshot.snapshot_json["categories"]), 1)
+        self.assertEqual(
+            snapshot.snapshot_json["categories"][0]["category_id"],
+            self.category.id,
+        )
 
     def test_category_snapshot_restore_blocks_other_category_schedule_slot(self):
         snapshot = create_category_snapshot(

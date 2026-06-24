@@ -48,6 +48,12 @@
 
 <h3>スナップショット</h3>
 
+<p>
+    <a href="{% url 'tournament_snapshot_list' tournament.code %}">
+        大会全体スナップショット
+    </a>
+</p>
+
 <ul>
     {% for category in categories %}
         <li>
