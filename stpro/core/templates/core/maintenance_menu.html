@@ -46,6 +46,18 @@
     </a>
 </p>
 
+<h3>スナップショット</h3>
+
+<ul>
+    {% for category in categories %}
+        <li>
+            <a href="{% url 'category_snapshot_list' category.id %}">
+                {{ category.name }}
+            </a>
+        </li>
+    {% endfor %}
+</ul>
+
 <h3>トーナメント</h3>
 
 <p>

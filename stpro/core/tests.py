@@ -15,6 +15,7 @@ from .models import (
     Group,
     GroupRanking,
     LeagueEntry,
+    OperationSnapshot,
     RoundRobinMatch,
     Schedule,
     ScheduleReplacementHistory,
@@ -41,6 +42,10 @@ from .services import (
     undo_schedule_replacement,
     update_group_ranking,
     validate_tournament_score_change,
+)
+from .snapshot_services import (
+    create_category_snapshot,
+    restore_category_snapshot,
 )
 
 
@@ -1382,6 +1387,207 @@ class RoundRobinMeetingTests(TestCase):
         schedule.refresh_from_db()
         self.assertEqual(schedule.round_robin_match, extra_match)
         self.assertIsNone(history.reverted_at)
+
+
+class CategorySnapshotTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="スナップショット大会",
+            code="SNAP",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+        )
+        self.entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="1",
+            display_order=1,
+            player1_name="選手1A",
+            player2_name="選手1B",
+        )
+        self.entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="2",
+            display_order=2,
+            player1_name="選手2A",
+            player2_name="選手2B",
+        )
+        self.match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            match_games=5,
+        )
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        self.schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=1,
+            round_robin_match=self.match,
+        )
+
+    def test_category_snapshot_restore_resets_progress_and_extra_matches(self):
+        snapshot = create_category_snapshot(
+            self.category,
+            label="開始前",
+        )
+
+        extra_match = create_extra_round_robin_match(
+            self.group,
+            self.entry1,
+            self.entry2,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=2,
+            round_robin_match=extra_match,
+        )
+
+        self.entry1.retired = True
+        self.entry1.save(update_fields=["retired"])
+        self.match.pair1_games = 0
+        self.match.pair2_games = 3
+        self.match.completed = True
+        self.match.result_type = RoundRobinMatch.RESULT_RETIREMENT
+        self.match.save()
+        self.schedule.called = True
+        self.schedule.started = True
+        self.schedule.finished = True
+        self.schedule.save()
+        GroupRanking.objects.create(
+            group=self.group,
+            pair=self.entry2,
+            wins=1,
+            losses=0,
+            rank=1,
+        )
+
+        result = restore_category_snapshot(snapshot)
+
+        self.entry1.refresh_from_db()
+        self.match.refresh_from_db()
+        self.schedule.refresh_from_db()
+
+        self.assertFalse(self.entry1.retired)
+        self.assertIsNone(self.match.pair1_games)
+        self.assertIsNone(self.match.pair2_games)
+        self.assertFalse(self.match.completed)
+        self.assertEqual(
+            self.match.result_type,
+            RoundRobinMatch.RESULT_NORMAL,
+        )
+        self.assertFalse(self.schedule.called)
+        self.assertFalse(self.schedule.started)
+        self.assertFalse(self.schedule.finished)
+        self.assertFalse(
+            RoundRobinMatch.objects.filter(id=extra_match.id).exists()
+        )
+        self.assertEqual(
+            Schedule.objects.filter(
+                round_robin_match__group__category=self.category,
+            ).count(),
+            1,
+        )
+        self.assertEqual(GroupRanking.objects.count(), 0)
+        self.assertEqual(result["deleted_extra_matches"], 1)
+
+    def test_category_snapshot_can_be_created_from_view(self):
+        response = self.client.post(
+            reverse(
+                "category_snapshot_list",
+                kwargs={"category_id": self.category.id},
+            ),
+            {
+                "label": "リタイア前",
+                "note": "テスト",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_snapshot_list",
+                kwargs={"category_id": self.category.id},
+            ),
+        )
+        snapshot = OperationSnapshot.objects.get()
+        self.assertEqual(snapshot.label, "リタイア前")
+        self.assertEqual(snapshot.scope_type, OperationSnapshot.SCOPE_CATEGORY)
+        self.assertEqual(snapshot.category, self.category)
+
+    def test_category_snapshot_restore_blocks_other_category_schedule_slot(self):
+        snapshot = create_category_snapshot(
+            self.category,
+            label="開始前",
+        )
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        other_stage = Stage.objects.create(
+            category=other_category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        other_group = Group.objects.create(
+            category=other_category,
+            stage=other_stage,
+            name="A",
+        )
+        other_entry1 = LeagueEntry.objects.create(
+            category=other_category,
+            group=other_group,
+            pair_code="1",
+            display_order=1,
+            player1_name="他1A",
+            player2_name="他1B",
+        )
+        other_entry2 = LeagueEntry.objects.create(
+            category=other_category,
+            group=other_group,
+            pair_code="2",
+            display_order=2,
+            player1_name="他2A",
+            player2_name="他2B",
+        )
+        other_match = RoundRobinMatch.objects.create(
+            group=other_group,
+            pair1=other_entry1,
+            pair2=other_entry2,
+        )
+
+        self.schedule.delete()
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=1,
+            round_robin_match=other_match,
+        )
+
+        with self.assertRaises(ValidationError):
+            restore_category_snapshot(snapshot)
 
 
 class ImportPairsCsvTests(TestCase):

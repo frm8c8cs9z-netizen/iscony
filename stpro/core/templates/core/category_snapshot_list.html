@@ -1,0 +1,111 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+スナップショット
+{% endblock %}
+
+{% block content %}
+
+<h2>
+    {{ category.name }} スナップショット
+</h2>
+
+<p>
+    <a href="{% url 'maintenance_menu' category.tournament.code %}">
+        メンテナンスへ戻る
+    </a>
+    ／
+    <a href="{% url 'category_stage_overview' category.id %}">
+        Stage進行へ戻る
+    </a>
+</p>
+
+<p>
+    リタイア、追加対戦、進行順の大きな変更、後続Stage反映の前に作成しておく退避地点です。
+    復元すると、このカテゴリの進行・結果・リタイア状態・追加対戦・差し替え履歴が保存時点へ戻ります。
+</p>
+
+<h3>
+    作成
+</h3>
+
+<form method="post">
+    {% csrf_token %}
+    <p>
+        <label>
+            ラベル
+            <input
+                type="text"
+                name="label"
+                placeholder="例: 2日目開始前"
+            >
+        </label>
+    </p>
+    <p>
+        <label>
+            メモ<br>
+            <textarea
+                name="note"
+                rows="3"
+                cols="60"
+                placeholder="例: 女子Aのリタイア対応前"
+            ></textarea>
+        </label>
+    </p>
+    <button type="submit">
+        スナップショットを作成
+    </button>
+</form>
+
+<h3>
+    一覧
+</h3>
+
+{% if snapshots %}
+    <table>
+        <tr>
+            <th>作成日時</th>
+            <th>ラベル</th>
+            <th>メモ</th>
+            <th>件数</th>
+            <th>操作</th>
+        </tr>
+        {% for snapshot in snapshots %}
+            <tr>
+                <td>
+                    {{ snapshot.created_at|date:"Y-m-d H:i" }}
+                </td>
+                <td>
+                    {{ snapshot.label }}
+                </td>
+                <td>
+                    {{ snapshot.note|linebreaksbr }}
+                </td>
+                <td>
+                    進行 {{ snapshot.snapshot_json.schedules|length }} /
+                    リーグ試合 {{ snapshot.snapshot_json.round_robin_matches|length }}
+                </td>
+                <td>
+                    <form
+                        method="post"
+                        action="{% url 'restore_category_snapshot' snapshot.id %}"
+                    >
+                        {% csrf_token %}
+                        <button
+                            type="submit"
+                            onclick="return confirm('このカテゴリをスナップショットの状態へ復元します。現在の進行・結果・追加対戦は上書きされます。本当に実行しますか？');"
+                        >
+                            復元
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% else %}
+    <p>
+        スナップショットはまだありません。
+    </p>
+{% endif %}
+
+{% endblock %}

@@ -1414,4 +1414,86 @@ class ScheduleReplacementHistory(models.Model):
         )
 
 
+class OperationSnapshot(models.Model):
+    """進行・結果操作の前後で戻れるようにするスナップショット。"""
+
+    SCOPE_CATEGORY = "category"
+    SCOPE_SCHEDULE_BLOCK = "schedule_block"
+    SCOPE_TOURNAMENT = "tournament"
+
+    SCOPE_CHOICES = [
+        (SCOPE_CATEGORY, "カテゴリ"),
+        (SCOPE_SCHEDULE_BLOCK, "日程区分"),
+        (SCOPE_TOURNAMENT, "大会"),
+    ]
+
+    tournament = models.ForeignKey(
+        Tournament,
+        on_delete=models.CASCADE,
+    )
+
+    category = models.ForeignKey(
+        Category,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+    )
+
+    schedule_block = models.ForeignKey(
+        ScheduleBlock,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+    )
+
+    scope_type = models.CharField(
+        max_length=30,
+        choices=SCOPE_CHOICES,
+    )
+
+    label = models.CharField(
+        max_length=100,
+    )
+
+    note = models.TextField(
+        blank=True,
+    )
+
+    snapshot_json = models.JSONField()
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = [
+            "-created_at",
+            "-id",
+        ]
+
+    def clean(self):
+        if (
+            self.scope_type == self.SCOPE_CATEGORY
+            and not self.category
+        ):
+            raise ValidationError(
+                "カテゴリ単位のスナップショットにはcategoryが必要です。"
+            )
+
+        if (
+            self.scope_type == self.SCOPE_SCHEDULE_BLOCK
+            and not self.schedule_block
+        ):
+            raise ValidationError(
+                "日程区分単位のスナップショットにはschedule_blockが必要です。"
+            )
+
+    def __str__(self):
+        return (
+            f"{self.tournament.name} "
+            f"{self.get_scope_type_display()} "
+            f"{self.label}"
+        )
+
+
 

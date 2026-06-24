@@ -4,6 +4,7 @@ from . import advancement_views
 from . import csv_views
 from . import league_views
 from . import pdf_views
+from . import snapshot_views
 from . import stage_views
 from . import views
 from . import tournament_views
@@ -42,6 +43,18 @@ urlpatterns = [
         "category/<int:category_id>/stages/",
         stage_views.category_stage_overview,
         name="category_stage_overview",
+    ),
+
+    path(
+        "category/<int:category_id>/snapshots/",
+        snapshot_views.category_snapshot_list,
+        name="category_snapshot_list",
+    ),
+
+    path(
+        "snapshot/<int:snapshot_id>/restore/",
+        snapshot_views.restore_category_snapshot_view,
+        name="restore_category_snapshot",
     ),
 
     # =====================================================

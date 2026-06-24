@@ -18,11 +18,33 @@ from .models import (
     TournamentBracket,
     TournamentEntry,
     AdvancementSource,
+    OperationSnapshot,
     ScoreSheetTemplate,
     Schedule,
     ScheduleReplacementHistory,
     
 )
+
+
+@admin.register(OperationSnapshot)
+class OperationSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        "label",
+        "scope_type",
+        "tournament",
+        "category",
+        "schedule_block",
+        "created_at",
+    )
+    list_filter = (
+        "scope_type",
+        "tournament",
+        "created_at",
+    )
+    search_fields = (
+        "label",
+        "note",
+    )
 
 
 @admin.register(ScheduleReplacementHistory)
