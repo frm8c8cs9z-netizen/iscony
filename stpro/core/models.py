@@ -1091,7 +1091,12 @@ class TournamentMatch(models.Model):
 
     @property
     def retired_entry(self):
-        if not self.is_retirement_result or not self.winner:
+        if (
+            not self.is_retirement_result
+            or not self.winner
+            or not self.pair1
+            or not self.pair2
+        ):
             return None
 
         if self.winner_id == self.pair1_id:

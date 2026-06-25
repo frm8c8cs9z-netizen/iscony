@@ -56,7 +56,7 @@
             {% if match.pair1 %}
                 {{ match.pair1.code }}
                 {{ match.pair1.display_name }}
-                {% if match.retired_entry == match.pair1 %}
+                {% if match.pair1 and match.retired_entry == match.pair1 %}
                     (R)
                 {% endif %}
             {% else %}
@@ -68,7 +68,7 @@
             {% if match.pair2 %}
                 {{ match.pair2.code }}
                 {{ match.pair2.display_name }}
-                {% if match.retired_entry == match.pair2 %}
+                {% if match.pair2 and match.retired_entry == match.pair2 %}
                     (R)
                 {% endif %}
             {% else %}

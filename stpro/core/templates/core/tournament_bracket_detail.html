@@ -101,7 +101,7 @@
                                         </div>
 
                                         <div class="entry-score">
-                                            {% if match.retired_entry == match.pair1 %}
+                                            {% if match.pair1 and match.retired_entry == match.pair1 %}
                                                 R
                                             {% else %}
                                                 {{ match.pair1_games|default_if_none:"" }}
@@ -136,7 +136,7 @@
                                         </div>
 
                                         <div class="entry-score">
-                                            {% if match.retired_entry == match.pair2 %}
+                                            {% if match.pair2 and match.retired_entry == match.pair2 %}
                                                 R
                                             {% else %}
                                                 {{ match.pair2_games|default_if_none:"" }}

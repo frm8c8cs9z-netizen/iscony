@@ -5,6 +5,7 @@ import os
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.template import Context, Template
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -151,6 +152,23 @@ class TournamentAdvancementTests(TestCase):
         self.assertEqual(first_match.winner, self.entries[1])
         self.assertEqual(first_match.retired_entry, self.entries[0])
         self.assertEqual(next_match.pair1, self.entries[1])
+
+    def test_bye_match_does_not_show_retirement_entry(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            winner=self.entries[0],
+            result_type=TournamentMatch.RESULT_RETIREMENT,
+        )
+        rendered = Template(
+            "{% if match.pair2 and match.retired_entry == match.pair2 %}R{% endif %}"
+        ).render(Context({"match": match}))
+
+        self.assertIsNone(match.retired_entry)
+        self.assertEqual(rendered, "")
 
     def test_delete_tournament_retirement_resets_result_type(self):
         match = TournamentMatch.objects.create(
