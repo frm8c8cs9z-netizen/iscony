@@ -3811,6 +3811,10 @@ class ApplyStageAdvancementsTests(TestCase):
 
         self.assertEqual(snapshot.scope_type, OperationSnapshot.SCOPE_TOURNAMENT)
         self.assertEqual(snapshot.label, "自動: 女子A / 予選リーグ 反映前")
+        self.assertEqual(
+            snapshot.note,
+            "後続Stage反映の直前に自動作成。反映元Stage: 女子A / 予選リーグ",
+        )
         self.assertEqual(auto["type"], "before_stage_advancement")
         self.assertEqual(auto["source_stage_id"], self.preliminary_stage.id)
         self.assertIsNone(target_entry_payload["participant_id"])

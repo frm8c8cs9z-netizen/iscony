@@ -324,7 +324,10 @@ def create_stage_advancement_snapshot_once(stage):
         tournament=tournament,
         scope_type=OperationSnapshot.SCOPE_TOURNAMENT,
         label=f"自動: {stage.category.name} / {stage.name} 反映前",
-        note="後続Stage反映の直前に自動作成",
+        note=(
+            "後続Stage反映の直前に自動作成。"
+            f"反映元Stage: {stage.category.name} / {stage.name}"
+        ),
         snapshot_json=payload,
     )
     snapshot.full_clean()
