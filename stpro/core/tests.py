@@ -4150,6 +4150,30 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "選手1A・選手1B")
         self.assertContains(response, "2")
 
+    def test_tournament_bracket_detail_draws_lines_before_result(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "normal-line")
+        self.assertNotContains(response, 'class="winner-line"')
+
     def test_tournament_bracket_detail_uses_short_name_and_organization(self):
         self.entry1.player1_name = "山田　太郎"
         self.entry1.player2_name = "佐藤　次郎"

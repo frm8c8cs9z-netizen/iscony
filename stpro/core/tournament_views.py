@@ -217,6 +217,14 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             "class": vertical_class,
         })
 
+    svg["lines"].append({
+        "x1": join_x,
+        "y1": center_y,
+        "x2": advance_x,
+        "y2": center_y,
+        "class": "normal-line",
+    })
+
     if match.winner_id:
         svg["lines"].append({
             "x1": join_x,
@@ -397,6 +405,14 @@ def _build_svg_bracket_data(bracket, round_data):
                     "anchor": "middle",
                     "url": "",
                 })
+
+        svg["lines"].append({
+            "x1": center_x - 120,
+            "y1": height / 2 + 52,
+            "x2": center_x + 120,
+            "y2": height / 2 + 52,
+            "class": "normal-line",
+        })
 
         if final_match.winner_id:
             svg["lines"].append({
