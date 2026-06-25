@@ -4,6 +4,61 @@
 
 <h2>{{ tournament.name }} メンテナンス</h2>
 
+<h3>カテゴリ別クイック操作</h3>
+
+<p>
+    当日の運用でよく使う入口です。カテゴリごとの状況確認、退避、進出元調整にすぐ移動できます。
+</p>
+
+<table>
+    <tr>
+        <th>カテゴリ</th>
+        <th>進行・結果</th>
+        <th>退避・調整</th>
+        <th>枠メンテ</th>
+    </tr>
+    {% for category in categories %}
+        <tr>
+            <td>
+                {{ category.name }}
+            </td>
+            <td>
+                <a href="{% url 'category_stage_overview' category.id %}">
+                    Stage一覧
+                </a>
+                ／
+                <a href="{% url 'schedule_view' tournament.code %}">
+                    試合進行表
+                </a>
+            </td>
+            <td>
+                <a href="{% url 'category_snapshot_list' category.id %}">
+                    スナップショット
+                </a>
+                ／
+                <a href="{% url 'advancement_source_list' tournament.code %}">
+                    進出元入れ替え
+                </a>
+            </td>
+            <td>
+                <a href="{% url 'pair_maintenance' category.id %}">
+                    リーグ枠
+                </a>
+                ／
+                <a href="{% url 'bracket_list' tournament.code %}">
+                    トーナメント
+                </a>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="4">
+                カテゴリがありません。
+            </td>
+        </tr>
+    {% endfor %}
+</table>
+
 <h3>基本CSV取込</h3>
 
 <p>

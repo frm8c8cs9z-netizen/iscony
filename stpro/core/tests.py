@@ -3922,6 +3922,62 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(self.target.participant, self.participant2)
 
 
+class MaintenanceMenuTests(TestCase):
+
+    def test_category_quick_actions_are_displayed_in_display_order(self):
+        tournament = Tournament.objects.create(
+            name="運用導線大会",
+            code="MENUTEST",
+        )
+        later_category = Category.objects.create(
+            tournament=tournament,
+            name="女子B",
+            display_order=2,
+        )
+        first_category = Category.objects.create(
+            tournament=tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "maintenance_menu",
+                kwargs={"code": tournament.code},
+            )
+        )
+
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "カテゴリ別クイック操作")
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": first_category.id},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "category_snapshot_list",
+                kwargs={"category_id": first_category.id},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "pair_maintenance",
+                kwargs={"category_id": first_category.id},
+            ),
+        )
+        self.assertLess(
+            content.index(first_category.name),
+            content.index(later_category.name),
+        )
+
+
 class CategoryStageOverviewTests(TestCase):
 
     def test_league_and_tournament_are_displayed_in_stage_order(self):

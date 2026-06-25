@@ -259,7 +259,7 @@ def maintenance_menu(request, code):
 
     categories = Category.objects.filter(
         tournament=tournament
-    ).order_by("name")
+    ).order_by("display_order", "id")
 
     return render(
         request,
