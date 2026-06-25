@@ -128,3 +128,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# 後続Stage反映の直前に、大会全体スナップショットを自動作成する。
+# 現場運用でスナップショットが増えすぎる場合は False にする。
+ENABLE_AUTO_OPERATION_SNAPSHOT = True

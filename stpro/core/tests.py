@@ -5,7 +5,7 @@ import os
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import (
@@ -3713,6 +3713,17 @@ class ApplyStageAdvancementsTests(TestCase):
         apply_stage_advancements(self.preliminary_stage)
 
         self.assertEqual(OperationSnapshot.objects.count(), 1)
+
+    @override_settings(ENABLE_AUTO_OPERATION_SNAPSHOT=False)
+    def test_auto_snapshot_can_be_disabled(self):
+        self._finish_preliminary_group()
+
+        applied_count = apply_stage_advancements(self.preliminary_stage)
+
+        self.assertEqual(applied_count, 1)
+        self.assertEqual(OperationSnapshot.objects.count(), 0)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant, self.participant1)
 
     def test_unfinished_source_does_not_change_any_target(self):
         with self.assertRaises(ValidationError):

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Max, Q
 
@@ -143,7 +144,8 @@ def apply_stage_advancements(source_stage):
 
             resolved.append((target, source_entry))
 
-        create_stage_advancement_snapshot_once(source_stage)
+        if getattr(settings, "ENABLE_AUTO_OPERATION_SNAPSHOT", True):
+            create_stage_advancement_snapshot_once(source_stage)
 
         for target, source_entry in resolved:
             target.participant = source_entry.participant
