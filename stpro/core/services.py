@@ -873,6 +873,7 @@ def delete_tournament_score(match):
         match.pair1_games = None
         match.pair2_games = None
         match.winner = None
+        match.result_type = TournamentMatch.RESULT_NORMAL
 
         match.save()
 
@@ -984,6 +985,7 @@ def save_tournament_score(
         # --------------------------------------
         match.pair1_games = pair1_games
         match.pair2_games = pair2_games
+        match.result_type = TournamentMatch.RESULT_NORMAL
 
         # --------------------------------------
         # 勝者決定
@@ -1020,6 +1022,72 @@ def save_tournament_score(
         advance_tournament_winner(
             match,
             winner
+        )
+
+    return None
+
+
+def save_tournament_retirement(match, retired_side):
+    """トーナメント試合を、指定側のリタイアによる相手勝ちとして保存する。"""
+
+    with transaction.atomic():
+
+        match = TournamentMatch.objects.select_for_update().get(
+            id=match.id
+        )
+
+        if not match.pair1 or not match.pair2:
+            return "対戦ペアが未確定です。"
+
+        if retired_side not in ["pair1", "pair2"]:
+            return "リタイアする側を確認してください。"
+
+        win_games = (match.match_games // 2) + 1
+
+        if retired_side == "pair1":
+            pair1_games = 0
+            pair2_games = win_games
+            winner = match.pair2
+        else:
+            pair1_games = win_games
+            pair2_games = 0
+            winner = match.pair1
+
+        error = validate_tournament_score_change(
+            match,
+            pair1_games,
+            pair2_games,
+        )
+
+        if error:
+            return error
+
+        old_winner = match.winner
+
+        match.pair1_games = pair1_games
+        match.pair2_games = pair2_games
+        match.winner = winner
+        match.result_type = TournamentMatch.RESULT_RETIREMENT
+
+        if old_winner and old_winner != winner:
+            clear_advanced_tournament_winner(
+                match,
+                old_winner,
+            )
+
+        match.save()
+
+        Schedule.objects.filter(
+            tournament_match=match
+        ).update(
+            called=True,
+            started=True,
+            finished=True,
+        )
+
+        advance_tournament_winner(
+            match,
+            winner,
         )
 
     return None

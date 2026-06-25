@@ -37,7 +37,9 @@ from .services import (
     create_extra_round_robin_match,
     insert_round_robin_schedule,
     move_schedule,
+    delete_tournament_score,
     save_tournament_score,
+    save_tournament_retirement,
     swap_advancement_sources,
     undo_schedule_replacement,
     update_group_ranking,
@@ -112,6 +114,66 @@ class TournamentAdvancementTests(TestCase):
 
         self.assertEqual(first_match.winner, self.entries[0])
         self.assertEqual(next_match.pair1, self.entries[0])
+
+    def test_tournament_retirement_advances_opponent(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            match_games=7,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        error = save_tournament_retirement(
+            first_match,
+            "pair1",
+        )
+
+        self.assertIsNone(error)
+
+        first_match.refresh_from_db()
+        next_match.refresh_from_db()
+
+        self.assertEqual(first_match.result_type, TournamentMatch.RESULT_RETIREMENT)
+        self.assertEqual(first_match.pair1_games, 0)
+        self.assertEqual(first_match.pair2_games, 4)
+        self.assertEqual(first_match.winner, self.entries[1])
+        self.assertEqual(first_match.retired_entry, self.entries[0])
+        self.assertEqual(next_match.pair1, self.entries[1])
+
+    def test_delete_tournament_retirement_resets_result_type(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=0,
+            pair2_games=4,
+            winner=self.entries[1],
+            result_type=TournamentMatch.RESULT_RETIREMENT,
+        )
+
+        error = delete_tournament_score(match)
+
+        self.assertIsNone(error)
+        match.refresh_from_db()
+        self.assertEqual(match.result_type, TournamentMatch.RESULT_NORMAL)
+        self.assertIsNone(match.pair1_games)
+        self.assertIsNone(match.pair2_games)
+        self.assertIsNone(match.winner)
 
     def test_winner_change_replaces_advanced_entry_when_next_match_has_no_score(self):
         first_match = TournamentMatch.objects.create(

@@ -131,6 +131,7 @@ def build_category_snapshot_payload(category):
             "pair1_games": match.pair1_games,
             "pair2_games": match.pair2_games,
             "match_games": match.match_games,
+            "result_type": match.result_type,
             "winner_id": match.winner_id,
             "next_match_id": match.next_match_id,
             "next_slot": match.next_slot,
@@ -479,6 +480,10 @@ def _restore_category_payload(
                 pair1_games=item["pair1_games"],
                 pair2_games=item["pair2_games"],
                 match_games=item["match_games"],
+                result_type=item.get(
+                    "result_type",
+                    TournamentMatch.RESULT_NORMAL,
+                ),
                 winner_id=item["winner_id"],
                 next_match_id=item["next_match_id"],
                 next_slot=item["next_slot"],

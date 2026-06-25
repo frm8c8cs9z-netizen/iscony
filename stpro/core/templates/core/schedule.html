@@ -132,9 +132,17 @@
                                         {% if match.pair1_games != None and match.pair2_games != None %}
                                             <br>
                                             <strong>
-                                                {{ match.pair1_games }}
+                                                {% if match.retired_entry == match.pair1 %}
+                                                    R
+                                                {% else %}
+                                                    {{ match.pair1_games }}
+                                                {% endif %}
                                                 -
-                                                {{ match.pair2_games }}
+                                                {% if match.retired_entry == match.pair2 %}
+                                                    R
+                                                {% else %}
+                                                    {{ match.pair2_games }}
+                                                {% endif %}
                                             </strong>
                                         {% endif %}
                                     {% if match.pair1 and match.pair2 %}

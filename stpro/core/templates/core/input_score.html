@@ -105,6 +105,28 @@
             保存
         </button>
 
+        {% if mode == "tournament" and match.pair1 and match.pair2 %}
+            <button
+                type="submit"
+                name="action"
+                value="retire_pair1"
+                class="danger-button"
+                onclick="return confirm('{{ match.pair1.display_name }} をこの試合でリタイア扱いにしますか？');"
+            >
+                上側リタイア
+            </button>
+
+            <button
+                type="submit"
+                name="action"
+                value="retire_pair2"
+                class="danger-button"
+                onclick="return confirm('{{ match.pair2.display_name }} をこの試合でリタイア扱いにしますか？');"
+            >
+                下側リタイア
+            </button>
+        {% endif %}
+
         {% if match.pair1_games != None and match.pair2_games != None %}
             <button
                 type="submit"

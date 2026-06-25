@@ -973,6 +973,14 @@ class TournamentMatch(models.Model):
         ("pair1", "上側 / pair1"),
         ("pair2", "下側 / pair2"),
     ]
+
+    RESULT_NORMAL = "normal"
+    RESULT_RETIREMENT = "retirement"
+
+    RESULT_TYPE_CHOICES = [
+        (RESULT_NORMAL, "通常"),
+        (RESULT_RETIREMENT, "リタイアによる不戦"),
+    ]
     
     bracket = models.ForeignKey(
         TournamentBracket,
@@ -1023,6 +1031,12 @@ class TournamentMatch(models.Model):
         default=7
     )
 
+    result_type = models.CharField(
+        max_length=20,
+        choices=RESULT_TYPE_CHOICES,
+        default=RESULT_NORMAL,
+    )
+
     winner = models.ForeignKey(
         TournamentEntry,
         null=True,
@@ -1070,6 +1084,23 @@ class TournamentMatch(models.Model):
             f"第{self.match_number}試合 "
             f"{pair1_code} vs {pair2_code}"
         )
+
+    @property
+    def is_retirement_result(self):
+        return self.result_type == self.RESULT_RETIREMENT
+
+    @property
+    def retired_entry(self):
+        if not self.is_retirement_result or not self.winner:
+            return None
+
+        if self.winner_id == self.pair1_id:
+            return self.pair2
+
+        if self.winner_id == self.pair2_id:
+            return self.pair1
+
+        return None
 
 
 # =========================================================

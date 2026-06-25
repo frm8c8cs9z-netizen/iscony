@@ -35,6 +35,7 @@ from .services import (
     advance_tournament_bye_winners,
     delete_tournament_score,
     save_tournament_score,
+    save_tournament_retirement,
     validate_tournament_score_change,
 )
 from .utils import (
@@ -223,6 +224,48 @@ def input_tournament_match_score(request, code, match_id):
                 "tournament_bracket_detail",
                 code=tournament.code,
                 bracket_id=match.bracket.id
+            )
+
+        if action in ["retire_pair1", "retire_pair2"]:
+            retired_side = (
+                "pair1"
+                if action == "retire_pair1"
+                else "pair2"
+            )
+            error = save_tournament_retirement(
+                match,
+                retired_side,
+            )
+
+            if error:
+                return render_score_input(
+                    request=request,
+                    tournament=tournament,
+                    match=match,
+                    winning_games=winning_games,
+                    mode="tournament",
+                    back_url=request.GET.get(
+                        "next",
+                        reverse(
+                            "tournament_bracket_detail",
+                            kwargs={
+                                "code": tournament.code,
+                                "bracket_id": match.bracket.id,
+                            }
+                        )
+                    ),
+                    error=error,
+                )
+
+            next_url = request.GET.get("next")
+
+            if next_url:
+                return redirect(next_url)
+
+            return redirect(
+                "tournament_bracket_detail",
+                code=tournament.code,
+                bracket_id=match.bracket.id,
             )
 
         try:
