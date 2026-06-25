@@ -3850,6 +3850,48 @@ class TournamentScheduleBehaviorTests(TestCase):
             name="1",
         )
 
+    def test_tournament_bracket_detail_links_back_to_stage_overview(self):
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Stage一覧へ戻る")
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": self.category.id},
+            ),
+        )
+
+    def test_tournament_match_maintenance_links_back_to_stage_overview(self):
+        response = self.client.get(
+            reverse(
+                "tournament_match_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Stage一覧へ戻る")
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": self.category.id},
+            ),
+        )
+
     def test_schedule_can_hold_tournament_match(self):
         match = TournamentMatch.objects.create(
             bracket=self.bracket,

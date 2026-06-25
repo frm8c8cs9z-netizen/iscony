@@ -9,6 +9,10 @@
 </h2>
 
 <p>
+    <a href="{% url 'category_stage_overview' bracket.category.id %}">
+        Stage一覧へ戻る
+    </a>
+    |
     <a href="{% url 'tournament_bracket_detail' tournament.code bracket.id %}">
         トーナメント表へ
     </a>

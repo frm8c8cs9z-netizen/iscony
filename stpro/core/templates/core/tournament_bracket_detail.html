@@ -17,6 +17,9 @@
     </div>
 
     <div class="action-row">
+        <a href="{% url 'category_stage_overview' bracket.category.id %}">
+            Stage一覧へ戻る
+        </a>
         <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
             メンテナンス
         </a>
