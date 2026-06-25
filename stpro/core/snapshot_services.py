@@ -553,8 +553,16 @@ def _restore_category_payload(
         deleted_extra_count = len(current_rr_ids - restored_rr_ids)
 
     return {
+        "league_entries": len(payload["league_entries"]),
+        "tournament_entries": len(payload["tournament_entries"]),
         "round_robin_matches": len(payload["round_robin_matches"]),
+        "tournament_matches": len(payload["tournament_matches"]),
+        "group_rankings": len(payload["group_rankings"]),
         "schedules": len(payload["schedules"]),
+        "schedule_replacement_histories": len(
+            payload["schedule_replacement_histories"]
+        ),
+        "advancement_sources": len(payload["advancement_sources"]),
         "deleted_extra_matches": deleted_extra_count,
     }
 
@@ -640,8 +648,14 @@ def restore_tournament_snapshot(snapshot):
 
     totals = {
         "categories": 0,
+        "league_entries": 0,
+        "tournament_entries": 0,
         "round_robin_matches": 0,
+        "tournament_matches": 0,
+        "group_rankings": 0,
         "schedules": 0,
+        "schedule_replacement_histories": 0,
+        "advancement_sources": 0,
         "deleted_extra_matches": 0,
     }
 
@@ -658,8 +672,16 @@ def restore_tournament_snapshot(snapshot):
                 delete_existing_schedules=False,
             )
             totals["categories"] += 1
+            totals["league_entries"] += result["league_entries"]
+            totals["tournament_entries"] += result["tournament_entries"]
             totals["round_robin_matches"] += result["round_robin_matches"]
+            totals["tournament_matches"] += result["tournament_matches"]
+            totals["group_rankings"] += result["group_rankings"]
             totals["schedules"] += result["schedules"]
+            totals["schedule_replacement_histories"] += result[
+                "schedule_replacement_histories"
+            ]
+            totals["advancement_sources"] += result["advancement_sources"]
             totals["deleted_extra_matches"] += result["deleted_extra_matches"]
 
     return totals

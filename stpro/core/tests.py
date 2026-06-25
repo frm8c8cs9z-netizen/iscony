@@ -3,6 +3,7 @@ import io
 import os
 
 from django.conf import settings
+from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.template import Context, Template
@@ -2099,6 +2100,17 @@ class CategorySnapshotTests(TestCase):
             self.tournament,
             label="開始前",
         )
+        extra_match = create_extra_round_robin_match(
+            self.group,
+            self.entry1,
+            self.entry2,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=2,
+            round_robin_match=extra_match,
+        )
         self.match.pair1_games = 1
         self.match.pair2_games = 3
         self.match.completed = True
@@ -2122,6 +2134,16 @@ class CategorySnapshotTests(TestCase):
         self.assertIsNone(self.match.pair1_games)
         self.assertIsNone(self.match.pair2_games)
         self.assertFalse(self.match.completed)
+        self.assertFalse(
+            RoundRobinMatch.objects.filter(id=extra_match.id).exists()
+        )
+        message_text = " ".join(
+            str(message)
+            for message in get_messages(response.wsgi_request)
+        )
+        self.assertIn("復元内容: 全カテゴリの進行表", message_text)
+        self.assertIn("トーナメント試合", message_text)
+        self.assertIn("追加試合削除1件", message_text)
 
     def test_category_snapshot_restore_blocks_other_category_schedule_slot(self):
         snapshot = create_category_snapshot(

@@ -83,10 +83,11 @@
     一覧
 </h3>
 
-{% if snapshots %}
+{% if snapshot_rows %}
     <table>
         <tr>
             <th>作成日時</th>
+            <th>種別</th>
             <th>ラベル</th>
             <th>メモ</th>
             <th>件数</th>
@@ -94,24 +95,39 @@
             <th>カテゴリ復元</th>
             <th>進行表だけ復元</th>
         </tr>
-        {% for snapshot in snapshots %}
+        {% for row in snapshot_rows %}
             <tr>
                 <td>
-                    {{ snapshot.created_at|date:"Y-m-d H:i" }}
+                    {{ row.snapshot.created_at|date:"Y-m-d H:i" }}
                 </td>
                 <td>
-                    {{ snapshot.label }}
+                    {{ row.origin }}
+                    {% if row.origin_detail %}
+                        <br>
+                        {{ row.origin_detail }}
+                    {% endif %}
                 </td>
                 <td>
-                    {{ snapshot.note|linebreaksbr }}
+                    {{ row.snapshot.label }}
                 </td>
                 <td>
-                    カテゴリ {{ snapshot.snapshot_json.categories|length }}
+                    {{ row.snapshot.note|linebreaksbr }}
+                </td>
+                <td>
+                    カテゴリ {{ row.summary.categories }} /
+                    進行 {{ row.summary.schedules }} /
+                    リーグ試合 {{ row.summary.round_robin_matches }} /
+                    トーナメント試合 {{ row.summary.tournament_matches }}
+                    <br>
+                    リーグ枠 {{ row.summary.league_entries }} /
+                    トーナメント枠 {{ row.summary.tournament_entries }} /
+                    後続Stage参照 {{ row.summary.advancement_sources }} /
+                    差し替え履歴 {{ row.summary.replacement_histories }}
                 </td>
                 <td>
                     <form
                         method="post"
-                        action="{% url 'restore_tournament_snapshot' snapshot.id %}"
+                        action="{% url 'restore_tournament_snapshot' row.snapshot.id %}"
                     >
                         {% csrf_token %}
                         <button
@@ -125,7 +141,7 @@
                 <td>
                     <form
                         method="post"
-                        action="{% url 'restore_tournament_snapshot_category' snapshot.id %}"
+                        action="{% url 'restore_tournament_snapshot_category' row.snapshot.id %}"
                     >
                         {% csrf_token %}
                         <select name="category_id" required>
@@ -147,7 +163,7 @@
                 <td>
                     <form
                         method="post"
-                        action="{% url 'restore_tournament_snapshot_category_block' snapshot.id %}"
+                        action="{% url 'restore_tournament_snapshot_category_block' row.snapshot.id %}"
                     >
                         {% csrf_token %}
                         <select name="category_id" required>
