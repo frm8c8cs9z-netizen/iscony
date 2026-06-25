@@ -8,6 +8,7 @@ core.tournament_views
 
 import csv
 import io
+import math
 
 from django.db import transaction
 from django.http import HttpResponse
@@ -48,6 +49,349 @@ from .view_helper import (
     redirect_next_or_default,
     render_score_input,
 )
+
+
+def _entry_svg_label(entry):
+    """SVG上に出す短い名前 + 所属名を返す。"""
+
+    if not entry:
+        return ""
+
+    label = entry.short_name
+
+    if entry.display_organization:
+        label = f"{label}（{entry.display_organization}）"
+
+    return label
+
+
+def _entry_score_text(match, side):
+    """負け側の肩に表示するゲーム数またはRを返す。"""
+
+    entry = getattr(match, side)
+
+    if not entry or not match.winner_id:
+        return ""
+
+    if match.winner_id == entry.id:
+        return ""
+
+    if match.retired_entry == entry:
+        return "R"
+
+    games = (
+        match.pair1_games
+        if side == "pair1"
+        else match.pair2_games
+    )
+
+    if games is None:
+        return ""
+
+    return str(games)
+
+
+def _add_svg_match(svg, match, *, round_number, side, index):
+    """1試合分の線・文字をSVGデータへ追加する。"""
+
+    row_gap = svg["row_gap"]
+    top = svg["top"]
+    round_gap = svg["round_gap"]
+    name_width = svg["name_width"]
+    shoulder = svg["shoulder"]
+    line_pad = svg["line_pad"]
+
+    span = row_gap * (2 ** max(round_number - 1, 0))
+    y1 = top + (index * span * 2)
+    y2 = y1 + span
+
+    if not match.pair2:
+        y2 = y1
+
+    center_y = (y1 + y2) / 2
+
+    if side == "right":
+        entry_x = (
+            svg["width"]
+            - svg["side_margin"]
+            - ((round_number - 1) * round_gap)
+        )
+        line_start = entry_x - name_width
+        join_x = line_start - shoulder
+        advance_x = join_x - line_pad
+        text_anchor = "end"
+        score_dx = -10
+    else:
+        entry_x = svg["side_margin"] + ((round_number - 1) * round_gap)
+        line_start = entry_x + name_width
+        join_x = line_start + shoulder
+        advance_x = join_x + line_pad
+        text_anchor = "start"
+        score_dx = 10
+
+    match_url = (
+        reverse(
+            "input_tournament_match_score",
+            kwargs={
+                "code": match.bracket.category.tournament.code,
+                "match_id": match.id,
+            },
+        )
+        if match.pair1 and match.pair2
+        else ""
+    )
+
+    svg["labels"].append({
+        "x": join_x,
+        "y": center_y - 12,
+        "text": match.match_label or match.match_code,
+        "class": "svg-match-code",
+        "anchor": "middle",
+        "url": match_url,
+    })
+
+    for side_name, y in [("pair1", y1), ("pair2", y2)]:
+        entry = getattr(match, side_name)
+
+        if not entry:
+            continue
+
+        is_winner = (
+            match.winner_id
+            and match.winner_id == entry.id
+        )
+        line_class = "winner-line" if is_winner else "normal-line"
+        text_class = "winner-text" if is_winner else "entry-text"
+
+        svg["labels"].append({
+            "x": entry_x,
+            "y": y - 6,
+            "text": str(entry.display_order),
+            "class": text_class,
+            "anchor": text_anchor,
+            "url": "",
+        })
+        svg["labels"].append({
+            "x": entry_x,
+            "y": y + 14,
+            "text": _entry_svg_label(entry),
+            "class": text_class,
+            "anchor": text_anchor,
+            "url": "",
+        })
+        svg["lines"].append({
+            "x1": line_start,
+            "y1": y,
+            "x2": join_x,
+            "y2": y,
+            "class": line_class,
+        })
+
+        score = _entry_score_text(match, side_name)
+
+        if score:
+            svg["labels"].append({
+                "x": join_x + score_dx,
+                "y": y - 6,
+                "text": score,
+                "class": "loser-score",
+                "anchor": "middle",
+                "url": "",
+            })
+
+    if match.pair1 and match.pair2:
+        vertical_class = (
+            "winner-line"
+            if match.winner_id
+            else "normal-line"
+        )
+        svg["lines"].append({
+            "x1": join_x,
+            "y1": y1,
+            "x2": join_x,
+            "y2": y2,
+            "class": vertical_class,
+        })
+
+    if match.winner_id:
+        svg["lines"].append({
+            "x1": join_x,
+            "y1": center_y,
+            "x2": advance_x,
+            "y2": center_y,
+            "class": "winner-line",
+        })
+
+
+def _build_svg_bracket_data(bracket, round_data):
+    """片側/左右表示に対応したSVGトーナメント表データを作る。"""
+
+    if not round_data:
+        return None
+
+    round_count = len(round_data)
+    first_round_matches = len(round_data[0]["matches"])
+    row_gap = 46
+    top = 70
+    side_margin = 28
+    round_gap = 250
+    name_width = 170
+    shoulder = 44
+    line_pad = 30
+    height = max(
+        220,
+        top * 2 + max(first_round_matches * row_gap * 2, row_gap * 2),
+    )
+
+    if bracket.layout_type == TournamentBracket.LAYOUT_SINGLE:
+        width = side_margin * 2 + (round_count * round_gap) + name_width
+    else:
+        side_rounds = max(round_count - 1, 1)
+        width = max(
+            900,
+            side_margin * 2 + (side_rounds * round_gap * 2) + 180,
+        )
+
+    svg = {
+        "width": int(width),
+        "height": int(height),
+        "top": top,
+        "row_gap": row_gap,
+        "round_gap": round_gap,
+        "side_margin": side_margin,
+        "name_width": name_width,
+        "shoulder": shoulder,
+        "line_pad": line_pad,
+        "layout_type": bracket.layout_type,
+        "lines": [],
+        "labels": [],
+        "headings": [],
+    }
+
+    if bracket.layout_type == TournamentBracket.LAYOUT_SINGLE:
+        for round_item in round_data:
+            round_number = round_item["number"]
+            svg["headings"].append({
+                "x": side_margin + ((round_number - 1) * round_gap) + 90,
+                "y": 28,
+                "text": round_item["label"],
+            })
+
+            for index, match in enumerate(round_item["matches"]):
+                _add_svg_match(
+                    svg,
+                    match,
+                    round_number=round_number,
+                    side="left",
+                    index=index,
+                )
+
+        return svg
+
+    for round_item in round_data[:-1]:
+        round_number = round_item["number"]
+        matches = round_item["matches"]
+        half_count = math.ceil(len(matches) / 2)
+        left_matches = matches[:half_count]
+        right_matches = matches[half_count:]
+
+        svg["headings"].append({
+            "x": side_margin + ((round_number - 1) * round_gap) + 90,
+            "y": 28,
+            "text": round_item["label"],
+        })
+        svg["headings"].append({
+            "x": width - side_margin - ((round_number - 1) * round_gap) - 90,
+            "y": 28,
+            "text": round_item["label"],
+        })
+
+        for index, match in enumerate(left_matches):
+            _add_svg_match(
+                svg,
+                match,
+                round_number=round_number,
+                side="left",
+                index=index,
+            )
+
+        for index, match in enumerate(right_matches):
+            _add_svg_match(
+                svg,
+                match,
+                round_number=round_number,
+                side="right",
+                index=index,
+            )
+
+    final_matches = round_data[-1]["matches"]
+
+    if final_matches:
+        center_x = width / 2
+        final_match = final_matches[0]
+        svg["headings"].append({
+            "x": center_x,
+            "y": 28,
+            "text": round_data[-1]["label"],
+        })
+        svg["labels"].append({
+            "x": center_x,
+            "y": (height / 2) - 24,
+            "text": final_match.match_label or final_match.match_code,
+            "class": "svg-match-code",
+            "anchor": "middle",
+            "url": (
+                reverse(
+                    "input_tournament_match_score",
+                    kwargs={
+                        "code": bracket.category.tournament.code,
+                        "match_id": final_match.id,
+                    },
+                )
+                if final_match.pair1 and final_match.pair2
+                else ""
+            ),
+        })
+
+        for entry, y, side_name in [
+            (final_match.pair1, (height / 2) - 6, "pair1"),
+            (final_match.pair2, (height / 2) + 34, "pair2"),
+        ]:
+            if not entry:
+                continue
+
+            is_winner = final_match.winner_id == entry.id
+            svg["labels"].append({
+                "x": center_x,
+                "y": y,
+                "text": f"{entry.display_order} {_entry_svg_label(entry)}",
+                "class": "winner-text" if is_winner else "entry-text",
+                "anchor": "middle",
+                "url": "",
+            })
+
+            score = _entry_score_text(final_match, side_name)
+
+            if score:
+                svg["labels"].append({
+                    "x": center_x + 145,
+                    "y": y,
+                    "text": score,
+                    "class": "loser-score",
+                    "anchor": "middle",
+                    "url": "",
+                })
+
+        if final_match.winner_id:
+            svg["lines"].append({
+                "x1": center_x - 120,
+                "y1": height / 2 + 52,
+                "x2": center_x + 120,
+                "y2": height / 2 + 52,
+                "class": "winner-line",
+            })
+
+    return svg
 
 
 def tournament_bracket_detail(request, code, bracket_id):
@@ -123,6 +467,11 @@ def tournament_bracket_detail(request, code, bracket_id):
             "matches": round_matches,
         })
 
+    svg_bracket = _build_svg_bracket_data(
+        bracket,
+        round_data,
+    )
+
     # 決勝だけ中央に置き、それ以外を左右に分けられる形へ整える。
     side_round_data = []
     final_round = None
@@ -157,6 +506,7 @@ def tournament_bracket_detail(request, code, bracket_id):
             "tournament": tournament,
             "bracket": bracket,
             "round_data": round_data,
+            "svg_bracket": svg_bracket,
             "side_round_data": side_round_data,
             "final_round": final_round,
         }

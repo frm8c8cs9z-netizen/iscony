@@ -4119,6 +4119,63 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
+    def test_tournament_bracket_detail_shows_svg_bracket(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<svg", html=False)
+        self.assertContains(response, "winner-line")
+        self.assertContains(response, "1回戦1")
+        self.assertContains(response, "選手1A・選手1B")
+        self.assertContains(response, "2")
+
+    def test_tournament_bracket_detail_uses_short_name_and_organization(self):
+        self.entry1.player1_name = "山田　太郎"
+        self.entry1.player2_name = "佐藤　次郎"
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertContains(response, "山田・佐藤（第一クラブ）")
+
     def test_tournament_match_maintenance_links_back_to_stage_overview(self):
         response = self.client.get(
             reverse(

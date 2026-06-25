@@ -34,6 +34,129 @@
 
 {% if round_data %}
 
+    {% if svg_bracket %}
+        <style>
+            .svg-bracket-wrap {
+                border: 1px solid #c9c9c9;
+                overflow: auto;
+                padding: 16px;
+                margin-bottom: 24px;
+                background: #fff;
+            }
+
+            .svg-bracket {
+                min-width: 100%;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
+
+            .svg-heading {
+                font-size: 18px;
+                font-weight: 700;
+                fill: #222;
+            }
+
+            .entry-text {
+                font-size: 14px;
+                font-weight: 600;
+                fill: #222;
+            }
+
+            .winner-text {
+                font-size: 14px;
+                font-weight: 800;
+                fill: #e00000;
+            }
+
+            .svg-match-code {
+                font-size: 12px;
+                fill: #666;
+            }
+
+            .loser-score {
+                font-size: 13px;
+                font-weight: 700;
+                fill: #222;
+            }
+
+            .normal-line {
+                stroke: #222;
+                stroke-width: 2;
+                fill: none;
+            }
+
+            .winner-line {
+                stroke: #e00000;
+                stroke-width: 4;
+                fill: none;
+            }
+
+            .svg-card-note {
+                color: #666;
+                margin-top: 24px;
+            }
+        </style>
+
+        <div class="svg-bracket-wrap">
+            <svg
+                class="svg-bracket"
+                width="{{ svg_bracket.width }}"
+                height="{{ svg_bracket.height }}"
+                viewBox="0 0 {{ svg_bracket.width }} {{ svg_bracket.height }}"
+                role="img"
+                aria-label="{{ bracket.name }} トーナメント表"
+            >
+                {% for heading in svg_bracket.headings %}
+                    <text
+                        class="svg-heading"
+                        x="{{ heading.x }}"
+                        y="{{ heading.y }}"
+                        text-anchor="middle"
+                    >
+                        {{ heading.text }}
+                    </text>
+                {% endfor %}
+
+                {% for line in svg_bracket.lines %}
+                    <line
+                        class="{{ line.class }}"
+                        x1="{{ line.x1 }}"
+                        y1="{{ line.y1 }}"
+                        x2="{{ line.x2 }}"
+                        y2="{{ line.y2 }}"
+                    />
+                {% endfor %}
+
+                {% for label in svg_bracket.labels %}
+                    {% if label.url %}
+                        <a href="{{ label.url }}">
+                            <text
+                                class="{{ label.class }}"
+                                x="{{ label.x }}"
+                                y="{{ label.y }}"
+                                text-anchor="{{ label.anchor }}"
+                            >
+                                {{ label.text }}
+                            </text>
+                        </a>
+                    {% else %}
+                        <text
+                            class="{{ label.class }}"
+                            x="{{ label.x }}"
+                            y="{{ label.y }}"
+                            text-anchor="{{ label.anchor }}"
+                        >
+                            {{ label.text }}
+                        </text>
+                    {% endif %}
+                {% endfor %}
+            </svg>
+        </div>
+
+        <p class="svg-card-note">
+            下のカード型表示は、試合状態の確認用として残しています。
+        </p>
+    {% endif %}
+
     <div class="bracket-scroll">
         <div class="tournament-bracket">
 
