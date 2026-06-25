@@ -102,7 +102,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
     y1 = top + (index * span * 2)
     y2 = y1 + span
 
-    if not match.pair2:
+    if round_number == 1 and not match.pair2:
         y2 = y1
 
     center_y = (y1 + y2) / 2
@@ -156,16 +156,20 @@ def _add_svg_match(svg, match, *, round_number, side, index):
     for side_name, y in [("pair1", y1), ("pair2", y2)]:
         entry = getattr(match, side_name)
 
-        if not entry:
+        if not entry and round_number == 1:
             continue
 
-        should_show_entry = not _is_advanced_svg_entry(
-            svg,
-            entry,
-            round_number,
+        should_show_entry = (
+            entry
+            and not _is_advanced_svg_entry(
+                svg,
+                entry,
+                round_number,
+            )
         )
         is_winner = (
             match.winner_id
+            and entry
             and match.winner_id == entry.id
         )
         line_class = "winner-line" if is_winner else "normal-line"
@@ -207,7 +211,11 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             "class": line_class,
         })
 
-        score = _entry_score_text(match, side_name)
+        score = (
+            _entry_score_text(match, side_name)
+            if entry
+            else ""
+        )
 
         if score:
             svg["labels"].append({
@@ -219,7 +227,10 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "url": "",
             })
 
-    if match.pair1 and match.pair2:
+    if (
+        match.pair1
+        and match.pair2
+    ) or round_number > 1:
         vertical_class = (
             "winner-line"
             if match.winner_id

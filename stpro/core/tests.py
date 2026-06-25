@@ -4174,6 +4174,52 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "normal-line")
         self.assertNotContains(response, 'class="winner-line"')
 
+    def test_tournament_bracket_detail_draws_later_round_skeleton_lines(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=3,
+            match_number=1,
+            match_code="M4",
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('y1="70"', svg_content)
+        self.assertIn('y2="162"', svg_content)
+
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,
