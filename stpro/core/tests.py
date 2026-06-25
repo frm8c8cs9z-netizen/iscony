@@ -193,6 +193,81 @@ class TournamentAdvancementTests(TestCase):
         self.assertIsNone(match.pair2_games)
         self.assertIsNone(match.winner)
 
+    def test_delete_tournament_retirement_clears_advanced_entry(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=0,
+            pair2_games=4,
+            winner=self.entries[1],
+            result_type=TournamentMatch.RESULT_RETIREMENT,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=self.entries[1],
+            pair2=self.entries[2],
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        error = delete_tournament_score(first_match)
+
+        self.assertIsNone(error)
+        first_match.refresh_from_db()
+        next_match.refresh_from_db()
+        self.assertEqual(first_match.result_type, TournamentMatch.RESULT_NORMAL)
+        self.assertIsNone(first_match.winner)
+        self.assertIsNone(next_match.pair1)
+        self.assertEqual(next_match.pair2, self.entries[2])
+
+    def test_delete_tournament_retirement_is_blocked_when_next_match_has_score(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=0,
+            pair2_games=4,
+            winner=self.entries[1],
+            result_type=TournamentMatch.RESULT_RETIREMENT,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=self.entries[1],
+            pair2=self.entries[2],
+            pair1_games=4,
+            pair2_games=1,
+            winner=self.entries[1],
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        error = delete_tournament_score(first_match)
+
+        self.assertEqual(
+            error,
+            "次の試合に結果が入力されているため、この結果は削除できません。"
+        )
+        first_match.refresh_from_db()
+        next_match.refresh_from_db()
+        self.assertEqual(first_match.result_type, TournamentMatch.RESULT_RETIREMENT)
+        self.assertEqual(first_match.winner, self.entries[1])
+        self.assertEqual(next_match.pair1, self.entries[1])
+
     def test_winner_change_replaces_advanced_entry_when_next_match_has_no_score(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,
