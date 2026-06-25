@@ -4174,6 +4174,50 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "normal-line")
         self.assertNotContains(response, 'class="winner-line"')
 
+    def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entry1,
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+        self.assertEqual(
+            svg_content.count("選手1A・選手1B"),
+            1,
+        )
+
     def test_tournament_bracket_detail_uses_short_name_and_organization(self):
         self.entry1.player1_name = "山田　太郎"
         self.entry1.player2_name = "佐藤　次郎"

@@ -77,6 +77,16 @@ def _entry_score_text(match, side):
     return str(games)
 
 
+def _is_advanced_svg_entry(svg, entry, round_number):
+    """前ラウンドから勝ち上がってきた枠かを判定する。"""
+
+    return (
+        round_number > 1
+        and entry
+        and entry.id in svg["advanced_entry_ids"]
+    )
+
+
 def _add_svg_match(svg, match, *, round_number, side, index):
     """1試合分の線・文字をSVGデータへ追加する。"""
 
@@ -149,6 +159,11 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         if not entry:
             continue
 
+        should_show_entry = not _is_advanced_svg_entry(
+            svg,
+            entry,
+            round_number,
+        )
         is_winner = (
             match.winner_id
             and match.winner_id == entry.id
@@ -156,32 +171,33 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         line_class = "winner-line" if is_winner else "normal-line"
         text_class = "winner-text" if is_winner else "entry-text"
 
-        svg["labels"].append({
-            "x": number_x,
-            "y": y + 5,
-            "text": str(entry.display_order),
-            "class": text_class,
-            "anchor": number_anchor,
-            "url": "",
-        })
-        svg["labels"].append({
-            "x": name_x,
-            "y": y - 7,
-            "text": entry.short_name,
-            "class": text_class,
-            "anchor": text_anchor,
-            "url": "",
-        })
-
-        if entry.display_organization:
+        if should_show_entry:
+            svg["labels"].append({
+                "x": number_x,
+                "y": y + 5,
+                "text": str(entry.display_order),
+                "class": text_class,
+                "anchor": number_anchor,
+                "url": "",
+            })
             svg["labels"].append({
                 "x": name_x,
-                "y": y + 11,
-                "text": f"（{entry.display_organization}）",
-                "class": "winner-org-text" if is_winner else "entry-org-text",
+                "y": y - 7,
+                "text": entry.short_name,
+                "class": text_class,
                 "anchor": text_anchor,
                 "url": "",
             })
+
+            if entry.display_organization:
+                svg["labels"].append({
+                    "x": name_x,
+                    "y": y + 11,
+                    "text": f"（{entry.display_organization}）",
+                    "class": "winner-org-text" if is_winner else "entry-org-text",
+                    "anchor": text_anchor,
+                    "url": "",
+                })
 
         svg["lines"].append({
             "x1": line_start,
@@ -251,6 +267,12 @@ def _build_svg_bracket_data(bracket, round_data):
     number_width = 24
     shoulder = 44
     line_pad = 30
+    advanced_entry_ids = {
+        match.winner_id
+        for round_item in round_data[:-1]
+        for match in round_item["matches"]
+        if match.winner_id
+    }
     height = max(
         220,
         top * 2 + max(first_round_matches * row_gap * 2, row_gap * 2),
@@ -277,6 +299,7 @@ def _build_svg_bracket_data(bracket, round_data):
         "shoulder": shoulder,
         "line_pad": line_pad,
         "layout_type": bracket.layout_type,
+        "advanced_entry_ids": advanced_entry_ids,
         "lines": [],
         "labels": [],
         "headings": [],
@@ -374,25 +397,32 @@ def _build_svg_bracket_data(bracket, round_data):
             if not entry:
                 continue
 
+            should_show_entry = not _is_advanced_svg_entry(
+                svg,
+                entry,
+                final_match.round_number,
+            )
             is_winner = final_match.winner_id == entry.id
-            svg["labels"].append({
-                "x": center_x,
-                "y": y,
-                "text": f"{entry.display_order} {entry.short_name}",
-                "class": "winner-text" if is_winner else "entry-text",
-                "anchor": "middle",
-                "url": "",
-            })
 
-            if entry.display_organization:
+            if should_show_entry:
                 svg["labels"].append({
                     "x": center_x,
-                    "y": y + 18,
-                    "text": f"（{entry.display_organization}）",
-                    "class": "winner-org-text" if is_winner else "entry-org-text",
+                    "y": y,
+                    "text": f"{entry.display_order} {entry.short_name}",
+                    "class": "winner-text" if is_winner else "entry-text",
                     "anchor": "middle",
                     "url": "",
                 })
+
+                if entry.display_organization:
+                    svg["labels"].append({
+                        "x": center_x,
+                        "y": y + 18,
+                        "text": f"（{entry.display_organization}）",
+                        "class": "winner-org-text" if is_winner else "entry-org-text",
+                        "anchor": "middle",
+                        "url": "",
+                    })
 
             score = _entry_score_text(final_match, side_name)
 
