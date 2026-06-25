@@ -51,20 +51,6 @@ from .view_helper import (
 )
 
 
-def _entry_svg_label(entry):
-    """SVG上に出す短い名前 + 所属名を返す。"""
-
-    if not entry:
-        return ""
-
-    label = entry.short_name
-
-    if entry.display_organization:
-        label = f"{label}（{entry.display_organization}）"
-
-    return label
-
-
 def _entry_score_text(match, side):
     """負け側の肩に表示するゲーム数またはRを返す。"""
 
@@ -98,6 +84,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
     top = svg["top"]
     round_gap = svg["round_gap"]
     name_width = svg["name_width"]
+    number_width = svg["number_width"]
     shoulder = svg["shoulder"]
     line_pad = svg["line_pad"]
 
@@ -119,6 +106,9 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         line_start = entry_x - name_width
         join_x = line_start - shoulder
         advance_x = join_x - line_pad
+        number_x = entry_x
+        name_x = entry_x - number_width
+        number_anchor = "end"
         text_anchor = "end"
         score_dx = -10
     else:
@@ -126,6 +116,9 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         line_start = entry_x + name_width
         join_x = line_start + shoulder
         advance_x = join_x + line_pad
+        number_x = entry_x
+        name_x = entry_x + number_width
+        number_anchor = "start"
         text_anchor = "start"
         score_dx = 10
 
@@ -164,21 +157,32 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         text_class = "winner-text" if is_winner else "entry-text"
 
         svg["labels"].append({
-            "x": entry_x,
-            "y": y - 6,
+            "x": number_x,
+            "y": y + 5,
             "text": str(entry.display_order),
             "class": text_class,
-            "anchor": text_anchor,
+            "anchor": number_anchor,
             "url": "",
         })
         svg["labels"].append({
-            "x": entry_x,
-            "y": y + 14,
-            "text": _entry_svg_label(entry),
+            "x": name_x,
+            "y": y - 7,
+            "text": entry.short_name,
             "class": text_class,
             "anchor": text_anchor,
             "url": "",
         })
+
+        if entry.display_organization:
+            svg["labels"].append({
+                "x": name_x,
+                "y": y + 11,
+                "text": f"（{entry.display_organization}）",
+                "class": "winner-org-text" if is_winner else "entry-org-text",
+                "anchor": text_anchor,
+                "url": "",
+            })
+
         svg["lines"].append({
             "x1": line_start,
             "y1": y,
@@ -235,7 +239,8 @@ def _build_svg_bracket_data(bracket, round_data):
     top = 70
     side_margin = 28
     round_gap = 250
-    name_width = 170
+    name_width = 210
+    number_width = 24
     shoulder = 44
     line_pad = 30
     height = max(
@@ -260,6 +265,7 @@ def _build_svg_bracket_data(bracket, round_data):
         "round_gap": round_gap,
         "side_margin": side_margin,
         "name_width": name_width,
+        "number_width": number_width,
         "shoulder": shoulder,
         "line_pad": line_pad,
         "layout_type": bracket.layout_type,
@@ -364,11 +370,21 @@ def _build_svg_bracket_data(bracket, round_data):
             svg["labels"].append({
                 "x": center_x,
                 "y": y,
-                "text": f"{entry.display_order} {_entry_svg_label(entry)}",
+                "text": f"{entry.display_order} {entry.short_name}",
                 "class": "winner-text" if is_winner else "entry-text",
                 "anchor": "middle",
                 "url": "",
             })
+
+            if entry.display_organization:
+                svg["labels"].append({
+                    "x": center_x,
+                    "y": y + 18,
+                    "text": f"（{entry.display_organization}）",
+                    "class": "winner-org-text" if is_winner else "entry-org-text",
+                    "anchor": "middle",
+                    "url": "",
+                })
 
             score = _entry_score_text(final_match, side_name)
 

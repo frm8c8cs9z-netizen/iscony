@@ -4174,7 +4174,9 @@ class TournamentScheduleBehaviorTests(TestCase):
             )
         )
 
-        self.assertContains(response, "山田・佐藤（第一クラブ）")
+        self.assertContains(response, "山田・佐藤")
+        self.assertContains(response, "（第一クラブ）")
+        self.assertContains(response, "entry-org-text")
 
     def test_tournament_match_maintenance_links_back_to_stage_overview(self):
         response = self.client.get(
