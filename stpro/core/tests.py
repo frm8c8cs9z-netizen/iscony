@@ -4298,6 +4298,67 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('y2="139.0"', svg_content)
         self.assertNotIn(">S1<", svg_content)
 
+    def test_tournament_bracket_detail_delays_seed_winner_highlight_until_opponent_ready(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
+        self.bracket.save()
+        seed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entry1,
+            pair2=None,
+            winner=self.entry1,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=None,
+        )
+        seed_match.next_match = next_match
+        seed_match.next_slot = "pair1"
+        seed_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertNotIn('class="winner-line"', svg_content)
+
+        next_match.pair2 = self.entry2
+        next_match.save(update_fields=["pair2"])
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="winner-line"', svg_content)
+
     def test_tournament_bracket_detail_connects_split_final_lines(self):
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()

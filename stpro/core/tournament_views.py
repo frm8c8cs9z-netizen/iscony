@@ -87,6 +87,27 @@ def _is_advanced_svg_entry(svg, entry, round_number):
     )
 
 
+def _should_highlight_svg_winner(match):
+    """勝ち上がり線を赤で表示してよい状態かを判定する。"""
+
+    if not match.winner_id:
+        return False
+
+    if not match.match_code.startswith("S"):
+        return True
+
+    if not match.next_match:
+        return False
+
+    if match.next_slot == "pair1":
+        return bool(match.next_match.pair2_id)
+
+    if match.next_slot == "pair2":
+        return bool(match.next_match.pair1_id)
+
+    return False
+
+
 def _svg_match_y_positions(round_number, index, row_gap, top):
     """指定ラウンドの上下入力線と中心線のY座標を返す。"""
 
@@ -356,6 +377,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             match.winner_id
             and entry
             and match.winner_id == entry.id
+            and _should_highlight_svg_winner(match)
         )
         line_class = "winner-line" if is_winner else "normal-line"
 
@@ -433,7 +455,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             "class": "normal-line",
         })
 
-        if match.winner_id:
+        if _should_highlight_svg_winner(match):
             winner_y = y1 if match.winner_id == match.pair1_id else y2
             svg["lines"].append({
                 "x1": join_x,
@@ -451,7 +473,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         "class": "normal-line",
     })
 
-    if match.winner_id:
+    if _should_highlight_svg_winner(match):
         svg["lines"].append({
             "x1": join_x,
             "y1": center_y,
