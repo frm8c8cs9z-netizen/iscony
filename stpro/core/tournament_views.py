@@ -124,6 +124,77 @@ def _should_highlight_svg_winner(match):
     return False
 
 
+def _svg_entry_with_org(entry):
+    """SVG内に表示する短い名前＋所属名を返す。"""
+
+    if not entry:
+        return ""
+
+    if entry.display_organization:
+        return f"{entry.short_name}（{entry.display_organization}）"
+
+    return entry.short_name
+
+
+def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
+    """決勝入力後に優勝者名をSVGへ追加する。"""
+
+    winner = final_match.winner
+
+    if not winner:
+        return
+
+    text = _svg_entry_with_org(winner)
+
+    if not text:
+        return
+
+    if bracket.layout_type == TournamentBracket.LAYOUT_SPLIT:
+        line_top = final_y - 34
+        svg["lines"].append({
+            "x1": center_x,
+            "y1": final_y,
+            "x2": center_x,
+            "y2": line_top,
+            "class": "winner-line",
+        })
+        svg["labels"].append({
+            "x": center_x,
+            "y": line_top - 8,
+            "text": text,
+            "class": "champion-vertical-text",
+            "anchor": "end",
+            "url": "",
+        })
+        return
+
+    position = svg["match_positions"].get(("left", final_match.id))
+
+    if not position:
+        return
+
+    join_x = (
+        svg["side_margin"]
+        + svg["name_width"]
+        + svg["shoulder"]
+        + ((final_match.round_number - 1) * svg["round_gap"])
+    )
+    advance_x = _next_svg_line_start(
+        svg,
+        final_match.round_number,
+        "left",
+        join_x,
+    )
+    svg["labels"].append({
+        "x": advance_x - 8,
+        "y": position["center_y"] - 8,
+        "text": text,
+        "class": "champion-text",
+        "anchor": "end",
+        "url": "",
+    })
+
+
 def _svg_match_y_positions(round_number, index, row_gap, top):
     """指定ラウンドの上下入力線と中心線のY座標を返す。"""
 
@@ -638,6 +709,21 @@ def _build_svg_bracket_data(bracket, round_data):
                     index=index,
                 )
 
+        final_matches = round_data[-1]["matches"]
+
+        if final_matches:
+            final_match = final_matches[0]
+            final_position = match_positions.get(("left", final_match.id))
+
+            if final_position:
+                _add_svg_champion_label(
+                    svg,
+                    bracket,
+                    final_match,
+                    final_position["center_y"],
+                    width / 2,
+                )
+
         return svg
 
     for round_item in round_data[:-1]:
@@ -780,6 +866,14 @@ def _build_svg_bracket_data(bracket, round_data):
                     **line,
                     "class": "winner-line",
                 })
+
+            _add_svg_champion_label(
+                svg,
+                bracket,
+                final_match,
+                final_y,
+                center_x,
+            )
 
     return svg
 
