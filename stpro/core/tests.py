@@ -4669,6 +4669,20 @@ class TournamentScheduleBehaviorTests(TestCase):
             'class="winner-line"\n                        x1="450.0"',
             svg_content,
         )
+        self.assertIn(
+            'class="winner-line"\n                        x1="390.0"\n'
+            '                        y1="93.0"\n'
+            '                        x2="450.0"\n'
+            '                        y2="93.0"',
+            svg_content,
+        )
+        self.assertNotIn(
+            'class="winner-line"\n                        x1="390.0"\n'
+            '                        y1="93.0"\n'
+            '                        x2="510.0"\n'
+            '                        y2="93.0"',
+            svg_content,
+        )
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(

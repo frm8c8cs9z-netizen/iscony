@@ -861,9 +861,21 @@ def _build_svg_bracket_data(bracket, round_data):
             })
 
         if final_match.winner_id:
-            for line in final_lines:
+            if final_match.winner_id == final_match.pair1_id:
                 svg["lines"].append({
-                    **line,
+                    "x1": center_x - final_half_width,
+                    "y1": final_y,
+                    "x2": center_x,
+                    "y2": final_y,
+                    "class": "winner-line",
+                })
+
+            if final_match.winner_id == final_match.pair2_id:
+                svg["lines"].append({
+                    "x1": center_x,
+                    "y1": final_y,
+                    "x2": center_x + final_half_width,
+                    "y2": final_y,
                     "class": "winner-line",
                 })
 
