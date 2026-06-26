@@ -425,7 +425,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         )
 
         if score:
-            score_y = y - 8 if y <= center_y else y + 16
+            score_y = y - 4 if y <= center_y else y + 10
             svg["labels"].append({
                 "x": score_x,
                 "y": score_y,
