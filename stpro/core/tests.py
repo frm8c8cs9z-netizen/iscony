@@ -4227,6 +4227,44 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('x1="498.0"', svg_content)
         self.assertIn('x2="738.0"', svg_content)
 
+    def test_tournament_bracket_detail_keeps_seed_match_slot_height(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entry1,
+            pair2=None,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M1",
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('x1="238"', svg_content)
+        self.assertIn('y1="70"', svg_content)
+        self.assertIn('x1="282"', svg_content)
+        self.assertIn('y2="93.0"', svg_content)
+        self.assertIn('x2="330.0"', svg_content)
+        self.assertNotIn('y1="116"', svg_content)
+
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,

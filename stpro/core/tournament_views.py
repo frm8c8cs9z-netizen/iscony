@@ -35,6 +35,7 @@ from .models import (
 from .services import (
     advance_tournament_bye_winners,
     delete_tournament_score,
+    get_single_tournament_entry,
     save_tournament_score,
     save_tournament_retirement,
     validate_tournament_score_change,
@@ -155,10 +156,6 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         row_gap,
         top,
     )
-
-    if round_number == 1 and not match.pair2:
-        y2 = y1
-        center_y = y1
 
     if side == "right":
         entry_x = (
@@ -285,10 +282,20 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "url": "",
             })
 
-    if (
-        match.pair1
-        and match.pair2
-    ) or round_number > 1:
+    should_draw_vertical = (
+        round_number > 1
+        or (match.pair1 and match.pair2)
+        or (round_number == 1 and bool(get_single_tournament_entry(match)))
+    )
+
+    if should_draw_vertical:
+        vertical_y1 = y1
+        vertical_y2 = y2
+
+        if round_number == 1 and get_single_tournament_entry(match):
+            vertical_y1 = y1 if match.pair1 else y2
+            vertical_y2 = center_y
+
         vertical_class = (
             "winner-line"
             if match.winner_id
@@ -296,9 +303,9 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         )
         svg["lines"].append({
             "x1": join_x,
-            "y1": y1,
+            "y1": vertical_y1,
             "x2": join_x,
-            "y2": y2,
+            "y2": vertical_y2,
             "class": vertical_class,
         })
 
