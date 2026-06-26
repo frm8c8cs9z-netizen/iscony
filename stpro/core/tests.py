@@ -4145,7 +4145,16 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "<svg", html=False)
-        self.assertContains(response, "winner-line")
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn("winner-line", svg_content)
+        self.assertNotIn("winner-text", svg_content)
+        self.assertNotIn("winner-org-text", svg_content)
+        self.assertIn("entry-text", svg_content)
         self.assertContains(response, "1回戦1")
         self.assertContains(response, "選手1A・選手1B")
         self.assertContains(response, "2")

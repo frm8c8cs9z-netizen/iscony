@@ -358,14 +358,13 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             and match.winner_id == entry.id
         )
         line_class = "winner-line" if is_winner else "normal-line"
-        text_class = "winner-text" if is_winner else "entry-text"
 
         if should_show_entry:
             svg["labels"].append({
                 "x": number_x,
                 "y": y + 5,
                 "text": str(entry.display_order),
-                "class": text_class,
+                "class": "entry-text",
                 "anchor": number_anchor,
                 "url": "",
             })
@@ -373,7 +372,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "x": name_x,
                 "y": y - 7,
                 "text": entry.short_name,
-                "class": text_class,
+                "class": "entry-text",
                 "anchor": text_anchor,
                 "url": "",
             })
@@ -383,7 +382,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                     "x": name_x,
                     "y": y + 11,
                     "text": f"（{entry.display_organization}）",
-                    "class": "winner-org-text" if is_winner else "entry-org-text",
+                    "class": "entry-org-text",
                     "anchor": text_anchor,
                     "url": "",
                 })
@@ -693,7 +692,7 @@ def _build_svg_bracket_data(bracket, round_data):
                     "x": center_x,
                     "y": y,
                     "text": f"{entry.display_order} {entry.short_name}",
-                    "class": "winner-text" if is_winner else "entry-text",
+                    "class": "entry-text",
                     "anchor": "middle",
                     "url": "",
                 })
@@ -703,7 +702,7 @@ def _build_svg_bracket_data(bracket, round_data):
                         "x": center_x,
                         "y": y + 18,
                         "text": f"（{entry.display_organization}）",
-                        "class": "winner-org-text" if is_winner else "entry-org-text",
+                        "class": "entry-org-text",
                         "anchor": "middle",
                         "url": "",
                     })
