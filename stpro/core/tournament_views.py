@@ -294,7 +294,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         text_anchor = "end"
         code_anchor = "start"
         code_x = join_x + 8
-        score_x = line_start + 12
+        score_x = join_x - 10
     else:
         first_join_x = svg["side_margin"] + name_width + shoulder
         join_x = first_join_x + ((round_number - 1) * round_gap)
@@ -306,7 +306,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         text_anchor = "start"
         code_anchor = "end"
         code_x = join_x - 8
-        score_x = line_start - 12
+        score_x = join_x + 10
 
     advance_x = _next_svg_line_start(
         svg,
@@ -404,9 +404,10 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         )
 
         if score:
+            score_y = y - 8 if y <= center_y else y + 16
             svg["labels"].append({
                 "x": score_x,
-                "y": y - 6,
+                "y": score_y,
                 "text": score,
                 "class": "loser-score",
                 "anchor": "middle",
