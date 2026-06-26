@@ -4219,12 +4219,12 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertIn('y1="70"', svg_content)
         self.assertIn('x1="282"', svg_content)
-        self.assertIn('x2="488"', svg_content)
+        self.assertIn('x2="324"', svg_content)
         self.assertIn('y1="93.0"', svg_content)
-        self.assertIn('x1="532"', svg_content)
-        self.assertIn('x2="498.0"', svg_content)
-        self.assertIn('x1="498.0"', svg_content)
-        self.assertIn('x2="738.0"', svg_content)
+        self.assertIn('x1="368"', svg_content)
+        self.assertIn('x2="398.0"', svg_content)
+        self.assertIn('x1="398.0"', svg_content)
+        self.assertIn('x2="518.0"', svg_content)
 
     def test_tournament_bracket_detail_keeps_seed_match_slot_height(self):
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
@@ -4281,7 +4281,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('y1="162"', svg_content)
         self.assertIn('x1="282"', svg_content)
         self.assertIn('y2="70.0"', svg_content)
-        self.assertIn('x2="488"', svg_content)
+        self.assertIn('x2="324"', svg_content)
         self.assertIn('y1="70.0"', svg_content)
         self.assertIn('y2="139.0"', svg_content)
 
@@ -4367,13 +4367,13 @@ class TournamentScheduleBehaviorTests(TestCase):
             content.index("</svg>")
         ]
 
-        self.assertIn('x1="498.0"', svg_content)
+        self.assertIn('x1="398.0"', svg_content)
         self.assertIn('y1="139.0"', svg_content)
         self.assertIn('y2="139.0"', svg_content)
-        self.assertIn('x2="738.0"', svg_content)
+        self.assertIn('x2="518.0"', svg_content)
         self.assertIn(
-            'x1="498.0"\n                        y1="139.0"\n'
-            '                        x2="738.0"\n'
+            'x1="398.0"\n                        y1="139.0"\n'
+            '                        x2="518.0"\n'
             '                        y2="139.0"',
             svg_content,
         )

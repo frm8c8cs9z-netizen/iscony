@@ -235,15 +235,22 @@ def _next_svg_line_start(svg, round_number, side, join_x):
         )
 
     if side == "right":
-        next_entry_x = (
+        next_join_x = (
             svg["width"]
             - svg["side_margin"]
+            - svg["name_width"]
+            - svg["shoulder"]
             - (round_number * svg["round_gap"])
         )
-        return next_entry_x - svg["name_width"]
+        return next_join_x + svg["shoulder"]
 
-    next_entry_x = svg["side_margin"] + (round_number * svg["round_gap"])
-    return next_entry_x + svg["name_width"]
+    next_join_x = (
+        svg["side_margin"]
+        + svg["name_width"]
+        + svg["shoulder"]
+        + (round_number * svg["round_gap"])
+    )
+    return next_join_x - svg["shoulder"]
 
 
 def _add_svg_match(svg, match, *, round_number, side, index):
@@ -272,22 +279,25 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         )
 
     if side == "right":
-        entry_x = (
+        first_join_x = (
             svg["width"]
             - svg["side_margin"]
-            - ((round_number - 1) * round_gap)
+            - name_width
+            - shoulder
         )
-        line_start = entry_x - name_width
-        join_x = line_start - shoulder
+        join_x = first_join_x - ((round_number - 1) * round_gap)
+        line_start = join_x + shoulder
+        entry_x = svg["width"] - svg["side_margin"]
         number_x = entry_x
         name_x = entry_x - number_width
         number_anchor = "end"
         text_anchor = "end"
         score_dx = -10
     else:
-        entry_x = svg["side_margin"] + ((round_number - 1) * round_gap)
-        line_start = entry_x + name_width
-        join_x = line_start + shoulder
+        first_join_x = svg["side_margin"] + name_width + shoulder
+        join_x = first_join_x + ((round_number - 1) * round_gap)
+        line_start = join_x - shoulder
+        entry_x = svg["side_margin"]
         number_x = entry_x
         name_x = entry_x + number_width
         number_anchor = "start"
@@ -330,6 +340,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
 
         should_show_entry = (
             entry
+            and round_number == 1
             and not _is_advanced_svg_entry(
                 svg,
                 entry,
@@ -449,12 +460,12 @@ def _build_svg_bracket_data(bracket, round_data):
     row_gap = 46
     top = 70
     side_margin = 28
-    round_gap = 250
+    round_gap = 86
     name_width = 210
     number_width = 24
     shoulder = 44
     line_pad = 30
-    final_half_width = 120
+    final_half_width = 60
     advanced_entry_ids = {
         match.winner_id
         for round_item in round_data[:-1]
@@ -527,12 +538,21 @@ def _build_svg_bracket_data(bracket, round_data):
     height = max(220, int(max_position_y + top))
 
     if bracket.layout_type == TournamentBracket.LAYOUT_SINGLE:
-        width = side_margin * 2 + (round_count * round_gap) + name_width
+        first_join_x = side_margin + name_width + shoulder
+        width = (
+            first_join_x
+            + ((round_count - 1) * round_gap)
+            + line_pad
+            + side_margin
+        )
     else:
         side_rounds = max(round_count - 1, 1)
+        first_join_x = side_margin + name_width + shoulder
+        last_side_join_x = first_join_x + ((side_rounds - 1) * round_gap)
+        center_x = last_side_join_x + line_pad + final_half_width
         width = max(
             900,
-            side_margin * 2 + (side_rounds * round_gap * 2) + 180,
+            center_x * 2,
         )
 
     svg = {
@@ -559,11 +579,6 @@ def _build_svg_bracket_data(bracket, round_data):
     if bracket.layout_type == TournamentBracket.LAYOUT_SINGLE:
         for round_item in round_data:
             round_number = round_item["number"]
-            svg["headings"].append({
-                "x": side_margin + ((round_number - 1) * round_gap) + 90,
-                "y": 28,
-                "text": round_item["label"],
-            })
 
             for index, match in enumerate(round_item["matches"]):
                 _add_svg_match(
@@ -582,17 +597,6 @@ def _build_svg_bracket_data(bracket, round_data):
         half_count = math.ceil(len(matches) / 2)
         left_matches = matches[:half_count]
         right_matches = matches[half_count:]
-
-        svg["headings"].append({
-            "x": side_margin + ((round_number - 1) * round_gap) + 90,
-            "y": 28,
-            "text": round_item["label"],
-        })
-        svg["headings"].append({
-            "x": width - side_margin - ((round_number - 1) * round_gap) - 90,
-            "y": 28,
-            "text": round_item["label"],
-        })
 
         for index, match in enumerate(left_matches):
             _add_svg_match(
@@ -639,11 +643,6 @@ def _build_svg_bracket_data(bracket, round_data):
             if pre_final_centers:
                 final_y = sum(pre_final_centers) / len(pre_final_centers)
 
-        svg["headings"].append({
-            "x": center_x,
-            "y": 28,
-            "text": round_data[-1]["label"],
-        })
         svg["labels"].append({
             "x": center_x,
             "y": final_y - 24,
