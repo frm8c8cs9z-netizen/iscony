@@ -4632,7 +4632,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             pair2_games=1,
             winner=entries[2],
         )
-        TournamentMatch.objects.create(
+        final_match = TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=2,
             match_number=1,
@@ -4643,8 +4643,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             pair2_games=3,
             winner=entries[0],
         )
+        first_match.next_match = final_match
         first_match.next_slot = "pair1"
         first_match.save()
+        second_match.next_match = final_match
         second_match.next_slot = "pair2"
         second_match.save()
 
@@ -4678,6 +4680,13 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertNotIn(
             'class="winner-line"\n                        x1="390.0"\n'
+            '                        y1="93.0"\n'
+            '                        x2="510.0"\n'
+            '                        y2="93.0"',
+            svg_content,
+        )
+        self.assertNotIn(
+            'class="winner-line"\n                        x1="618"\n'
             '                        y1="93.0"\n'
             '                        x2="510.0"\n'
             '                        y2="93.0"',
