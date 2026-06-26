@@ -52,14 +52,11 @@ from .view_helper import (
 
 
 def _entry_score_text(match, side):
-    """負け側の肩に表示するゲーム数またはRを返す。"""
+    """指定した側に表示するゲーム数またはRを返す。"""
 
     entry = getattr(match, side)
 
     if not entry or not match.winner_id:
-        return ""
-
-    if match.winner_id == entry.id:
         return ""
 
     if match.retired_entry == entry:
@@ -75,6 +72,25 @@ def _entry_score_text(match, side):
         return ""
 
     return str(games)
+
+
+def _should_show_svg_score(match, side):
+    """トーナメント表上で指定した側のスコアを表示するか判定する。"""
+
+    bracket = match.bracket
+
+    if bracket.score_display_mode == TournamentBracket.SCORE_DISPLAY_NONE:
+        return False
+
+    entry = getattr(match, side)
+
+    if not entry or not match.winner_id:
+        return False
+
+    if bracket.score_display_mode == TournamentBracket.SCORE_DISPLAY_BOTH:
+        return True
+
+    return match.winner_id != entry.id
 
 
 def _is_advanced_svg_entry(svg, entry, round_number):
@@ -420,7 +436,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
 
         score = (
             _entry_score_text(match, side_name)
-            if entry
+            if _should_show_svg_score(match, side_name)
             else ""
         )
 
@@ -707,8 +723,6 @@ def _build_svg_bracket_data(bracket, round_data):
                 entry,
                 final_match.round_number,
             )
-            is_winner = final_match.winner_id == entry.id
-
             if should_show_entry:
                 svg["labels"].append({
                     "x": center_x,
@@ -729,7 +743,11 @@ def _build_svg_bracket_data(bracket, round_data):
                         "url": "",
                     })
 
-            score = _entry_score_text(final_match, side_name)
+            score = (
+                _entry_score_text(final_match, side_name)
+                if _should_show_svg_score(final_match, side_name)
+                else ""
+            )
 
             if score:
                 svg["labels"].append({
@@ -1983,6 +2001,57 @@ def add_tournament_bracket(request, code):
         {
             "tournament": tournament,
             "form": form,
+            "page_title": "トーナメント追加",
+        }
+    )
+
+
+def edit_tournament_bracket(request, code, bracket_id):
+    """トーナメント表の基本設定を変更する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code
+    )
+
+    bracket = get_object_or_404(
+        TournamentBracket,
+        id=bracket_id,
+        category__tournament=tournament
+    )
+
+    if request.method == "POST":
+
+        form = TournamentBracketForm(
+            request.POST,
+            instance=bracket,
+            tournament=tournament
+        )
+
+        if form.is_valid():
+
+            form.save()
+
+            return redirect(
+                "bracket_list",
+                code=tournament.code
+            )
+
+    else:
+
+        form = TournamentBracketForm(
+            instance=bracket,
+            tournament=tournament
+        )
+
+    return render(
+        request,
+        "core/add_tournament_bracket.html",
+        {
+            "tournament": tournament,
+            "bracket": bracket,
+            "form": form,
+            "page_title": "トーナメント設定変更",
         }
     )
 

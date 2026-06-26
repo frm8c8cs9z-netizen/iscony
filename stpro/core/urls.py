@@ -369,6 +369,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/bracket/<int:bracket_id>/edit/",
+        tournament_views.edit_tournament_bracket,
+        name="edit_tournament_bracket",
+    ),
+
+    path(
         "tournament/<str:code>/bracket/<int:bracket_id>/import/schedule/",
         tournament_views.import_tournament_schedule,
         name="import_tournament_schedule",

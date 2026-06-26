@@ -4159,6 +4159,105 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "選手1A・選手1B")
         self.assertContains(response, "2")
 
+    def test_tournament_bracket_detail_can_show_both_scores(self):
+        self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
+        self.bracket.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="loser-score"', svg_content)
+        self.assertIn('y="156.0"', svg_content)
+        self.assertIn('>\n                            4\n                        </text>', svg_content)
+        self.assertIn('y="196.0"', svg_content)
+        self.assertIn('>\n                            2\n                        </text>', svg_content)
+
+    def test_tournament_bracket_detail_can_hide_scores(self):
+        self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_NONE
+        self.bracket.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertNotIn('class="loser-score"', svg_content)
+
+    def test_tournament_bracket_score_display_mode_can_be_edited(self):
+        response = self.client.post(
+            reverse(
+                "edit_tournament_bracket",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "category": self.category.id,
+                "name": self.bracket.name,
+                "layout_type": TournamentBracket.LAYOUT_SINGLE,
+                "score_display_mode": TournamentBracket.SCORE_DISPLAY_BOTH,
+                "display_order": self.bracket.display_order,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "bracket_list",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        self.bracket.refresh_from_db()
+        self.assertEqual(
+            self.bracket.score_display_mode,
+            TournamentBracket.SCORE_DISPLAY_BOTH,
+        )
+
     def test_tournament_bracket_detail_draws_lines_before_result(self):
         TournamentMatch.objects.create(
             bracket=self.bracket,

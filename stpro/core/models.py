@@ -763,10 +763,19 @@ class TournamentBracket(models.Model):
 
     LAYOUT_SPLIT = "split"
     LAYOUT_SINGLE = "single"
+    SCORE_DISPLAY_LOSER = "loser"
+    SCORE_DISPLAY_BOTH = "both"
+    SCORE_DISPLAY_NONE = "none"
 
     LAYOUT_CHOICES = [
         (LAYOUT_SPLIT, "左右表示"),
         (LAYOUT_SINGLE, "片側表示"),
+    ]
+
+    SCORE_DISPLAY_CHOICES = [
+        (SCORE_DISPLAY_LOSER, "負けのみ"),
+        (SCORE_DISPLAY_BOTH, "勝ち負け両方"),
+        (SCORE_DISPLAY_NONE, "表示しない"),
     ]
 
     category = models.ForeignKey(
@@ -793,6 +802,12 @@ class TournamentBracket(models.Model):
         max_length=20,
         choices=LAYOUT_CHOICES,
         default=LAYOUT_SPLIT
+    )
+
+    score_display_mode = models.CharField(
+        max_length=20,
+        choices=SCORE_DISPLAY_CHOICES,
+        default=SCORE_DISPLAY_LOSER
     )
 
     class Meta:

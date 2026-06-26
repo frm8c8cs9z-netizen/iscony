@@ -21,6 +21,7 @@
         <th>Stage名</th>
         <th>トーナメント名</th>
         <th>表示方式</th>
+        <th>スコア表示</th>
         <th>操作</th>
     </tr>
 
@@ -65,6 +66,15 @@
         </td>
 
         <td>
+            {{ bracket.get_score_display_mode_display }}
+        </td>
+
+        <td>
+            <a href="{% url 'edit_tournament_bracket' tournament.code bracket.id %}">
+                設定
+            </a>
+
+            |
 
             <a href="{% url 'tournament_bracket_detail' tournament.code bracket.id %}">
                 表示
@@ -107,7 +117,7 @@
     {% empty %}
 
     <tr>
-        <td colspan="7">
+        <td colspan="8">
             トーナメントがありません。先に「トーナメント追加」から作成してください。
         </td>
     </tr>
