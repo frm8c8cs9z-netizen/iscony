@@ -4368,11 +4368,21 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('x1="498.0"', svg_content)
-        self.assertIn('y1="104.5"', svg_content)
-        self.assertIn('x2="618.0"', svg_content)
-        self.assertIn('x1="618.0"', svg_content)
+        self.assertIn('y1="139.0"', svg_content)
         self.assertIn('y2="139.0"', svg_content)
         self.assertIn('x2="738.0"', svg_content)
+        self.assertIn(
+            'x1="498.0"\n                        y1="139.0"\n'
+            '                        x2="738.0"\n'
+            '                        y2="139.0"',
+            svg_content,
+        )
+        self.assertNotIn(
+            'x1="618.0"\n                        y1="104.5"\n'
+            '                        x2="618.0"\n'
+            '                        y2="139.0"',
+            svg_content,
+        )
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(

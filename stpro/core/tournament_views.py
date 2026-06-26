@@ -182,6 +182,37 @@ def _build_svg_match_positions(round_items, row_gap, top):
     return positions
 
 
+def _shift_svg_match_positions(positions, y_offset):
+    """片側の山全体を上下に移動する。"""
+
+    if not y_offset:
+        return positions
+
+    return {
+        match_id: {
+            "y1": position["y1"] + y_offset,
+            "y2": position["y2"] + y_offset,
+            "center_y": position["center_y"] + y_offset,
+        }
+        for match_id, position in positions.items()
+    }
+
+
+def _last_svg_center(positions, round_items):
+    """指定した山の最終ラウンド中心Yを返す。"""
+
+    if not round_items:
+        return None
+
+    for match in reversed(round_items[-1]["matches"]):
+        position = positions.get(match.id)
+
+        if position:
+            return position["center_y"]
+
+    return None
+
+
 def _next_svg_line_start(svg, round_number, side, join_x):
     """次ラウンドの入力線まで、現在ラウンドの出口線を伸ばす。"""
 
@@ -456,18 +487,34 @@ def _build_svg_bracket_data(bracket, round_data):
                 "matches": matches[half_count:],
             })
 
-        for match_id, position in _build_svg_match_positions(
+        left_positions = _build_svg_match_positions(
             left_round_items,
             row_gap,
             top,
-        ).items():
-            match_positions[("left", match_id)] = position
-
-        for match_id, position in _build_svg_match_positions(
+        )
+        right_positions = _build_svg_match_positions(
             right_round_items,
             row_gap,
             top,
-        ).items():
+        )
+        left_center = _last_svg_center(left_positions, left_round_items)
+        right_center = _last_svg_center(right_positions, right_round_items)
+
+        if left_center is not None and right_center is not None:
+            target_center = max(left_center, right_center)
+            left_positions = _shift_svg_match_positions(
+                left_positions,
+                target_center - left_center,
+            )
+            right_positions = _shift_svg_match_positions(
+                right_positions,
+                target_center - right_center,
+            )
+
+        for match_id, position in left_positions.items():
+            match_positions[("left", match_id)] = position
+
+        for match_id, position in right_positions.items():
             match_positions[("right", match_id)] = position
 
     max_position_y = max(
@@ -662,43 +709,14 @@ def _build_svg_bracket_data(bracket, round_data):
                     "url": "",
                 })
 
-        if (
-            bracket.layout_type == TournamentBracket.LAYOUT_SPLIT
-            and round_count > 1
-            and left_final_centers
-            and right_final_centers
-        ):
-            left_y = left_final_centers[0]
-            right_y = right_final_centers[0]
-            final_lines = [
-                {
-                    "x1": center_x - final_half_width,
-                    "y1": left_y,
-                    "x2": center_x,
-                    "y2": left_y,
-                },
-                {
-                    "x1": center_x,
-                    "y1": left_y,
-                    "x2": center_x,
-                    "y2": right_y,
-                },
-                {
-                    "x1": center_x,
-                    "y1": right_y,
-                    "x2": center_x + final_half_width,
-                    "y2": right_y,
-                },
-            ]
-        else:
-            final_lines = [
-                {
-                    "x1": center_x - final_half_width,
-                    "y1": final_y,
-                    "x2": center_x + final_half_width,
-                    "y2": final_y,
-                },
-            ]
+        final_lines = [
+            {
+                "x1": center_x - final_half_width,
+                "y1": final_y,
+                "x2": center_x + final_half_width,
+                "y2": final_y,
+            },
+        ]
 
         for line in final_lines:
             svg["lines"].append({
