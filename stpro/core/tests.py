@@ -4225,6 +4225,9 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('x2="390.0"', svg_content)
         self.assertIn('x1="390.0"', svg_content)
         self.assertIn('x2="510.0"', svg_content)
+        self.assertIn('x="290"', svg_content)
+        self.assertIn('y="89.0"', svg_content)
+        self.assertIn('text-anchor="start"', svg_content)
 
     def test_tournament_bracket_detail_keeps_seed_match_slot_height(self):
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
