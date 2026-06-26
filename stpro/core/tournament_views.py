@@ -577,12 +577,17 @@ def _build_svg_bracket_data(bracket, round_data):
             and round_count > 1
         ):
             pre_final_matches = round_data[-2]["matches"]
-            pre_final_centers = [
-                match_positions[(side, match.id)]["center_y"]
-                for side in ["left", "right"]
+            left_final_centers = [
+                match_positions[("left", match.id)]["center_y"]
                 for match in pre_final_matches
-                if (side, match.id) in match_positions
+                if ("left", match.id) in match_positions
             ]
+            right_final_centers = [
+                match_positions[("right", match.id)]["center_y"]
+                for match in pre_final_matches
+                if ("right", match.id) in match_positions
+            ]
+            pre_final_centers = left_final_centers + right_final_centers
 
             if pre_final_centers:
                 final_y = sum(pre_final_centers) / len(pre_final_centers)
@@ -657,22 +662,56 @@ def _build_svg_bracket_data(bracket, round_data):
                     "url": "",
                 })
 
-        svg["lines"].append({
-            "x1": center_x - final_half_width,
-            "y1": final_y,
-            "x2": center_x + final_half_width,
-            "y2": final_y,
-            "class": "normal-line",
-        })
+        if (
+            bracket.layout_type == TournamentBracket.LAYOUT_SPLIT
+            and round_count > 1
+            and left_final_centers
+            and right_final_centers
+        ):
+            left_y = left_final_centers[0]
+            right_y = right_final_centers[0]
+            final_lines = [
+                {
+                    "x1": center_x - final_half_width,
+                    "y1": left_y,
+                    "x2": center_x,
+                    "y2": left_y,
+                },
+                {
+                    "x1": center_x,
+                    "y1": left_y,
+                    "x2": center_x,
+                    "y2": right_y,
+                },
+                {
+                    "x1": center_x,
+                    "y1": right_y,
+                    "x2": center_x + final_half_width,
+                    "y2": right_y,
+                },
+            ]
+        else:
+            final_lines = [
+                {
+                    "x1": center_x - final_half_width,
+                    "y1": final_y,
+                    "x2": center_x + final_half_width,
+                    "y2": final_y,
+                },
+            ]
+
+        for line in final_lines:
+            svg["lines"].append({
+                **line,
+                "class": "normal-line",
+            })
 
         if final_match.winner_id:
-            svg["lines"].append({
-                "x1": center_x - final_half_width,
-                "y1": final_y,
-                "x2": center_x + final_half_width,
-                "y2": final_y,
-                "class": "winner-line",
-            })
+            for line in final_lines:
+                svg["lines"].append({
+                    **line,
+                    "class": "winner-line",
+                })
 
     return svg
 

@@ -4285,6 +4285,95 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('y1="70.0"', svg_content)
         self.assertIn('y2="139.0"', svg_content)
 
+    def test_tournament_bracket_detail_connects_split_final_lines(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.save()
+        entries = [self.entry1, self.entry2]
+
+        for number in range(3, 8):
+            entries.append(
+                TournamentEntry.objects.create(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=entries[0],
+            pair2=None,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M1",
+            pair1=entries[1],
+            pair2=entries[2],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=3,
+            match_code="M2",
+            pair1=entries[3],
+            pair2=entries[4],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=4,
+            match_code="M3",
+            pair1=entries[5],
+            pair2=entries[6],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M4",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=2,
+            match_code="M5",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=3,
+            match_number=1,
+            match_code="M6",
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('x1="498.0"', svg_content)
+        self.assertIn('y1="104.5"', svg_content)
+        self.assertIn('x2="618.0"', svg_content)
+        self.assertIn('x1="618.0"', svg_content)
+        self.assertIn('y2="139.0"', svg_content)
+        self.assertIn('x2="738.0"', svg_content)
+
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,
