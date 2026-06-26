@@ -4477,6 +4477,8 @@ class TournamentScheduleBehaviorTests(TestCase):
             '                        y2="93.0"',
             svg_content,
         )
+        self.assertIn('class="loser-score"', svg_content)
+        self.assertIn('x="226"', svg_content)
         self.assertNotIn(
             'class="winner-line"\n                        x1="282"\n'
             '                        y1="70"\n'
