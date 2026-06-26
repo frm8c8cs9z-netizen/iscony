@@ -425,18 +425,23 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         vertical_y1 = y1
         vertical_y2 = y2
 
-        vertical_class = (
-            "winner-line"
-            if match.winner_id
-            else "normal-line"
-        )
         svg["lines"].append({
             "x1": join_x,
             "y1": vertical_y1,
             "x2": join_x,
             "y2": vertical_y2,
-            "class": vertical_class,
+            "class": "normal-line",
         })
+
+        if match.winner_id:
+            winner_y = y1 if match.winner_id == match.pair1_id else y2
+            svg["lines"].append({
+                "x1": join_x,
+                "y1": winner_y,
+                "x2": join_x,
+                "y2": center_y,
+                "class": "winner-line",
+            })
 
     svg["lines"].append({
         "x1": join_x,

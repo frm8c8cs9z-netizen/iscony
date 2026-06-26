@@ -4432,6 +4432,59 @@ class TournamentScheduleBehaviorTests(TestCase):
             1,
         )
 
+    def test_tournament_bracket_detail_highlights_only_winner_side_vertical_line(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
+        self.bracket.save()
+
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn(
+            'class="normal-line"\n                        x1="282"\n'
+            '                        y1="70"\n'
+            '                        x2="282"\n'
+            '                        y2="116"',
+            svg_content,
+        )
+        self.assertIn(
+            'class="winner-line"\n                        x1="282"\n'
+            '                        y1="70"\n'
+            '                        x2="282"\n'
+            '                        y2="93.0"',
+            svg_content,
+        )
+        self.assertNotIn(
+            'class="winner-line"\n                        x1="282"\n'
+            '                        y1="70"\n'
+            '                        x2="282"\n'
+            '                        y2="116"',
+            svg_content,
+        )
+
     def test_tournament_bracket_detail_uses_short_name_and_organization(self):
         self.entry1.player1_name = "山田　太郎"
         self.entry1.player2_name = "佐藤　次郎"
