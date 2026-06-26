@@ -242,7 +242,7 @@ def _next_svg_line_start(svg, round_number, side, join_x):
             - svg["shoulder"]
             - (round_number * svg["round_gap"])
         )
-        return next_join_x + svg["shoulder"]
+        return next_join_x
 
     next_join_x = (
         svg["side_margin"]
@@ -250,7 +250,7 @@ def _next_svg_line_start(svg, round_number, side, join_x):
         + svg["shoulder"]
         + (round_number * svg["round_gap"])
     )
-    return next_join_x - svg["shoulder"]
+    return next_join_x
 
 
 def _add_svg_match(svg, match, *, round_number, side, index):
@@ -286,7 +286,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             - shoulder
         )
         join_x = first_join_x - ((round_number - 1) * round_gap)
-        line_start = join_x + shoulder
+        line_start = join_x if round_number > 1 else join_x + shoulder
         entry_x = svg["width"] - svg["side_margin"]
         number_x = entry_x
         name_x = entry_x - number_width
@@ -296,7 +296,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
     else:
         first_join_x = svg["side_margin"] + name_width + shoulder
         join_x = first_join_x + ((round_number - 1) * round_gap)
-        line_start = join_x - shoulder
+        line_start = join_x if round_number > 1 else join_x - shoulder
         entry_x = svg["side_margin"]
         number_x = entry_x
         name_x = entry_x + number_width
@@ -383,13 +383,14 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                     "url": "",
                 })
 
-        svg["lines"].append({
-            "x1": line_start,
-            "y1": y,
-            "x2": join_x,
-            "y2": y,
-            "class": line_class,
-        })
+        if line_start != join_x:
+            svg["lines"].append({
+                "x1": line_start,
+                "y1": y,
+                "x2": join_x,
+                "y2": y,
+                "class": line_class,
+            })
 
         score = (
             _entry_score_text(match, side_name)
@@ -460,7 +461,7 @@ def _build_svg_bracket_data(bracket, round_data):
     row_gap = 46
     top = 70
     side_margin = 28
-    round_gap = 86
+    round_gap = 42
     name_width = 210
     number_width = 24
     shoulder = 44
