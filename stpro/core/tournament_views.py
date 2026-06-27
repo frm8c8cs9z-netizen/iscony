@@ -856,9 +856,9 @@ def _build_svg_bracket_data(bracket, round_data):
 
             if score:
                 score_x = (
-                    center_x - final_half_width + 16
+                    center_x - final_half_width + 6
                     if side_name == "pair1"
-                    else center_x + final_half_width - 16
+                    else center_x + final_half_width - 6
                 )
                 svg["labels"].append({
                     "x": score_x,
