@@ -1141,6 +1141,94 @@ def import_stage_slots(request, tournament_code):
                     "取込対象の行がありません。"
                 )
 
+            planned_source_group_counts = {}
+
+            for row in validated_rows:
+                if row["stage_type"] != Stage.TYPE_LEAGUE:
+                    continue
+
+                source_keys = [
+                    (
+                        row["category"].id,
+                        "name",
+                        row["stage_name"],
+                        row["group_name"],
+                    ),
+                ]
+
+                if row["stage_code"]:
+                    source_keys.append(
+                        (
+                            row["category"].id,
+                            "code",
+                            row["stage_code"],
+                            row["group_name"],
+                        )
+                    )
+
+                for source_key in source_keys:
+                    planned_source_group_counts[source_key] = (
+                        planned_source_group_counts.get(source_key, 0)
+                        + 1
+                    )
+
+            for row in validated_rows:
+                if row["source_type"] != AdvancementSource.SOURCE_LEAGUE_RANK:
+                    continue
+
+                if row["source_stage_code"]:
+                    planned_source_key = (
+                        row["category"].id,
+                        "code",
+                        row["source_stage_code"],
+                        row["source_group"],
+                    )
+                else:
+                    planned_source_key = (
+                        row["category"].id,
+                        "name",
+                        row["source_stage"],
+                        row["source_group"],
+                    )
+
+                source_entry_count = planned_source_group_counts.get(
+                    planned_source_key
+                )
+
+                if source_entry_count is None:
+                    try:
+                        source_group = _get_source_group(
+                            row["category"],
+                            row["source_stage"],
+                            row["source_stage_code"],
+                            row["source_group"],
+                        )
+                    except Group.DoesNotExist:
+                        errors.append(
+                            f"{row['row_number']}行目: 進出元リーグが見つかりません。"
+                            f"category={row['category'].name} / "
+                            f"source_stage={row['source_stage'] or row['source_stage_code']} / "
+                            f"source_group={row['source_group']}"
+                        )
+                        continue
+                    except Group.MultipleObjectsReturned:
+                        errors.append(
+                            f"{row['row_number']}行目: 進出元リーグが複数あります。"
+                            "source_stage_codeを指定してください。"
+                        )
+                        continue
+
+                    source_entry_count = LeagueEntry.objects.filter(
+                        group=source_group,
+                    ).count()
+
+                if row["source_rank"] > source_entry_count:
+                    errors.append(
+                        f"{row['row_number']}行目: "
+                        f"{row['source_group']}{row['source_rank']} は参照できません。"
+                        f"進出元リーグの枠数は {source_entry_count} です。"
+                    )
+
             existing_target_stages = []
 
             for category_id, stage_code, stage_name, _ in target_stage_keys:

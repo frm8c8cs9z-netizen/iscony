@@ -2536,6 +2536,27 @@ class ImportStageSlotsCsvTests(TestCase):
 
         self.assertEqual(tournament_entry.display_name, "A1")
 
+    def test_stage_slots_reject_unavailable_league_rank_source(self):
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選リーグ,L,G,,1,1,,,,,,\n"
+            "男子B,予選リーグ,L,G,,2,2,,,,,,\n"
+            "男子B,予選リーグ,L,G,,3,3,,,,,,\n"
+            "男子B,予選リーグ,L,G,,4,4,,,,,,\n"
+            "男子B,５位リーグ,L,A,,G5,1,,LR,予選リーグ,G,5,,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "6行目: G5 は参照できません。進出元リーグの枠数は 4 です。",
+        )
+        self.assertFalse(
+            Stage.objects.filter(
+                name="５位リーグ",
+            ).exists()
+        )
+
     def test_reimport_preserves_existing_stage_order_and_appends_new_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,
