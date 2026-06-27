@@ -4789,35 +4789,43 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertIn(
             'class="winner-line"\n                        x1="390.0"\n'
-            '                        y1="93.0"\n'
+            '                        y1="282.0"\n'
             '                        x2="450.0"\n'
-            '                        y2="93.0"',
+            '                        y2="282.0"',
             svg_content,
         )
         self.assertNotIn(
             'class="winner-line"\n                        x1="390.0"\n'
-            '                        y1="93.0"\n'
+            '                        y1="282.0"\n'
             '                        x2="510.0"\n'
-            '                        y2="93.0"',
+            '                        y2="282.0"',
             svg_content,
         )
         self.assertNotIn(
             'class="winner-line"\n                        x1="708"\n'
-            '                        y1="93.0"\n'
+            '                        y1="282.0"\n'
             '                        x2="510.0"\n'
-            '                        y2="93.0"',
+            '                        y2="282.0"',
             svg_content,
         )
         self.assertIn(
             'class="loser-score"\n                            x="700"\n'
-            '                            y="85.0"',
+            '                            y="274.0"',
             svg_content,
         )
         self.assertIn(
             'class="svg-match-code"\n                                x="450.0"\n'
-            '                                y="115.0"',
+            '                                y="304.0"',
             svg_content,
         )
+        champion_label = svg_content.split(
+            'class="champion-vertical-text"',
+            1,
+        )[1]
+        champion_y = float(
+            champion_label.split('y="', 1)[1].split('"', 1)[0]
+        )
+        self.assertGreaterEqual(champion_y, 220)
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(

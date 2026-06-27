@@ -196,6 +196,12 @@ def _estimate_svg_name_width(round_data):
     )
 
 
+def _estimate_svg_vertical_text_height(text):
+    """縦書き表示時の高さを概算する。"""
+
+    return len(text) * 14
+
+
 def _effective_svg_layout_type(bracket, round_data):
     """実データ上で左右表示できない小さい山は片側表示へ倒す。"""
 
@@ -402,6 +408,31 @@ def _last_svg_center(positions, round_items):
             return position["center_y"]
 
     return None
+
+
+def _split_svg_final_y(match_positions, round_data, fallback_y):
+    """左右表示の決勝線Y座標を返す。"""
+
+    if len(round_data) <= 1:
+        return fallback_y
+
+    pre_final_matches = round_data[-2]["matches"]
+    left_final_centers = [
+        match_positions[("left", match.id)]["center_y"]
+        for match in pre_final_matches
+        if ("left", match.id) in match_positions
+    ]
+    right_final_centers = [
+        match_positions[("right", match.id)]["center_y"]
+        for match in pre_final_matches
+        if ("right", match.id) in match_positions
+    ]
+    pre_final_centers = left_final_centers + right_final_centers
+
+    if pre_final_centers:
+        return sum(pre_final_centers) / len(pre_final_centers)
+
+    return fallback_y
 
 
 def _next_svg_line_start(svg, round_number, side, join_x):
@@ -732,6 +763,40 @@ def _build_svg_bracket_data(bracket, round_data):
         for match_id, position in right_positions.items():
             match_positions[("right", match_id)] = position
 
+        final_matches = round_data[-1]["matches"]
+
+        if final_matches:
+            final_match = final_matches[0]
+            champion_text = (
+                _svg_entry_with_org(final_match.winner)
+                if final_match.winner
+                else ""
+            )
+
+            if champion_text:
+                final_y = _split_svg_final_y(
+                    match_positions,
+                    round_data,
+                    top,
+                )
+                champion_label_y = final_y - 42
+                champion_top_y = (
+                    champion_label_y
+                    - _estimate_svg_vertical_text_height(champion_text)
+                )
+                top_margin = 16
+
+                if champion_top_y < top_margin:
+                    y_offset = top_margin - champion_top_y
+                    match_positions = {
+                        key: {
+                            "y1": position["y1"] + y_offset,
+                            "y2": position["y2"] + y_offset,
+                            "center_y": position["center_y"] + y_offset,
+                        }
+                        for key, position in match_positions.items()
+                    }
+
     max_position_y = max(
         [
             position["y2"]
@@ -864,21 +929,11 @@ def _build_svg_bracket_data(bracket, round_data):
             layout_type == TournamentBracket.LAYOUT_SPLIT
             and round_count > 1
         ):
-            pre_final_matches = round_data[-2]["matches"]
-            left_final_centers = [
-                match_positions[("left", match.id)]["center_y"]
-                for match in pre_final_matches
-                if ("left", match.id) in match_positions
-            ]
-            right_final_centers = [
-                match_positions[("right", match.id)]["center_y"]
-                for match in pre_final_matches
-                if ("right", match.id) in match_positions
-            ]
-            pre_final_centers = left_final_centers + right_final_centers
-
-            if pre_final_centers:
-                final_y = sum(pre_final_centers) / len(pre_final_centers)
+            final_y = _split_svg_final_y(
+                match_positions,
+                round_data,
+                final_y,
+            )
 
         svg["labels"].append({
             "x": center_x,
