@@ -196,6 +196,29 @@ def _estimate_svg_name_width(round_data):
     )
 
 
+def _effective_svg_layout_type(bracket, round_data):
+    """実データ上で左右表示できない小さい山は片側表示へ倒す。"""
+
+    if bracket.layout_type != TournamentBracket.LAYOUT_SPLIT:
+        return bracket.layout_type
+
+    entry_ids = set()
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in [match.pair1, match.pair2]:
+                if entry:
+                    entry_ids.add(entry.id)
+
+    if len(entry_ids) < 4:
+        return TournamentBracket.LAYOUT_SINGLE
+
+    if len(round_data) < 2:
+        return TournamentBracket.LAYOUT_SINGLE
+
+    return bracket.layout_type
+
+
 def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     """決勝入力後に優勝者名をSVGへ追加する。"""
 
@@ -209,7 +232,7 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     if not text:
         return
 
-    if bracket.layout_type == TournamentBracket.LAYOUT_SPLIT:
+    if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT:
         line_top = final_y - 34
         svg["lines"].append({
             "x1": center_x,
@@ -642,6 +665,7 @@ def _build_svg_bracket_data(bracket, round_data):
     side_margin = 28
     round_gap = 42
     name_width = _estimate_svg_name_width(round_data)
+    layout_type = _effective_svg_layout_type(bracket, round_data)
     number_width = 24
     shoulder = 44
     line_pad = 30
@@ -655,7 +679,7 @@ def _build_svg_bracket_data(bracket, round_data):
 
     match_positions = {}
 
-    if bracket.layout_type == TournamentBracket.LAYOUT_SINGLE:
+    if layout_type == TournamentBracket.LAYOUT_SINGLE:
         for match_id, position in _build_svg_match_positions(
             round_data,
             row_gap,
@@ -717,7 +741,7 @@ def _build_svg_bracket_data(bracket, round_data):
     )
     height = max(220, int(max_position_y + top))
 
-    if bracket.layout_type == TournamentBracket.LAYOUT_SINGLE:
+    if layout_type == TournamentBracket.LAYOUT_SINGLE:
         first_join_x = side_margin + name_width + shoulder
         width = (
             first_join_x
@@ -725,6 +749,24 @@ def _build_svg_bracket_data(bracket, round_data):
             + line_pad
             + side_margin
         )
+
+        final_matches = round_data[-1]["matches"]
+
+        if final_matches and final_matches[0].winner:
+            final_match = final_matches[0]
+            champion_text = _svg_entry_with_org(final_match.winner)
+            champion_x = (
+                first_join_x
+                + ((final_match.round_number - 1) * round_gap)
+                + line_pad
+                + 10
+            )
+            width = max(
+                width,
+                champion_x
+                + _estimate_svg_text_width(champion_text)
+                + side_margin,
+            )
     else:
         side_rounds = max(round_count - 1, 1)
         first_join_x = side_margin + name_width + shoulder
@@ -748,7 +790,7 @@ def _build_svg_bracket_data(bracket, round_data):
         "line_pad": line_pad,
         "final_half_width": final_half_width,
         "round_count": round_count,
-        "layout_type": bracket.layout_type,
+        "layout_type": layout_type,
         "match_positions": match_positions,
         "advanced_entry_ids": advanced_entry_ids,
         "lines": [],
@@ -756,7 +798,7 @@ def _build_svg_bracket_data(bracket, round_data):
         "headings": [],
     }
 
-    if bracket.layout_type == TournamentBracket.LAYOUT_SINGLE:
+    if layout_type == TournamentBracket.LAYOUT_SINGLE:
         for round_item in round_data:
             round_number = round_item["number"]
 
@@ -819,7 +861,7 @@ def _build_svg_bracket_data(bracket, round_data):
         final_y = height / 2 + 52
 
         if (
-            bracket.layout_type == TournamentBracket.LAYOUT_SPLIT
+            layout_type == TournamentBracket.LAYOUT_SPLIT
             and round_count > 1
         ):
             pre_final_matches = round_data[-2]["matches"]

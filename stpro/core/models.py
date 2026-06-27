@@ -801,7 +801,7 @@ class TournamentBracket(models.Model):
     layout_type = models.CharField(
         max_length=20,
         choices=LAYOUT_CHOICES,
-        default=LAYOUT_SPLIT
+        default=LAYOUT_SINGLE
     )
 
     score_display_mode = models.CharField(

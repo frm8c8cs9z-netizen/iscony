@@ -4140,6 +4140,12 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
+    def test_tournament_bracket_default_layout_is_single(self):
+        self.assertEqual(
+            self.bracket.layout_type,
+            TournamentBracket.LAYOUT_SINGLE,
+        )
+
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(
             bracket=self.bracket,
@@ -4211,9 +4217,9 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('class="loser-score"', svg_content)
-        self.assertIn('y="156.0"', svg_content)
+        self.assertIn('y="66"', svg_content)
         self.assertIn('>\n                            4\n                        </text>', svg_content)
-        self.assertIn('y="196.0"', svg_content)
+        self.assertIn('y="126"', svg_content)
         self.assertIn('>\n                            2\n                        </text>', svg_content)
 
     def test_tournament_bracket_detail_can_hide_scores(self):
@@ -4304,6 +4310,22 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotContains(response, 'class="winner-line"')
 
     def test_tournament_bracket_detail_draws_later_round_skeleton_lines(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.save()
+        entry3 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+        )
+        entry4 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="4",
+            display_order=4,
+            player1_name="選手4A",
+            player2_name="選手4B",
+        )
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -4317,6 +4339,8 @@ class TournamentScheduleBehaviorTests(TestCase):
             round_number=1,
             match_number=2,
             match_code="M2",
+            pair1=entry3,
+            pair2=entry4,
         )
         TournamentMatch.objects.create(
             bracket=self.bracket,
@@ -4614,6 +4638,75 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('x="232"', svg_content)
         self.assertIn('text-anchor="start"', svg_content)
         self.assertIn("選手1A・選手1B（第一クラブ）", svg_content)
+
+    def test_tournament_bracket_detail_expands_single_layout_for_champion(self):
+        self.entry1.organization = "とても長いクラブ名"
+        self.entry1.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="champion-text"', svg_content)
+        svg_width = float(
+            svg_content.split('width="', 1)[1].split('"', 1)[0]
+        )
+        self.assertGreater(svg_width, 400)
+
+    def test_tournament_bracket_detail_uses_single_layout_for_small_split_bracket(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="champion-text"', svg_content)
+        self.assertNotIn('class="champion-vertical-text"', svg_content)
 
     def test_tournament_bracket_detail_shows_split_layout_champion(self):
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
