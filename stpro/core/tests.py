@@ -4590,6 +4590,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('class="champion-text"', svg_content)
+        self.assertIn('x="322"', svg_content)
+        self.assertIn('text-anchor="start"', svg_content)
         self.assertIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_shows_split_layout_champion(self):
