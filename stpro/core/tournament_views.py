@@ -155,6 +155,47 @@ def _svg_entry_with_org(entry):
     return entry.short_name
 
 
+def _estimate_svg_text_width(text):
+    """SVG上の文字幅を概算する。"""
+
+    width = 0
+
+    for char in text:
+        width += 7 if char.isascii() else 13
+
+    return width
+
+
+def _estimate_svg_name_width(round_data):
+    """番号列を除いた選手名表示幅をトーナメント内の文字から概算する。"""
+
+    texts = []
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in [match.pair1, match.pair2]:
+                if not entry:
+                    continue
+
+                texts.append(entry.short_name)
+
+                if entry.display_organization:
+                    texts.append(f"（{entry.display_organization}）")
+
+    if not texts:
+        return 160
+
+    estimated_width = max(
+        _estimate_svg_text_width(text)
+        for text in texts
+    )
+
+    return min(
+        max(estimated_width + 16, 120),
+        230,
+    )
+
+
 def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     """決勝入力後に優勝者名をSVGへ追加する。"""
 
@@ -600,7 +641,7 @@ def _build_svg_bracket_data(bracket, round_data):
     top = 70
     side_margin = 28
     round_gap = 42
-    name_width = 210
+    name_width = _estimate_svg_name_width(round_data)
     number_width = 24
     shoulder = 44
     line_pad = 30

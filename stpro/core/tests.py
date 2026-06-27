@@ -4326,14 +4326,14 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('y1="70"', svg_content)
-        self.assertIn('x1="282"', svg_content)
-        self.assertIn('x2="324"', svg_content)
+        self.assertIn('x1="192"', svg_content)
+        self.assertIn('x2="234"', svg_content)
         self.assertIn('y1="93.0"', svg_content)
-        self.assertIn('x1="324"', svg_content)
+        self.assertIn('x1="234"', svg_content)
         self.assertIn('x2="390.0"', svg_content)
         self.assertIn('x1="390.0"', svg_content)
         self.assertIn('x2="510.0"', svg_content)
-        self.assertIn('x="274"', svg_content)
+        self.assertIn('x="184"', svg_content)
         self.assertIn('y="89.0"', svg_content)
         self.assertIn('text-anchor="end"', svg_content)
 
@@ -4386,13 +4386,13 @@ class TournamentScheduleBehaviorTests(TestCase):
             content.index("</svg>")
         ]
 
-        self.assertIn('x1="238"', svg_content)
+        self.assertIn('x1="148"', svg_content)
         self.assertIn('y1="70"', svg_content)
         self.assertIn('y1="116"', svg_content)
         self.assertIn('y1="162"', svg_content)
-        self.assertIn('x1="282"', svg_content)
+        self.assertIn('x1="192"', svg_content)
         self.assertIn('y2="70.0"', svg_content)
-        self.assertIn('x2="324"', svg_content)
+        self.assertIn('x2="234"', svg_content)
         self.assertIn('y1="70.0"', svg_content)
         self.assertIn('y2="139.0"', svg_content)
         self.assertNotIn(">S1<", svg_content)
@@ -4590,7 +4590,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('class="champion-text"', svg_content)
-        self.assertIn('x="322"', svg_content)
+        self.assertIn('x="232"', svg_content)
         self.assertIn('text-anchor="start"', svg_content)
         self.assertIn("選手1A・選手1B（第一クラブ）", svg_content)
 
@@ -4688,14 +4688,14 @@ class TournamentScheduleBehaviorTests(TestCase):
             svg_content,
         )
         self.assertNotIn(
-            'class="winner-line"\n                        x1="618"\n'
+            'class="winner-line"\n                        x1="708"\n'
             '                        y1="93.0"\n'
             '                        x2="510.0"\n'
             '                        y2="93.0"',
             svg_content,
         )
         self.assertIn(
-            'class="loser-score"\n                            x="610"\n'
+            'class="loser-score"\n                            x="700"\n'
             '                            y="85.0"',
             svg_content,
         )
@@ -4781,26 +4781,26 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn(
-            'class="normal-line"\n                        x1="282"\n'
+            'class="normal-line"\n                        x1="192"\n'
             '                        y1="70"\n'
-            '                        x2="282"\n'
+            '                        x2="192"\n'
             '                        y2="116"',
             svg_content,
         )
         self.assertIn(
-            'class="winner-line"\n                        x1="282"\n'
+            'class="winner-line"\n                        x1="192"\n'
             '                        y1="70"\n'
-            '                        x2="282"\n'
+            '                        x2="192"\n'
             '                        y2="93.0"',
             svg_content,
         )
         self.assertIn('class="loser-score"', svg_content)
-        self.assertIn('x="292"', svg_content)
+        self.assertIn('x="202"', svg_content)
         self.assertIn('y="126"', svg_content)
         self.assertNotIn(
-            'class="winner-line"\n                        x1="282"\n'
+            'class="winner-line"\n                        x1="192"\n'
             '                        y1="70"\n'
-            '                        x2="282"\n'
+            '                        x2="192"\n'
             '                        y2="116"',
             svg_content,
         )
