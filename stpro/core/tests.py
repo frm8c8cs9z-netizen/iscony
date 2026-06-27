@@ -4694,6 +4694,11 @@ class TournamentScheduleBehaviorTests(TestCase):
             '                        y2="93.0"',
             svg_content,
         )
+        self.assertIn(
+            'class="loser-score"\n                            x="494.0"\n'
+            '                            y="85.0"',
+            svg_content,
+        )
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(
@@ -4737,80 +4742,6 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(
             svg_content.count("選手1A・選手1B"),
             1,
-        )
-
-    def test_tournament_bracket_detail_draws_score_shoulder_after_first_round(self):
-        self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
-        self.bracket.save()
-        entry3 = TournamentEntry.objects.create(
-            bracket=self.bracket,
-            pair_code="3",
-            display_order=3,
-            player1_name="選手3A",
-            player2_name="選手3B",
-        )
-        entry4 = TournamentEntry.objects.create(
-            bracket=self.bracket,
-            pair_code="4",
-            display_order=4,
-            player1_name="選手4A",
-            player2_name="選手4B",
-        )
-        TournamentMatch.objects.create(
-            bracket=self.bracket,
-            round_number=1,
-            match_number=1,
-            match_code="M1",
-            pair1=self.entry1,
-            pair2=self.entry2,
-            pair1_games=4,
-            pair2_games=2,
-            winner=self.entry1,
-        )
-        TournamentMatch.objects.create(
-            bracket=self.bracket,
-            round_number=1,
-            match_number=2,
-            match_code="M2",
-            pair1=entry3,
-            pair2=entry4,
-            pair1_games=4,
-            pair2_games=1,
-            winner=entry3,
-        )
-        TournamentMatch.objects.create(
-            bracket=self.bracket,
-            round_number=2,
-            match_number=1,
-            match_code="M3",
-            pair1=self.entry1,
-            pair2=entry3,
-            pair1_games=4,
-            pair2_games=3,
-            winner=self.entry1,
-        )
-
-        response = self.client.get(
-            reverse(
-                "tournament_bracket_detail",
-                kwargs={
-                    "code": self.tournament.code,
-                    "bracket_id": self.bracket.id,
-                },
-            )
-        )
-        content = response.content.decode()
-        svg_content = content[
-            content.index("<svg"):
-            content.index("</svg>")
-        ]
-
-        self.assertIn(
-            'class="normal-line"\n                        x1="324"\n'
-            '                        y1="185.0"\n'
-            '                        x2="346"\n'
-            '                        y2="185.0"',
-            svg_content,
         )
 
     def test_tournament_bracket_detail_highlights_only_winner_side_vertical_line(self):

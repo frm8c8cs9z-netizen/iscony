@@ -531,24 +531,6 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         )
 
         if score:
-            if round_number > 1:
-                score_shoulder = min(
-                    abs(advance_x - join_x),
-                    22,
-                )
-                score_shoulder_x = (
-                    join_x - score_shoulder
-                    if side == "right"
-                    else join_x + score_shoulder
-                )
-                svg["lines"].append({
-                    "x1": join_x,
-                    "y1": y,
-                    "x2": score_shoulder_x,
-                    "y2": y,
-                    "class": "normal-line",
-                })
-
             score_y = y - 4 if y <= center_y else y + 10
             svg["labels"].append({
                 "x": score_x,
@@ -873,9 +855,14 @@ def _build_svg_bracket_data(bracket, round_data):
             )
 
             if score:
+                score_x = (
+                    center_x - final_half_width + 16
+                    if side_name == "pair1"
+                    else center_x + final_half_width - 16
+                )
                 svg["labels"].append({
-                    "x": center_x + 145,
-                    "y": y,
+                    "x": score_x,
+                    "y": final_y - 8,
                     "text": score,
                     "class": "loser-score",
                     "anchor": "middle",
