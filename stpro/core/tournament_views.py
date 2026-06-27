@@ -855,10 +855,27 @@ def _build_svg_bracket_data(bracket, round_data):
             )
 
             if score:
+                pre_final_round_index = max(
+                    final_match.round_number - 2,
+                    0,
+                )
+                left_pre_final_join_x = (
+                    svg["side_margin"]
+                    + svg["name_width"]
+                    + svg["shoulder"]
+                    + (pre_final_round_index * svg["round_gap"])
+                )
+                right_pre_final_join_x = (
+                    svg["width"]
+                    - svg["side_margin"]
+                    - svg["name_width"]
+                    - svg["shoulder"]
+                    - (pre_final_round_index * svg["round_gap"])
+                )
                 score_x = (
-                    center_x - final_half_width + 8
+                    left_pre_final_join_x + 8
                     if side_name == "pair1"
-                    else center_x + final_half_width - 8
+                    else right_pre_final_join_x - 8
                 )
                 svg["labels"].append({
                     "x": score_x,
