@@ -799,7 +799,7 @@ def _build_svg_bracket_data(bracket, round_data):
 
         svg["labels"].append({
             "x": center_x,
-            "y": final_y - 24,
+            "y": final_y + 22,
             "text": final_match.match_label or final_match.match_code,
             "class": "svg-match-code",
             "anchor": "middle",

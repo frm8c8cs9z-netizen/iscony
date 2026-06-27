@@ -4699,6 +4699,11 @@ class TournamentScheduleBehaviorTests(TestCase):
             '                            y="85.0"',
             svg_content,
         )
+        self.assertIn(
+            'class="svg-match-code"\n                                x="450.0"\n'
+            '                                y="115.0"',
+            svg_content,
+        )
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(
