@@ -160,6 +160,7 @@
                                 x="{{ label.x }}"
                                 y="{{ label.y }}"
                                 text-anchor="{{ label.anchor }}"
+                                {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
                             >
                                 {{ label.text }}
                             </text>
@@ -170,6 +171,7 @@
                             x="{{ label.x }}"
                             y="{{ label.y }}"
                             text-anchor="{{ label.anchor }}"
+                            {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
                         >
                             {{ label.text }}
                         </text>

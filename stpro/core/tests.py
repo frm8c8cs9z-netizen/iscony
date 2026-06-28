@@ -4861,14 +4861,18 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('class="champion-vertical-text"', svg_content)
-        self.assertIn(
+        self.assertNotIn(
             'class="winner-line"\n                        x1="222"',
             svg_content,
         )
-        self.assertNotIn(
-            'class="winner-line"\n                        x1="125.0"',
-            svg_content,
-        )
+        champion_label = svg_content.split(
+            'class="champion-vertical-text"',
+            1,
+        )[1]
+        self.assertIn('x="232"', champion_label)
+        self.assertIn('y="93.0"', champion_label)
+        self.assertIn('text-anchor="start"', champion_label)
+        self.assertIn('dominant-baseline="middle"', champion_label)
 
     def test_tournament_bracket_detail_uses_single_layout_for_small_split_bracket(self):
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT

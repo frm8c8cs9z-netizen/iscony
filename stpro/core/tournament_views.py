@@ -262,11 +262,19 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     )
 
     if champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE:
-        line_x = (
-            center_x
-            if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
-            else advance_x
-        )
+        if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
+            svg["labels"].append({
+                "x": advance_x + 10,
+                "y": final_y,
+                "text": text,
+                "class": "champion-vertical-text",
+                "anchor": "start",
+                "baseline": "middle",
+                "url": "",
+            })
+            return
+
+        line_x = center_x
         line_top = final_y - 34
         svg["lines"].append({
             "x1": line_x,
@@ -819,11 +827,17 @@ def _build_svg_bracket_data(bracket, round_data):
                     else top
                 )
 
-            champion_label_y = final_y - 42
-            champion_top_y = (
-                champion_label_y
-                - _estimate_svg_vertical_text_height(champion_text)
-            )
+            if layout_type == TournamentBracket.LAYOUT_SPLIT:
+                champion_top_y = (
+                    final_y
+                    - 42
+                    - _estimate_svg_vertical_text_height(champion_text)
+                )
+            else:
+                champion_top_y = (
+                    final_y
+                    - (_estimate_svg_vertical_text_height(champion_text) / 2)
+                )
             top_margin = 16
 
             if champion_top_y < top_margin:
