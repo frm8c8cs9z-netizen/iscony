@@ -334,6 +334,7 @@ class TournamentBracketAdmin(admin.ModelAdmin):
         "category",
         "stage",
         "layout_type",
+        "champion_display_mode",
         "display_order",
     )
 
@@ -341,6 +342,7 @@ class TournamentBracketAdmin(admin.ModelAdmin):
         "category",
         "stage",
         "layout_type",
+        "champion_display_mode",
     )
 
     search_fields = (

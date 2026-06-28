@@ -4145,6 +4145,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             self.bracket.layout_type,
             TournamentBracket.LAYOUT_SINGLE,
         )
+        self.assertEqual(
+            self.bracket.champion_display_mode,
+            TournamentBracket.CHAMPION_DISPLAY_AUTO,
+        )
 
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(
@@ -4268,6 +4272,9 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "name": self.bracket.name,
                 "layout_type": TournamentBracket.LAYOUT_SINGLE,
                 "score_display_mode": TournamentBracket.SCORE_DISPLAY_BOTH,
+                "champion_display_mode": (
+                    TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+                ),
                 "display_order": self.bracket.display_order,
             },
         )
@@ -4283,6 +4290,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(
             self.bracket.score_display_mode,
             TournamentBracket.SCORE_DISPLAY_BOTH,
+        )
+        self.assertEqual(
+            self.bracket.champion_display_mode,
+            TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE,
         )
 
     def test_tournament_bracket_detail_draws_lines_before_result(self):
@@ -4968,6 +4979,119 @@ class TournamentScheduleBehaviorTests(TestCase):
             champion_label.split('y="', 1)[1].split('"', 1)[0]
         )
         self.assertGreaterEqual(champion_y, 220)
+
+    def test_tournament_bracket_detail_can_hide_champion(self):
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_NONE
+        )
+        self.bracket.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertNotIn('class="champion-text"', svg_content)
+        self.assertNotIn('class="champion-vertical-text"', svg_content)
+
+    def test_tournament_bracket_detail_can_show_split_champion_horizontally(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+        )
+        self.bracket.save()
+        entries = [self.entry1, self.entry2]
+
+        for number in range(3, 5):
+            entries.append(
+                TournamentEntry.objects.create(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entries[0],
+            pair2=entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=entries[0],
+        )
+        second_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entries[2],
+            pair2=entries[3],
+            pair1_games=4,
+            pair2_games=1,
+            winner=entries[2],
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=entries[0],
+            pair2=entries[2],
+            pair1_games=4,
+            pair2_games=3,
+            winner=entries[0],
+        )
+        first_match.next_match = final_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+        second_match.next_match = final_match
+        second_match.next_slot = "pair2"
+        second_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="champion-text"', svg_content)
+        self.assertNotIn('class="champion-vertical-text"', svg_content)
+        self.assertIn("選手1A・選手1B", svg_content)
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(

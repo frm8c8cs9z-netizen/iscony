@@ -330,6 +330,7 @@ class TournamentBracketForm(forms.ModelForm):
             "name",
             "layout_type",
             "score_display_mode",
+            "champion_display_mode",
             "display_order",
         ]
 
@@ -338,6 +339,7 @@ class TournamentBracketForm(forms.ModelForm):
             "name": "トーナメント名",
             "layout_type": "表示方式",
             "score_display_mode": "スコア表示",
+            "champion_display_mode": "優勝者表示",
             "display_order": "表示順",
         }
 

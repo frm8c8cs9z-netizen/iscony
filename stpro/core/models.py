@@ -766,6 +766,10 @@ class TournamentBracket(models.Model):
     SCORE_DISPLAY_LOSER = "loser"
     SCORE_DISPLAY_BOTH = "both"
     SCORE_DISPLAY_NONE = "none"
+    CHAMPION_DISPLAY_AUTO = "auto"
+    CHAMPION_DISPLAY_HORIZONTAL_1LINE = "horizontal_1line"
+    CHAMPION_DISPLAY_VERTICAL_1LINE = "vertical_1line"
+    CHAMPION_DISPLAY_NONE = "none"
 
     LAYOUT_CHOICES = [
         (LAYOUT_SPLIT, "左右表示"),
@@ -776,6 +780,13 @@ class TournamentBracket(models.Model):
         (SCORE_DISPLAY_LOSER, "負けのみ"),
         (SCORE_DISPLAY_BOTH, "勝ち負け両方"),
         (SCORE_DISPLAY_NONE, "表示しない"),
+    ]
+
+    CHAMPION_DISPLAY_CHOICES = [
+        (CHAMPION_DISPLAY_AUTO, "自動"),
+        (CHAMPION_DISPLAY_HORIZONTAL_1LINE, "横書き1行"),
+        (CHAMPION_DISPLAY_VERTICAL_1LINE, "縦書き1行"),
+        (CHAMPION_DISPLAY_NONE, "表示しない"),
     ]
 
     category = models.ForeignKey(
@@ -808,6 +819,12 @@ class TournamentBracket(models.Model):
         max_length=20,
         choices=SCORE_DISPLAY_CHOICES,
         default=SCORE_DISPLAY_LOSER
+    )
+
+    champion_display_mode = models.CharField(
+        max_length=30,
+        choices=CHAMPION_DISPLAY_CHOICES,
+        default=CHAMPION_DISPLAY_AUTO
     )
 
     class Meta:
