@@ -124,10 +124,24 @@ def _should_highlight_svg_winner(match):
     return False
 
 
-def _should_highlight_svg_advance(match):
+def _should_highlight_svg_advance(match, svg):
     """次ラウンドへ伸びる横線を赤で表示してよいか判定する。"""
 
-    return _should_highlight_svg_winner(match)
+    if not _should_highlight_svg_winner(match):
+        return False
+
+    next_match = match.next_match
+
+    if (
+        svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
+        and next_match
+        and next_match.round_number == svg["round_count"]
+        and next_match.winner_id
+        and next_match.winner_id != match.winner_id
+    ):
+        return False
+
+    return True
 
 
 def _svg_entry_with_org(entry):
@@ -714,7 +728,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         "class": "normal-line",
     })
 
-    if _should_highlight_svg_advance(match):
+    if _should_highlight_svg_advance(match, svg):
         svg["lines"].append({
             "x1": join_x,
             "y1": center_y,

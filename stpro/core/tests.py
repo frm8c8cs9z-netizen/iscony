@@ -5000,7 +5000,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             '                        y2="282.0"',
             svg_content,
         )
-        self.assertIn(
+        self.assertNotIn(
             'class="winner-line"\n                        x1="708"\n'
             '                        y1="282.0"\n'
             '                        x2="510.0"\n'
