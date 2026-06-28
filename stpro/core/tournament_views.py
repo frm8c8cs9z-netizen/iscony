@@ -294,9 +294,17 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         return
 
     if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT:
+        line_top = final_y - 34
+        svg["lines"].append({
+            "x1": center_x,
+            "y1": final_y,
+            "x2": center_x,
+            "y2": line_top,
+            "class": "winner-line",
+        })
         svg["labels"].append({
             "x": center_x,
-            "y": final_y - 8,
+            "y": line_top - 8,
             "text": text,
             "class": "champion-text",
             "anchor": "middle",

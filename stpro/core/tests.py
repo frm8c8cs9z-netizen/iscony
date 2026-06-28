@@ -5140,7 +5140,15 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn("選手1A・選手1B", svg_content)
         champion_label = svg_content.split('class="champion-text"', 1)[1]
         self.assertIn('x="450.0"', champion_label)
+        self.assertIn('y="51.0"', champion_label)
         self.assertIn('text-anchor="middle"', champion_label)
+        self.assertIn(
+            'class="winner-line"\n                        x1="450.0"\n'
+            '                        y1="93.0"\n'
+            '                        x2="450.0"\n'
+            '                        y2="59.0"',
+            svg_content,
+        )
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(
