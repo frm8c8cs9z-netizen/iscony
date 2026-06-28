@@ -268,7 +268,7 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
                 "y": final_y,
                 "text": text,
                 "class": "champion-vertical-text",
-                "anchor": "start",
+                "anchor": "middle",
                 "baseline": "middle",
                 "url": "",
             })

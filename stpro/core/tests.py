@@ -4871,7 +4871,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )[1]
         self.assertIn('x="232"', champion_label)
         self.assertIn('y="93.0"', champion_label)
-        self.assertIn('text-anchor="start"', champion_label)
+        self.assertIn('text-anchor="middle"', champion_label)
         self.assertIn('dominant-baseline="middle"', champion_label)
 
     def test_tournament_bracket_detail_uses_single_layout_for_small_split_bracket(self):
