@@ -4828,6 +4828,48 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertGreater(svg_width, 400)
 
+    def test_tournament_bracket_detail_places_single_vertical_champion_on_advance_line(self):
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
+        )
+        self.bracket.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="champion-vertical-text"', svg_content)
+        self.assertIn(
+            'class="winner-line"\n                        x1="222"',
+            svg_content,
+        )
+        self.assertNotIn(
+            'class="winner-line"\n                        x1="125.0"',
+            svg_content,
+        )
+
     def test_tournament_bracket_detail_uses_single_layout_for_small_split_bracket(self):
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
@@ -5092,6 +5134,9 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('class="champion-text"', svg_content)
         self.assertNotIn('class="champion-vertical-text"', svg_content)
         self.assertIn("選手1A・選手1B", svg_content)
+        champion_label = svg_content.split('class="champion-text"', 1)[1]
+        self.assertIn('x="450.0"', champion_label)
+        self.assertIn('text-anchor="middle"', champion_label)
 
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(

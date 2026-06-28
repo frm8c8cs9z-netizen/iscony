@@ -247,41 +247,7 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     if champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_NONE:
         return
 
-    if champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE:
-        line_top = final_y - 34
-        svg["lines"].append({
-            "x1": center_x,
-            "y1": final_y,
-            "x2": center_x,
-            "y2": line_top,
-            "class": "winner-line",
-        })
-        svg["labels"].append({
-            "x": center_x,
-            "y": line_top - 8,
-            "text": text,
-            "class": "champion-vertical-text",
-            "anchor": "end",
-            "url": "",
-        })
-        return
-
-    if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT:
-        svg["labels"].append({
-            "x": center_x + 10,
-            "y": final_y - 8,
-            "text": text,
-            "class": "champion-text",
-            "anchor": "start",
-            "url": "",
-        })
-        return
-
     position = svg["match_positions"].get(("left", final_match.id))
-
-    if not position:
-        return
-
     join_x = (
         svg["side_margin"]
         + svg["name_width"]
@@ -294,6 +260,44 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         "left",
         join_x,
     )
+
+    if champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE:
+        line_x = (
+            center_x
+            if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
+            else advance_x
+        )
+        line_top = final_y - 34
+        svg["lines"].append({
+            "x1": line_x,
+            "y1": final_y,
+            "x2": line_x,
+            "y2": line_top,
+            "class": "winner-line",
+        })
+        svg["labels"].append({
+            "x": line_x,
+            "y": line_top - 8,
+            "text": text,
+            "class": "champion-vertical-text",
+            "anchor": "end",
+            "url": "",
+        })
+        return
+
+    if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT:
+        svg["labels"].append({
+            "x": center_x,
+            "y": final_y - 8,
+            "text": text,
+            "class": "champion-text",
+            "anchor": "middle",
+            "url": "",
+        })
+        return
+
+    if not position:
+        return
     svg["labels"].append({
         "x": advance_x + 10,
         "y": position["center_y"] - 8,
@@ -783,46 +787,50 @@ def _build_svg_bracket_data(bracket, round_data):
         for match_id, position in right_positions.items():
             match_positions[("right", match_id)] = position
 
-        final_matches = round_data[-1]["matches"]
+    final_matches = round_data[-1]["matches"]
 
-        if final_matches:
-            final_match = final_matches[0]
-            champion_text = (
-                _svg_entry_with_org(final_match.winner)
-                if final_match.winner
-                else ""
-            )
-            champion_display_mode = _resolve_svg_champion_display_mode(
-                bracket,
-                layout_type,
-            )
+    if final_matches:
+        final_match = final_matches[0]
+        champion_text = (
+            _svg_entry_with_org(final_match.winner)
+            if final_match.winner
+            else ""
+        )
+        champion_display_mode = _resolve_svg_champion_display_mode(
+            bracket,
+            layout_type,
+        )
 
-            if (
-                champion_text
-                and champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
-            ):
+        if (
+            champion_text
+            and champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
+        ):
+            if layout_type == TournamentBracket.LAYOUT_SPLIT:
                 final_y = _split_svg_final_y(
                     match_positions,
                     round_data,
                     top,
                 )
-                champion_label_y = final_y - 42
-                champion_top_y = (
-                    champion_label_y
-                    - _estimate_svg_vertical_text_height(champion_text)
+            else:
+                final_position = match_positions.get(("left", final_match.id))
+                final_y = (
+                    final_position["center_y"]
+                    if final_position
+                    else top
                 )
-                top_margin = 16
 
-                if champion_top_y < top_margin:
-                    y_offset = top_margin - champion_top_y
-                    match_positions = {
-                        key: {
-                            "y1": position["y1"] + y_offset,
-                            "y2": position["y2"] + y_offset,
-                            "center_y": position["center_y"] + y_offset,
-                        }
-                        for key, position in match_positions.items()
-                    }
+            champion_label_y = final_y - 42
+            champion_top_y = (
+                champion_label_y
+                - _estimate_svg_vertical_text_height(champion_text)
+            )
+            top_margin = 16
+
+            if champion_top_y < top_margin:
+                match_positions = _shift_svg_match_positions(
+                    match_positions,
+                    top_margin - champion_top_y,
+                )
 
     max_position_y = max(
         [
