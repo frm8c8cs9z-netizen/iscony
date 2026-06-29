@@ -26,11 +26,16 @@
             </div>
             <div>
                 {{ row.stage.get_stage_type_display }} /
+                参加者表示: {{ row.stage.get_entry_display_mode_display }} /
                 {% if row.ready %}
                     <strong>結果確定</strong>
                 {% else %}
                     進行中
                 {% endif %}
+                /
+                <a href="{% url 'edit_stage_display_settings' row.stage.id %}">
+                    表示設定
+                </a>
             </div>
         </div>
 

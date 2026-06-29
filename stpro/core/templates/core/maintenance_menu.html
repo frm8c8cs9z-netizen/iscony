@@ -59,6 +59,39 @@
     {% endfor %}
 </table>
 
+<h3>表示設定</h3>
+
+<p>
+    Stageごとのリーグ表示や、トーナメント表の片山・両山、参加者表示、優勝者表示を確認・変更します。
+</p>
+
+<table>
+    <tr>
+        <th>カテゴリ</th>
+        <th>Stage表示</th>
+        <th>トーナメント表示</th>
+    </tr>
+    {% for category in categories %}
+        <tr>
+            <td>{{ category.name }}</td>
+            <td>
+                <a href="{% url 'category_stage_overview' category.id %}">
+                    Stage一覧・表示設定
+                </a>
+            </td>
+            <td>
+                <a href="{% url 'bracket_list' tournament.code %}">
+                    トーナメント一覧・表示設定
+                </a>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="3">カテゴリがありません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
 <h3>基本CSV取込</h3>
 
 <p>

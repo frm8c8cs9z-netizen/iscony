@@ -4100,6 +4100,9 @@ class MaintenanceMenuTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "カテゴリ別クイック操作")
+        self.assertContains(response, "表示設定")
+        self.assertContains(response, "Stage一覧・表示設定")
+        self.assertContains(response, "トーナメント一覧・表示設定")
         self.assertContains(
             response,
             reverse(
@@ -4199,6 +4202,15 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "Aリーグ")
         self.assertContains(response, "本戦")
         self.assertContains(response, "決勝トーナメント")
+        self.assertContains(response, "参加者表示")
+        self.assertContains(response, "大会デフォルトを使う")
+        self.assertContains(
+            response,
+            reverse(
+                "edit_stage_display_settings",
+                kwargs={"stage_id": league_stage.id},
+            ),
+        )
         self.assertContains(response, "0/1枠反映済み")
         self.assertContains(response, "後続Stageへ反映")
         self.assertContains(
@@ -4210,6 +4222,45 @@ class CategoryStageOverviewTests(TestCase):
                     "bracket_id": bracket.id,
                 },
             ),
+        )
+
+    def test_stage_display_settings_can_be_updated(self):
+        tournament = Tournament.objects.create(
+            name="Stage表示設定大会",
+            code="STAGESETTING",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage_display_settings",
+                kwargs={"stage_id": stage.id},
+            ),
+            {
+                "entry_display_mode": Stage.ENTRY_DISPLAY_NAME_ORG_2LINE,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            ),
+        )
+        stage.refresh_from_db()
+        self.assertEqual(
+            stage.entry_display_mode,
+            Stage.ENTRY_DISPLAY_NAME_ORG_2LINE,
         )
 
 
@@ -4285,6 +4336,21 @@ class TournamentScheduleBehaviorTests(TestCase):
             self.bracket.entry_display_mode,
             TournamentBracket.ENTRY_DISPLAY_SHORT_ORG_2LINE,
         )
+
+    def test_bracket_list_shows_display_settings(self):
+        response = self.client.get(
+            reverse(
+                "bracket_list",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "参加者表示")
+        self.assertContains(response, "優勝者表示")
+        self.assertContains(response, "短い名前/所属2段")
+        self.assertContains(response, "自動")
+        self.assertContains(response, "設定")
 
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(

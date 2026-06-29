@@ -22,6 +22,8 @@
         <th>トーナメント名</th>
         <th>表示方式</th>
         <th>スコア表示</th>
+        <th>参加者表示</th>
+        <th>優勝者表示</th>
         <th>操作</th>
     </tr>
 
@@ -67,6 +69,16 @@
 
         <td>
             {{ bracket.get_score_display_mode_display }}
+        </td>
+
+        <td>
+            {{ bracket.get_entry_display_mode_display }}
+        </td>
+
+        <td>
+            {{ bracket.get_champion_display_mode_display }}
+            /
+            {{ bracket.get_champion_text_layout_display }}
         </td>
 
         <td>
@@ -117,7 +129,7 @@
     {% empty %}
 
     <tr>
-        <td colspan="8">
+        <td colspan="10">
             トーナメントがありません。先に「トーナメント追加」から作成してください。
         </td>
     </tr>

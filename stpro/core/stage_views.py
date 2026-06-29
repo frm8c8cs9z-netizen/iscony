@@ -1,8 +1,9 @@
 """カテゴリ内のリーグ・トーナメントをStage順に扱う運用画面。"""
 
 from django.db.models import Q
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 
+from .forms import StageDisplaySettingsForm
 from .models import (
     AdvancementSource,
     Category,
@@ -178,5 +179,43 @@ def category_stage_overview(request, category_id):
             "category": category,
             "tournament": category.tournament,
             "stage_rows": stage_rows,
+        },
+    )
+
+
+def edit_stage_display_settings(request, stage_id):
+    """Stage単位の表示設定を編集する。"""
+
+    stage = get_object_or_404(
+        Stage.objects.select_related(
+            "category",
+            "category__tournament",
+        ),
+        id=stage_id,
+    )
+
+    if request.method == "POST":
+        form = StageDisplaySettingsForm(
+            request.POST,
+            instance=stage,
+        )
+
+        if form.is_valid():
+            form.save()
+            return redirect(
+                "category_stage_overview",
+                category_id=stage.category_id,
+            )
+    else:
+        form = StageDisplaySettingsForm(instance=stage)
+
+    return render(
+        request,
+        "core/edit_stage_display_settings.html",
+        {
+            "stage": stage,
+            "category": stage.category,
+            "tournament": stage.category.tournament,
+            "form": form,
         },
     )
