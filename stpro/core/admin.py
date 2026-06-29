@@ -117,6 +117,7 @@ class StageAdmin(admin.ModelAdmin):
         "name",
         "category",
         "stage_type",
+        "entry_display_mode",
         "display_order",
     )
 
@@ -128,6 +129,7 @@ class StageAdmin(admin.ModelAdmin):
     list_filter = (
         "category",
         "stage_type",
+        "entry_display_mode",
     )
 
     readonly_fields = (

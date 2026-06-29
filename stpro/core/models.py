@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 
 from .display_helpers import (
+    ENTRY_DISPLAY_INHERIT as DISPLAY_INHERIT,
     ENTRY_DISPLAY_NAME_ORG_2LINE as DISPLAY_NAME_ORG_2LINE,
     ENTRY_DISPLAY_ONE_LINE as DISPLAY_ONE_LINE,
     ENTRY_DISPLAY_SHORT_ORG_2LINE as DISPLAY_SHORT_ORG_2LINE,
@@ -124,10 +125,21 @@ class Stage(models.Model):
 
     TYPE_LEAGUE = "league"
     TYPE_TOURNAMENT = "tournament"
+    ENTRY_DISPLAY_INHERIT = DISPLAY_INHERIT
+    ENTRY_DISPLAY_SHORT_ORG_2LINE = DISPLAY_SHORT_ORG_2LINE
+    ENTRY_DISPLAY_ONE_LINE = DISPLAY_ONE_LINE
+    ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
 
     STAGE_TYPE_CHOICES = [
         (TYPE_LEAGUE, "リーグ"),
         (TYPE_TOURNAMENT, "トーナメント"),
+    ]
+
+    ENTRY_DISPLAY_CHOICES = [
+        (ENTRY_DISPLAY_INHERIT, "大会デフォルトを使う"),
+        (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
+        (ENTRY_DISPLAY_ONE_LINE, "短い名前（所属）1行"),
+        (ENTRY_DISPLAY_NAME_ORG_2LINE, "フル名前/所属2段"),
     ]
 
     category = models.ForeignKey(
@@ -151,6 +163,12 @@ class Stage(models.Model):
 
     display_order = models.IntegerField(
         default=0
+    )
+
+    entry_display_mode = models.CharField(
+        max_length=30,
+        choices=ENTRY_DISPLAY_CHOICES,
+        default=ENTRY_DISPLAY_INHERIT
     )
 
     class Meta:

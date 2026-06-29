@@ -11,10 +11,12 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .display_helpers import (
+    ENTRY_DISPLAY_INHERIT,
     ENTRY_DISPLAY_NAME_ORG_2LINE,
     ENTRY_DISPLAY_ONE_LINE,
     build_entry_display_lines,
     format_entry_one_line,
+    resolve_entry_display_mode,
 )
 from .models import (
     Category,
@@ -146,6 +148,15 @@ class EntryDisplayHelperTests(TestCase):
                 {"text": "山田　太郎・佐藤　次郎", "class": "entry-text"},
                 {"text": "第一クラブ", "class": "entry-org-text"},
             ],
+        )
+
+    def test_entry_display_mode_inherit_resolves_to_system_default(self):
+        self.stage.entry_display_mode = ENTRY_DISPLAY_INHERIT
+        self.stage.save()
+
+        self.assertEqual(
+            resolve_entry_display_mode(stage=self.stage),
+            Stage.ENTRY_DISPLAY_SHORT_ORG_2LINE,
         )
 
 
@@ -1096,6 +1107,31 @@ class RoundRobinMeetingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, action_url)
         self.assertNotContains(response, retire_url)
+
+    def test_category_detail_uses_stage_entry_display_mode(self):
+        self.stage.entry_display_mode = Stage.ENTRY_DISPLAY_NAME_ORG_2LINE
+        self.stage.save()
+        self.entry1.player1_name = "山田　太郎"
+        self.entry1.player2_name = "佐藤　次郎"
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "山田　太郎・佐藤　次郎")
+        self.assertContains(response, "第一クラブ")
+        self.assertNotContains(response, "山田・佐藤")
 
     def test_league_entry_action_page_shows_retirement_operation(self):
         RoundRobinMatch.objects.create(

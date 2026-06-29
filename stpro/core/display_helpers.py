@@ -6,9 +6,32 @@ core.display_helpers
 """
 
 
+ENTRY_DISPLAY_INHERIT = "inherit"
 ENTRY_DISPLAY_SHORT_ORG_2LINE = "short_org_2line"
 ENTRY_DISPLAY_ONE_LINE = "one_line"
 ENTRY_DISPLAY_NAME_ORG_2LINE = "name_org_2line"
+SYSTEM_ENTRY_DISPLAY_MODE = ENTRY_DISPLAY_SHORT_ORG_2LINE
+
+
+def resolve_entry_display_mode(*, stage=None, explicit_mode=None, tournament=None):
+    """参加者表示モードを上書き階層込みで解決する。"""
+
+    if explicit_mode and explicit_mode != ENTRY_DISPLAY_INHERIT:
+        return explicit_mode
+
+    if stage and stage.entry_display_mode != ENTRY_DISPLAY_INHERIT:
+        return stage.entry_display_mode
+
+    tournament_default = getattr(
+        tournament,
+        "default_entry_display_mode",
+        "",
+    )
+
+    if tournament_default and tournament_default != ENTRY_DISPLAY_INHERIT:
+        return tournament_default
+
+    return SYSTEM_ENTRY_DISPLAY_MODE
 
 
 def format_entry_one_line(entry, *, use_short_name=True, with_organization=True):

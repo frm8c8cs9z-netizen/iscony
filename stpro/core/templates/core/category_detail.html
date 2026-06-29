@@ -87,9 +87,10 @@
                 </th>
                 <th class="{% if row.pair.retired %}retired-pair{% endif %}">
                     <a href="{% url 'league_entry_action' row.pair.id %}">
-                        {{ row.pair.display_name}}
-                    </a><br>
-                    ({{ row.pair.display_organization}})<br>
+                        {% for line in row.pair_display_lines %}
+                            {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </a>
                 </th>
 
                 {% for score in row.scores %}

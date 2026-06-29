@@ -15,6 +15,10 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from .display_helpers import (
+    build_entry_display_lines,
+    resolve_entry_display_mode,
+)
 from .forms import ExtraRoundRobinMatchForm, LeagueEntryEditForm
 from .models import (
     Category,
@@ -66,6 +70,10 @@ def category_detail(request, category_id):
     group_data = []
 
     for group in groups:
+        entry_display_mode = resolve_entry_display_mode(
+            stage=group.stage,
+            tournament=category.tournament,
+        )
 
         pairs = LeagueEntry.objects.filter(
             group=group
@@ -195,6 +203,10 @@ def category_detail(request, category_id):
 
             table_rows.append({
                 "pair": row_pair,
+                "pair_display_lines": build_entry_display_lines(
+                    row_pair,
+                    mode=entry_display_mode,
+                ),
                 "scores": row_scores,
                 "ranking": ranking,
             })
