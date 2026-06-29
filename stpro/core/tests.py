@@ -4939,6 +4939,49 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('text-anchor="middle"', champion_label)
         self.assertIn('dominant-baseline="middle"', champion_label)
 
+    def test_tournament_bracket_detail_can_show_single_vertical_champion_in_two_columns(self):
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
+        )
+        self.bracket.champion_text_layout = (
+            TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.bracket.save()
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="champion-vertical-text"', svg_content)
+        self.assertIn('class="champion-org-vertical-text"', svg_content)
+        self.assertIn("選手1A・選手1B", svg_content)
+        self.assertIn("第一クラブ", svg_content)
+        self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
+
     def test_tournament_bracket_detail_uses_single_layout_for_small_split_bracket(self):
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
@@ -5090,6 +5133,88 @@ class TournamentScheduleBehaviorTests(TestCase):
             champion_label.split('y="', 1)[1].split('"', 1)[0]
         )
         self.assertGreaterEqual(champion_y, 220)
+
+    def test_tournament_bracket_detail_can_show_split_vertical_champion_in_two_columns(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.champion_text_layout = (
+            TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.bracket.save()
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        entries = [self.entry1, self.entry2]
+
+        for number in range(3, 5):
+            entries.append(
+                TournamentEntry.objects.create(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entries[0],
+            pair2=entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=entries[0],
+        )
+        second_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entries[2],
+            pair2=entries[3],
+            pair1_games=4,
+            pair2_games=1,
+            winner=entries[2],
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=entries[0],
+            pair2=entries[2],
+            pair1_games=4,
+            pair2_games=3,
+            winner=entries[0],
+        )
+        first_match.next_match = final_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+        second_match.next_match = final_match
+        second_match.next_slot = "pair2"
+        second_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="champion-vertical-text"', svg_content)
+        self.assertIn('class="champion-org-vertical-text"', svg_content)
+        self.assertIn("選手1A・選手1B", svg_content)
+        self.assertIn("第一クラブ", svg_content)
+        self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_can_hide_champion(self):
         self.bracket.champion_display_mode = (

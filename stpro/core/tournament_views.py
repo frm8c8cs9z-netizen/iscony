@@ -160,6 +160,7 @@ CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
 CHAMPION_ORIENTATION_VERTICAL = "vertical"
 CHAMPION_ORIENTATION_NONE = "none"
 CHAMPION_LINE_HEIGHT = 16
+CHAMPION_VERTICAL_COLUMN_GAP = 18
 
 
 def _resolve_svg_champion_display_mode(bracket, layout_type):
@@ -249,6 +250,45 @@ def _svg_champion_multiline_label(lines, x, center_y):
         }
         for index, line in enumerate(lines)
     ]
+
+
+def _add_svg_champion_vertical_labels(
+        svg,
+        lines,
+        x,
+        y,
+        anchor,
+        baseline=None):
+    """縦書き優勝者表示を必要に応じて複数列で追加する。"""
+
+    if len(lines) <= 1:
+        svg["labels"].append({
+            "x": x,
+            "y": y,
+            "text": _svg_champion_line_text(lines),
+            "class": "champion-vertical-text",
+            "anchor": anchor,
+            "baseline": baseline,
+            "url": "",
+        })
+        return
+
+    start_x = x + (((len(lines) - 1) * CHAMPION_VERTICAL_COLUMN_GAP) / 2)
+
+    for index, line in enumerate(lines):
+        svg["labels"].append({
+            "x": start_x - (index * CHAMPION_VERTICAL_COLUMN_GAP),
+            "y": y,
+            "text": line["text"],
+            "class": (
+                "champion-org-vertical-text"
+                if line["class"] == "champion-org-text"
+                else "champion-vertical-text"
+            ),
+            "anchor": anchor,
+            "baseline": baseline,
+            "url": "",
+        })
 
 
 def _estimate_svg_champion_width(lines):
@@ -368,15 +408,14 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
 
     if champion_orientation == CHAMPION_ORIENTATION_VERTICAL:
         if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
-            svg["labels"].append({
-                "x": advance_x + 10,
-                "y": final_y,
-                "text": text,
-                "class": "champion-vertical-text",
-                "anchor": "middle",
-                "baseline": "middle",
-                "url": "",
-            })
+            _add_svg_champion_vertical_labels(
+                svg,
+                text_lines,
+                advance_x + 10,
+                final_y,
+                "middle",
+                baseline="middle",
+            )
             return
 
         line_x = center_x
@@ -388,14 +427,13 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
             "y2": line_top,
             "class": "winner-line",
         })
-        svg["labels"].append({
-            "x": line_x,
-            "y": line_top - 8,
-            "text": text,
-            "class": "champion-vertical-text",
-            "anchor": "end",
-            "url": "",
-        })
+        _add_svg_champion_vertical_labels(
+            svg,
+            text_lines,
+            line_x,
+            line_top - 8,
+            "end",
+        )
         return
 
     if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT:
