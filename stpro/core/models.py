@@ -4,6 +4,12 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 
+from .display_helpers import (
+    ENTRY_DISPLAY_NAME_ORG_2LINE as DISPLAY_NAME_ORG_2LINE,
+    ENTRY_DISPLAY_ONE_LINE as DISPLAY_ONE_LINE,
+    ENTRY_DISPLAY_SHORT_ORG_2LINE as DISPLAY_SHORT_ORG_2LINE,
+)
+
 
 # =========================================================
 # スコアシート
@@ -773,6 +779,9 @@ class TournamentBracket(models.Model):
     CHAMPION_TEXT_AUTO = "auto"
     CHAMPION_TEXT_ONE_LINE = "one_line"
     CHAMPION_TEXT_NAME_ORG_2LINE = "name_org_2line"
+    ENTRY_DISPLAY_SHORT_ORG_2LINE = DISPLAY_SHORT_ORG_2LINE
+    ENTRY_DISPLAY_ONE_LINE = DISPLAY_ONE_LINE
+    ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
 
     LAYOUT_CHOICES = [
         (LAYOUT_SPLIT, "左右表示"),
@@ -796,6 +805,12 @@ class TournamentBracket(models.Model):
         (CHAMPION_TEXT_AUTO, "自動"),
         (CHAMPION_TEXT_ONE_LINE, "1行"),
         (CHAMPION_TEXT_NAME_ORG_2LINE, "名前/所属2段"),
+    ]
+
+    ENTRY_DISPLAY_CHOICES = [
+        (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
+        (ENTRY_DISPLAY_ONE_LINE, "短い名前（所属）1行"),
+        (ENTRY_DISPLAY_NAME_ORG_2LINE, "フル名前/所属2段"),
     ]
 
     category = models.ForeignKey(
@@ -840,6 +855,12 @@ class TournamentBracket(models.Model):
         max_length=30,
         choices=CHAMPION_TEXT_CHOICES,
         default=CHAMPION_TEXT_AUTO
+    )
+
+    entry_display_mode = models.CharField(
+        max_length=30,
+        choices=ENTRY_DISPLAY_CHOICES,
+        default=ENTRY_DISPLAY_SHORT_ORG_2LINE
     )
 
     class Meta:

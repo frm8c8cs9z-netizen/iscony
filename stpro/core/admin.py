@@ -334,6 +334,7 @@ class TournamentBracketAdmin(admin.ModelAdmin):
         "category",
         "stage",
         "layout_type",
+        "entry_display_mode",
         "champion_display_mode",
         "champion_text_layout",
         "display_order",
@@ -343,6 +344,7 @@ class TournamentBracketAdmin(admin.ModelAdmin):
         "category",
         "stage",
         "layout_type",
+        "entry_display_mode",
         "champion_display_mode",
         "champion_text_layout",
     )

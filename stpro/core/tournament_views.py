@@ -309,7 +309,7 @@ def _estimate_svg_text_width(text):
     return width
 
 
-def _estimate_svg_name_width(round_data):
+def _estimate_svg_name_width(round_data, entry_display_mode):
     """番号列を除いた選手名表示幅をトーナメント内の文字から概算する。"""
 
     texts = []
@@ -320,7 +320,9 @@ def _estimate_svg_name_width(round_data):
                 if not entry:
                     continue
 
-                for line in build_entry_display_lines(entry):
+                for line in build_entry_display_lines(
+                        entry,
+                        mode=entry_display_mode):
                     texts.append(line["text"])
 
     if not texts:
@@ -788,7 +790,9 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "url": "",
             })
             for line_index, line in enumerate(
-                    build_entry_display_lines(entry)):
+                    build_entry_display_lines(
+                        entry,
+                        mode=svg["entry_display_mode"])):
                 svg["labels"].append({
                     "x": name_x,
                     "y": y - 7 + (line_index * 18),
@@ -883,7 +887,8 @@ def _build_svg_bracket_data(bracket, round_data):
     top = 70
     side_margin = 28
     round_gap = 42
-    name_width = _estimate_svg_name_width(round_data)
+    entry_display_mode = bracket.entry_display_mode
+    name_width = _estimate_svg_name_width(round_data, entry_display_mode)
     layout_type = _effective_svg_layout_type(bracket, round_data)
     number_width = 24
     shoulder = 44
@@ -1072,6 +1077,7 @@ def _build_svg_bracket_data(bracket, round_data):
         "final_half_width": final_half_width,
         "round_count": round_count,
         "layout_type": layout_type,
+        "entry_display_mode": entry_display_mode,
         "match_positions": match_positions,
         "advanced_entry_ids": advanced_entry_ids,
         "lines": [],
@@ -1184,7 +1190,9 @@ def _build_svg_bracket_data(bracket, round_data):
             )
             if should_show_entry:
                 for line_index, line in enumerate(
-                        build_entry_display_lines(entry)):
+                        build_entry_display_lines(
+                            entry,
+                            mode=svg["entry_display_mode"])):
                     text = line["text"]
 
                     if line_index == 0:

@@ -4245,6 +4245,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             self.bracket.champion_text_layout,
             TournamentBracket.CHAMPION_TEXT_AUTO,
         )
+        self.assertEqual(
+            self.bracket.entry_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_SHORT_ORG_2LINE,
+        )
 
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(
@@ -4285,6 +4289,43 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "1回戦1")
         self.assertContains(response, "選手1A・選手1B")
         self.assertContains(response, "2")
+
+    def test_tournament_bracket_detail_can_change_entry_display_mode(self):
+        self.bracket.entry_display_mode = (
+            TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.bracket.save()
+        self.entry1.player1_name = "山田　太郎"
+        self.entry1.player2_name = "佐藤　次郎"
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn("山田　太郎・佐藤　次郎", svg_content)
+        self.assertIn("第一クラブ", svg_content)
+        self.assertNotIn("山田・佐藤", svg_content)
 
     def test_tournament_bracket_detail_can_show_both_scores(self):
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
@@ -4374,6 +4415,9 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "name": self.bracket.name,
                 "layout_type": TournamentBracket.LAYOUT_SINGLE,
                 "score_display_mode": TournamentBracket.SCORE_DISPLAY_BOTH,
+                "entry_display_mode": (
+                    TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
+                ),
                 "champion_display_mode": (
                     TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
                 ),
@@ -4395,6 +4439,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(
             self.bracket.score_display_mode,
             TournamentBracket.SCORE_DISPLAY_BOTH,
+        )
+        self.assertEqual(
+            self.bracket.entry_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE,
         )
         self.assertEqual(
             self.bracket.champion_display_mode,
