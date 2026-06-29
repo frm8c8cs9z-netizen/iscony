@@ -4149,6 +4149,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             self.bracket.champion_display_mode,
             TournamentBracket.CHAMPION_DISPLAY_AUTO,
         )
+        self.assertEqual(
+            self.bracket.champion_text_layout,
+            TournamentBracket.CHAMPION_TEXT_AUTO,
+        )
 
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(
@@ -4222,9 +4226,15 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertIn('class="loser-score"', svg_content)
         self.assertIn('y="66"', svg_content)
-        self.assertIn('>\n                            4\n                        </text>', svg_content)
+        self.assertRegex(
+            svg_content,
+            r'class="loser-score"[\s\S]*?y="66"[\s\S]*?>\s*4\s*</text>',
+        )
         self.assertIn('y="126"', svg_content)
-        self.assertIn('>\n                            2\n                        </text>', svg_content)
+        self.assertRegex(
+            svg_content,
+            r'class="loser-score"[\s\S]*?y="126"[\s\S]*?>\s*2\s*</text>',
+        )
 
     def test_tournament_bracket_detail_can_hide_scores(self):
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_NONE
@@ -4275,6 +4285,9 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "champion_display_mode": (
                     TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
                 ),
+                "champion_text_layout": (
+                    TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+                ),
                 "display_order": self.bracket.display_order,
             },
         )
@@ -4294,6 +4307,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(
             self.bracket.champion_display_mode,
             TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE,
+        )
+        self.assertEqual(
+            self.bracket.champion_text_layout,
+            TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE,
         )
 
     def test_tournament_bracket_detail_draws_lines_before_result(self):
@@ -4793,6 +4810,52 @@ class TournamentScheduleBehaviorTests(TestCase):
         champion_label = svg_content.split('class="champion-text"', 1)[1]
         self.assertIn('dominant-baseline="middle"', champion_label)
         self.assertIn("選手1A・選手1B（第一クラブ）", svg_content)
+
+    def test_tournament_bracket_detail_can_show_champion_in_two_lines(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+        )
+        self.bracket.champion_text_layout = (
+            TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.bracket.save()
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn("<tspan", svg_content)
+        self.assertIn("選手1A・選手1B", svg_content)
+        self.assertIn("第一クラブ", svg_content)
+        self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
+        self.assertIn('class="champion-org-text"', svg_content)
+        self.assertIn('y="85.0"', svg_content)
+        self.assertIn('y="101.0"', svg_content)
 
     def test_tournament_bracket_detail_expands_single_layout_for_champion(self):
         self.entry1.organization = "とても長いクラブ名"

@@ -770,6 +770,9 @@ class TournamentBracket(models.Model):
     CHAMPION_DISPLAY_HORIZONTAL_1LINE = "horizontal_1line"
     CHAMPION_DISPLAY_VERTICAL_1LINE = "vertical_1line"
     CHAMPION_DISPLAY_NONE = "none"
+    CHAMPION_TEXT_AUTO = "auto"
+    CHAMPION_TEXT_ONE_LINE = "one_line"
+    CHAMPION_TEXT_NAME_ORG_2LINE = "name_org_2line"
 
     LAYOUT_CHOICES = [
         (LAYOUT_SPLIT, "左右表示"),
@@ -787,6 +790,12 @@ class TournamentBracket(models.Model):
         (CHAMPION_DISPLAY_HORIZONTAL_1LINE, "横書き1行"),
         (CHAMPION_DISPLAY_VERTICAL_1LINE, "縦書き1行"),
         (CHAMPION_DISPLAY_NONE, "表示しない"),
+    ]
+
+    CHAMPION_TEXT_CHOICES = [
+        (CHAMPION_TEXT_AUTO, "自動"),
+        (CHAMPION_TEXT_ONE_LINE, "1行"),
+        (CHAMPION_TEXT_NAME_ORG_2LINE, "名前/所属2段"),
     ]
 
     category = models.ForeignKey(
@@ -825,6 +834,12 @@ class TournamentBracket(models.Model):
         max_length=30,
         choices=CHAMPION_DISPLAY_CHOICES,
         default=CHAMPION_DISPLAY_AUTO
+    )
+
+    champion_text_layout = models.CharField(
+        max_length=30,
+        choices=CHAMPION_TEXT_CHOICES,
+        default=CHAMPION_TEXT_AUTO
     )
 
     class Meta:

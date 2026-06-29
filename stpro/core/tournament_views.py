@@ -159,6 +159,7 @@ def _svg_entry_with_org(entry):
 CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
 CHAMPION_ORIENTATION_VERTICAL = "vertical"
 CHAMPION_ORIENTATION_NONE = "none"
+CHAMPION_LINE_HEIGHT = 16
 
 
 def _resolve_svg_champion_display_mode(bracket, layout_type):
@@ -187,6 +188,76 @@ def _resolve_svg_champion_orientation(bracket, layout_type):
         return CHAMPION_ORIENTATION_VERTICAL
 
     return CHAMPION_ORIENTATION_HORIZONTAL
+
+
+def _resolve_svg_champion_text_layout(bracket):
+    """優勝者名の文字組みを決める。"""
+
+    if bracket.champion_text_layout == TournamentBracket.CHAMPION_TEXT_AUTO:
+        return TournamentBracket.CHAMPION_TEXT_ONE_LINE
+
+    return bracket.champion_text_layout
+
+
+def _svg_champion_text_lines(entry, bracket):
+    """優勝者表示用のテキスト行を返す。"""
+
+    text_layout = _resolve_svg_champion_text_layout(bracket)
+
+    if (
+        text_layout == TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+        and entry.display_organization
+    ):
+        return [
+            {
+                "text": entry.short_name,
+                "class": "",
+            },
+            {
+                "text": entry.display_organization,
+                "class": "champion-org-text",
+            },
+        ]
+
+    return [
+        {
+            "text": _svg_entry_with_org(entry),
+            "class": "",
+        }
+    ]
+
+
+def _svg_champion_line_text(lines):
+    """複数行指定から1行表示用の文字列を返す。"""
+
+    return lines[0]["text"] if lines else ""
+
+
+def _svg_champion_multiline_label(lines, x, center_y):
+    """複数行テキストを中央基準のSVGラベルへ変換する。"""
+
+    if len(lines) <= 1:
+        return []
+
+    start_y = center_y - (((len(lines) - 1) * CHAMPION_LINE_HEIGHT) / 2)
+
+    return [
+        {
+            "text": line["text"],
+            "class": line["class"],
+            "y": start_y + (index * CHAMPION_LINE_HEIGHT),
+        }
+        for index, line in enumerate(lines)
+    ]
+
+
+def _estimate_svg_champion_width(lines):
+    """優勝者表示の最大行幅を概算する。"""
+
+    return max(
+        [_estimate_svg_text_width(line["text"]) for line in lines],
+        default=0,
+    )
 
 
 def _estimate_svg_text_width(text):
@@ -267,7 +338,8 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     if not winner:
         return
 
-    text = _svg_entry_with_org(winner)
+    text_lines = _svg_champion_text_lines(winner, bracket)
+    text = _svg_champion_line_text(text_lines)
 
     if not text:
         return
@@ -328,6 +400,11 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
 
     if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT:
         line_top = final_y - 34
+        label_center_y = (
+            line_top
+            - 8
+            - (((len(text_lines) - 1) * CHAMPION_LINE_HEIGHT) / 2)
+        )
         svg["lines"].append({
             "x1": center_x,
             "y1": final_y,
@@ -337,10 +414,16 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         })
         svg["labels"].append({
             "x": center_x,
-            "y": line_top - 8,
+            "y": label_center_y,
             "text": text,
+            "lines": _svg_champion_multiline_label(
+                text_lines,
+                center_x,
+                label_center_y,
+            ),
             "class": "champion-text",
             "anchor": "middle",
+            "baseline": "middle",
             "url": "",
         })
         return
@@ -351,6 +434,11 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         "x": advance_x + 10,
         "y": position["center_y"],
         "text": text,
+        "lines": _svg_champion_multiline_label(
+            text_lines,
+            advance_x + 10,
+            position["center_y"],
+        ),
         "class": "champion-text",
         "anchor": "start",
         "baseline": "middle",
@@ -910,7 +998,10 @@ def _build_svg_bracket_data(bracket, round_data):
 
         if final_matches and final_matches[0].winner:
             final_match = final_matches[0]
-            champion_text = _svg_entry_with_org(final_match.winner)
+            champion_lines = _svg_champion_text_lines(
+                final_match.winner,
+                bracket,
+            )
             champion_orientation = _resolve_svg_champion_orientation(
                 bracket,
                 layout_type,
@@ -928,7 +1019,7 @@ def _build_svg_bracket_data(bracket, round_data):
                 width = max(
                     width,
                     champion_x
-                    + _estimate_svg_text_width(champion_text)
+                    + _estimate_svg_champion_width(champion_lines)
                     + side_margin,
                 )
     else:

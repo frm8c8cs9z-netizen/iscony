@@ -85,6 +85,12 @@
                 fill: #e00000;
             }
 
+            .champion-org-text {
+                font-size: 12px;
+                font-weight: 700;
+                fill: #e00000;
+            }
+
             .champion-vertical-text {
                 font-size: 14px;
                 font-weight: 700;
@@ -162,7 +168,17 @@
                                 text-anchor="{{ label.anchor }}"
                                 {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
                             >
-                                {{ label.text }}
+                                {% if label.lines %}
+                                    {% for line in label.lines %}
+                                        <tspan
+                                            x="{{ label.x }}"
+                                            y="{{ line.y }}"
+                                            {% if line.class %}class="{{ line.class }}"{% endif %}
+                                        >{{ line.text }}</tspan>
+                                    {% endfor %}
+                                {% else %}
+                                    {{ label.text }}
+                                {% endif %}
                             </text>
                         </a>
                     {% else %}
@@ -173,7 +189,17 @@
                             text-anchor="{{ label.anchor }}"
                             {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
                         >
-                            {{ label.text }}
+                            {% if label.lines %}
+                                {% for line in label.lines %}
+                                    <tspan
+                                        x="{{ label.x }}"
+                                        y="{{ line.y }}"
+                                        {% if line.class %}class="{{ line.class }}"{% endif %}
+                                    >{{ line.text }}</tspan>
+                                {% endfor %}
+                            {% else %}
+                                {{ label.text }}
+                            {% endif %}
                         </text>
                     {% endif %}
                 {% endfor %}
