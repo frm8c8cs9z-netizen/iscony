@@ -156,6 +156,11 @@ def _svg_entry_with_org(entry):
     return entry.short_name
 
 
+CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
+CHAMPION_ORIENTATION_VERTICAL = "vertical"
+CHAMPION_ORIENTATION_NONE = "none"
+
+
 def _resolve_svg_champion_display_mode(bracket, layout_type):
     """優勝者表示モードを実効レイアウト込みで決める。"""
 
@@ -168,6 +173,20 @@ def _resolve_svg_champion_display_mode(bracket, layout_type):
         return TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
 
     return mode
+
+
+def _resolve_svg_champion_orientation(bracket, layout_type):
+    """保存値をSVG描画用の表示方向へ変換する。"""
+
+    mode = _resolve_svg_champion_display_mode(bracket, layout_type)
+
+    if mode == TournamentBracket.CHAMPION_DISPLAY_NONE:
+        return CHAMPION_ORIENTATION_NONE
+
+    if mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE:
+        return CHAMPION_ORIENTATION_VERTICAL
+
+    return CHAMPION_ORIENTATION_HORIZONTAL
 
 
 def _estimate_svg_text_width(text):
@@ -253,12 +272,12 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     if not text:
         return
 
-    champion_display_mode = _resolve_svg_champion_display_mode(
+    champion_orientation = _resolve_svg_champion_orientation(
         bracket,
         svg["layout_type"],
     )
 
-    if champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_NONE:
+    if champion_orientation == CHAMPION_ORIENTATION_NONE:
         return
 
     position = svg["match_positions"].get(("left", final_match.id))
@@ -275,7 +294,7 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         join_x,
     )
 
-    if champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE:
+    if champion_orientation == CHAMPION_ORIENTATION_VERTICAL:
         if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
             svg["labels"].append({
                 "x": advance_x + 10,
@@ -827,14 +846,14 @@ def _build_svg_bracket_data(bracket, round_data):
             if final_match.winner
             else ""
         )
-        champion_display_mode = _resolve_svg_champion_display_mode(
+        champion_orientation = _resolve_svg_champion_orientation(
             bracket,
             layout_type,
         )
 
         if (
             champion_text
-            and champion_display_mode == TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
+            and champion_orientation == CHAMPION_ORIENTATION_VERTICAL
         ):
             if layout_type == TournamentBracket.LAYOUT_SPLIT:
                 final_y = _split_svg_final_y(
@@ -892,7 +911,7 @@ def _build_svg_bracket_data(bracket, round_data):
         if final_matches and final_matches[0].winner:
             final_match = final_matches[0]
             champion_text = _svg_entry_with_org(final_match.winner)
-            champion_display_mode = _resolve_svg_champion_display_mode(
+            champion_orientation = _resolve_svg_champion_orientation(
                 bracket,
                 layout_type,
             )
@@ -904,8 +923,7 @@ def _build_svg_bracket_data(bracket, round_data):
             )
 
             if (
-                champion_display_mode
-                == TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+                champion_orientation == CHAMPION_ORIENTATION_HORIZONTAL
             ):
                 width = max(
                     width,
