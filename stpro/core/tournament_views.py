@@ -15,6 +15,10 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from .display_helpers import (
+    build_entry_display_lines,
+    format_entry_one_line,
+)
 from .forms import (
     BracketGenerateForm,
     CSVUploadForm,
@@ -147,13 +151,7 @@ def _should_highlight_svg_advance(match, svg):
 def _svg_entry_with_org(entry):
     """SVG内に表示する短い名前＋所属名を返す。"""
 
-    if not entry:
-        return ""
-
-    if entry.display_organization:
-        return f"{entry.short_name}（{entry.display_organization}）"
-
-    return entry.short_name
+    return format_entry_one_line(entry)
 
 
 CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
@@ -322,10 +320,8 @@ def _estimate_svg_name_width(round_data):
                 if not entry:
                     continue
 
-                texts.append(entry.short_name)
-
-                if entry.display_organization:
-                    texts.append(f"（{entry.display_organization}）")
+                for line in build_entry_display_lines(entry):
+                    texts.append(line["text"])
 
     if not texts:
         return 160
@@ -791,21 +787,13 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "anchor": number_anchor,
                 "url": "",
             })
-            svg["labels"].append({
-                "x": name_x,
-                "y": y - 7,
-                "text": entry.short_name,
-                "class": "entry-text",
-                "anchor": text_anchor,
-                "url": "",
-            })
-
-            if entry.display_organization:
+            for line_index, line in enumerate(
+                    build_entry_display_lines(entry)):
                 svg["labels"].append({
                     "x": name_x,
-                    "y": y + 11,
-                    "text": f"（{entry.display_organization}）",
-                    "class": "entry-org-text",
+                    "y": y - 7 + (line_index * 18),
+                    "text": line["text"],
+                    "class": line["class"],
                     "anchor": text_anchor,
                     "url": "",
                 })
@@ -1195,21 +1183,18 @@ def _build_svg_bracket_data(bracket, round_data):
                 final_match.round_number,
             )
             if should_show_entry:
-                svg["labels"].append({
-                    "x": center_x,
-                    "y": y,
-                    "text": f"{entry.display_order} {entry.short_name}",
-                    "class": "entry-text",
-                    "anchor": "middle",
-                    "url": "",
-                })
+                for line_index, line in enumerate(
+                        build_entry_display_lines(entry)):
+                    text = line["text"]
 
-                if entry.display_organization:
+                    if line_index == 0:
+                        text = f"{entry.display_order} {text}"
+
                     svg["labels"].append({
                         "x": center_x,
-                        "y": y + 18,
-                        "text": f"（{entry.display_organization}）",
-                        "class": "entry-org-text",
+                        "y": y + (line_index * 18),
+                        "text": text,
+                        "class": line["class"],
                         "anchor": "middle",
                         "url": "",
                     })

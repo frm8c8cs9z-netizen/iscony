@@ -10,6 +10,12 @@ from django.template import Context, Template
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from .display_helpers import (
+    ENTRY_DISPLAY_NAME_ORG_2LINE,
+    ENTRY_DISPLAY_ONE_LINE,
+    build_entry_display_lines,
+    format_entry_one_line,
+)
 from .models import (
     Category,
     AdvancementSource,
@@ -55,6 +61,92 @@ from .snapshot_services import (
     restore_category_from_tournament_snapshot,
     restore_tournament_snapshot,
 )
+
+
+class EntryDisplayHelperTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="表示ヘルパーテスト",
+            code="DISPLAY",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選",
+            code="prelim",
+            display_order=1,
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="本戦",
+        )
+
+    def test_entry_display_helper_accepts_league_entry(self):
+        entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            organization="第一クラブ",
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+
+        self.assertEqual(
+            format_entry_one_line(entry),
+            "山田・佐藤（第一クラブ）",
+        )
+        self.assertEqual(
+            build_entry_display_lines(entry),
+            [
+                {"text": "山田・佐藤", "class": "entry-text"},
+                {"text": "（第一クラブ）", "class": "entry-org-text"},
+            ],
+        )
+
+    def test_entry_display_helper_accepts_tournament_entry(self):
+        entry = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="1",
+            display_order=1,
+            organization="第一クラブ",
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+
+        self.assertEqual(
+            build_entry_display_lines(
+                entry,
+                mode=ENTRY_DISPLAY_ONE_LINE,
+            ),
+            [
+                {
+                    "text": "山田・佐藤（第一クラブ）",
+                    "class": "entry-text",
+                },
+            ],
+        )
+        self.assertEqual(
+            build_entry_display_lines(
+                entry,
+                mode=ENTRY_DISPLAY_NAME_ORG_2LINE,
+            ),
+            [
+                {"text": "山田　太郎・佐藤　次郎", "class": "entry-text"},
+                {"text": "第一クラブ", "class": "entry-org-text"},
+            ],
+        )
 
 
 class TournamentAdvancementTests(TestCase):
