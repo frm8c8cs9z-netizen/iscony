@@ -330,10 +330,11 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         return
     svg["labels"].append({
         "x": advance_x + 10,
-        "y": position["center_y"] - 8,
+        "y": position["center_y"],
         "text": text,
         "class": "champion-text",
         "anchor": "start",
+        "baseline": "middle",
         "url": "",
     })
 

@@ -4790,6 +4790,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('class="champion-text"', svg_content)
         self.assertIn('x="232"', svg_content)
         self.assertIn('text-anchor="start"', svg_content)
+        champion_label = svg_content.split('class="champion-text"', 1)[1]
+        self.assertIn('dominant-baseline="middle"', champion_label)
         self.assertIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_expands_single_layout_for_champion(self):
