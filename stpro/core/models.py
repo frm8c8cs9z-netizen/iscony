@@ -83,7 +83,13 @@ class Tournament(models.Model):
         on_delete=models.SET_NULL
     )
 
-    default_entry_display_mode = models.CharField(
+    default_league_entry_display_mode = models.CharField(
+        max_length=30,
+        choices=ENTRY_DISPLAY_CHOICES,
+        default=ENTRY_DISPLAY_SHORT_ORG_2LINE
+    )
+
+    default_tournament_entry_display_mode = models.CharField(
         max_length=30,
         choices=ENTRY_DISPLAY_CHOICES,
         default=ENTRY_DISPLAY_SHORT_ORG_2LINE

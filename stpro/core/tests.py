@@ -11,6 +11,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .display_helpers import (
+    ENTRY_DISPLAY_TARGET_LEAGUE,
+    ENTRY_DISPLAY_TARGET_TOURNAMENT,
     ENTRY_DISPLAY_NAME_ORG_2LINE,
     ENTRY_DISPLAY_ONE_LINE,
     build_entry_display_lines,
@@ -150,14 +152,31 @@ class EntryDisplayHelperTests(TestCase):
         )
 
     def test_entry_display_mode_resolves_to_tournament_default(self):
-        self.tournament.default_entry_display_mode = (
+        self.tournament.default_league_entry_display_mode = (
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
         self.tournament.save()
 
         self.assertEqual(
-            resolve_entry_display_mode(tournament=self.tournament),
+            resolve_entry_display_mode(
+                tournament=self.tournament,
+                target=ENTRY_DISPLAY_TARGET_LEAGUE,
+            ),
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE,
+        )
+
+    def test_entry_display_mode_resolves_to_tournament_bracket_default(self):
+        self.tournament.default_tournament_entry_display_mode = (
+            Tournament.ENTRY_DISPLAY_ONE_LINE
+        )
+        self.tournament.save()
+
+        self.assertEqual(
+            resolve_entry_display_mode(
+                tournament=self.tournament,
+                target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
+            ),
+            Tournament.ENTRY_DISPLAY_ONE_LINE,
         )
 
 
@@ -1110,7 +1129,7 @@ class RoundRobinMeetingTests(TestCase):
         self.assertNotContains(response, retire_url)
 
     def test_category_detail_uses_tournament_default_entry_display_mode(self):
-        self.tournament.default_entry_display_mode = (
+        self.tournament.default_league_entry_display_mode = (
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
         self.tournament.save()
@@ -4104,7 +4123,8 @@ class MaintenanceMenuTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "カテゴリ別クイック操作")
         self.assertContains(response, "表示設定")
-        self.assertContains(response, "参加者表示の大会デフォルト")
+        self.assertContains(response, "リーグ参加者表示")
+        self.assertContains(response, "トーナメント参加者表示")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "Stage一覧")
         self.assertContains(response, "トーナメント一覧・個別設定")
@@ -4141,7 +4161,7 @@ class MaintenanceMenuTests(TestCase):
             content.index(later_category.name),
         )
 
-    def test_tournament_settings_can_update_default_entry_display_mode(self):
+    def test_tournament_settings_can_update_default_entry_display_modes(self):
         tournament = Tournament.objects.create(
             name="大会設定テスト",
             code="SETTINGTEST",
@@ -4153,8 +4173,11 @@ class MaintenanceMenuTests(TestCase):
                 kwargs={"code": tournament.code},
             ),
             {
-                "default_entry_display_mode": (
+                "default_league_entry_display_mode": (
                     Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+                ),
+                "default_tournament_entry_display_mode": (
+                    Tournament.ENTRY_DISPLAY_ONE_LINE
                 ),
             },
         )
@@ -4168,8 +4191,12 @@ class MaintenanceMenuTests(TestCase):
         )
         tournament.refresh_from_db()
         self.assertEqual(
-            tournament.default_entry_display_mode,
+            tournament.default_league_entry_display_mode,
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE,
+        )
+        self.assertEqual(
+            tournament.default_tournament_entry_display_mode,
+            Tournament.ENTRY_DISPLAY_ONE_LINE,
         )
 
 
@@ -4347,7 +4374,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "設定")
 
     def test_tournament_bracket_detail_uses_tournament_default_entry_display_mode(self):
-        self.tournament.default_entry_display_mode = (
+        self.tournament.default_tournament_entry_display_mode = (
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
         self.tournament.save()

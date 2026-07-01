@@ -17,6 +17,7 @@ from django.urls import reverse
 
 from .display_helpers import (
     build_entry_display_lines,
+    ENTRY_DISPLAY_TARGET_TOURNAMENT,
     format_entry_one_line,
     resolve_entry_display_mode,
 )
@@ -891,6 +892,7 @@ def _build_svg_bracket_data(bracket, round_data):
     entry_display_mode = resolve_entry_display_mode(
         explicit_mode=bracket.entry_display_mode,
         tournament=bracket.category.tournament,
+        target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
     )
     name_width = _estimate_svg_name_width(round_data, entry_display_mode)
     layout_type = _effective_svg_layout_type(bracket, round_data)

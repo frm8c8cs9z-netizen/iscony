@@ -73,11 +73,13 @@ class TournamentAdmin(admin.ModelAdmin):
         "code",
         "start_date",
         "is_public",
-        "default_entry_display_mode",
+        "default_league_entry_display_mode",
+        "default_tournament_entry_display_mode",
     )
 
     list_filter = (
-        "default_entry_display_mode",
+        "default_league_entry_display_mode",
+        "default_tournament_entry_display_mode",
         "is_public",
     )
 

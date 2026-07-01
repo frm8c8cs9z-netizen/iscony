@@ -66,8 +66,11 @@
 </p>
 
 <p>
-    参加者表示の大会デフォルト:
-    <strong>{{ tournament.get_default_entry_display_mode_display }}</strong>
+    リーグ参加者表示:
+    <strong>{{ tournament.get_default_league_entry_display_mode_display }}</strong>
+    ／
+    トーナメント参加者表示:
+    <strong>{{ tournament.get_default_tournament_entry_display_mode_display }}</strong>
     ／
     <a href="{% url 'tournament_settings' tournament.code %}">
         大会設定

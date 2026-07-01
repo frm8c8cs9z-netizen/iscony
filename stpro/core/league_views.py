@@ -17,6 +17,7 @@ from django.urls import reverse
 
 from .display_helpers import (
     build_entry_display_lines,
+    ENTRY_DISPLAY_TARGET_LEAGUE,
     resolve_entry_display_mode,
 )
 from .forms import ExtraRoundRobinMatchForm, LeagueEntryEditForm
@@ -70,6 +71,7 @@ def category_detail(request, category_id):
     group_data = []
     entry_display_mode = resolve_entry_display_mode(
         tournament=category.tournament,
+        target=ENTRY_DISPLAY_TARGET_LEAGUE,
     )
 
     for group in groups:
