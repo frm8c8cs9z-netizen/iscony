@@ -30,6 +30,7 @@ from .models import (
     Schedule,
     ScheduleBlock,
     ScheduleReplacementHistory,
+    Tournament,
 )
 from .services import (
     cancel_pair_retirement,
@@ -73,6 +74,10 @@ def category_detail(request, category_id):
         tournament=category.tournament,
         target=ENTRY_DISPLAY_TARGET_LEAGUE,
     )
+    entry_display_mode_label = dict(Tournament.ENTRY_DISPLAY_CHOICES).get(
+        entry_display_mode,
+        entry_display_mode,
+    )
 
     for group in groups:
         pairs = LeagueEntry.objects.filter(
@@ -101,6 +106,20 @@ def category_detail(request, category_id):
             "pair1__display_order",
             "pair2__display_order",
         )
+        extra_match_rows = [
+            {
+                "match": match,
+                "pair1_display_lines": build_entry_display_lines(
+                    match.pair1,
+                    mode=entry_display_mode,
+                ),
+                "pair2_display_lines": build_entry_display_lines(
+                    match.pair2,
+                    mode=entry_display_mode,
+                ),
+            }
+            for match in extra_matches
+        ]
         replacement_histories = ScheduleReplacementHistory.objects.filter(
             replacement_match__group=group,
             reverted_at__isnull=True,
@@ -355,13 +374,26 @@ def category_detail(request, category_id):
 
                     tie_rows.append({
                         "pair": row_pair,
+                        "pair_display_lines": build_entry_display_lines(
+                            row_pair,
+                            mode=entry_display_mode,
+                        ),
                         "scores": row_scores,
                         "stat": tie_stats[row_pair.id],
                     })
 
                 tie_tables.append({
                     "wins": wins,
-                    "pairs": tied_pairs,
+                    "pairs": [
+                        {
+                            "pair": pair,
+                            "display_lines": build_entry_display_lines(
+                                pair,
+                                mode=entry_display_mode,
+                            ),
+                        }
+                        for pair in tied_pairs
+                    ],
                     "rows": tie_rows,
                 })
 
@@ -370,7 +402,7 @@ def category_detail(request, category_id):
             "pairs": pairs,
             "table_rows": table_rows,
             "tie_tables": tie_tables,
-            "extra_matches": extra_matches,
+            "extra_matches": extra_match_rows,
             "replacement_histories": replacement_histories,
         })
 
@@ -381,6 +413,7 @@ def category_detail(request, category_id):
             "category": category,
             "group_data": group_data,
             "tournament": category.tournament,
+            "entry_display_mode_label": entry_display_mode_label,
         }
     )
 

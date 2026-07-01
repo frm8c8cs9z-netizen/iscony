@@ -9,6 +9,13 @@
 <h2>
     {{ category.name }}
 </h2>
+
+<p>
+    リーグ参加者表示:
+    <strong>{{ entry_display_mode_label }}</strong>
+    （大会デフォルト）
+</p>
+
 <p>
 
     <a href="{% url 'calculate_category_ranking' category.id %}">
@@ -170,25 +177,31 @@
                     <th>順位計算</th>
                     <th>理由</th>
                 </tr>
-                {% for match in data.extra_matches %}
+                {% for row in data.extra_matches %}
                     <tr>
                         <td>
-                            <a href="{% url 'input_match_score' match.id %}?next={% url 'category_detail' category.id %}#group-{{ data.group.id }}">
-                                {{ match.pair1.pair_code }} {{ match.pair1.short_name }}
+                            <a href="{% url 'input_match_score' row.match.id %}?next={% url 'category_detail' category.id %}#group-{{ data.group.id }}">
+                                {{ row.match.pair1.pair_code }}
+                                {% for line in row.pair1_display_lines %}
+                                    {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
                                 vs
-                                {{ match.pair2.pair_code }} {{ match.pair2.short_name }}
+                                {{ row.match.pair2.pair_code }}
+                                {% for line in row.pair2_display_lines %}
+                                    {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                                {% endfor %}
                             </a>
                         </td>
-                        <td>{{ match.meeting_number }}回目</td>
-                        <td>{{ match.score_display }}</td>
+                        <td>{{ row.match.meeting_number }}回目</td>
+                        <td>{{ row.match.score_display }}</td>
                         <td>
-                            {% if match.counts_for_ranking %}
+                            {% if row.match.counts_for_ranking %}
                                 対象
                             {% else %}
                                 対象外
                             {% endif %}
                         </td>
-                        <td>{{ match.note|default:"-" }}</td>
+                        <td>{{ row.match.note|default:"-" }}</td>
                     </tr>
                 {% endfor %}
             </table>
@@ -255,9 +268,9 @@
             <th></th>
             <th></th>
 
-            {% for pair in tie_table.pairs %}
+            {% for pair_data in tie_table.pairs %}
                 <th>
-                    {{ pair.pair_code }}
+                    {{ pair_data.pair.pair_code }}
                 </th>
             {% endfor %}
 
@@ -274,9 +287,9 @@
                 </th>
 
                 <th>
-                    {{ row.pair.display_name }}
-                    <br>
-                    ({{ row.pair.display_organization }})
+                    {% for line in row.pair_display_lines %}
+                        {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                    {% endfor %}
                 </th>
 
                 {% for score in row.scores %}

@@ -1076,6 +1076,14 @@ class RoundRobinMeetingTests(TestCase):
         self.assertEqual((ranking2.wins, ranking2.losses), (0, 1))
 
     def test_extra_meeting_is_displayed_below_league_table(self):
+        self.tournament.default_league_entry_display_mode = (
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.tournament.save()
+        self.entry1.player1_name = "山田　太郎"
+        self.entry1.player2_name = "佐藤　次郎"
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
         RoundRobinMatch.objects.create(
             group=self.group,
             pair1=self.entry1,
@@ -1100,6 +1108,8 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, "追加試合")
         self.assertContains(response, "2回目")
         self.assertContains(response, "リタイアに伴う追加対戦")
+        self.assertContains(response, "山田　太郎・佐藤　次郎")
+        self.assertContains(response, "第一クラブ")
 
     def test_league_entry_action_link_is_displayed_on_player_name(self):
         RoundRobinMatch.objects.create(
@@ -1151,6 +1161,8 @@ class RoundRobinMeetingTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "リーグ参加者表示")
+        self.assertContains(response, "フル名前/所属2段")
         self.assertContains(response, "山田　太郎・佐藤　次郎")
         self.assertContains(response, "第一クラブ")
         self.assertNotContains(response, "山田・佐藤")
