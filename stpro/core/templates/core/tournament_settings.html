@@ -1,0 +1,27 @@
+{% extends "core/base.html" %}
+
+{% block title %}大会設定{% endblock %}
+
+{% block content %}
+
+<h2>{{ tournament.name }} 大会設定</h2>
+
+<p>
+    大会全体の標準設定を管理します。個別のリーグ枠やトーナメントで上書きしない限り、この設定が使われます。
+</p>
+
+<h3>表示設定</h3>
+
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">保存</button>
+</form>
+
+<p>
+    <a href="{% url 'maintenance_menu' tournament.code %}">
+        管理メニューへ戻る
+    </a>
+</p>
+
+{% endblock %}

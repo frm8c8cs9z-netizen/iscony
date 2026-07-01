@@ -30,6 +30,12 @@ urlpatterns = [
         name='tournament_detail'
     ),
 
+    path(
+        "tournament/<str:code>/settings/",
+        views.tournament_settings,
+        name="tournament_settings",
+    ),
+
     # =====================================================
     # カテゴリ詳細
     # =====================================================

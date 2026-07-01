@@ -29,6 +29,7 @@ from .forms import (
     ScheduleEditForm,
     ScheduleMoveForm,
     CategoryForm,
+    TournamentSettingsForm,
 )
 
 from .services import (
@@ -268,6 +269,39 @@ def maintenance_menu(request, code):
             "tournament": tournament,
             "categories": categories,
         }
+    )
+
+
+def tournament_settings(request, code):
+    """大会全体のデフォルト設定を編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+
+    if request.method == "POST":
+        form = TournamentSettingsForm(
+            request.POST,
+            instance=tournament,
+        )
+
+        if form.is_valid():
+            form.save()
+            return redirect(
+                "maintenance_menu",
+                code=tournament.code,
+            )
+    else:
+        form = TournamentSettingsForm(instance=tournament)
+
+    return render(
+        request,
+        "core/tournament_settings.html",
+        {
+            "tournament": tournament,
+            "form": form,
+        },
     )
 
 

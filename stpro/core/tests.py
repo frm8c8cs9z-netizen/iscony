@@ -4104,8 +4104,17 @@ class MaintenanceMenuTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "カテゴリ別クイック操作")
         self.assertContains(response, "表示設定")
+        self.assertContains(response, "参加者表示の大会デフォルト")
+        self.assertContains(response, "大会設定")
         self.assertContains(response, "Stage一覧")
         self.assertContains(response, "トーナメント一覧・個別設定")
+        self.assertContains(
+            response,
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+        )
         self.assertContains(
             response,
             reverse(
@@ -4130,6 +4139,37 @@ class MaintenanceMenuTests(TestCase):
         self.assertLess(
             content.index(first_category.name),
             content.index(later_category.name),
+        )
+
+    def test_tournament_settings_can_update_default_entry_display_mode(self):
+        tournament = Tournament.objects.create(
+            name="大会設定テスト",
+            code="SETTINGTEST",
+        )
+
+        response = self.client.post(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+            {
+                "default_entry_display_mode": (
+                    Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+                ),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "maintenance_menu",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        tournament.refresh_from_db()
+        self.assertEqual(
+            tournament.default_entry_display_mode,
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE,
         )
 
 

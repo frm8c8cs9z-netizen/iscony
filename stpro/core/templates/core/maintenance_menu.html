@@ -65,6 +65,15 @@
     大会デフォルト設定を基本にしつつ、必要なトーナメントだけ片山・両山、参加者表示、優勝者表示を個別に調整します。
 </p>
 
+<p>
+    参加者表示の大会デフォルト:
+    <strong>{{ tournament.get_default_entry_display_mode_display }}</strong>
+    ／
+    <a href="{% url 'tournament_settings' tournament.code %}">
+        大会設定
+    </a>
+</p>
+
 <table>
     <tr>
         <th>カテゴリ</th>

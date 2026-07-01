@@ -4,6 +4,7 @@ from .models import (
     LeagueEntry,
     Category,
     Group,
+    Tournament,
     TournamentBracket,
     TournamentMatch,
     Schedule,
@@ -317,6 +318,21 @@ class CategoryForm(forms.ModelForm):
             "name",
             "display_order",
         ]
+
+
+class TournamentSettingsForm(forms.ModelForm):
+
+    class Meta:
+
+        model = Tournament
+
+        fields = [
+            "default_entry_display_mode",
+        ]
+
+        labels = {
+            "default_entry_display_mode": "参加者表示の大会デフォルト",
+        }
 
 
 class TournamentBracketForm(forms.ModelForm):

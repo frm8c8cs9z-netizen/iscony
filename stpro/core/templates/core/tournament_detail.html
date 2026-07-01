@@ -17,6 +17,10 @@
         管理メニュー
     </a>
 
+    <a href="{% url 'tournament_settings' tournament.code %}">
+        大会設定
+    </a>
+
     <a href="{% url 'schedule_view' tournament.code %}">
         試合進行表
     </a>
