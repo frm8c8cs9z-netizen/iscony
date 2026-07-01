@@ -11,7 +11,6 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .display_helpers import (
-    ENTRY_DISPLAY_INHERIT,
     ENTRY_DISPLAY_NAME_ORG_2LINE,
     ENTRY_DISPLAY_ONE_LINE,
     build_entry_display_lines,
@@ -150,13 +149,15 @@ class EntryDisplayHelperTests(TestCase):
             ],
         )
 
-    def test_entry_display_mode_inherit_resolves_to_system_default(self):
-        self.stage.entry_display_mode = ENTRY_DISPLAY_INHERIT
-        self.stage.save()
+    def test_entry_display_mode_resolves_to_tournament_default(self):
+        self.tournament.default_entry_display_mode = (
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.tournament.save()
 
         self.assertEqual(
-            resolve_entry_display_mode(stage=self.stage),
-            Stage.ENTRY_DISPLAY_SHORT_ORG_2LINE,
+            resolve_entry_display_mode(tournament=self.tournament),
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE,
         )
 
 
@@ -1108,9 +1109,11 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, action_url)
         self.assertNotContains(response, retire_url)
 
-    def test_category_detail_uses_stage_entry_display_mode(self):
-        self.stage.entry_display_mode = Stage.ENTRY_DISPLAY_NAME_ORG_2LINE
-        self.stage.save()
+    def test_category_detail_uses_tournament_default_entry_display_mode(self):
+        self.tournament.default_entry_display_mode = (
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.tournament.save()
         self.entry1.player1_name = "山田　太郎"
         self.entry1.player2_name = "佐藤　次郎"
         self.entry1.organization = "第一クラブ"
@@ -4101,8 +4104,8 @@ class MaintenanceMenuTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "カテゴリ別クイック操作")
         self.assertContains(response, "表示設定")
-        self.assertContains(response, "Stage一覧・表示設定")
-        self.assertContains(response, "トーナメント一覧・表示設定")
+        self.assertContains(response, "Stage一覧")
+        self.assertContains(response, "トーナメント一覧・個別設定")
         self.assertContains(
             response,
             reverse(
@@ -4202,15 +4205,6 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "Aリーグ")
         self.assertContains(response, "本戦")
         self.assertContains(response, "決勝トーナメント")
-        self.assertContains(response, "参加者表示")
-        self.assertContains(response, "大会デフォルトを使う")
-        self.assertContains(
-            response,
-            reverse(
-                "edit_stage_display_settings",
-                kwargs={"stage_id": league_stage.id},
-            ),
-        )
         self.assertContains(response, "0/1枠反映済み")
         self.assertContains(response, "後続Stageへ反映")
         self.assertContains(
@@ -4223,46 +4217,6 @@ class CategoryStageOverviewTests(TestCase):
                 },
             ),
         )
-
-    def test_stage_display_settings_can_be_updated(self):
-        tournament = Tournament.objects.create(
-            name="Stage表示設定大会",
-            code="STAGESETTING",
-        )
-        category = Category.objects.create(
-            tournament=tournament,
-            name="女子A",
-        )
-        stage = Stage.objects.create(
-            category=category,
-            name="予選リーグ",
-            stage_type=Stage.TYPE_LEAGUE,
-            display_order=1,
-        )
-
-        response = self.client.post(
-            reverse(
-                "edit_stage_display_settings",
-                kwargs={"stage_id": stage.id},
-            ),
-            {
-                "entry_display_mode": Stage.ENTRY_DISPLAY_NAME_ORG_2LINE,
-            },
-        )
-
-        self.assertRedirects(
-            response,
-            reverse(
-                "category_stage_overview",
-                kwargs={"category_id": category.id},
-            ),
-        )
-        stage.refresh_from_db()
-        self.assertEqual(
-            stage.entry_display_mode,
-            Stage.ENTRY_DISPLAY_NAME_ORG_2LINE,
-        )
-
 
 class TournamentScheduleBehaviorTests(TestCase):
 
@@ -4334,7 +4288,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertEqual(
             self.bracket.entry_display_mode,
-            TournamentBracket.ENTRY_DISPLAY_SHORT_ORG_2LINE,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
 
     def test_bracket_list_shows_display_settings(self):
@@ -4348,9 +4302,44 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "参加者表示")
         self.assertContains(response, "優勝者表示")
-        self.assertContains(response, "短い名前/所属2段")
+        self.assertContains(response, "大会デフォルトを使う")
         self.assertContains(response, "自動")
         self.assertContains(response, "設定")
+
+    def test_tournament_bracket_detail_uses_tournament_default_entry_display_mode(self):
+        self.tournament.default_entry_display_mode = (
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.tournament.save()
+        self.bracket.entry_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.save()
+        self.entry1.player1_name = "山田　太郎"
+        self.entry1.player2_name = "佐藤　次郎"
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "山田　太郎・佐藤　次郎")
+        self.assertContains(response, "第一クラブ")
+        self.assertNotContains(response, "山田・佐藤")
 
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(

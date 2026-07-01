@@ -73,6 +73,12 @@ class TournamentAdmin(admin.ModelAdmin):
         "code",
         "start_date",
         "is_public",
+        "default_entry_display_mode",
+    )
+
+    list_filter = (
+        "default_entry_display_mode",
+        "is_public",
     )
 
     search_fields = (
@@ -117,7 +123,6 @@ class StageAdmin(admin.ModelAdmin):
         "name",
         "category",
         "stage_type",
-        "entry_display_mode",
         "display_order",
     )
 
@@ -129,7 +134,6 @@ class StageAdmin(admin.ModelAdmin):
     list_filter = (
         "category",
         "stage_type",
-        "entry_display_mode",
     )
 
     readonly_fields = (

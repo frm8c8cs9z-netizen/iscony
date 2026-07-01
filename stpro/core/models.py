@@ -44,6 +44,16 @@ class ScoreSheetTemplate(models.Model):
 # =========================================================
 class Tournament(models.Model):
 
+    ENTRY_DISPLAY_SHORT_ORG_2LINE = DISPLAY_SHORT_ORG_2LINE
+    ENTRY_DISPLAY_ONE_LINE = DISPLAY_ONE_LINE
+    ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
+
+    ENTRY_DISPLAY_CHOICES = [
+        (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
+        (ENTRY_DISPLAY_ONE_LINE, "短い名前（所属）1行"),
+        (ENTRY_DISPLAY_NAME_ORG_2LINE, "フル名前/所属2段"),
+    ]
+
     name = models.CharField(
         max_length=100
     )
@@ -71,6 +81,12 @@ class Tournament(models.Model):
         null=True,
         blank=True,
         on_delete=models.SET_NULL
+    )
+
+    default_entry_display_mode = models.CharField(
+        max_length=30,
+        choices=ENTRY_DISPLAY_CHOICES,
+        default=ENTRY_DISPLAY_SHORT_ORG_2LINE
     )
 
     def save(self, *args, **kwargs):
@@ -125,21 +141,10 @@ class Stage(models.Model):
 
     TYPE_LEAGUE = "league"
     TYPE_TOURNAMENT = "tournament"
-    ENTRY_DISPLAY_INHERIT = DISPLAY_INHERIT
-    ENTRY_DISPLAY_SHORT_ORG_2LINE = DISPLAY_SHORT_ORG_2LINE
-    ENTRY_DISPLAY_ONE_LINE = DISPLAY_ONE_LINE
-    ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
 
     STAGE_TYPE_CHOICES = [
         (TYPE_LEAGUE, "リーグ"),
         (TYPE_TOURNAMENT, "トーナメント"),
-    ]
-
-    ENTRY_DISPLAY_CHOICES = [
-        (ENTRY_DISPLAY_INHERIT, "大会デフォルトを使う"),
-        (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
-        (ENTRY_DISPLAY_ONE_LINE, "短い名前（所属）1行"),
-        (ENTRY_DISPLAY_NAME_ORG_2LINE, "フル名前/所属2段"),
     ]
 
     category = models.ForeignKey(
@@ -163,12 +168,6 @@ class Stage(models.Model):
 
     display_order = models.IntegerField(
         default=0
-    )
-
-    entry_display_mode = models.CharField(
-        max_length=30,
-        choices=ENTRY_DISPLAY_CHOICES,
-        default=ENTRY_DISPLAY_INHERIT
     )
 
     class Meta:
@@ -825,7 +824,9 @@ class TournamentBracket(models.Model):
         (CHAMPION_TEXT_NAME_ORG_2LINE, "名前/所属2段"),
     ]
 
+    ENTRY_DISPLAY_INHERIT = DISPLAY_INHERIT
     ENTRY_DISPLAY_CHOICES = [
+        (ENTRY_DISPLAY_INHERIT, "大会デフォルトを使う"),
         (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
         (ENTRY_DISPLAY_ONE_LINE, "短い名前（所属）1行"),
         (ENTRY_DISPLAY_NAME_ORG_2LINE, "フル名前/所属2段"),
@@ -878,7 +879,7 @@ class TournamentBracket(models.Model):
     entry_display_mode = models.CharField(
         max_length=30,
         choices=ENTRY_DISPLAY_CHOICES,
-        default=ENTRY_DISPLAY_SHORT_ORG_2LINE
+        default=ENTRY_DISPLAY_INHERIT
     )
 
     class Meta:

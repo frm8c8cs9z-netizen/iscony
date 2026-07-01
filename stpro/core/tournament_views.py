@@ -18,6 +18,7 @@ from django.urls import reverse
 from .display_helpers import (
     build_entry_display_lines,
     format_entry_one_line,
+    resolve_entry_display_mode,
 )
 from .forms import (
     BracketGenerateForm,
@@ -887,7 +888,10 @@ def _build_svg_bracket_data(bracket, round_data):
     top = 70
     side_margin = 28
     round_gap = 42
-    entry_display_mode = bracket.entry_display_mode
+    entry_display_mode = resolve_entry_display_mode(
+        explicit_mode=bracket.entry_display_mode,
+        tournament=bracket.category.tournament,
+    )
     name_width = _estimate_svg_name_width(round_data, entry_display_mode)
     layout_type = _effective_svg_layout_type(bracket, round_data)
     number_width = 24

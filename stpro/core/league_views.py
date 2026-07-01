@@ -68,13 +68,11 @@ def category_detail(request, category_id):
 
     # テンプレートでリーグごとに描画しやすい形へ整える。
     group_data = []
+    entry_display_mode = resolve_entry_display_mode(
+        tournament=category.tournament,
+    )
 
     for group in groups:
-        entry_display_mode = resolve_entry_display_mode(
-            stage=group.stage,
-            tournament=category.tournament,
-        )
-
         pairs = LeagueEntry.objects.filter(
             group=group
         ).order_by(

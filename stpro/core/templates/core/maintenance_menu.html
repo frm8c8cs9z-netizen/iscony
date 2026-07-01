@@ -62,26 +62,26 @@
 <h3>表示設定</h3>
 
 <p>
-    Stageごとのリーグ表示や、トーナメント表の片山・両山、参加者表示、優勝者表示を確認・変更します。
+    大会デフォルト設定を基本にしつつ、必要なトーナメントだけ片山・両山、参加者表示、優勝者表示を個別に調整します。
 </p>
 
 <table>
     <tr>
         <th>カテゴリ</th>
-        <th>Stage表示</th>
-        <th>トーナメント表示</th>
+        <th>Stage一覧</th>
+        <th>トーナメント個別設定</th>
     </tr>
     {% for category in categories %}
         <tr>
             <td>{{ category.name }}</td>
             <td>
                 <a href="{% url 'category_stage_overview' category.id %}">
-                    Stage一覧・表示設定
+                    Stage一覧
                 </a>
             </td>
             <td>
                 <a href="{% url 'bracket_list' tournament.code %}">
-                    トーナメント一覧・表示設定
+                    トーナメント一覧・個別設定
                 </a>
             </td>
         </tr>

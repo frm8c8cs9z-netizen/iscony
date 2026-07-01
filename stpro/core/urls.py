@@ -46,12 +46,6 @@ urlpatterns = [
     ),
 
     path(
-        "stage/<int:stage_id>/display-settings/",
-        stage_views.edit_stage_display_settings,
-        name="edit_stage_display_settings",
-    ),
-
-    path(
         "category/<int:category_id>/snapshots/",
         snapshot_views.category_snapshot_list,
         name="category_snapshot_list",
