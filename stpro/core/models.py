@@ -53,6 +53,9 @@ class Tournament(models.Model):
     CHAMPION_DISPLAY_HORIZONTAL_1LINE = "horizontal_1line"
     CHAMPION_DISPLAY_VERTICAL_1LINE = "vertical_1line"
     CHAMPION_DISPLAY_NONE = "none"
+    SCORE_DISPLAY_LOSER = "loser"
+    SCORE_DISPLAY_BOTH = "both"
+    SCORE_DISPLAY_NONE = "none"
 
     ENTRY_DISPLAY_CHOICES = [
         (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
@@ -70,6 +73,12 @@ class Tournament(models.Model):
         (CHAMPION_DISPLAY_HORIZONTAL_1LINE, "横書き1行"),
         (CHAMPION_DISPLAY_VERTICAL_1LINE, "縦書き1行"),
         (CHAMPION_DISPLAY_NONE, "表示しない"),
+    ]
+
+    SCORE_DISPLAY_CHOICES = [
+        (SCORE_DISPLAY_LOSER, "負けのみ"),
+        (SCORE_DISPLAY_BOTH, "勝ち負け両方"),
+        (SCORE_DISPLAY_NONE, "表示しない"),
     ]
 
     name = models.CharField(
@@ -123,6 +132,12 @@ class Tournament(models.Model):
         max_length=30,
         choices=CHAMPION_DISPLAY_CHOICES,
         default=CHAMPION_DISPLAY_AUTO
+    )
+
+    default_tournament_score_display_mode = models.CharField(
+        max_length=20,
+        choices=SCORE_DISPLAY_CHOICES,
+        default=SCORE_DISPLAY_LOSER
     )
 
     def save(self, *args, **kwargs):
@@ -844,6 +859,7 @@ class TournamentBracket(models.Model):
     ]
 
     SCORE_DISPLAY_CHOICES = [
+        (DISPLAY_INHERIT, "大会デフォルトを使う"),
         (SCORE_DISPLAY_LOSER, "負けのみ"),
         (SCORE_DISPLAY_BOTH, "勝ち負け両方"),
         (SCORE_DISPLAY_NONE, "表示しない"),
@@ -900,7 +916,7 @@ class TournamentBracket(models.Model):
     score_display_mode = models.CharField(
         max_length=20,
         choices=SCORE_DISPLAY_CHOICES,
-        default=SCORE_DISPLAY_LOSER
+        default=DISPLAY_INHERIT
     )
 
     champion_display_mode = models.CharField(

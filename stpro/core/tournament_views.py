@@ -83,9 +83,9 @@ def _entry_score_text(match, side):
 def _should_show_svg_score(match, side):
     """トーナメント表上で指定した側のスコアを表示するか判定する。"""
 
-    bracket = match.bracket
+    score_display_mode = _resolve_svg_score_display_mode(match.bracket)
 
-    if bracket.score_display_mode == TournamentBracket.SCORE_DISPLAY_NONE:
+    if score_display_mode == TournamentBracket.SCORE_DISPLAY_NONE:
         return False
 
     entry = getattr(match, side)
@@ -93,10 +93,19 @@ def _should_show_svg_score(match, side):
     if not entry or not match.winner_id:
         return False
 
-    if bracket.score_display_mode == TournamentBracket.SCORE_DISPLAY_BOTH:
+    if score_display_mode == TournamentBracket.SCORE_DISPLAY_BOTH:
         return True
 
     return match.winner_id != entry.id
+
+
+def _resolve_svg_score_display_mode(bracket):
+    """スコア表示モードを大会デフォルト込みで決める。"""
+
+    if bracket.score_display_mode == TournamentBracket.ENTRY_DISPLAY_INHERIT:
+        return bracket.category.tournament.default_tournament_score_display_mode
+
+    return bracket.score_display_mode
 
 
 def _is_advanced_svg_entry(svg, entry, round_number):

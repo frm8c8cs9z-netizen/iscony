@@ -4185,6 +4185,9 @@ class MaintenanceMenuTests(TestCase):
                 "default_champion_display_mode": (
                     Tournament.CHAMPION_DISPLAY_HORIZONTAL_1LINE
                 ),
+                "default_tournament_score_display_mode": (
+                    Tournament.SCORE_DISPLAY_NONE
+                ),
             },
         )
 
@@ -4211,6 +4214,10 @@ class MaintenanceMenuTests(TestCase):
         self.assertEqual(
             tournament.default_champion_display_mode,
             Tournament.CHAMPION_DISPLAY_HORIZONTAL_1LINE,
+        )
+        self.assertEqual(
+            tournament.default_tournament_score_display_mode,
+            Tournament.SCORE_DISPLAY_NONE,
         )
 
 
@@ -4361,6 +4368,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertEqual(
             self.bracket.champion_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.score_display_mode,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(
@@ -4641,6 +4652,42 @@ class TournamentScheduleBehaviorTests(TestCase):
 
     def test_tournament_bracket_detail_can_hide_scores(self):
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_NONE
+        self.bracket.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertNotIn('class="loser-score"', svg_content)
+
+    def test_tournament_bracket_detail_uses_tournament_default_score_display(self):
+        self.tournament.default_tournament_score_display_mode = (
+            Tournament.SCORE_DISPLAY_NONE
+        )
+        self.tournament.save()
+        self.bracket.score_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
         self.bracket.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
