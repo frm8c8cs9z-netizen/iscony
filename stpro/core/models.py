@@ -47,11 +47,18 @@ class Tournament(models.Model):
     ENTRY_DISPLAY_SHORT_ORG_2LINE = DISPLAY_SHORT_ORG_2LINE
     ENTRY_DISPLAY_ONE_LINE = DISPLAY_ONE_LINE
     ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
+    TOURNAMENT_LAYOUT_SINGLE = "single"
+    TOURNAMENT_LAYOUT_SPLIT = "split"
 
     ENTRY_DISPLAY_CHOICES = [
         (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
         (ENTRY_DISPLAY_ONE_LINE, "短い名前（所属）1行"),
         (ENTRY_DISPLAY_NAME_ORG_2LINE, "フル名前/所属2段"),
+    ]
+
+    TOURNAMENT_LAYOUT_CHOICES = [
+        (TOURNAMENT_LAYOUT_SINGLE, "片側表示"),
+        (TOURNAMENT_LAYOUT_SPLIT, "左右表示"),
     ]
 
     name = models.CharField(
@@ -93,6 +100,12 @@ class Tournament(models.Model):
         max_length=30,
         choices=ENTRY_DISPLAY_CHOICES,
         default=ENTRY_DISPLAY_SHORT_ORG_2LINE
+    )
+
+    default_tournament_layout_type = models.CharField(
+        max_length=20,
+        choices=TOURNAMENT_LAYOUT_CHOICES,
+        default=TOURNAMENT_LAYOUT_SINGLE
     )
 
     def save(self, *args, **kwargs):
@@ -790,6 +803,7 @@ class ScheduleBlock(models.Model):
 
 class TournamentBracket(models.Model):
 
+    LAYOUT_INHERIT = "inherit"
     LAYOUT_SPLIT = "split"
     LAYOUT_SINGLE = "single"
     SCORE_DISPLAY_LOSER = "loser"
@@ -807,6 +821,7 @@ class TournamentBracket(models.Model):
     ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
 
     LAYOUT_CHOICES = [
+        (LAYOUT_INHERIT, "大会デフォルトを使う"),
         (LAYOUT_SPLIT, "左右表示"),
         (LAYOUT_SINGLE, "片側表示"),
     ]
@@ -861,7 +876,7 @@ class TournamentBracket(models.Model):
     layout_type = models.CharField(
         max_length=20,
         choices=LAYOUT_CHOICES,
-        default=LAYOUT_SINGLE
+        default=LAYOUT_INHERIT
     )
 
     score_display_mode = models.CharField(

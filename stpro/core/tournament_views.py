@@ -350,8 +350,13 @@ def _estimate_svg_vertical_text_height(text):
 def _effective_svg_layout_type(bracket, round_data):
     """実データ上で左右表示できない小さい山は片側表示へ倒す。"""
 
-    if bracket.layout_type != TournamentBracket.LAYOUT_SPLIT:
-        return bracket.layout_type
+    layout_type = bracket.layout_type
+
+    if layout_type == TournamentBracket.LAYOUT_INHERIT:
+        layout_type = bracket.category.tournament.default_tournament_layout_type
+
+    if layout_type != TournamentBracket.LAYOUT_SPLIT:
+        return layout_type
 
     entry_ids = set()
 
@@ -367,7 +372,7 @@ def _effective_svg_layout_type(bracket, round_data):
     if len(round_data) < 2:
         return TournamentBracket.LAYOUT_SINGLE
 
-    return bracket.layout_type
+    return layout_type
 
 
 def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):

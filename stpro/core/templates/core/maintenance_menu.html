@@ -72,6 +72,9 @@
     トーナメント参加者表示:
     <strong>{{ tournament.get_default_tournament_entry_display_mode_display }}</strong>
     ／
+    トーナメント表示方式:
+    <strong>{{ tournament.get_default_tournament_layout_type_display }}</strong>
+    ／
     <a href="{% url 'tournament_settings' tournament.code %}">
         大会設定
     </a>

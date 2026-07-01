@@ -4161,7 +4161,7 @@ class MaintenanceMenuTests(TestCase):
             content.index(later_category.name),
         )
 
-    def test_tournament_settings_can_update_default_entry_display_modes(self):
+    def test_tournament_settings_can_update_default_display_settings(self):
         tournament = Tournament.objects.create(
             name="大会設定テスト",
             code="SETTINGTEST",
@@ -4178,6 +4178,9 @@ class MaintenanceMenuTests(TestCase):
                 ),
                 "default_tournament_entry_display_mode": (
                     Tournament.ENTRY_DISPLAY_ONE_LINE
+                ),
+                "default_tournament_layout_type": (
+                    Tournament.TOURNAMENT_LAYOUT_SPLIT
                 ),
             },
         )
@@ -4197,6 +4200,10 @@ class MaintenanceMenuTests(TestCase):
         self.assertEqual(
             tournament.default_tournament_entry_display_mode,
             Tournament.ENTRY_DISPLAY_ONE_LINE,
+        )
+        self.assertEqual(
+            tournament.default_tournament_layout_type,
+            Tournament.TOURNAMENT_LAYOUT_SPLIT,
         )
 
 
@@ -4340,10 +4347,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
-    def test_tournament_bracket_default_layout_is_single(self):
+    def test_tournament_bracket_default_layout_uses_tournament_default(self):
         self.assertEqual(
             self.bracket.layout_type,
-            TournamentBracket.LAYOUT_SINGLE,
+            TournamentBracket.LAYOUT_INHERIT,
         )
         self.assertEqual(
             self.bracket.champion_display_mode,
@@ -4407,6 +4414,67 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "山田　太郎・佐藤　次郎")
         self.assertContains(response, "第一クラブ")
         self.assertNotContains(response, "山田・佐藤")
+
+    def test_tournament_bracket_detail_uses_tournament_default_layout_type(self):
+        self.tournament.default_tournament_layout_type = (
+            Tournament.TOURNAMENT_LAYOUT_SPLIT
+        )
+        self.tournament.save()
+        self.bracket.layout_type = TournamentBracket.LAYOUT_INHERIT
+        self.bracket.save()
+        entry3 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+        )
+        entry4 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="4",
+            display_order=4,
+            player1_name="選手4A",
+            player2_name="選手4B",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            winner=self.entry1,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entry3,
+            pair2=entry4,
+            winner=entry3,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=self.entry1,
+            pair2=entry3,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'text-anchor="end"', html=False)
 
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(

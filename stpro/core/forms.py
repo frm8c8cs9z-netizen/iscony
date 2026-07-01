@@ -329,11 +329,13 @@ class TournamentSettingsForm(forms.ModelForm):
         fields = [
             "default_league_entry_display_mode",
             "default_tournament_entry_display_mode",
+            "default_tournament_layout_type",
         ]
 
         labels = {
             "default_league_entry_display_mode": "リーグ参加者表示",
             "default_tournament_entry_display_mode": "トーナメント参加者表示",
+            "default_tournament_layout_type": "トーナメント表示方式",
         }
 
 
