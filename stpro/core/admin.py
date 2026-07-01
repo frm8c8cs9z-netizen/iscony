@@ -76,12 +76,14 @@ class TournamentAdmin(admin.ModelAdmin):
         "default_league_entry_display_mode",
         "default_tournament_entry_display_mode",
         "default_tournament_layout_type",
+        "default_champion_display_mode",
     )
 
     list_filter = (
         "default_league_entry_display_mode",
         "default_tournament_entry_display_mode",
         "default_tournament_layout_type",
+        "default_champion_display_mode",
         "is_public",
     )
 

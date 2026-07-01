@@ -49,6 +49,10 @@ class Tournament(models.Model):
     ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
     TOURNAMENT_LAYOUT_SINGLE = "single"
     TOURNAMENT_LAYOUT_SPLIT = "split"
+    CHAMPION_DISPLAY_AUTO = "auto"
+    CHAMPION_DISPLAY_HORIZONTAL_1LINE = "horizontal_1line"
+    CHAMPION_DISPLAY_VERTICAL_1LINE = "vertical_1line"
+    CHAMPION_DISPLAY_NONE = "none"
 
     ENTRY_DISPLAY_CHOICES = [
         (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
@@ -59,6 +63,13 @@ class Tournament(models.Model):
     TOURNAMENT_LAYOUT_CHOICES = [
         (TOURNAMENT_LAYOUT_SINGLE, "片側表示"),
         (TOURNAMENT_LAYOUT_SPLIT, "左右表示"),
+    ]
+
+    CHAMPION_DISPLAY_CHOICES = [
+        (CHAMPION_DISPLAY_AUTO, "自動"),
+        (CHAMPION_DISPLAY_HORIZONTAL_1LINE, "横書き1行"),
+        (CHAMPION_DISPLAY_VERTICAL_1LINE, "縦書き1行"),
+        (CHAMPION_DISPLAY_NONE, "表示しない"),
     ]
 
     name = models.CharField(
@@ -106,6 +117,12 @@ class Tournament(models.Model):
         max_length=20,
         choices=TOURNAMENT_LAYOUT_CHOICES,
         default=TOURNAMENT_LAYOUT_SINGLE
+    )
+
+    default_champion_display_mode = models.CharField(
+        max_length=30,
+        choices=CHAMPION_DISPLAY_CHOICES,
+        default=CHAMPION_DISPLAY_AUTO
     )
 
     def save(self, *args, **kwargs):
@@ -833,6 +850,7 @@ class TournamentBracket(models.Model):
     ]
 
     CHAMPION_DISPLAY_CHOICES = [
+        (DISPLAY_INHERIT, "大会デフォルトを使う"),
         (CHAMPION_DISPLAY_AUTO, "自動"),
         (CHAMPION_DISPLAY_HORIZONTAL_1LINE, "横書き1行"),
         (CHAMPION_DISPLAY_VERTICAL_1LINE, "縦書き1行"),
@@ -888,7 +906,7 @@ class TournamentBracket(models.Model):
     champion_display_mode = models.CharField(
         max_length=30,
         choices=CHAMPION_DISPLAY_CHOICES,
-        default=CHAMPION_DISPLAY_AUTO
+        default=DISPLAY_INHERIT
     )
 
     champion_text_layout = models.CharField(

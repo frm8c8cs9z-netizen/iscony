@@ -168,6 +168,9 @@ def _resolve_svg_champion_display_mode(bracket, layout_type):
 
     mode = bracket.champion_display_mode
 
+    if mode == TournamentBracket.ENTRY_DISPLAY_INHERIT:
+        mode = bracket.category.tournament.default_champion_display_mode
+
     if mode == TournamentBracket.CHAMPION_DISPLAY_AUTO:
         if layout_type == TournamentBracket.LAYOUT_SPLIT:
             return TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
