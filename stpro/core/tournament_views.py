@@ -2550,6 +2550,26 @@ def edit_tournament_bracket(request, code, bracket_id):
     )
 
     if request.method == "POST":
+        if request.POST.get("action") == "reset_to_tournament_default":
+            bracket.layout_type = TournamentBracket.LAYOUT_INHERIT
+            bracket.score_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
+            bracket.entry_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
+            bracket.champion_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
+            bracket.champion_text_layout = TournamentBracket.CHAMPION_TEXT_AUTO
+            bracket.save(
+                update_fields=[
+                    "layout_type",
+                    "score_display_mode",
+                    "entry_display_mode",
+                    "champion_display_mode",
+                    "champion_text_layout",
+                ]
+            )
+
+            return redirect(
+                "bracket_list",
+                code=tournament.code
+            )
 
         form = TournamentBracketForm(
             request.POST,

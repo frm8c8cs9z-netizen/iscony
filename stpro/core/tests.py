@@ -4770,6 +4770,77 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE,
         )
 
+    def test_tournament_bracket_settings_can_reset_to_tournament_default(self):
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
+        self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
+        self.bracket.entry_display_mode = (
+            TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+        )
+        self.bracket.champion_text_layout = (
+            TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.bracket.save()
+
+        response = self.client.post(
+            reverse(
+                "edit_tournament_bracket",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "action": "reset_to_tournament_default",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "bracket_list",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        self.bracket.refresh_from_db()
+        self.assertEqual(
+            self.bracket.layout_type,
+            TournamentBracket.LAYOUT_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.score_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.entry_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.champion_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.champion_text_layout,
+            TournamentBracket.CHAMPION_TEXT_AUTO,
+        )
+
+    def test_tournament_bracket_settings_show_reset_button(self):
+        response = self.client.get(
+            reverse(
+                "edit_tournament_bracket",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "大会デフォルトに戻す")
+        self.assertContains(response, "reset_to_tournament_default")
+
     def test_tournament_bracket_detail_draws_lines_before_result(self):
         TournamentMatch.objects.create(
             bracket=self.bracket,
