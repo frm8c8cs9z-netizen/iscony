@@ -923,6 +923,10 @@ class TournamentBracket(models.Model):
         default=0
     )
 
+    use_tournament_defaults = models.BooleanField(
+        default=True
+    )
+
     layout_type = models.CharField(
         max_length=20,
         choices=LAYOUT_CHOICES,
@@ -959,6 +963,27 @@ class TournamentBracket(models.Model):
             "stage",
             "name",
         )
+
+    def save(self, *args, **kwargs):
+        if self.use_tournament_defaults:
+            self.layout_type = self.LAYOUT_INHERIT
+            self.score_display_mode = self.ENTRY_DISPLAY_INHERIT
+            self.entry_display_mode = self.ENTRY_DISPLAY_INHERIT
+            self.champion_display_mode = self.ENTRY_DISPLAY_INHERIT
+            self.champion_text_layout = self.ENTRY_DISPLAY_INHERIT
+
+            update_fields = kwargs.get("update_fields")
+
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {
+                    "layout_type",
+                    "score_display_mode",
+                    "entry_display_mode",
+                    "champion_display_mode",
+                    "champion_text_layout",
+                }
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return (

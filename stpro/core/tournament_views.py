@@ -102,7 +102,10 @@ def _should_show_svg_score(match, side):
 def _resolve_svg_score_display_mode(bracket):
     """スコア表示モードを大会デフォルト込みで決める。"""
 
-    if bracket.score_display_mode == TournamentBracket.ENTRY_DISPLAY_INHERIT:
+    if (
+        bracket.use_tournament_defaults
+        or bracket.score_display_mode == TournamentBracket.ENTRY_DISPLAY_INHERIT
+    ):
         return bracket.category.tournament.default_tournament_score_display_mode
 
     return bracket.score_display_mode
@@ -177,7 +180,7 @@ def _resolve_svg_champion_display_mode(bracket, layout_type):
 
     mode = bracket.champion_display_mode
 
-    if mode == TournamentBracket.ENTRY_DISPLAY_INHERIT:
+    if bracket.use_tournament_defaults or mode == TournamentBracket.ENTRY_DISPLAY_INHERIT:
         mode = bracket.category.tournament.default_champion_display_mode
 
     if mode == TournamentBracket.CHAMPION_DISPLAY_AUTO:
@@ -208,7 +211,10 @@ def _resolve_svg_champion_text_layout(bracket):
 
     text_layout = bracket.champion_text_layout
 
-    if text_layout == TournamentBracket.ENTRY_DISPLAY_INHERIT:
+    if (
+        bracket.use_tournament_defaults
+        or text_layout == TournamentBracket.ENTRY_DISPLAY_INHERIT
+    ):
         text_layout = bracket.category.tournament.default_champion_text_layout
 
     if text_layout == TournamentBracket.CHAMPION_TEXT_AUTO:
@@ -369,7 +375,7 @@ def _effective_svg_layout_type(bracket, round_data):
 
     layout_type = bracket.layout_type
 
-    if layout_type == TournamentBracket.LAYOUT_INHERIT:
+    if bracket.use_tournament_defaults or layout_type == TournamentBracket.LAYOUT_INHERIT:
         layout_type = bracket.category.tournament.default_tournament_layout_type
 
     if layout_type != TournamentBracket.LAYOUT_SPLIT:
@@ -912,7 +918,11 @@ def _build_svg_bracket_data(bracket, round_data):
     side_margin = 28
     round_gap = 42
     entry_display_mode = resolve_entry_display_mode(
-        explicit_mode=bracket.entry_display_mode,
+        explicit_mode=(
+            TournamentBracket.ENTRY_DISPLAY_INHERIT
+            if bracket.use_tournament_defaults
+            else bracket.entry_display_mode
+        ),
         tournament=bracket.category.tournament,
         target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
     )
@@ -2556,6 +2566,7 @@ def edit_tournament_bracket(request, code, bracket_id):
 
     if request.method == "POST":
         if request.POST.get("action") == "reset_to_tournament_default":
+            bracket.use_tournament_defaults = True
             bracket.layout_type = TournamentBracket.LAYOUT_INHERIT
             bracket.score_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
             bracket.entry_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
@@ -2563,6 +2574,7 @@ def edit_tournament_bracket(request, code, bracket_id):
             bracket.champion_text_layout = TournamentBracket.ENTRY_DISPLAY_INHERIT
             bracket.save(
                 update_fields=[
+                    "use_tournament_defaults",
                     "layout_type",
                     "score_display_mode",
                     "entry_display_mode",

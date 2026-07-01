@@ -354,6 +354,7 @@ class TournamentBracketForm(forms.ModelForm):
         fields = [
             "category",
             "name",
+            "use_tournament_defaults",
             "layout_type",
             "score_display_mode",
             "entry_display_mode",
@@ -365,12 +366,20 @@ class TournamentBracketForm(forms.ModelForm):
         labels = {
             "category": "カテゴリ",
             "name": "トーナメント名",
+            "use_tournament_defaults": "大会デフォルトを使う",
             "layout_type": "表示方式",
             "score_display_mode": "スコア表示",
             "entry_display_mode": "参加者表示",
             "champion_display_mode": "優勝者表示",
             "champion_text_layout": "優勝者文字組み",
             "display_order": "表示順",
+        }
+
+        help_texts = {
+            "use_tournament_defaults": (
+                "ONの場合、このトーナメントの表示設定は大会デフォルトを使用します。"
+                "保存時に下の個別表示設定は大会デフォルトへ戻ります。"
+            ),
         }
 
     def __init__(

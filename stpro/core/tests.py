@@ -4347,6 +4347,9 @@ class TournamentScheduleBehaviorTests(TestCase):
             name="1",
         )
 
+    def use_individual_bracket_settings(self):
+        self.bracket.use_tournament_defaults = False
+
     def test_tournament_bracket_detail_links_back_to_stage_overview(self):
         response = self.client.get(
             reverse(
@@ -4369,6 +4372,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_tournament_bracket_default_layout_uses_tournament_default(self):
+        self.assertTrue(self.bracket.use_tournament_defaults)
         self.assertEqual(
             self.bracket.layout_type,
             TournamentBracket.LAYOUT_INHERIT,
@@ -4578,6 +4582,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "2")
 
     def test_tournament_bracket_detail_can_change_entry_display_mode(self):
+        self.use_individual_bracket_settings()
         self.bracket.entry_display_mode = (
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
@@ -4615,6 +4620,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn("山田・佐藤", svg_content)
 
     def test_tournament_bracket_detail_can_show_both_scores(self):
+        self.use_individual_bracket_settings()
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
         self.bracket.save()
         TournamentMatch.objects.create(
@@ -4657,6 +4663,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_tournament_bracket_detail_can_hide_scores(self):
+        self.use_individual_bracket_settings()
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_NONE
         self.bracket.save()
         TournamentMatch.objects.create(
@@ -4759,6 +4766,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
         self.bracket.refresh_from_db()
+        self.assertFalse(self.bracket.use_tournament_defaults)
         self.assertEqual(
             self.bracket.score_display_mode,
             TournamentBracket.SCORE_DISPLAY_BOTH,
@@ -4776,7 +4784,80 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE,
         )
 
+    def test_tournament_bracket_settings_can_enable_tournament_defaults(self):
+        self.use_individual_bracket_settings()
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
+        self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
+        self.bracket.entry_display_mode = (
+            TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+        )
+        self.bracket.champion_text_layout = (
+            TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.bracket.save()
+
+        response = self.client.post(
+            reverse(
+                "edit_tournament_bracket",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "category": self.category.id,
+                "name": self.bracket.name,
+                "use_tournament_defaults": "on",
+                "layout_type": TournamentBracket.LAYOUT_SINGLE,
+                "score_display_mode": TournamentBracket.SCORE_DISPLAY_BOTH,
+                "entry_display_mode": (
+                    TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
+                ),
+                "champion_display_mode": (
+                    TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+                ),
+                "champion_text_layout": (
+                    TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+                ),
+                "display_order": self.bracket.display_order,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "bracket_list",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        self.bracket.refresh_from_db()
+        self.assertTrue(self.bracket.use_tournament_defaults)
+        self.assertEqual(
+            self.bracket.layout_type,
+            TournamentBracket.LAYOUT_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.score_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.entry_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.champion_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.champion_text_layout,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+
     def test_tournament_bracket_settings_can_reset_to_tournament_default(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
         self.bracket.entry_display_mode = (
@@ -4811,6 +4892,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
         self.bracket.refresh_from_db()
+        self.assertTrue(self.bracket.use_tournament_defaults)
         self.assertEqual(
             self.bracket.layout_type,
             TournamentBracket.LAYOUT_INHERIT,
@@ -4872,6 +4954,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotContains(response, 'class="winner-line"')
 
     def test_tournament_bracket_detail_draws_later_round_skeleton_lines(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
         entry3 = TournamentEntry.objects.create(
@@ -4945,6 +5028,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('text-anchor="end"', svg_content)
 
     def test_tournament_bracket_detail_keeps_seed_match_slot_height(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
 
@@ -5005,6 +5089,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn(">S1<", svg_content)
 
     def test_tournament_bracket_detail_delays_seed_winner_highlight_until_opponent_ready(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
         seed_match = TournamentMatch.objects.create(
@@ -5066,6 +5151,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('class="winner-line"', svg_content)
 
     def test_tournament_bracket_detail_keeps_three_entry_loser_finalist_advance_line(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
         entry3 = TournamentEntry.objects.create(
@@ -5137,6 +5223,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_tournament_bracket_detail_keeps_three_entry_seed_advance_line_after_final_loss(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
         entry3 = TournamentEntry.objects.create(
@@ -5208,6 +5295,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_tournament_bracket_detail_connects_split_final_lines(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
         entries = [self.entry1, self.entry2]
@@ -5307,6 +5395,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_tournament_bracket_detail_shows_single_layout_champion(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
         self.entry1.organization = "第一クラブ"
@@ -5346,6 +5435,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_can_show_champion_in_two_lines(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.champion_display_mode = (
             TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
@@ -5396,6 +5486,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
         )
         self.tournament.save()
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.champion_display_mode = (
             TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
@@ -5473,6 +5564,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertGreater(svg_width, 400)
 
     def test_tournament_bracket_detail_places_single_vertical_champion_on_advance_line(self):
+        self.use_individual_bracket_settings()
         self.bracket.champion_display_mode = (
             TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
         )
@@ -5519,6 +5611,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('dominant-baseline="middle"', champion_label)
 
     def test_tournament_bracket_detail_can_show_single_vertical_champion_in_two_columns(self):
+        self.use_individual_bracket_settings()
         self.bracket.champion_display_mode = (
             TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
         )
@@ -5562,6 +5655,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_uses_single_layout_for_small_split_bracket(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
         TournamentMatch.objects.create(
@@ -5595,6 +5689,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn('class="champion-vertical-text"', svg_content)
 
     def test_tournament_bracket_detail_shows_split_layout_champion(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
         self.entry1.organization = "第一クラブ"
@@ -5714,6 +5809,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertGreaterEqual(champion_y, 220)
 
     def test_tournament_bracket_detail_can_show_split_vertical_champion_in_two_columns(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.champion_text_layout = (
             TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
@@ -5796,6 +5892,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_can_hide_champion(self):
+        self.use_individual_bracket_settings()
         self.bracket.champion_display_mode = (
             TournamentBracket.CHAMPION_DISPLAY_NONE
         )
@@ -5831,6 +5928,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn('class="champion-vertical-text"', svg_content)
 
     def test_tournament_bracket_detail_can_show_split_champion_horizontally(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.champion_display_mode = (
             TournamentBracket.CHAMPION_DISPLAY_HORIZONTAL_1LINE
@@ -5964,6 +6062,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_tournament_bracket_detail_highlights_only_winner_side_vertical_line(self):
+        self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
 
