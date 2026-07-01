@@ -10,6 +10,57 @@
     {{ tournament.name }}
 </p>
 
+{% if bracket %}
+    <h3>
+        現在有効な表示設定
+    </h3>
+
+    <p>
+        設定元:
+        {% if bracket.use_tournament_defaults %}
+            大会デフォルト
+        {% else %}
+            個別設定
+        {% endif %}
+    </p>
+
+    <table border="1">
+        <tr>
+            <th>項目</th>
+            <th>実際に使う設定</th>
+            <th>保存値</th>
+        </tr>
+        <tr>
+            <td>表示方式</td>
+            <td>{{ bracket.effective_layout_type_label }}</td>
+            <td>{{ bracket.get_layout_type_display }}</td>
+        </tr>
+        <tr>
+            <td>スコア表示</td>
+            <td>{{ bracket.effective_score_display_mode_label }}</td>
+            <td>{{ bracket.get_score_display_mode_display }}</td>
+        </tr>
+        <tr>
+            <td>参加者表示</td>
+            <td>{{ bracket.effective_entry_display_mode_label }}</td>
+            <td>{{ bracket.get_entry_display_mode_display }}</td>
+        </tr>
+        <tr>
+            <td>優勝者表示</td>
+            <td>
+                {{ bracket.effective_champion_display_mode_label }}
+                /
+                {{ bracket.effective_champion_text_layout_label }}
+            </td>
+            <td>
+                {{ bracket.get_champion_display_mode_display }}
+                /
+                {{ bracket.get_champion_text_layout_display }}
+            </td>
+        </tr>
+    </table>
+{% endif %}
+
 <form method="post">
 
     {% csrf_token %}
@@ -21,6 +72,47 @@
     </button>
 
 </form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const defaultCheckbox = document.getElementById("id_use_tournament_defaults");
+    const individualFieldIds = [
+        "id_layout_type",
+        "id_score_display_mode",
+        "id_entry_display_mode",
+        "id_champion_display_mode",
+        "id_champion_text_layout",
+    ];
+
+    function updateIndividualFields() {
+        if (!defaultCheckbox) {
+            return;
+        }
+
+        individualFieldIds.forEach(function (fieldId) {
+            const field = document.getElementById(fieldId);
+
+            if (field) {
+                field.disabled = defaultCheckbox.checked;
+            }
+        });
+    }
+
+    if (defaultCheckbox) {
+        defaultCheckbox.addEventListener("change", updateIndividualFields);
+        defaultCheckbox.closest("form").addEventListener("submit", function () {
+            individualFieldIds.forEach(function (fieldId) {
+                const field = document.getElementById(fieldId);
+
+                if (field) {
+                    field.disabled = false;
+                }
+            });
+        });
+        updateIndividualFields();
+    }
+});
+</script>
 
 {% if bracket %}
     <form method="post">

@@ -20,6 +20,7 @@
         <th>Stageコード</th>
         <th>Stage名</th>
         <th>トーナメント名</th>
+        <th>設定元</th>
         <th>表示方式</th>
         <th>スコア表示</th>
         <th>参加者表示</th>
@@ -64,21 +65,48 @@
         </td>
 
         <td>
-            {{ bracket.get_layout_type_display }}
+            {% if bracket.use_tournament_defaults %}
+                大会デフォルト
+            {% else %}
+                個別設定
+            {% endif %}
         </td>
 
         <td>
-            {{ bracket.get_score_display_mode_display }}
+            {{ bracket.effective_layout_type_label }}
+            <br>
+            <small>
+                保存値: {{ bracket.get_layout_type_display }}
+            </small>
         </td>
 
         <td>
-            {{ bracket.get_entry_display_mode_display }}
+            {{ bracket.effective_score_display_mode_label }}
+            <br>
+            <small>
+                保存値: {{ bracket.get_score_display_mode_display }}
+            </small>
         </td>
 
         <td>
-            {{ bracket.get_champion_display_mode_display }}
+            {{ bracket.effective_entry_display_mode_label }}
+            <br>
+            <small>
+                保存値: {{ bracket.get_entry_display_mode_display }}
+            </small>
+        </td>
+
+        <td>
+            {{ bracket.effective_champion_display_mode_label }}
             /
-            {{ bracket.get_champion_text_layout_display }}
+            {{ bracket.effective_champion_text_layout_label }}
+            <br>
+            <small>
+                保存値:
+                {{ bracket.get_champion_display_mode_display }}
+                /
+                {{ bracket.get_champion_text_layout_display }}
+            </small>
         </td>
 
         <td>
@@ -129,7 +157,7 @@
     {% empty %}
 
     <tr>
-        <td colspan="10">
+        <td colspan="11">
             トーナメントがありません。先に「トーナメント追加」から作成してください。
         </td>
     </tr>

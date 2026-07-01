@@ -4405,6 +4405,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "参加者表示")
         self.assertContains(response, "優勝者表示")
+        self.assertContains(response, "設定元")
+        self.assertContains(response, "大会デフォルト")
+        self.assertContains(response, "片側表示")
+        self.assertContains(response, "保存値")
         self.assertContains(response, "大会デフォルトを使う")
         self.assertContains(response, "設定")
 
@@ -4926,6 +4930,9 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "現在有効な表示設定")
+        self.assertContains(response, "実際に使う設定")
+        self.assertContains(response, "保存値")
         self.assertContains(response, "大会デフォルトに戻す")
         self.assertContains(response, "reset_to_tournament_default")
 

@@ -985,6 +985,88 @@ class TournamentBracket(models.Model):
 
         super().save(*args, **kwargs)
 
+    @property
+    def effective_layout_type(self):
+        if self.use_tournament_defaults or self.layout_type == self.LAYOUT_INHERIT:
+            return self.category.tournament.default_tournament_layout_type
+
+        return self.layout_type
+
+    @property
+    def effective_score_display_mode(self):
+        if (
+            self.use_tournament_defaults
+            or self.score_display_mode == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_tournament_score_display_mode
+
+        return self.score_display_mode
+
+    @property
+    def effective_entry_display_mode(self):
+        if (
+            self.use_tournament_defaults
+            or self.entry_display_mode == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_tournament_entry_display_mode
+
+        return self.entry_display_mode
+
+    @property
+    def effective_champion_display_mode(self):
+        if (
+            self.use_tournament_defaults
+            or self.champion_display_mode == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_champion_display_mode
+
+        return self.champion_display_mode
+
+    @property
+    def effective_champion_text_layout(self):
+        if (
+            self.use_tournament_defaults
+            or self.champion_text_layout == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_champion_text_layout
+
+        return self.champion_text_layout
+
+    @property
+    def effective_layout_type_label(self):
+        return dict(Tournament.TOURNAMENT_LAYOUT_CHOICES).get(
+            self.effective_layout_type,
+            self.effective_layout_type,
+        )
+
+    @property
+    def effective_score_display_mode_label(self):
+        return dict(Tournament.SCORE_DISPLAY_CHOICES).get(
+            self.effective_score_display_mode,
+            self.effective_score_display_mode,
+        )
+
+    @property
+    def effective_entry_display_mode_label(self):
+        return dict(Tournament.ENTRY_DISPLAY_CHOICES).get(
+            self.effective_entry_display_mode,
+            self.effective_entry_display_mode,
+        )
+
+    @property
+    def effective_champion_display_mode_label(self):
+        return dict(Tournament.CHAMPION_DISPLAY_CHOICES).get(
+            self.effective_champion_display_mode,
+            self.effective_champion_display_mode,
+        )
+
+    @property
+    def effective_champion_text_layout_label(self):
+        return dict(Tournament.CHAMPION_TEXT_CHOICES).get(
+            self.effective_champion_text_layout,
+            self.effective_champion_text_layout,
+        )
+
     def __str__(self):
         return (
             f"{self.category.name} "

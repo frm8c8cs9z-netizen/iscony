@@ -102,13 +102,7 @@ def _should_show_svg_score(match, side):
 def _resolve_svg_score_display_mode(bracket):
     """スコア表示モードを大会デフォルト込みで決める。"""
 
-    if (
-        bracket.use_tournament_defaults
-        or bracket.score_display_mode == TournamentBracket.ENTRY_DISPLAY_INHERIT
-    ):
-        return bracket.category.tournament.default_tournament_score_display_mode
-
-    return bracket.score_display_mode
+    return bracket.effective_score_display_mode
 
 
 def _is_advanced_svg_entry(svg, entry, round_number):
@@ -178,10 +172,7 @@ CHAMPION_VERTICAL_COLUMN_GAP = 18
 def _resolve_svg_champion_display_mode(bracket, layout_type):
     """優勝者表示モードを実効レイアウト込みで決める。"""
 
-    mode = bracket.champion_display_mode
-
-    if bracket.use_tournament_defaults or mode == TournamentBracket.ENTRY_DISPLAY_INHERIT:
-        mode = bracket.category.tournament.default_champion_display_mode
+    mode = bracket.effective_champion_display_mode
 
     if mode == TournamentBracket.CHAMPION_DISPLAY_AUTO:
         if layout_type == TournamentBracket.LAYOUT_SPLIT:
@@ -209,13 +200,7 @@ def _resolve_svg_champion_orientation(bracket, layout_type):
 def _resolve_svg_champion_text_layout(bracket):
     """優勝者名の文字組みを決める。"""
 
-    text_layout = bracket.champion_text_layout
-
-    if (
-        bracket.use_tournament_defaults
-        or text_layout == TournamentBracket.ENTRY_DISPLAY_INHERIT
-    ):
-        text_layout = bracket.category.tournament.default_champion_text_layout
+    text_layout = bracket.effective_champion_text_layout
 
     if text_layout == TournamentBracket.CHAMPION_TEXT_AUTO:
         return TournamentBracket.CHAMPION_TEXT_ONE_LINE
@@ -373,10 +358,7 @@ def _estimate_svg_vertical_text_height(text):
 def _effective_svg_layout_type(bracket, round_data):
     """実データ上で左右表示できない小さい山は片側表示へ倒す。"""
 
-    layout_type = bracket.layout_type
-
-    if bracket.use_tournament_defaults or layout_type == TournamentBracket.LAYOUT_INHERIT:
-        layout_type = bracket.category.tournament.default_tournament_layout_type
+    layout_type = bracket.effective_layout_type
 
     if layout_type != TournamentBracket.LAYOUT_SPLIT:
         return layout_type
@@ -918,11 +900,7 @@ def _build_svg_bracket_data(bracket, round_data):
     side_margin = 28
     round_gap = 42
     entry_display_mode = resolve_entry_display_mode(
-        explicit_mode=(
-            TournamentBracket.ENTRY_DISPLAY_INHERIT
-            if bracket.use_tournament_defaults
-            else bracket.entry_display_mode
-        ),
+        explicit_mode=bracket.effective_entry_display_mode,
         tournament=bracket.category.tournament,
         target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
     )
