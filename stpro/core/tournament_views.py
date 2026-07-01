@@ -206,10 +206,15 @@ def _resolve_svg_champion_orientation(bracket, layout_type):
 def _resolve_svg_champion_text_layout(bracket):
     """優勝者名の文字組みを決める。"""
 
-    if bracket.champion_text_layout == TournamentBracket.CHAMPION_TEXT_AUTO:
+    text_layout = bracket.champion_text_layout
+
+    if text_layout == TournamentBracket.ENTRY_DISPLAY_INHERIT:
+        text_layout = bracket.category.tournament.default_champion_text_layout
+
+    if text_layout == TournamentBracket.CHAMPION_TEXT_AUTO:
         return TournamentBracket.CHAMPION_TEXT_ONE_LINE
 
-    return bracket.champion_text_layout
+    return text_layout
 
 
 def _svg_champion_text_lines(entry, bracket):
@@ -2555,7 +2560,7 @@ def edit_tournament_bracket(request, code, bracket_id):
             bracket.score_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
             bracket.entry_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
             bracket.champion_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
-            bracket.champion_text_layout = TournamentBracket.CHAMPION_TEXT_AUTO
+            bracket.champion_text_layout = TournamentBracket.ENTRY_DISPLAY_INHERIT
             bracket.save(
                 update_fields=[
                     "layout_type",

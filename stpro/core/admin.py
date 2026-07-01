@@ -77,6 +77,7 @@ class TournamentAdmin(admin.ModelAdmin):
         "default_tournament_entry_display_mode",
         "default_tournament_layout_type",
         "default_champion_display_mode",
+        "default_champion_text_layout",
         "default_tournament_score_display_mode",
     )
 
@@ -85,6 +86,7 @@ class TournamentAdmin(admin.ModelAdmin):
         "default_tournament_entry_display_mode",
         "default_tournament_layout_type",
         "default_champion_display_mode",
+        "default_champion_text_layout",
         "default_tournament_score_display_mode",
         "is_public",
     )

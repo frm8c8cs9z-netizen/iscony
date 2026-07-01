@@ -331,6 +331,7 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_tournament_entry_display_mode",
             "default_tournament_layout_type",
             "default_champion_display_mode",
+            "default_champion_text_layout",
             "default_tournament_score_display_mode",
         ]
 
@@ -339,6 +340,7 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_tournament_entry_display_mode": "トーナメント参加者表示",
             "default_tournament_layout_type": "トーナメント表示方式",
             "default_champion_display_mode": "優勝者表示",
+            "default_champion_text_layout": "優勝者文字組み",
             "default_tournament_score_display_mode": "トーナメントスコア表示",
         }
 
