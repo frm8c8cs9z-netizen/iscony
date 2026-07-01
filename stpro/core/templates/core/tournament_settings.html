@@ -11,11 +11,110 @@
     個別のトーナメントで上書きしない限り、この設定が使われます。
 </p>
 
-<h3>表示設定</h3>
-
 <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
+
+    {% if form.non_field_errors %}
+        {{ form.non_field_errors }}
+    {% endif %}
+
+    <h3>参加者表示</h3>
+
+    <p>
+        リーグ表とトーナメント表で、参加者名と所属をどう表示するかを指定します。
+    </p>
+
+    <table border="1">
+        <tr>
+            <th>項目</th>
+            <th>設定</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <td>{{ form.default_league_entry_display_mode.label_tag }}</td>
+            <td>{{ form.default_league_entry_display_mode }}</td>
+            <td>{{ form.default_league_entry_display_mode.help_text }}</td>
+        </tr>
+        <tr>
+            <td>{{ form.default_tournament_entry_display_mode.label_tag }}</td>
+            <td>{{ form.default_tournament_entry_display_mode }}</td>
+            <td>{{ form.default_tournament_entry_display_mode.help_text }}</td>
+        </tr>
+    </table>
+
+    <h3>トーナメント表</h3>
+
+    <p>
+        片側表示・左右表示、スコア表示など、トーナメント表そのものの標準設定です。
+    </p>
+
+    <table border="1">
+        <tr>
+            <th>項目</th>
+            <th>設定</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <td>{{ form.default_tournament_layout_type.label_tag }}</td>
+            <td>{{ form.default_tournament_layout_type }}</td>
+            <td>{{ form.default_tournament_layout_type.help_text }}</td>
+        </tr>
+        <tr>
+            <td>{{ form.default_tournament_score_display_mode.label_tag }}</td>
+            <td>{{ form.default_tournament_score_display_mode }}</td>
+            <td>{{ form.default_tournament_score_display_mode.help_text }}</td>
+        </tr>
+    </table>
+
+    <h3>優勝者表示</h3>
+
+    <p>
+        優勝者表示は、片側表示と左右表示で見やすい配置が異なるため、それぞれ別に指定します。
+    </p>
+
+    <table border="1">
+        <tr>
+            <th>表示方式</th>
+            <th>優勝者表示</th>
+            <th>文字組み</th>
+        </tr>
+        <tr>
+            <td>片側表示</td>
+            <td>
+                {{ form.default_single_champion_display_mode }}
+                <br>
+                <small>{{ form.default_single_champion_display_mode.help_text }}</small>
+            </td>
+            <td>
+                {{ form.default_single_champion_text_layout }}
+                <br>
+                <small>{{ form.default_single_champion_text_layout.help_text }}</small>
+            </td>
+        </tr>
+        <tr>
+            <td>左右表示</td>
+            <td>
+                {{ form.default_split_champion_display_mode }}
+                <br>
+                <small>{{ form.default_split_champion_display_mode.help_text }}</small>
+            </td>
+            <td>
+                {{ form.default_split_champion_text_layout }}
+                <br>
+                <small>{{ form.default_split_champion_text_layout.help_text }}</small>
+            </td>
+        </tr>
+    </table>
+
+    {% for field in form %}
+        {% if field.errors %}
+            <p>
+                {{ field.label }}:
+                {{ field.errors }}
+            </p>
+        {% endif %}
+    {% endfor %}
+
     <button type="submit">保存</button>
 </form>
 

@@ -348,6 +348,33 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_tournament_score_display_mode": "トーナメントスコア表示",
         }
 
+        help_texts = {
+            "default_league_entry_display_mode": (
+                "リーグ表、進行表、補助表などでリーグ枠を表示するときの標準形式です。"
+            ),
+            "default_tournament_entry_display_mode": (
+                "トーナメント表に参加者名を表示するときの標準形式です。"
+            ),
+            "default_tournament_layout_type": (
+                "新規トーナメントや大会デフォルト使用中のトーナメントに適用されます。"
+            ),
+            "default_single_champion_display_mode": (
+                "片側表示のトーナメントで優勝者を表示するときの標準形式です。"
+            ),
+            "default_single_champion_text_layout": (
+                "片側表示のトーナメントで優勝者名と所属をどう組むかを指定します。"
+            ),
+            "default_split_champion_display_mode": (
+                "左右表示のトーナメントで優勝者を表示するときの標準形式です。"
+            ),
+            "default_split_champion_text_layout": (
+                "左右表示のトーナメントで優勝者名と所属をどう組むかを指定します。"
+            ),
+            "default_tournament_score_display_mode": (
+                "トーナメント表に勝敗ゲーム数を表示する範囲を指定します。"
+            ),
+        }
+
 
 class TournamentBracketForm(forms.ModelForm):
 

@@ -4241,6 +4241,28 @@ class MaintenanceMenuTests(TestCase):
             Tournament.SCORE_DISPLAY_NONE,
         )
 
+    def test_tournament_settings_page_groups_display_settings(self):
+        tournament = Tournament.objects.create(
+            name="大会設定表示テスト",
+            code="SETTINGVIEW",
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "参加者表示")
+        self.assertContains(response, "トーナメント表")
+        self.assertContains(response, "優勝者表示")
+        self.assertContains(response, "片側表示")
+        self.assertContains(response, "左右表示")
+        self.assertContains(response, "リーグ表とトーナメント表")
+        self.assertContains(response, "見やすい配置が異なる")
+
 
 class CategoryStageOverviewTests(TestCase):
 
