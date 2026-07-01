@@ -4182,11 +4182,17 @@ class MaintenanceMenuTests(TestCase):
                 "default_tournament_layout_type": (
                     Tournament.TOURNAMENT_LAYOUT_SPLIT
                 ),
-                "default_champion_display_mode": (
+                "default_single_champion_display_mode": (
                     Tournament.CHAMPION_DISPLAY_HORIZONTAL_1LINE
                 ),
-                "default_champion_text_layout": (
+                "default_single_champion_text_layout": (
                     Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
+                ),
+                "default_split_champion_display_mode": (
+                    Tournament.CHAMPION_DISPLAY_VERTICAL_1LINE
+                ),
+                "default_split_champion_text_layout": (
+                    Tournament.CHAMPION_TEXT_ONE_LINE
                 ),
                 "default_tournament_score_display_mode": (
                     Tournament.SCORE_DISPLAY_NONE
@@ -4215,12 +4221,20 @@ class MaintenanceMenuTests(TestCase):
             Tournament.TOURNAMENT_LAYOUT_SPLIT,
         )
         self.assertEqual(
-            tournament.default_champion_display_mode,
+            tournament.default_single_champion_display_mode,
             Tournament.CHAMPION_DISPLAY_HORIZONTAL_1LINE,
         )
         self.assertEqual(
-            tournament.default_champion_text_layout,
+            tournament.default_single_champion_text_layout,
             Tournament.CHAMPION_TEXT_NAME_ORG_2LINE,
+        )
+        self.assertEqual(
+            tournament.default_split_champion_display_mode,
+            Tournament.CHAMPION_DISPLAY_VERTICAL_1LINE,
+        )
+        self.assertEqual(
+            tournament.default_split_champion_text_layout,
+            Tournament.CHAMPION_TEXT_ONE_LINE,
         )
         self.assertEqual(
             tournament.default_tournament_score_display_mode,
@@ -4509,7 +4523,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, 'text-anchor="end"', html=False)
 
     def test_tournament_bracket_detail_uses_tournament_default_champion_display(self):
-        self.tournament.default_champion_display_mode = (
+        self.tournament.default_single_champion_display_mode = (
             Tournament.CHAMPION_DISPLAY_VERTICAL_1LINE
         )
         self.tournament.save()
@@ -4544,6 +4558,100 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertIn('class="champion-vertical-text"', svg_content)
         self.assertNotIn('class="champion-text"', svg_content)
+
+    def test_tournament_bracket_detail_uses_split_champion_defaults(self):
+        self.tournament.default_tournament_layout_type = (
+            Tournament.TOURNAMENT_LAYOUT_SPLIT
+        )
+        self.tournament.default_single_champion_display_mode = (
+            Tournament.CHAMPION_DISPLAY_VERTICAL_1LINE
+        )
+        self.tournament.default_split_champion_display_mode = (
+            Tournament.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+        )
+        self.tournament.default_single_champion_text_layout = (
+            Tournament.CHAMPION_TEXT_ONE_LINE
+        )
+        self.tournament.default_split_champion_text_layout = (
+            Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.tournament.save()
+        self.entry1.organization = "第一クラブ"
+        self.entry1.save()
+        entries = [self.entry1, self.entry2]
+
+        for number in range(3, 5):
+            entries.append(
+                TournamentEntry.objects.create(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entries[0],
+            pair2=entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=entries[0],
+        )
+        second_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entries[2],
+            pair2=entries[3],
+            pair1_games=4,
+            pair2_games=1,
+            winner=entries[2],
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=entries[0],
+            pair2=entries[2],
+            pair1_games=4,
+            pair2_games=3,
+            winner=entries[0],
+        )
+        first_match.next_match = final_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+        second_match.next_match = final_match
+        second_match.next_slot = "pair2"
+        second_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertIn('class="champion-text"', svg_content)
+        self.assertNotIn('class="champion-vertical-text"', svg_content)
+        self.assertIn("<tspan", svg_content)
+        self.assertIn("選手1A・選手1B", svg_content)
+        self.assertIn("第一クラブ", svg_content)
+        self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_shows_svg_bracket(self):
         TournamentMatch.objects.create(
@@ -5489,7 +5597,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('y="101.0"', svg_content)
 
     def test_tournament_bracket_detail_uses_tournament_default_champion_text_layout(self):
-        self.tournament.default_champion_text_layout = (
+        self.tournament.default_single_champion_text_layout = (
             Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
         )
         self.tournament.save()

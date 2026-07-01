@@ -172,7 +172,7 @@ CHAMPION_VERTICAL_COLUMN_GAP = 18
 def _resolve_svg_champion_display_mode(bracket, layout_type):
     """優勝者表示モードを実効レイアウト込みで決める。"""
 
-    mode = bracket.effective_champion_display_mode
+    mode = bracket.get_effective_champion_display_mode(layout_type)
 
     if mode == TournamentBracket.CHAMPION_DISPLAY_AUTO:
         if layout_type == TournamentBracket.LAYOUT_SPLIT:
@@ -197,10 +197,10 @@ def _resolve_svg_champion_orientation(bracket, layout_type):
     return CHAMPION_ORIENTATION_HORIZONTAL
 
 
-def _resolve_svg_champion_text_layout(bracket):
+def _resolve_svg_champion_text_layout(bracket, layout_type=None):
     """優勝者名の文字組みを決める。"""
 
-    text_layout = bracket.effective_champion_text_layout
+    text_layout = bracket.get_effective_champion_text_layout(layout_type)
 
     if text_layout == TournamentBracket.CHAMPION_TEXT_AUTO:
         return TournamentBracket.CHAMPION_TEXT_ONE_LINE
@@ -208,10 +208,10 @@ def _resolve_svg_champion_text_layout(bracket):
     return text_layout
 
 
-def _svg_champion_text_lines(entry, bracket):
+def _svg_champion_text_lines(entry, bracket, layout_type=None):
     """優勝者表示用のテキスト行を返す。"""
 
-    text_layout = _resolve_svg_champion_text_layout(bracket)
+    text_layout = _resolve_svg_champion_text_layout(bracket, layout_type)
 
     if (
         text_layout == TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
@@ -388,7 +388,11 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     if not winner:
         return
 
-    text_lines = _svg_champion_text_lines(winner, bracket)
+    text_lines = _svg_champion_text_lines(
+        winner,
+        bracket,
+        svg["layout_type"],
+    )
     text = _svg_champion_line_text(text_lines)
 
     if not text:

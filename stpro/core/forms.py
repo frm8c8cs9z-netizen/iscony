@@ -330,8 +330,10 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_league_entry_display_mode",
             "default_tournament_entry_display_mode",
             "default_tournament_layout_type",
-            "default_champion_display_mode",
-            "default_champion_text_layout",
+            "default_single_champion_display_mode",
+            "default_single_champion_text_layout",
+            "default_split_champion_display_mode",
+            "default_split_champion_text_layout",
             "default_tournament_score_display_mode",
         ]
 
@@ -339,8 +341,10 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_league_entry_display_mode": "リーグ参加者表示",
             "default_tournament_entry_display_mode": "トーナメント参加者表示",
             "default_tournament_layout_type": "トーナメント表示方式",
-            "default_champion_display_mode": "優勝者表示",
-            "default_champion_text_layout": "優勝者文字組み",
+            "default_single_champion_display_mode": "片側表示時の優勝者表示",
+            "default_single_champion_text_layout": "片側表示時の優勝者文字組み",
+            "default_split_champion_display_mode": "左右表示時の優勝者表示",
+            "default_split_champion_text_layout": "左右表示時の優勝者文字組み",
             "default_tournament_score_display_mode": "トーナメントスコア表示",
         }
 

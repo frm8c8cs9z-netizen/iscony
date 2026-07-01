@@ -78,6 +78,10 @@ class TournamentAdmin(admin.ModelAdmin):
         "default_tournament_layout_type",
         "default_champion_display_mode",
         "default_champion_text_layout",
+        "default_single_champion_display_mode",
+        "default_single_champion_text_layout",
+        "default_split_champion_display_mode",
+        "default_split_champion_text_layout",
         "default_tournament_score_display_mode",
     )
 

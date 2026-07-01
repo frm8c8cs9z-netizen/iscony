@@ -143,6 +143,18 @@ class Tournament(models.Model):
         default=CHAMPION_DISPLAY_AUTO
     )
 
+    default_single_champion_display_mode = models.CharField(
+        max_length=30,
+        choices=CHAMPION_DISPLAY_CHOICES,
+        default=CHAMPION_DISPLAY_AUTO
+    )
+
+    default_split_champion_display_mode = models.CharField(
+        max_length=30,
+        choices=CHAMPION_DISPLAY_CHOICES,
+        default=CHAMPION_DISPLAY_AUTO
+    )
+
     default_tournament_score_display_mode = models.CharField(
         max_length=20,
         choices=SCORE_DISPLAY_CHOICES,
@@ -150,6 +162,18 @@ class Tournament(models.Model):
     )
 
     default_champion_text_layout = models.CharField(
+        max_length=30,
+        choices=CHAMPION_TEXT_CHOICES,
+        default=CHAMPION_TEXT_AUTO
+    )
+
+    default_single_champion_text_layout = models.CharField(
+        max_length=30,
+        choices=CHAMPION_TEXT_CHOICES,
+        default=CHAMPION_TEXT_AUTO
+    )
+
+    default_split_champion_text_layout = models.CharField(
         max_length=30,
         choices=CHAMPION_TEXT_CHOICES,
         default=CHAMPION_TEXT_AUTO
@@ -1014,21 +1038,39 @@ class TournamentBracket(models.Model):
 
     @property
     def effective_champion_display_mode(self):
+        return self.get_effective_champion_display_mode()
+
+    def get_effective_champion_display_mode(self, layout_type=None):
         if (
             self.use_tournament_defaults
             or self.champion_display_mode == self.ENTRY_DISPLAY_INHERIT
         ):
-            return self.category.tournament.default_champion_display_mode
+            if layout_type is None:
+                layout_type = self.effective_layout_type
+
+            if layout_type == self.LAYOUT_SPLIT:
+                return self.category.tournament.default_split_champion_display_mode
+
+            return self.category.tournament.default_single_champion_display_mode
 
         return self.champion_display_mode
 
     @property
     def effective_champion_text_layout(self):
+        return self.get_effective_champion_text_layout()
+
+    def get_effective_champion_text_layout(self, layout_type=None):
         if (
             self.use_tournament_defaults
             or self.champion_text_layout == self.ENTRY_DISPLAY_INHERIT
         ):
-            return self.category.tournament.default_champion_text_layout
+            if layout_type is None:
+                layout_type = self.effective_layout_type
+
+            if layout_type == self.LAYOUT_SPLIT:
+                return self.category.tournament.default_split_champion_text_layout
+
+            return self.category.tournament.default_single_champion_text_layout
 
         return self.champion_text_layout
 
