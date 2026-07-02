@@ -3695,6 +3695,104 @@ class ImportScheduleCsvTests(TestCase):
             "2日目",
         )
 
+    def test_schedule_import_preserves_existing_progress_flags(self):
+        stage, _, match = self._create_league_match(
+            "予選リーグ",
+        )
+        old_court = Court.objects.create(
+            tournament=self.tournament,
+            name="旧コート",
+        )
+        Schedule.objects.create(
+            court=old_court,
+            order=9,
+            round_robin_match=match,
+            called=True,
+            started=True,
+            finished=True,
+        )
+
+        response = self._post_csv(
+            "category,stage_code,court,order,slot1_code,slot2_code\n"
+            f"男子A,{stage.code},1コート,1,1,2\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        schedule = Schedule.objects.get(round_robin_match=match)
+        self.assertEqual(schedule.court.name, "1コート")
+        self.assertEqual(schedule.order, 1)
+        self.assertTrue(schedule.called)
+        self.assertTrue(schedule.started)
+        self.assertTrue(schedule.finished)
+
+    def test_schedule_import_marks_completed_league_match_finished(self):
+        stage, _, match = self._create_league_match(
+            "予選リーグ",
+        )
+        match.pair1_games = 4
+        match.pair2_games = 2
+        match.completed = True
+        match.save()
+
+        response = self._post_csv(
+            "category,stage_code,court,order,slot1_code,slot2_code\n"
+            f"男子A,{stage.code},1コート,1,1,2\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        schedule = Schedule.objects.get(round_robin_match=match)
+        self.assertTrue(schedule.called)
+        self.assertTrue(schedule.started)
+        self.assertTrue(schedule.finished)
+
+    def test_schedule_import_marks_completed_tournament_match_finished(self):
+        tournament_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝T",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=tournament_stage,
+            name="本戦",
+        )
+        entry1 = TournamentEntry.objects.create(
+            bracket=bracket,
+            pair_code="1",
+            display_order=1,
+            player1_name="T1A",
+            player2_name="T1B",
+        )
+        entry2 = TournamentEntry.objects.create(
+            bracket=bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="T2A",
+            player2_name="T2B",
+        )
+        match = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entry1,
+            pair2=entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=entry1,
+        )
+
+        response = self._post_csv(
+            "category,stage,bracket,court,order,match_code\n"
+            "男子A,決勝T,本戦,1コート,1,M1\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        schedule = Schedule.objects.get(tournament_match=match)
+        self.assertTrue(schedule.called)
+        self.assertTrue(schedule.started)
+        self.assertTrue(schedule.finished)
+
 
 class CsvFormatDownloadTests(TestCase):
 

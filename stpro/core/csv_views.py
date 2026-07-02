@@ -736,6 +736,48 @@ def _stage_reimport_protection_errors(stages):
     return errors
 
 
+def _schedule_flags_from_finished_match(match):
+    if isinstance(match, RoundRobinMatch):
+        is_finished = (
+            match.completed
+            or (
+                match.pair1_games is not None
+                and match.pair2_games is not None
+            )
+        )
+    else:
+        is_finished = (
+            match.winner_id is not None
+            or (
+                match.pair1_games is not None
+                and match.pair2_games is not None
+            )
+        )
+
+    if not is_finished:
+        return {}
+
+    return {
+        "called": True,
+        "started": True,
+        "finished": True,
+    }
+
+
+def _merged_schedule_flags(existing_flags, match):
+    flags = dict(existing_flags or {})
+    finished_flags = _schedule_flags_from_finished_match(match)
+
+    if finished_flags:
+        flags.update(finished_flags)
+
+    return {
+        "called": flags.get("called", False),
+        "started": flags.get("started", False),
+        "finished": flags.get("finished", False),
+    }
+
+
 def import_participants(request, tournament_code):
     """
     参加者CSVを取り込む。
@@ -2387,6 +2429,50 @@ def import_schedule(request, tournament_code):
                     }
                 )
 
+            existing_schedule_flags = {}
+
+            for schedule in Schedule.objects.filter(
+                round_robin_match__group_id__in=target_groups
+            ).select_related(
+                "round_robin_match"
+            ):
+                key = (
+                    "league",
+                    schedule.round_robin_match_id,
+                )
+                flags = existing_schedule_flags.setdefault(
+                    key,
+                    {
+                        "called": False,
+                        "started": False,
+                        "finished": False,
+                    },
+                )
+                flags["called"] = flags["called"] or schedule.called
+                flags["started"] = flags["started"] or schedule.started
+                flags["finished"] = flags["finished"] or schedule.finished
+
+            for schedule in Schedule.objects.filter(
+                tournament_match__bracket_id__in=target_brackets
+            ).select_related(
+                "tournament_match"
+            ):
+                key = (
+                    "tournament",
+                    schedule.tournament_match_id,
+                )
+                flags = existing_schedule_flags.setdefault(
+                    key,
+                    {
+                        "called": False,
+                        "started": False,
+                        "finished": False,
+                    },
+                )
+                flags["called"] = flags["called"] or schedule.called
+                flags["started"] = flags["started"] or schedule.started
+                flags["finished"] = flags["finished"] or schedule.finished
+
             with transaction.atomic():
 
                 Schedule.objects.filter(
@@ -2410,6 +2496,16 @@ def import_schedule(request, tournament_code):
                     )
 
                     match = row["match"]
+                    match_key = (
+                        "league"
+                        if row["stage_type"] == Stage.TYPE_LEAGUE
+                        else "tournament",
+                        match.id,
+                    )
+                    schedule_flags = _merged_schedule_flags(
+                        existing_schedule_flags.get(match_key),
+                        match,
+                    )
 
                     if row["stage_type"] == Stage.TYPE_LEAGUE:
                         match.match_games = row["match_games"]
@@ -2420,6 +2516,7 @@ def import_schedule(request, tournament_code):
                             round_robin_match=match,
                             court=court,
                             order=row["order"],
+                            **schedule_flags,
                         )
 
                     else:
@@ -2435,6 +2532,7 @@ def import_schedule(request, tournament_code):
                             tournament_match=match,
                             court=court,
                             order=row["order"],
+                            **schedule_flags,
                         )
 
             return redirect(
