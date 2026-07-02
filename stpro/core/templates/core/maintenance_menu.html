@@ -2,42 +2,78 @@
 
 {% block content %}
 
-<h2>{{ tournament.name }} メンテナンス</h2>
-
-<h3>カテゴリ別クイック操作</h3>
+<h2>{{ tournament.name }} 管理メニュー</h2>
 
 <p>
-    当日の運用でよく使う入口です。カテゴリごとの状況確認、退避、進出元調整にすぐ移動できます。
+    大会コード:
+    <strong>{{ tournament.code }}</strong>
+    ／
+    <a href="{% url 'tournament_detail' tournament.code %}">
+        大会トップへ
+    </a>
 </p>
+
+<h3>当日運営</h3>
+
+<table>
+    <tr>
+        <th>操作</th>
+        <th>入口</th>
+        <th>用途</th>
+    </tr>
+    <tr>
+        <td>進行確認・結果入力</td>
+        <td>
+            <a href="{% url 'schedule_view' tournament.code %}">
+                試合進行表
+            </a>
+        </td>
+        <td>コート別の進行、呼出、結果入力、採点票出力を行います。</td>
+    </tr>
+    <tr>
+        <td>進行調整</td>
+        <td>
+            <a href="{% url 'schedule_maintenance' tournament.code %}">
+                進行メンテナンス
+            </a>
+        </td>
+        <td>試合順の確認、未配置トーナメント試合の追加、進行枠の調整を行います。</td>
+    </tr>
+    <tr>
+        <td>進出元調整</td>
+        <td>
+            <a href="{% url 'advancement_source_list' tournament.code %}">
+                進出元一覧・入れ替え
+            </a>
+        </td>
+        <td>後続Stageの枠に入る進出元を確認・入れ替えします。</td>
+    </tr>
+    <tr>
+        <td>バックアップ・復元</td>
+        <td>
+            <a href="{% url 'tournament_snapshot_list' tournament.code %}">
+                大会スナップショット
+            </a>
+        </td>
+        <td>リタイア対応や反映処理の前後で、進行・結果を退避・復元します。</td>
+    </tr>
+</table>
+
+<h3>カテゴリ別</h3>
 
 <table>
     <tr>
         <th>カテゴリ</th>
         <th>進行・結果</th>
-        <th>退避・調整</th>
-        <th>枠メンテ</th>
+        <th>枠・調整</th>
+        <th>退避</th>
     </tr>
     {% for category in categories %}
         <tr>
-            <td>
-                {{ category.name }}
-            </td>
+            <td>{{ category.name }}</td>
             <td>
                 <a href="{% url 'category_stage_overview' category.id %}">
                     Stage一覧
-                </a>
-                ／
-                <a href="{% url 'schedule_view' tournament.code %}">
-                    試合進行表
-                </a>
-            </td>
-            <td>
-                <a href="{% url 'category_snapshot_list' category.id %}">
-                    スナップショット
-                </a>
-                ／
-                <a href="{% url 'advancement_source_list' tournament.code %}">
-                    進出元入れ替え
                 </a>
             </td>
             <td>
@@ -47,6 +83,11 @@
                 ／
                 <a href="{% url 'bracket_list' tournament.code %}">
                     トーナメント
+                </a>
+            </td>
+            <td>
+                <a href="{% url 'category_snapshot_list' category.id %}">
+                    スナップショット
                 </a>
             </td>
         </tr>
@@ -59,166 +100,129 @@
     {% endfor %}
 </table>
 
-<h3>表示設定</h3>
+<h3>事前準備CSV</h3>
 
 <p>
-    大会デフォルト設定を基本にしつつ、必要なトーナメントだけ片山・両山、参加者表示、優勝者表示を個別に調整します。
-</p>
-
-<p>
-    リーグ参加者表示:
-    <strong>{{ tournament.get_default_league_entry_display_mode_display }}</strong>
-    ／
-    トーナメント参加者表示:
-    <strong>{{ tournament.get_default_tournament_entry_display_mode_display }}</strong>
-    ／
-    トーナメント表示方式:
-    <strong>{{ tournament.get_default_tournament_layout_type_display }}</strong>
-    ／
-    片側優勝者表示:
-    <strong>{{ tournament.get_default_single_champion_display_mode_display }}</strong>
-    ／
-    片側優勝者文字組み:
-    <strong>{{ tournament.get_default_single_champion_text_layout_display }}</strong>
-    ／
-    左右優勝者表示:
-    <strong>{{ tournament.get_default_split_champion_display_mode_display }}</strong>
-    ／
-    左右優勝者文字組み:
-    <strong>{{ tournament.get_default_split_champion_text_layout_display }}</strong>
-    ／
-    スコア表示:
-    <strong>{{ tournament.get_default_tournament_score_display_mode_display }}</strong>
-    ／
-    <a href="{% url 'tournament_settings' tournament.code %}">
-        大会設定
-    </a>
+    通常のCSV取込はこの3つを使います。
+    旧形式のリーグ枠CSVやトーナメント個別CSVは、誤操作防止のため通常メニューから外しています。
 </p>
 
 <table>
     <tr>
-        <th>カテゴリ</th>
-        <th>Stage一覧</th>
-        <th>トーナメント個別設定</th>
+        <th>順番</th>
+        <th>入口</th>
+        <th>内容</th>
     </tr>
-    {% for category in categories %}
-        <tr>
-            <td>{{ category.name }}</td>
-            <td>
-                <a href="{% url 'category_stage_overview' category.id %}">
-                    Stage一覧
-                </a>
-            </td>
-            <td>
-                <a href="{% url 'bracket_list' tournament.code %}">
-                    トーナメント一覧・個別設定
-                </a>
-            </td>
-        </tr>
-    {% empty %}
-        <tr>
-            <td colspan="3">カテゴリがありません。</td>
-        </tr>
-    {% endfor %}
+    <tr>
+        <td>1</td>
+        <td>
+            <a href="{% url 'import_participants' tournament.code %}">
+                参加者CSV取込
+            </a>
+        </td>
+        <td>カテゴリ別の参加者名簿を登録します。</td>
+    </tr>
+    <tr>
+        <td>2</td>
+        <td>
+            <a href="{% url 'import_stage_slots' tournament.code %}">
+                Stage枠CSV取込
+            </a>
+            ／
+            <a href="{% url 'export_stage_slots' tournament.code %}">
+                現在のStage枠CSV
+            </a>
+        </td>
+        <td>リーグ枠、トーナメント枠、進出元の参照関係を登録します。</td>
+    </tr>
+    <tr>
+        <td>3</td>
+        <td>
+            <a href="{% url 'import_schedule' tournament.code %}">
+                試合進行CSV取込
+            </a>
+            ／
+            <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
+                フォーマット
+            </a>
+        </td>
+        <td>リーグとトーナメントのコート割・試合順を登録します。</td>
+    </tr>
 </table>
 
-<h3>基本CSV取込</h3>
+<h3>設定</h3>
 
-<p>
-    通常の事前準備では、下の3つを使います。
-    旧形式のリーグ枠CSVやトーナメント個別CSVは、誤操作防止のためこのメニューから外しています。
-</p>
-
-<p>
-    <a href="{% url 'import_participants' tournament.code %}">
-        参加者CSV取込
-    </a>
-</p>
-
-<p>
-    <a href="{% url 'import_stage_slots' tournament.code %}">
-        ステージ枠CSV取込
-    </a>
-    ／
-    <a href="{% url 'export_stage_slots' tournament.code %}">
-        現在のCSVをダウンロード
-    </a>
-</p>
-
-<p>
-    <a href="{% url 'import_schedule' tournament.code %}">
-        統合進行CSV取込
-    </a>
-    ／
-    <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
-        CSVフォーマットをダウンロード
-    </a>
-</p>
-
-<h3>ステージ確認</h3>
-
-<p>
-    <a href="{% url 'advancement_source_list' tournament.code %}">
-        進出元一覧
-    </a>
-</p>
-
-<h3>スナップショット</h3>
-
-<p>
-    <a href="{% url 'tournament_snapshot_list' tournament.code %}">
-        大会全体スナップショット
-    </a>
-</p>
-
-<ul>
-    {% for category in categories %}
-        <li>
-            <a href="{% url 'category_snapshot_list' category.id %}">
-                {{ category.name }}
+<table>
+    <tr>
+        <th>項目</th>
+        <th>入口</th>
+        <th>現在の設定</th>
+    </tr>
+    <tr>
+        <td>大会デフォルト</td>
+        <td>
+            <a href="{% url 'tournament_settings' tournament.code %}">
+                大会設定
             </a>
-        </li>
-    {% endfor %}
-</ul>
-
-<h3>トーナメント</h3>
-
-<p>
-    <a href="{% url 'bracket_list' tournament.code %}">
-        トーナメント一覧・個別設定
-    </a>
-</p>
-
-<h3>リーグ枠メンテナンス</h3>
-
-<ul>
-    {% for category in categories %}
-        <li>
-            <a href="{% url 'pair_maintenance' category.id %}">
-                {{ category.name }}
+        </td>
+        <td>
+            リーグ:
+            <strong>{{ tournament.get_default_league_entry_display_mode_display }}</strong>
+            ／
+            トーナメント:
+            <strong>{{ tournament.get_default_tournament_entry_display_mode_display }}</strong>
+            ／
+            表示方式:
+            <strong>{{ tournament.get_default_tournament_layout_type_display }}</strong>
+        </td>
+    </tr>
+    <tr>
+        <td>トーナメント個別設定</td>
+        <td>
+            <a href="{% url 'bracket_list' tournament.code %}">
+                トーナメント一覧・個別設定
             </a>
-        </li>
-    {% endfor %}
-</ul>
+        </td>
+        <td>大会デフォルトと異なる表示方式、スコア表示、優勝者表示を調整します。</td>
+    </tr>
+    <tr>
+        <td>表示順</td>
+        <td>
+            <a href="{% url 'order_maintenance' tournament.code %}">
+                カテゴリ・リーグ表示順
+            </a>
+            ／
+            <a href="{% url 'court_order_maintenance' tournament.code %}">
+                コート表示順
+            </a>
+        </td>
+        <td>画面表示と進行表の並びを整えます。</td>
+    </tr>
+</table>
 
-<h3>進行メンテナンス</h3>
+<h3>作成・追加</h3>
 
-<p>
-    <a href="{% url 'schedule_maintenance' tournament.code %}">
-        統合進行メンテナンス
-    </a>
-</p>
-
-<p>
-    <a href="{% url 'order_maintenance' tournament.code %}">
-        カテゴリ・リーグ表示順メンテナンス
-    </a>
-</p>
-
-<p>
-    <a href="{% url 'court_order_maintenance' tournament.code %}">
-        コート表示順メンテナンス
-    </a>
-</p>
+<table>
+    <tr>
+        <th>入口</th>
+        <th>用途</th>
+    </tr>
+    <tr>
+        <td>
+            <a href="{% url 'add_category' tournament.code %}">
+                カテゴリ追加
+            </a>
+        </td>
+        <td>CSV取込前にカテゴリだけ先に作りたい場合に使います。</td>
+    </tr>
+    <tr>
+        <td>
+            <a href="{% url 'add_tournament_bracket' tournament.code %}">
+                トーナメント追加
+            </a>
+        </td>
+        <td>手入力でトーナメント表を作る導線は今後整理します。</td>
+    </tr>
+</table>
 
 {% endblock %}

@@ -4464,13 +4464,16 @@ class MaintenanceMenuTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "カテゴリ別クイック操作")
-        self.assertContains(response, "表示設定")
-        self.assertContains(response, "リーグ参加者表示")
-        self.assertContains(response, "トーナメント参加者表示")
+        self.assertContains(response, "当日運営")
+        self.assertContains(response, "カテゴリ別")
+        self.assertContains(response, "事前準備CSV")
+        self.assertContains(response, "設定")
+        self.assertContains(response, "大会デフォルト")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "Stage一覧")
         self.assertContains(response, "トーナメント一覧・個別設定")
+        self.assertContains(response, "進出元一覧・入れ替え")
+        self.assertContains(response, "試合進行CSV取込")
         self.assertContains(
             response,
             reverse(
