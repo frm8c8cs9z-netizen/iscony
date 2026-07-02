@@ -646,6 +646,96 @@ def _create_advancement_source(row_data, target_entry):
     source.save()
 
 
+def _stage_reimport_protection_errors(stages):
+    """Stage再取込で失われる運用データが残っていないか確認する。"""
+
+    errors = []
+
+    for stage in stages:
+        stage_label = (
+            f"カテゴリ「{stage.category.name}」 Stage「{stage.name}」"
+        )
+
+        round_robin_has_result = RoundRobinMatch.objects.filter(
+            group__stage=stage,
+        ).filter(
+            Q(pair1_games__isnull=False)
+            | Q(pair2_games__isnull=False)
+            | Q(completed=True)
+            | ~Q(result_type=RoundRobinMatch.RESULT_NORMAL)
+        ).exists()
+
+        if round_robin_has_result:
+            errors.append(
+                f"{stage_label}にはリーグの試合結果が入力済みです。"
+                "Stage再取込で消えるため、取込できません。"
+            )
+
+        tournament_has_result = TournamentMatch.objects.filter(
+            bracket__stage=stage,
+        ).filter(
+            Q(pair1_games__isnull=False)
+            | Q(pair2_games__isnull=False)
+            | Q(winner__isnull=False)
+            | ~Q(result_type=TournamentMatch.RESULT_NORMAL)
+        ).exists()
+
+        if tournament_has_result:
+            errors.append(
+                f"{stage_label}にはトーナメントの試合結果が入力済みです。"
+                "Stage再取込で消えるため、取込できません。"
+            )
+
+        ranking_has_result = GroupRanking.objects.filter(
+            group__stage=stage,
+        ).filter(
+            Q(rank__isnull=False)
+            | Q(wins__gt=0)
+            | Q(losses__gt=0)
+            | Q(games_won__gt=0)
+            | Q(games_lost__gt=0)
+        ).exists()
+
+        if ranking_has_result:
+            errors.append(
+                f"{stage_label}にはリーグ順位情報が入力済みです。"
+                "Stage再取込で消えるため、取込できません。"
+            )
+
+        has_schedule = Schedule.objects.filter(
+            Q(round_robin_match__group__stage=stage)
+            | Q(tournament_match__bracket__stage=stage)
+        ).exists()
+
+        if has_schedule:
+            errors.append(
+                f"{stage_label}は試合進行表に登録済みです。"
+                "Stage再取込で進行表から消えるため、取込できません。"
+            )
+
+        league_advancement_applied = LeagueEntry.objects.filter(
+            group__stage=stage,
+            participant__isnull=False,
+            advancement_source__isnull=False,
+        ).exists()
+        tournament_advancement_applied = TournamentEntry.objects.filter(
+            bracket__stage=stage,
+            participant__isnull=False,
+            advancement_source__isnull=False,
+        ).exists()
+
+        if (
+            league_advancement_applied
+            or tournament_advancement_applied
+        ):
+            errors.append(
+                f"{stage_label}には後続Stage反映済みの参加者がいます。"
+                "Stage再取込で貼り付け位置が消えるため、取込できません。"
+            )
+
+    return errors
+
+
 def import_participants(request, tournament_code):
     """
     参加者CSVを取り込む。
@@ -1298,6 +1388,12 @@ def import_stage_slots(request, tournament_code):
                                 f"Stage「{target_stage.name}」から参照されています。"
                                 "関連するStageも同じCSVに含めてください。"
                             )
+
+                errors.extend(
+                    _stage_reimport_protection_errors(
+                        existing_target_stages
+                    )
+                )
 
             if errors:
                 return render(

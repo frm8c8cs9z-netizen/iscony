@@ -2907,6 +2907,186 @@ class ImportStageSlotsCsvTests(TestCase):
         )
         self.assertTrue(Group.objects.filter(id=source_group.id).exists())
 
+    def test_reimport_stage_with_league_result_is_blocked(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry_1 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+        )
+        entry_2 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="2",
+            display_order=2,
+        )
+        match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry_1,
+            pair2=entry_2,
+            pair1_games=4,
+            pair2_games=2,
+            completed=True,
+        )
+
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選リーグ,L,A,,1,1,,,,,,\n"
+            "男子B,予選リーグ,L,A,,2,2,,,,,,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "カテゴリ「男子B」 Stage「予選リーグ」にはリーグの試合結果が入力済みです。",
+        )
+        match.refresh_from_db()
+        self.assertEqual(match.pair1_games, 4)
+        self.assertEqual(match.pair2_games, 2)
+
+    def test_reimport_stage_with_schedule_is_blocked(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry_1 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+        )
+        entry_2 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="2",
+            display_order=2,
+        )
+        match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry_1,
+            pair2=entry_2,
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1",
+        )
+        Schedule.objects.create(
+            court=court,
+            order=1,
+            round_robin_match=match,
+        )
+
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選リーグ,L,A,,1,1,,,,,,\n"
+            "男子B,予選リーグ,L,A,,2,2,,,,,,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "カテゴリ「男子B」 Stage「予選リーグ」は試合進行表に登録済みです。",
+        )
+        self.assertTrue(
+            Schedule.objects.filter(
+                round_robin_match=match,
+            ).exists()
+        )
+
+    def test_reimport_stage_with_applied_advancement_is_blocked(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        source_group = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+        )
+        target_stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        target_group = Group.objects.create(
+            category=category,
+            stage=target_stage,
+            name="A",
+        )
+        participant = self._create_participant(
+            category,
+            "E001",
+        )
+        source_entry = LeagueEntry.objects.create(
+            category=category,
+            group=source_group,
+            pair_code="1",
+            display_order=1,
+            participant=participant,
+            player1_name=participant.player1_name,
+            player2_name=participant.player2_name,
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="A1",
+            display_order=1,
+            participant=participant,
+            player1_name=participant.player1_name,
+            player2_name=participant.player2_name,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=1,
+        )
+
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選リーグ,L,A,,1,1,E001,,,,,\n"
+            "男子B,決勝リーグ,L,A,,A1,1,,LR,予選リーグ,A,1,,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "カテゴリ「男子B」 Stage「決勝リーグ」には後続Stage反映済みの参加者がいます。",
+        )
+        target_entry.refresh_from_db()
+        self.assertEqual(target_entry.participant, participant)
+        self.assertEqual(source_entry.participant, participant)
+
     def test_entry_code_and_source_type_cannot_be_used_together(self):
         category = Category.objects.create(
             tournament=self.tournament,
