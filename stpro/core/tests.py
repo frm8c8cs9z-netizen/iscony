@@ -4274,6 +4274,11 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "左右表示")
         self.assertContains(response, "リーグ表とトーナメント表")
         self.assertContains(response, "見やすい配置が異なる")
+        self.assertContains(response, "参加者表示サンプル")
+        self.assertContains(response, "トーナメント表示サンプル")
+        self.assertContains(response, "優勝者表示の概念図")
+        self.assertContains(response, "片側・横書き")
+        self.assertContains(response, "左右・縦書き")
 
 
 class CategoryStageOverviewTests(TestCase):

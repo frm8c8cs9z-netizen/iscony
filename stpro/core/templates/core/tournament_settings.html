@@ -42,6 +42,29 @@
         </tr>
     </table>
 
+    <h4>参加者表示サンプル</h4>
+
+    <table border="1">
+        <tr>
+            <th>短い名前/所属2段</th>
+            <th>短い名前（所属）1行</th>
+            <th>フル名前/所属2段</th>
+        </tr>
+        <tr>
+            <td>
+                山田・佐藤<br>
+                （第一クラブ）
+            </td>
+            <td>
+                山田・佐藤（第一クラブ）
+            </td>
+            <td>
+                山田 太郎・佐藤 次郎<br>
+                第一クラブ
+            </td>
+        </tr>
+    </table>
+
     <h3>トーナメント表</h3>
 
     <p>
@@ -63,6 +86,43 @@
             <td>{{ form.default_tournament_score_display_mode.label_tag }}</td>
             <td>{{ form.default_tournament_score_display_mode }}</td>
             <td>{{ form.default_tournament_score_display_mode.help_text }}</td>
+        </tr>
+    </table>
+
+    <h4>トーナメント表示サンプル</h4>
+
+    <table border="1">
+        <tr>
+            <th>片側表示</th>
+            <th>左右表示</th>
+        </tr>
+        <tr>
+            <td>
+                <svg width="260" height="110" viewBox="0 0 260 110" role="img" aria-label="片側表示の概念図">
+                    <text x="12" y="22" font-size="12">1 山田・佐藤</text>
+                    <text x="12" y="82" font-size="12">2 鈴木・田中</text>
+                    <line x1="110" y1="20" x2="160" y2="20" stroke="#222" stroke-width="2"></line>
+                    <line x1="110" y1="80" x2="160" y2="80" stroke="#222" stroke-width="2"></line>
+                    <line x1="160" y1="20" x2="160" y2="80" stroke="#222" stroke-width="2"></line>
+                    <line x1="160" y1="50" x2="220" y2="50" stroke="#d00" stroke-width="3"></line>
+                </svg>
+            </td>
+            <td>
+                <svg width="260" height="110" viewBox="0 0 260 110" role="img" aria-label="左右表示の概念図">
+                    <text x="12" y="22" font-size="12">1 山田・佐藤</text>
+                    <text x="12" y="82" font-size="12">2 鈴木・田中</text>
+                    <text x="176" y="22" font-size="12">3 高橋・伊藤</text>
+                    <text x="176" y="82" font-size="12">4 渡辺・小林</text>
+                    <line x1="96" y1="20" x2="126" y2="20" stroke="#222" stroke-width="2"></line>
+                    <line x1="96" y1="80" x2="126" y2="80" stroke="#222" stroke-width="2"></line>
+                    <line x1="126" y1="20" x2="126" y2="80" stroke="#222" stroke-width="2"></line>
+                    <line x1="126" y1="50" x2="130" y2="50" stroke="#d00" stroke-width="3"></line>
+                    <line x1="164" y1="20" x2="134" y2="20" stroke="#222" stroke-width="2"></line>
+                    <line x1="164" y1="80" x2="134" y2="80" stroke="#222" stroke-width="2"></line>
+                    <line x1="134" y1="20" x2="134" y2="80" stroke="#222" stroke-width="2"></line>
+                    <line x1="134" y1="50" x2="130" y2="50" stroke="#d00" stroke-width="3"></line>
+                </svg>
+            </td>
         </tr>
     </table>
 
@@ -102,6 +162,52 @@
                 {{ form.default_split_champion_text_layout }}
                 <br>
                 <small>{{ form.default_split_champion_text_layout.help_text }}</small>
+            </td>
+        </tr>
+    </table>
+
+    <h4>優勝者表示の概念図</h4>
+
+    <table border="1">
+        <tr>
+            <th>片側・横書き</th>
+            <th>片側・縦書き</th>
+        </tr>
+        <tr>
+            <td>
+                <svg width="280" height="90" viewBox="0 0 280 90" role="img" aria-label="片側横書き優勝者表示の概念図">
+                    <line x1="20" y1="45" x2="140" y2="45" stroke="#d00" stroke-width="3"></line>
+                    <text x="150" y="45" font-size="13" dominant-baseline="middle" fill="#d00">山田・佐藤（第一クラブ）</text>
+                </svg>
+            </td>
+            <td>
+                <svg width="280" height="90" viewBox="0 0 280 90" role="img" aria-label="片側縦書き優勝者表示の概念図">
+                    <line x1="20" y1="45" x2="140" y2="45" stroke="#d00" stroke-width="3"></line>
+                    <text x="155" y="45" font-size="13" writing-mode="vertical-rl" text-anchor="middle" dominant-baseline="middle" fill="#d00">山田・佐藤</text>
+                </svg>
+            </td>
+        </tr>
+        <tr>
+            <th>左右・横書き</th>
+            <th>左右・縦書き</th>
+        </tr>
+        <tr>
+            <td>
+                <svg width="280" height="130" viewBox="0 0 280 130" role="img" aria-label="左右横書き優勝者表示の概念図">
+                    <line x1="30" y1="86" x2="140" y2="86" stroke="#d00" stroke-width="3"></line>
+                    <line x1="250" y1="86" x2="140" y2="86" stroke="#222" stroke-width="2"></line>
+                    <line x1="140" y1="86" x2="140" y2="54" stroke="#d00" stroke-width="3"></line>
+                    <text x="140" y="42" font-size="13" text-anchor="middle" fill="#d00">山田・佐藤</text>
+                    <text x="140" y="58" font-size="11" text-anchor="middle" fill="#d00">第一クラブ</text>
+                </svg>
+            </td>
+            <td>
+                <svg width="280" height="130" viewBox="0 0 280 130" role="img" aria-label="左右縦書き優勝者表示の概念図">
+                    <line x1="30" y1="100" x2="140" y2="100" stroke="#d00" stroke-width="3"></line>
+                    <line x1="250" y1="100" x2="140" y2="100" stroke="#222" stroke-width="2"></line>
+                    <line x1="140" y1="100" x2="140" y2="36" stroke="#d00" stroke-width="3"></line>
+                    <text x="140" y="28" font-size="13" writing-mode="vertical-rl" text-anchor="middle" fill="#d00">山田・佐藤</text>
+                </svg>
             </td>
         </tr>
     </table>
