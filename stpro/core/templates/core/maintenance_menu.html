@@ -125,6 +125,11 @@
 <h3>基本CSV取込</h3>
 
 <p>
+    通常の事前準備では、下の3つを使います。
+    旧形式のリーグ枠CSVやトーナメント個別CSVは、誤操作防止のためこのメニューから外しています。
+</p>
+
+<p>
     <a href="{% url 'import_participants' tournament.code %}">
         参加者CSV取込
     </a>
@@ -137,12 +142,6 @@
     ／
     <a href="{% url 'export_stage_slots' tournament.code %}">
         現在のCSVをダウンロード
-    </a>
-</p>
-
-<p>
-    <a href="{% url 'import_pairs' tournament.code %}">
-        リーグ枠CSV取込
     </a>
 </p>
 
@@ -186,7 +185,7 @@
 
 <p>
     <a href="{% url 'bracket_list' tournament.code %}">
-        トーナメント一覧・CSV取込
+        トーナメント一覧・個別設定
     </a>
 </p>
 

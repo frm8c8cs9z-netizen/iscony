@@ -20,14 +20,10 @@
     <a href="{% url 'generate_tournament_matches' tournament.code bracket.id %}">
         枠一括作成
     </a>
-    |
-    <a href="{% url 'import_bracket_positions' tournament.code bracket.id %}">
-        初期配置CSV
-    </a>
-    |
-    <a href="{% url 'import_tournament_schedule' tournament.code bracket.id %}">
-        進行CSV
-    </a>
+</p>
+
+<p>
+    トーナメント枠や進行順のCSV取込は、管理メニューの「ステージ枠CSV取込」「統合進行CSV取込」を使います。
 </p>
 
 <table>

@@ -3,13 +3,18 @@
 {% block content %}
 
 <h2>
-    トーナメント一覧・CSV取込
+    トーナメント一覧・個別設定
 </h2>
 
 <p>
     <a href="{% url 'add_tournament_bracket' tournament.code %}">
         トーナメント追加
     </a>
+</p>
+
+<p>
+    トーナメント枠や進行順のCSV取込は、通常は管理メニューの「ステージ枠CSV取込」「統合進行CSV取込」を使います。
+    この画面では、各トーナメント表の表示設定、表示確認、試合メンテナンスを行います。
 </p>
 
 <table border="1">
@@ -124,18 +129,6 @@
 
             <a href="{% url 'generate_tournament_matches' tournament.code bracket.id %}">
                 枠生成
-            </a>
-
-            |
-
-            <a href="{% url 'import_bracket_positions' tournament.code bracket.id %}">
-                トーナメント枠CSV
-            </a>
-
-            |
-
-            <a href="{% url 'import_tournament_schedule' tournament.code bracket.id %}">
-                トーナメント進行CSV
             </a>
 
             |
