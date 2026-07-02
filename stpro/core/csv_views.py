@@ -778,6 +778,83 @@ def _merged_schedule_flags(existing_flags, match):
     }
 
 
+def _schedule_import_lock_reason(schedule):
+    if schedule.called or schedule.started or schedule.finished:
+        return "進行状態が入っています"
+
+    if schedule.match_has_score:
+        return "試合結果が入力済みです"
+
+    return ""
+
+
+def _schedule_import_block_errors(target_groups, target_brackets):
+    """進行済みの範囲をCSV再取込で上書きしないための検査。"""
+
+    errors = []
+
+    league_schedules = Schedule.objects.filter(
+        round_robin_match__group_id__in=target_groups
+    ).select_related(
+        "round_robin_match",
+        "round_robin_match__group",
+        "round_robin_match__group__stage",
+        "round_robin_match__group__category",
+        "round_robin_match__pair1",
+        "round_robin_match__pair2",
+    )
+
+    for schedule in league_schedules:
+        reason = _schedule_import_lock_reason(schedule)
+
+        if not reason:
+            continue
+
+        match = schedule.round_robin_match
+        group = match.group
+        errors.append(
+            "試合進行CSVの対象範囲に進行済みの試合があります。"
+            f"カテゴリ={group.category.name} / "
+            f"Stage={group.stage.name} / "
+            f"Group={group.name} / "
+            f"{match.pair1.pair_code} vs {match.pair2.pair_code} / "
+            f"{reason}。CSV再取込はできません。"
+        )
+
+    tournament_schedules = Schedule.objects.filter(
+        tournament_match__bracket_id__in=target_brackets
+    ).select_related(
+        "tournament_match",
+        "tournament_match__bracket",
+        "tournament_match__bracket__stage",
+        "tournament_match__bracket__category",
+    )
+
+    for schedule in tournament_schedules:
+        reason = _schedule_import_lock_reason(schedule)
+
+        if not reason:
+            continue
+
+        match = schedule.tournament_match
+        bracket = match.bracket
+        match_label = (
+            match.match_label
+            or match.match_code
+            or f"M{match.match_number}"
+        )
+        errors.append(
+            "試合進行CSVの対象範囲に進行済みの試合があります。"
+            f"カテゴリ={bracket.category.name} / "
+            f"Stage={bracket.stage.name} / "
+            f"Bracket={bracket.name} / "
+            f"{match_label} / "
+            f"{reason}。CSV再取込はできません。"
+        )
+
+    return errors
+
+
 def import_participants(request, tournament_code):
     """
     参加者CSVを取り込む。
@@ -2415,6 +2492,14 @@ def import_schedule(request, tournament_code):
             if not validated_rows:
                 errors.append(
                     "取込対象の行がありません。"
+                )
+
+            if not errors:
+                errors.extend(
+                    _schedule_import_block_errors(
+                        target_groups,
+                        target_brackets,
+                    )
                 )
 
             if errors:

@@ -3695,7 +3695,7 @@ class ImportScheduleCsvTests(TestCase):
             "2日目",
         )
 
-    def test_schedule_import_preserves_existing_progress_flags(self):
+    def test_schedule_import_rejects_existing_progress_flags(self):
         stage, _, match = self._create_league_match(
             "予選リーグ",
         )
@@ -3717,15 +3717,23 @@ class ImportScheduleCsvTests(TestCase):
             f"男子A,{stage.code},1コート,1,1,2\n"
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "試合進行CSVの対象範囲に進行済みの試合があります。",
+        )
+        self.assertContains(
+            response,
+            "進行状態が入っています",
+        )
         schedule = Schedule.objects.get(round_robin_match=match)
-        self.assertEqual(schedule.court.name, "1コート")
-        self.assertEqual(schedule.order, 1)
+        self.assertEqual(schedule.court.name, "旧コート")
+        self.assertEqual(schedule.order, 9)
         self.assertTrue(schedule.called)
         self.assertTrue(schedule.started)
         self.assertTrue(schedule.finished)
 
-    def test_schedule_import_marks_completed_league_match_finished(self):
+    def test_schedule_import_rejects_completed_league_match(self):
         stage, _, match = self._create_league_match(
             "予選リーグ",
         )
@@ -3733,19 +3741,31 @@ class ImportScheduleCsvTests(TestCase):
         match.pair2_games = 2
         match.completed = True
         match.save()
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="旧コート",
+        )
+        Schedule.objects.create(
+            court=court,
+            order=5,
+            round_robin_match=match,
+        )
 
         response = self._post_csv(
             "category,stage_code,court,order,slot1_code,slot2_code\n"
             f"男子A,{stage.code},1コート,1,1,2\n"
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "試合結果が入力済みです",
+        )
         schedule = Schedule.objects.get(round_robin_match=match)
-        self.assertTrue(schedule.called)
-        self.assertTrue(schedule.started)
-        self.assertTrue(schedule.finished)
+        self.assertEqual(schedule.court.name, "旧コート")
+        self.assertEqual(schedule.order, 5)
 
-    def test_schedule_import_marks_completed_tournament_match_finished(self):
+    def test_schedule_import_rejects_completed_tournament_match(self):
         tournament_stage = Stage.objects.create(
             category=self.category,
             name="決勝T",
@@ -3781,17 +3801,29 @@ class ImportScheduleCsvTests(TestCase):
             pair2_games=2,
             winner=entry1,
         )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="旧コート",
+        )
+        Schedule.objects.create(
+            court=court,
+            order=5,
+            tournament_match=match,
+        )
 
         response = self._post_csv(
             "category,stage,bracket,court,order,match_code\n"
             "男子A,決勝T,本戦,1コート,1,M1\n"
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "試合結果が入力済みです",
+        )
         schedule = Schedule.objects.get(tournament_match=match)
-        self.assertTrue(schedule.called)
-        self.assertTrue(schedule.started)
-        self.assertTrue(schedule.finished)
+        self.assertEqual(schedule.court.name, "旧コート")
+        self.assertEqual(schedule.order, 5)
 
 
 class CsvFormatDownloadTests(TestCase):
