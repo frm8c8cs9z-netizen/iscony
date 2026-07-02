@@ -97,7 +97,7 @@ def _advancement_target(source):
     )
 
 
-def apply_stage_advancements(source_stage):
+def apply_stage_advancements(source_stage, *, include_snapshot_info=False):
     """確定済みStage結果をAdvancementSourceに従って後続枠へ反映する。"""
 
     if not isinstance(source_stage, Stage):
@@ -144,8 +144,10 @@ def apply_stage_advancements(source_stage):
 
             resolved.append((target, source_entry))
 
+        snapshot_info = None
+
         if getattr(settings, "ENABLE_AUTO_OPERATION_SNAPSHOT", True):
-            create_stage_advancement_snapshot_once(source_stage)
+            snapshot_info = create_stage_advancement_snapshot_once(source_stage)
 
         for target, source_entry in resolved:
             target.participant = source_entry.participant
@@ -170,7 +172,12 @@ def apply_stage_advancements(source_stage):
 
             target.save(update_fields=update_fields)
 
-        return len(resolved)
+        applied_count = len(resolved)
+
+        if include_snapshot_info:
+            return applied_count, snapshot_info
+
+        return applied_count
 
 
 def swap_advancement_sources(source_a, source_b):

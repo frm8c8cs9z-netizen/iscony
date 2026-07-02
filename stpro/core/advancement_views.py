@@ -338,10 +338,32 @@ def apply_stage_results(request, stage_id):
         return redirect("advancement_source_list", code=tournament.code)
 
     try:
-        applied_count = apply_stage_advancements(stage)
+        applied_count, snapshot_info = apply_stage_advancements(
+            stage,
+            include_snapshot_info=True,
+        )
     except ValidationError as error:
         messages.error(request, " ".join(error.messages))
     else:
+        if snapshot_info:
+            snapshot, created = snapshot_info
+
+            if created:
+                messages.info(
+                    request,
+                    f"反映前の自動スナップショットを作成しました: {snapshot.label}",
+                )
+            else:
+                messages.info(
+                    request,
+                    f"このStageの反映前スナップショットは作成済みです: {snapshot.label}",
+                )
+        else:
+            messages.info(
+                request,
+                "自動スナップショットは設定により無効です。",
+            )
+
         messages.success(
             request,
             f"{stage.category.name} / {stage.name} の結果を"

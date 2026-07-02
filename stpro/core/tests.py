@@ -4046,9 +4046,30 @@ class ApplyStageAdvancementsTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "反映前の自動スナップショットを作成しました")
         self.assertContains(response, "後続1枠へ反映しました")
         self.target.refresh_from_db()
         self.assertEqual(self.target.participant, self.participant1)
+
+    def test_apply_stage_results_view_reports_existing_auto_snapshot(self):
+        self._finish_preliminary_group()
+        apply_stage_advancements(self.preliminary_stage)
+
+        response = self.client.post(
+            reverse(
+                "apply_stage_results",
+                kwargs={"stage_id": self.preliminary_stage.id},
+            ),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "このStageの反映前スナップショットは作成済みです",
+        )
+        self.assertContains(response, "後続1枠へ反映しました")
+        self.assertEqual(OperationSnapshot.objects.count(), 1)
 
     def test_tournament_loser_can_be_applied_to_league_entry(self):
         tournament_stage = Stage.objects.create(
