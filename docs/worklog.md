@@ -181,3 +181,9 @@
   - `./venv/bin/python stpro/manage.py test core.tests.ReceptionMatchSearchTests core.tests.MaintenanceMenuTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 165 tests OK。
+
+### TODO追記: 受付検索画面の位置づけ見直し
+- 受付検索画面を少し使った結果、フォーム検索は1回戦目など受付が押しかける時間帯の主導線としては重い可能性が高いと判断。
+- 現行検索画面は、迷った時・例外対応・進行表と紙が合わない時の補助導線として据え置く方針を `TODO.md` に追記。
+- 混雑時の主導線は、進行表から直接押す導線、短い検索キー、QR読み取りを組み合わせて育てる方針。
+- ドキュメント更新のみのためテストは未実行。
