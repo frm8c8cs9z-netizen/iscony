@@ -197,3 +197,11 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_schedule_view_shows_reception_focused_match_cards core.tests.TournamentScheduleBehaviorTests.test_unresolved_tournament_match_schedule_score_sheet_redirects --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 166 tests OK。
+
+### Django設定パッケージ名変更
+- Djangoプロジェクト設定ディレクトリを `stpro/mysite` から `stpro/config` にリネーム。
+- `manage.py`、`settings.py`、`asgi.py`、`wsgi.py`、`urls.py` 内の `mysite` 参照を `config` に変更。
+- 確認:
+  - `./venv/bin/python stpro/manage.py check`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 166 tests OK。
