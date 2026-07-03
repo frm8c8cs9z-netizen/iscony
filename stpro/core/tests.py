@@ -6066,13 +6066,13 @@ class TournamentScheduleBehaviorTests(TestCase):
             pair1=entry3,
             pair2=entry4,
         )
-        TournamentMatch.objects.create(
+        pending_semifinal = TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=2,
             match_number=1,
             match_code="M3",
         )
-        TournamentMatch.objects.create(
+        pending_final = TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=3,
             match_number=1,
@@ -6106,6 +6106,26 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('y="93.0"', svg_content)
         self.assertIn('text-anchor="end"', svg_content)
         self.assertIn('dominant-baseline="middle"', svg_content)
+        self.assertIn(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": pending_semifinal.id,
+                },
+            ),
+            svg_content,
+        )
+        self.assertIn(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": pending_final.id,
+                },
+            ),
+            svg_content,
+        )
 
     def test_tournament_bracket_detail_keeps_seed_match_slot_height(self):
         self.use_individual_bracket_settings()

@@ -128,3 +128,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 159 tests OK。
+
+### トーナメントSVGマッチラベルのリンク復旧
+- トーナメントSVGのマッチラベル/マッチコードから、結果入力画面へ移動できる導線を復旧。
+- これまでは両ペアが確定している試合だけSVGラベルにリンクを付けていたが、対戦未確定の後続試合でもマッチコードから結果入力画面へ移動できるようにした。
+- 通常マッチと左右分割レイアウトの決勝ラベルに適用。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_tournament_bracket_detail_draws_later_round_skeleton_lines --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 159 tests OK。

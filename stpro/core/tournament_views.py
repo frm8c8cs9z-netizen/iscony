@@ -168,6 +168,18 @@ def _should_highlight_svg_advance(match, svg):
     return True
 
 
+def _tournament_match_score_url(match):
+    """トーナメント試合の結果入力画面URLを返す。"""
+
+    return reverse(
+        "input_tournament_match_score",
+        kwargs={
+            "code": match.bracket.category.tournament.code,
+            "match_id": match.id,
+        },
+    )
+
+
 def _svg_entry_with_org(entry):
     """SVG内に表示する短い名前＋所属名を返す。"""
 
@@ -763,17 +775,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         join_x,
     )
 
-    match_url = (
-        reverse(
-            "input_tournament_match_score",
-            kwargs={
-                "code": match.bracket.category.tournament.code,
-                "match_id": match.id,
-            },
-        )
-        if match.pair1 and match.pair2
-        else ""
-    )
+    match_url = _tournament_match_score_url(match)
 
     if not match.match_code.startswith("S"):
         svg["labels"].append({
@@ -1197,17 +1199,7 @@ def _build_svg_bracket_data(bracket, round_data):
             "class": "svg-match-code",
             "anchor": "middle",
             "baseline": "middle",
-            "url": (
-                reverse(
-                    "input_tournament_match_score",
-                    kwargs={
-                        "code": bracket.category.tournament.code,
-                        "match_id": final_match.id,
-                    },
-                )
-                if final_match.pair1 and final_match.pair2
-                else ""
-            ),
+            "url": _tournament_match_score_url(final_match),
         })
 
         for entry, y, side_name in [
