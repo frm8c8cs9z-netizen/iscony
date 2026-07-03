@@ -111,3 +111,20 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_tournament_bracket_detail_shows_svg_bracket --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 159 tests OK。
+
+### メンテナンスメニュー再構築 第1段階
+- `maintenance_menu.html` を、実装単位ではなく作業目的別の構成へ再配置。
+- 新しい区分:
+  - 当日運営
+  - Stage・結果反映
+  - 大会準備
+  - 表示・設定
+  - 高度なメンテナンス
+- 受付・結果入力、採点票出力、進行状況確認を上部に寄せた。現時点では既存の試合進行表やコート状況へリンクし、後で受付用横断検索画面を追加したら差し替えられる形にした。
+- カテゴリ別のStage一覧、リーグ表、リーグ枠メンテナンスへの導線は維持。
+- 通常運用では使いにくい旧リーグ枠CSV取込とトーナメント追加は「高度なメンテナンス」へ移動。
+- `TODO.md` に、第1段階完了と次段階の受付・結果入力横断検索画面を追記。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 159 tests OK。

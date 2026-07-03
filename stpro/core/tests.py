@@ -4998,16 +4998,51 @@ class MaintenanceMenuTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "当日運営")
-        self.assertContains(response, "カテゴリ別")
-        self.assertContains(response, "事前準備CSV")
-        self.assertContains(response, "設定")
+        self.assertContains(response, "受付・結果入力")
+        self.assertContains(response, "採点票出力")
+        self.assertContains(response, "Stage・結果反映")
+        self.assertContains(response, "大会準備")
+        self.assertContains(response, "表示・設定")
+        self.assertContains(response, "高度なメンテナンス")
         self.assertContains(response, "大会デフォルト")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
         self.assertContains(response, "Stage一覧")
+        self.assertContains(response, "リーグ表")
         self.assertContains(response, "トーナメント一覧・個別設定")
         self.assertContains(response, "進出元一覧・入れ替え")
         self.assertContains(response, "試合進行CSV取込")
+        self.assertContains(response, "旧リーグ枠CSV取込")
+        self.assertLess(
+            content.index("当日運営"),
+            content.index("Stage・結果反映"),
+        )
+        self.assertLess(
+            content.index("Stage・結果反映"),
+            content.index("大会準備"),
+        )
+        self.assertLess(
+            content.index("大会準備"),
+            content.index("表示・設定"),
+        )
+        self.assertLess(
+            content.index("表示・設定"),
+            content.index("高度なメンテナンス"),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "schedule_view",
+                kwargs={"tournament_code": tournament.code},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "court_status",
+                kwargs={"tournament_code": tournament.code},
+            ),
+        )
         self.assertContains(
             response,
             reverse(
@@ -5026,6 +5061,13 @@ class MaintenanceMenuTests(TestCase):
             response,
             reverse(
                 "category_stage_overview",
+                kwargs={"category_id": first_category.id},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "category_detail",
                 kwargs={"category_id": first_category.id},
             ),
         )
