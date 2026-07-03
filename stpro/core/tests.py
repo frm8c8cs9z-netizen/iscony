@@ -7703,3 +7703,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "リーグ表")
         self.assertContains(response, "トーナメント表")
         self.assertContains(response, "未入力")
+        self.assertNotContains(
+            response,
+            reverse(
+                "court_score_sheets_pdf",
+                kwargs={"court_id": self.court.id},
+            ),
+        )

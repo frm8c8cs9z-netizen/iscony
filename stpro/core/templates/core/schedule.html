@@ -21,12 +21,7 @@
 
             {% for court in courts %}
                 <th>
-                    <a
-                        href="{% url 'court_score_sheets_pdf' court.id %}?schedule_block={{ block_table.block.id }}"
-                        target="_blank"
-                    >
-                        {{ court.name }}
-                    </a>
+                    {{ court.name }}
                 </th>
             {% endfor %}
         </tr>

@@ -198,6 +198,16 @@
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 166 tests OK。
 
+### 進行表ヘッダの採点票リンク削除
+- 進行表のコート見出しに付いていたコート別採点票PDFリンクを削除し、ただのコート名表示に戻した。
+- 当初はコート単位で採点票をまとめて出す入口として置いていたが、現在の運用意図と出力内容がずれており、誤操作のもとになるため。
+- 試合セル内の個別 `採点票PDF` リンクは維持。
+- リーグ全試合分やトーナメント1回戦分を一括出力する導線は、今後あらためて設計する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_schedule_view_shows_reception_focused_match_cards --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 166 tests OK。
+
 ### Django設定パッケージ名変更
 - Djangoプロジェクト設定ディレクトリを `stpro/mysite` から `stpro/config` にリネーム。
 - `manage.py`、`settings.py`、`asgi.py`、`wsgi.py`、`urls.py` 内の `mysite` 参照を `config` に変更。
