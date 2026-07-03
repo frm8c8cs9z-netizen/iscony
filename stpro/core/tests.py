@@ -5341,6 +5341,69 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
+    def test_unresolved_tournament_match_score_input_is_disabled(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entry1,
+            pair2=None,
+        )
+
+        response = self.client.get(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": match.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        self.assertContains(response, "未確定")
+        self.assertContains(response, "disabled")
+
+    def test_unresolved_tournament_match_rejects_score_post(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entry1,
+            pair2=None,
+        )
+
+        response = self.client.post(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": match.id,
+                },
+            ),
+            {
+                "action": "save",
+                "pair1_games": "4",
+                "pair2_games": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        match.refresh_from_db()
+        self.assertIsNone(match.pair1_games)
+        self.assertIsNone(match.pair2_games)
+        self.assertIsNone(match.winner)
+
     def test_tournament_bracket_default_layout_uses_tournament_default(self):
         self.assertTrue(self.bracket.use_tournament_defaults)
         self.assertEqual(

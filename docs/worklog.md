@@ -137,3 +137,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_tournament_bracket_detail_draws_later_round_skeleton_lines --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 159 tests OK。
+
+### 対戦未確定トーナメント試合の結果入力ブロック
+- トーナメントSVGのマッチラベルから結果入力画面へ移動する導線は維持しつつ、対戦相手が未確定の試合では結果を保存できないようにした。
+- 入力画面では未確定枠を `未確定` と表示し、スコア入力欄と保存ボタンを無効化。
+- POST側でも、対戦相手未確定の新規結果保存・リタイア入力を拒否する防御を追加。既存結果の削除は復旧用途として従来どおり先に処理する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_unresolved_tournament_match_score_input_is_disabled core.tests.TournamentScheduleBehaviorTests.test_unresolved_tournament_match_rejects_score_post --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 161 tests OK。

@@ -15,6 +15,10 @@ def render_score_input(
         "winning_games": winning_games,
         "mode": mode,
         "back_url": back_url,
+        "can_input_score": not (
+            mode == "tournament"
+            and (not match.pair1_id or not match.pair2_id)
+        ),
     }
 
     if tournament:

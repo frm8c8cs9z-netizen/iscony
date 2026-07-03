@@ -1498,6 +1498,26 @@ def input_tournament_match_score(request, code, match_id):
                 bracket_id=match.bracket.id
             )
 
+        if not match.pair1_id or not match.pair2_id:
+            return render_score_input(
+                request=request,
+                tournament=tournament,
+                match=match,
+                winning_games=winning_games,
+                mode="tournament",
+                back_url=request.GET.get(
+                    "next",
+                    reverse(
+                        "tournament_bracket_detail",
+                        kwargs={
+                            "code": tournament.code,
+                            "bracket_id": match.bracket.id,
+                        }
+                    )
+                ),
+                error="対戦相手が確定していないため、この試合の結果は入力できません。",
+            )
+
         if action in ["retire_pair1", "retire_pair2", "retire_both"]:
             retired_side_map = {
                 "retire_pair1": "pair1",
