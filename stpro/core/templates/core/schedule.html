@@ -53,125 +53,140 @@
                         {% if schedule %}
 
                             {% with match=schedule.match %}
-
-                                {% if schedule.is_round_robin %}
-
-                                    <a href="{% url 'input_match_score' match.id %}?next={{ request.path }}">
-                                        {{ match.group.category.name }}
-                                        /
-                                        {% if match.group.stage %}
-                                            {{ match.group.stage.name }}
-                                            /
-                                        {% endif %}
-                                        {{ match.group.name }}
-                                        <br>
-
-                                        {{ match.pair1.code }}
-                                        {{ match.pair1.short_name }}
-
-                                        {% if match.pair1_games != None and match.pair2_games != None %}
-                                            <strong>
-                                                ({{match.pair1_games}})
-                                            </strong>
-                                        {% endif %}
-                                        
-                                        <br>
-                                        vs
-                                        <br>
-                                        {{ match.pair2.code }}
-                                        {{ match.pair2.short_name }}
-                                        {% if match.pair1_games != None and match.pair2_games != None %}
-                                            <strong>
-                                                ({{match.pair2_games}})
-                                            </strong>
-                                        {% endif %}
-                                        
-                                        <br>
-                                    </a>
-
-                                {% elif schedule.is_tournament %}
-
-                                    {% if match.pair1 and match.pair2 %}
-                                        <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
-                                    
-                                    {% else %}
-                                            <span style="color:gray;">
-                                    {% endif %}
-
-                                        {{ match.bracket.category.name }}
-                                        /
-                                        {% if match.bracket.stage %}
-                                            {{ match.bracket.stage.name }}
-                                            /
-                                        {% endif %}
-                                        {{ match.bracket.name }}
-                                        {% if match.match_code %}
-                                            /
-                                            {{ match.match_code }}
-                                        {% endif %}
-                                        <br>
-                                        {% if match.pair1 %}
-                                            {{ match.pair1.code }}
-                                            {{ match.pair1.short_name}}
-                                        {% else %}
-                                            未定
-                                        {% endif %}
-
-                                        <br>
-                                        vs
-                                        <br>
-
-                                        {% if match.pair2 %}
-                                            {{ match.pair2.code }}
-                                            {{ match.pair2.short_name }}
-                                            <br>
-                                        {% else %}
-                                            未定
-                                        {% endif %}
-
-                                        {% if match.pair1_games != None and match.pair2_games != None %}
-                                            <br>
-                                            <strong>
-                                                {% if match.pair1 and match.is_double_retirement_result or match.pair1 and match.retired_entry == match.pair1 %}
-                                                    R
-                                                {% else %}
-                                                    {{ match.pair1_games }}
-                                                {% endif %}
-                                                -
-                                                {% if match.pair2 and match.is_double_retirement_result or match.pair2 and match.retired_entry == match.pair2 %}
-                                                    R
-                                                {% else %}
-                                                    {{ match.pair2_games }}
-                                                {% endif %}
-                                            </strong>
-                                        {% endif %}
-                                    {% if match.pair1 and match.pair2 %}
-                                        </a>
-                                    {% else %}
+                                <div class="schedule-match-card">
+                                    <div class="schedule-card-head">
+                                        <span class="schedule-order-label">
+                                            {{ schedule.court.name }} 第{{ schedule.order }}試合
                                         </span>
+                                        <span class="schedule-status-label">
+                                            {% if schedule.finished %}
+                                                完了
+                                            {% elif schedule.started %}
+                                                試合中
+                                            {% elif schedule.called %}
+                                                呼出済
+                                            {% elif match.pair1_games != None and match.pair2_games != None %}
+                                                結果入力済み
+                                            {% else %}
+                                                未入力
+                                            {% endif %}
+                                        </span>
+                                    </div>
+
+                                    {% if schedule.is_round_robin %}
+                                        <div class="schedule-context">
+                                            <strong>{{ match.group.category.name }}</strong>
+                                            /
+                                            {{ match.group.name }}リーグ
+                                            {% if match.group.stage %}
+                                                <span>（{{ match.group.stage.name }}）</span>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="schedule-pair-line">
+                                            <span>{{ match.pair1.code }} {{ match.pair1.short_name }}</span>
+                                            {% if match.pair1_games != None and match.pair2_games != None %}
+                                                <strong>{{ match.pair1_games }}</strong>
+                                            {% endif %}
+                                        </div>
+                                        <div class="schedule-vs">vs</div>
+                                        <div class="schedule-pair-line">
+                                            <span>{{ match.pair2.code }} {{ match.pair2.short_name }}</span>
+                                            {% if match.pair1_games != None and match.pair2_games != None %}
+                                                <strong>{{ match.pair2_games }}</strong>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="schedule-actions">
+                                            <a href="{% url 'input_match_score' match.id %}?next={{ request.path }}">
+                                                結果入力
+                                            </a>
+                                            <a href="{% url 'category_detail' match.group.category.id %}#group-{{ match.group.id }}">
+                                                リーグ表
+                                            </a>
+                                    {% elif schedule.is_tournament %}
+                                        <div class="schedule-context">
+                                            <strong>{{ match.bracket.category.name }}</strong>
+                                            /
+                                            {{ match.bracket.name }}
+                                            {% if match.match_label or match.match_code %}
+                                                /
+                                                {{ match.match_label|default:match.match_code }}
+                                            {% endif %}
+                                            {% if match.bracket.stage %}
+                                                <span>（{{ match.bracket.stage.name }}）</span>
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="schedule-pair-line">
+                                            <span>
+                                                {% if match.pair1 %}
+                                                    {{ match.pair1.code }} {{ match.pair1.short_name }}
+                                                {% else %}
+                                                    未確定
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                        <div class="schedule-vs">vs</div>
+                                        <div class="schedule-pair-line">
+                                            <span>
+                                                {% if match.pair2 %}
+                                                    {{ match.pair2.code }} {{ match.pair2.short_name }}
+                                                {% else %}
+                                                    未確定
+                                                {% endif %}
+                                            </span>
+                                        </div>
+
+                                        {% if match.pair1_games != None and match.pair2_games != None %}
+                                            <div class="schedule-score-line">
+                                                <strong>
+                                                    {% if match.pair1 and match.is_double_retirement_result or match.pair1 and match.retired_entry == match.pair1 %}
+                                                        R
+                                                    {% else %}
+                                                        {{ match.pair1_games }}
+                                                    {% endif %}
+                                                    -
+                                                    {% if match.pair2 and match.is_double_retirement_result or match.pair2 and match.retired_entry == match.pair2 %}
+                                                        R
+                                                    {% else %}
+                                                        {{ match.pair2_games }}
+                                                    {% endif %}
+                                                </strong>
+                                            </div>
+                                        {% endif %}
+
+                                        <div class="schedule-actions">
+                                            {% if match.pair1 and match.pair2 %}
+                                                <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
+                                                    結果入力
+                                                </a>
+                                            {% else %}
+                                                <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
+                                                    確認
+                                                </a>
+                                            {% endif %}
+                                            <a href="{% url 'tournament_bracket_detail' tournament.code match.bracket.id %}">
+                                                トーナメント表
+                                            </a>
                                     {% endif %}
 
-                                {% endif %}
-                                
-                                <br>
-                                {% if match.pair1_games == None and match.pair2_games == None and match.pair1 and match.pair2 %}
-                                    <a
-                                        href="{% url 'score_sheet_pdf' schedule.id %}"
-                                        target="_blank"
-                                    >
-                                        採点表
-                                    </a>
-                                    <br>
+                                        {% if match.pair1_games == None and match.pair2_games == None and match.pair1 and match.pair2 %}
+                                            <a
+                                                href="{% url 'score_sheet_pdf' schedule.id %}"
+                                                target="_blank"
+                                            >
+                                                採点票PDF
+                                            </a>
+                                        {% endif %}
 
-                                    {% endif %}
-
-                                    {% if not schedule.is_locked_for_move %}
-                                        <a
-                                            href="{% url 'move_schedule' schedule.id %}"
-                                        >
-                                            移動
-                                        </a>
-                                    {% endif %}
+                                        {% if not schedule.is_locked_for_move %}
+                                            <a href="{% url 'move_schedule' schedule.id %}">
+                                                移動
+                                            </a>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             {% endwith %}
 
                         {% else %}

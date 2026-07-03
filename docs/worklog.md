@@ -187,3 +187,13 @@
 - 現行検索画面は、迷った時・例外対応・進行表と紙が合わない時の補助導線として据え置く方針を `TODO.md` に追記。
 - 混雑時の主導線は、進行表から直接押す導線、短い検索キー、QR読み取りを組み合わせて育てる方針。
 - ドキュメント更新のみのためテストは未実行。
+
+### 進行表の受付向け表示改善
+- 進行表セルを受付向けの試合カード風表示へ変更。
+- コート名と第何試合、状態、カテゴリ、リーグ/トーナメント名、対戦、結果入力、採点票PDF、リーグ表/トーナメント表への導線を見やすくした。
+- Stage名は内部上の文脈情報として小さく表示し、運営者が押すべき入口は結果入力・表移動を前面に出した。
+- `TODO.md` に、Stageは内部実装上は必要だが、運営画面では「どこの結果がどこの枠に入るか」という作業感覚へ寄せる方針を追記。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_schedule_view_shows_reception_focused_match_cards core.tests.TournamentScheduleBehaviorTests.test_unresolved_tournament_match_schedule_score_sheet_redirects --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 166 tests OK。

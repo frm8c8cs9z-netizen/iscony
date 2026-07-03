@@ -7639,3 +7639,67 @@ class TournamentScheduleBehaviorTests(TestCase):
                 }
             )
         )
+
+    def test_schedule_view_shows_reception_focused_match_cards(self):
+        group = Group.objects.create(
+            category=self.category,
+            name="A",
+        )
+        league_entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L1",
+            display_order=1,
+            player1_name="予選1A",
+            player2_name="予選1B",
+        )
+        league_entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L2",
+            display_order=2,
+            player1_name="予選2A",
+            player2_name="予選2B",
+        )
+        league_match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=league_entry1,
+            pair2=league_entry2,
+        )
+        tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        Schedule.objects.create(
+            court=self.court,
+            order=1,
+            round_robin_match=league_match,
+        )
+        Schedule.objects.create(
+            court=self.court,
+            order=2,
+            tournament_match=tournament_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "schedule_view",
+                kwargs={"tournament_code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "1 第1試合")
+        self.assertContains(response, "1 第2試合")
+        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "1回戦1")
+        self.assertContains(response, "結果入力")
+        self.assertContains(response, "採点票PDF")
+        self.assertContains(response, "リーグ表")
+        self.assertContains(response, "トーナメント表")
+        self.assertContains(response, "未入力")
