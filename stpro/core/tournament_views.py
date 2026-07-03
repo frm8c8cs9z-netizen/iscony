@@ -778,10 +778,11 @@ def _add_svg_match(svg, match, *, round_number, side, index):
     if not match.match_code.startswith("S"):
         svg["labels"].append({
             "x": code_x,
-            "y": center_y - 4,
+            "y": center_y,
             "text": match.match_label or match.match_code,
             "class": "svg-match-code",
             "anchor": code_anchor,
+            "baseline": "middle",
             "url": match_url,
         })
 
@@ -1195,6 +1196,7 @@ def _build_svg_bracket_data(bracket, round_data):
             "text": final_match.match_label or final_match.match_code,
             "class": "svg-match-code",
             "anchor": "middle",
+            "baseline": "middle",
             "url": (
                 reverse(
                     "input_tournament_match_score",

@@ -100,3 +100,14 @@
 - `TODO.md` に、リーグ試合とトーナメント試合を同じ画面で検索・入力できる当日受付用UI案を追加。
 - 今後は、修正ごとに作業内容を区切ってコミットする運用に戻す。
 - この追記自体はTODO/運用ログ更新のみのため、追加テストは不要。
+
+## 2026-07-03
+
+### トーナメントSVGのマッチラベル位置調整
+- トーナメントSVGのマッチラベルを、横線と同じY座標に置いたうえで `dominant-baseline="middle"` を付けるようにした。
+- これにより、SVGテキストのベースライン基準でラベルが横線より上に見える問題を補正。
+- 通常マッチと左右分割レイアウトの決勝マッチラベルに適用。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_tournament_bracket_detail_shows_svg_bracket --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 159 tests OK。

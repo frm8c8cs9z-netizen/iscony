@@ -5603,6 +5603,14 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn("winner-text", svg_content)
         self.assertNotIn("winner-org-text", svg_content)
         self.assertIn("entry-text", svg_content)
+        self.assertIn(
+            'class="svg-match-code"\n'
+            '                                x="184"\n'
+            '                                y="93.0"\n'
+            '                                text-anchor="end"\n'
+            '                                dominant-baseline="middle"',
+            svg_content,
+        )
         self.assertContains(response, "1回戦1")
         self.assertContains(response, "選手1A・選手1B")
         self.assertContains(response, "2")
@@ -6053,8 +6061,9 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('x1="390.0"', svg_content)
         self.assertIn('x2="510.0"', svg_content)
         self.assertIn('x="184"', svg_content)
-        self.assertIn('y="89.0"', svg_content)
+        self.assertIn('y="93.0"', svg_content)
         self.assertIn('text-anchor="end"', svg_content)
+        self.assertIn('dominant-baseline="middle"', svg_content)
 
     def test_tournament_bracket_detail_keeps_seed_match_slot_height(self):
         self.use_individual_bracket_settings()
