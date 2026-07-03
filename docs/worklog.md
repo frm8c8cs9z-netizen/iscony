@@ -146,3 +146,10 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_unresolved_tournament_match_score_input_is_disabled core.tests.TournamentScheduleBehaviorTests.test_unresolved_tournament_match_rejects_score_post --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 161 tests OK。
+
+### TODO追記: スコアシートQR導線
+- `TODO.md` に、スコアシートへQRコードを印字して結果入力画面へ移動する将来案を追記。
+- QRは `コート番号 + 第何試合` ではなく、対戦カードまたは試合そのものを特定できる情報を使う方針にした。
+- 理由: 印刷後にコートや試合順が変わっても、印刷済みスコアシートを使う場合があるため。
+- あわせて、受付画面の主な探し方は `カテゴリ + 番号` と `コート + 第何試合` とし、選手名検索は補助導線として整理。
+- ドキュメント更新のみのためテストは未実行。
