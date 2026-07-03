@@ -208,6 +208,17 @@
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 166 tests OK。
 
+### 採点票PDF一括出力の明示入口追加
+- 管理メニューの当日運営に、`リーグ採点票一括` と `トーナメント1回戦採点票一括` を追加。
+- `リーグ採点票一括` は、大会内で進行表に登録されたリーグ試合を、日程区分、コート、試合順で並べてPDF出力する。
+- `トーナメント1回戦採点票一括` は、大会内で進行表に登録されたトーナメント1回戦を、日程区分、コート、試合順で並べてPDF出力する。
+- 対戦相手が未確定の試合は採点票にできないためスキップする。
+- 進行表ヘッダの隠れリンクではなく、採点票出力として明示的な入口にした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests core.tests.MaintenanceMenuTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 168 tests OK。
+
 ### Django設定パッケージ名変更
 - Djangoプロジェクト設定ディレクトリを `stpro/mysite` から `stpro/config` にリネーム。
 - `manage.py`、`settings.py`、`asgi.py`、`wsgi.py`、`urls.py` 内の `mysite` 参照を `config` に変更。

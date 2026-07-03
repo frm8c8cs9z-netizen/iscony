@@ -225,6 +225,18 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/score-sheets/league/",
+        pdf_views.league_score_sheets_pdf,
+        name="league_score_sheets_pdf",
+    ),
+
+    path(
+        "tournament/<str:code>/score-sheets/tournament-first-round/",
+        pdf_views.tournament_first_round_scheduled_score_sheets_pdf,
+        name="tournament_first_round_scheduled_score_sheets_pdf",
+    ),
+
+    path(
         "tournament/<str:code>/maintenance/",
         views.maintenance_menu,
         name="maintenance_menu",

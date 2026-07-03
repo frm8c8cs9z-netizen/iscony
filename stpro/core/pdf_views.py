@@ -25,6 +25,7 @@ from .constants import SCORE_SHEET_POSITION_PATTERNS
 from .models import (
     Court,
     Schedule,
+    ScheduleBlock,
     Tournament,
     TournamentBracket,
     TournamentMatch,
@@ -104,6 +105,94 @@ def get_score_sheet_entry_data(entry):
         "player1_name": entry.display_player1_name,
         "player2_name": entry.display_player2_name,
     }
+
+
+def _schedule_outside_text(schedule):
+    block_name = ""
+
+    if (
+        schedule.schedule_block
+        and schedule.schedule_block.name != ScheduleBlock.DEFAULT_NAME
+    ):
+        block_name = f"{schedule.schedule_block.name} "
+
+    return (
+        f"{block_name}"
+        f"{schedule.court.name} "
+        f"コート 第{schedule.order}試合"
+    )
+
+
+def _add_schedule_score_sheet_page(writer, schedule, settings_tuple):
+    match = schedule.match
+
+    if not match or not match.pair1 or not match.pair2:
+        return False
+
+    (
+        position_key,
+        use_base_pdf,
+        base_pdf_path,
+    ) = settings_tuple
+
+    pair1_data = get_score_sheet_entry_data(
+        match.pair1
+    )
+    pair2_data = get_score_sheet_entry_data(
+        match.pair2
+    )
+
+    if schedule.is_round_robin:
+        category_name = match.group.category.name
+        round_label = None
+    else:
+        category_name = match.bracket.category.name
+        round_label = get_round_label(
+            match.round_number,
+            TournamentMatch.objects.filter(
+                bracket=match.bracket,
+                round_number=1,
+            ).count() * 2,
+        )
+
+    page = create_score_sheet_page(
+        category_name=category_name,
+        court_name=schedule.court.name,
+        round_label=round_label,
+        pair1_data=pair1_data,
+        pair2_data=pair2_data,
+        outside_text=_schedule_outside_text(schedule),
+        position_key=position_key,
+        use_base_pdf=use_base_pdf,
+        base_pdf_path=base_pdf_path,
+    )
+    writer.add_page(page)
+
+    return True
+
+
+def _scheduled_score_sheets_response(schedules, tournament, filename):
+    settings_tuple = get_score_sheet_template_settings(
+        tournament
+    )
+    writer = PdfWriter()
+
+    for schedule in schedules:
+        _add_schedule_score_sheet_page(
+            writer,
+            schedule,
+            settings_tuple,
+        )
+
+    output = io.BytesIO()
+    writer.write(output)
+    output.seek(0)
+
+    return FileResponse(
+        output,
+        as_attachment=False,
+        filename=filename,
+    )
 
 
 def score_sheet_pdf(request, schedule_id):
@@ -469,6 +558,88 @@ def tournament_first_round_score_sheets_pdf(request, code, bracket_id):
         output,
         as_attachment=False,
         filename=f"tournament_first_round_score_sheets_{bracket.id}.pdf"
+    )
+
+
+def league_score_sheets_pdf(request, code):
+    """
+    大会内のリーグ採点票を一括出力する。
+
+    進行表に登録されたリーグ試合を、日程区分、コート、試合順で並べる。
+    """
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    schedules = (
+        Schedule.objects.filter(
+            court__tournament=tournament,
+            round_robin_match__isnull=False,
+        )
+        .select_related(
+            "schedule_block",
+            "court",
+            "round_robin_match",
+            "round_robin_match__group",
+            "round_robin_match__group__category",
+            "round_robin_match__pair1",
+            "round_robin_match__pair2",
+        )
+        .order_by(
+            "schedule_block__display_order",
+            "schedule_block__id",
+            "court__display_order",
+            "court__name",
+            "order",
+        )
+    )
+
+    return _scheduled_score_sheets_response(
+        schedules,
+        tournament,
+        filename=f"league_score_sheets_{tournament.code}.pdf",
+    )
+
+
+def tournament_first_round_scheduled_score_sheets_pdf(request, code):
+    """
+    大会内のトーナメント1回戦採点票を一括出力する。
+
+    進行表に登録された1回戦を、日程区分、コート、試合順で並べる。
+    """
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    schedules = (
+        Schedule.objects.filter(
+            court__tournament=tournament,
+            tournament_match__round_number=1,
+        )
+        .select_related(
+            "schedule_block",
+            "court",
+            "tournament_match",
+            "tournament_match__bracket",
+            "tournament_match__bracket__category",
+            "tournament_match__pair1",
+            "tournament_match__pair2",
+        )
+        .order_by(
+            "schedule_block__display_order",
+            "schedule_block__id",
+            "court__display_order",
+            "court__name",
+            "order",
+        )
+    )
+
+    return _scheduled_score_sheets_response(
+        schedules,
+        tournament,
+        filename=f"tournament_first_round_score_sheets_{tournament.code}.pdf",
     )
 
 

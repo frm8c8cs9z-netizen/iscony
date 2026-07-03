@@ -37,11 +37,19 @@
     <tr>
         <td>採点票出力</td>
         <td>
+            <a href="{% url 'league_score_sheets_pdf' tournament.code %}" target="_blank">
+                リーグ採点票一括
+            </a>
+            ／
+            <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}" target="_blank">
+                トーナメント1回戦採点票一括
+            </a>
+            ／
             <a href="{% url 'schedule_view' tournament.code %}">
                 試合進行表
             </a>
         </td>
-        <td>コート別・試合別の採点票PDFを出力します。</td>
+        <td>リーグ全体、トーナメント1回戦、試合別の採点票PDFを出力します。</td>
     </tr>
     <tr>
         <td>進行状況確認</td>
