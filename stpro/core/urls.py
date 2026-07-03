@@ -231,6 +231,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/reception/search/",
+        views.reception_match_search,
+        name="reception_match_search",
+    ),
+
+    path(
         "tournament/<str:code>/advancement-sources/",
         advancement_views.advancement_source_list,
         name="advancement_source_list",

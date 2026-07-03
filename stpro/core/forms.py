@@ -122,6 +122,85 @@ class ExtraRoundRobinMatchForm(forms.Form):
         return cleaned_data
 
 
+class ReceptionMatchSearchForm(forms.Form):
+    """当日受付でスコアシートから試合を探すためのフォーム。"""
+
+    SEARCH_BY_ENTRY = "entry"
+    SEARCH_BY_SCHEDULE = "schedule"
+
+    SEARCH_MODE_CHOICES = [
+        (SEARCH_BY_ENTRY, "カテゴリ + 番号"),
+        (SEARCH_BY_SCHEDULE, "コート + 第何試合"),
+    ]
+
+    search_mode = forms.ChoiceField(
+        choices=SEARCH_MODE_CHOICES,
+        required=False,
+        initial=SEARCH_BY_ENTRY,
+        label="探し方",
+    )
+    category = forms.ModelChoiceField(
+        queryset=Category.objects.none(),
+        required=False,
+        label="カテゴリ",
+    )
+    entry_number = forms.CharField(
+        required=False,
+        max_length=20,
+        label="番号",
+    )
+    court = forms.ModelChoiceField(
+        queryset=Court.objects.none(),
+        required=False,
+        label="コート",
+    )
+    order = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="第何試合",
+    )
+
+    def __init__(self, *args, tournament=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tournament = tournament
+
+        if tournament:
+            self.fields["category"].queryset = (
+                Category.objects.filter(
+                    tournament=tournament,
+                ).order_by(
+                    "display_order",
+                    "id",
+                )
+            )
+            self.fields["court"].queryset = (
+                Court.objects.filter(
+                    tournament=tournament,
+                ).order_by(
+                    "display_order",
+                    "name",
+                )
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        mode = cleaned_data.get("search_mode") or self.SEARCH_BY_ENTRY
+
+        if mode == self.SEARCH_BY_ENTRY:
+            if not cleaned_data.get("category"):
+                self.add_error("category", "カテゴリを選択してください。")
+            if not cleaned_data.get("entry_number"):
+                self.add_error("entry_number", "番号を入力してください。")
+
+        if mode == self.SEARCH_BY_SCHEDULE:
+            if not cleaned_data.get("court"):
+                self.add_error("court", "コートを選択してください。")
+            if not cleaned_data.get("order"):
+                self.add_error("order", "第何試合を入力してください。")
+
+        return cleaned_data
+
+
 class LeagueEntryEditForm(forms.ModelForm):
 
     class Meta:

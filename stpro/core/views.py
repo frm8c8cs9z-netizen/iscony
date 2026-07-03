@@ -6,7 +6,7 @@ core.views
 """
 
 from django.contrib import messages
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 
@@ -22,6 +22,7 @@ from .models import (
     Group,
     Court,
     ScheduleBlock,
+    RoundRobinMatch,
     TournamentMatch,
     Schedule,
 )
@@ -30,6 +31,7 @@ from .forms import (
     ScheduleEditForm,
     ScheduleMoveForm,
     CategoryForm,
+    ReceptionMatchSearchForm,
     TournamentCloneForm,
     TournamentSettingsForm,
 )
@@ -272,6 +274,292 @@ def maintenance_menu(request, code):
             "tournament": tournament,
             "categories": categories,
         }
+    )
+
+
+def _score_text(match):
+    if match.pair1_games is None or match.pair2_games is None:
+        return "-"
+
+    return f"{match.pair1_games}-{match.pair2_games}"
+
+
+def _schedule_status(schedule, match):
+    if schedule and schedule.finished:
+        return "完了"
+
+    if schedule and schedule.started:
+        return "試合中"
+
+    if schedule and schedule.called:
+        return "呼出済"
+
+    if match.pair1_games is not None and match.pair2_games is not None:
+        return "結果入力済み"
+
+    return "未入力"
+
+
+def _schedule_for_match(match, *, is_tournament):
+    query = Schedule.objects.select_related(
+        "schedule_block",
+        "court",
+    )
+
+    if is_tournament:
+        query = query.filter(tournament_match=match)
+    else:
+        query = query.filter(round_robin_match=match)
+
+    return query.order_by(
+        "schedule_block__display_order",
+        "schedule_block__id",
+        "court__display_order",
+        "court__name",
+        "order",
+    ).first()
+
+
+def _schedule_text(schedule):
+    if not schedule:
+        return "進行表未配置"
+
+    block_name = (
+        f"{schedule.schedule_block.name} / "
+        if schedule.schedule_block
+        and schedule.schedule_block.name != ScheduleBlock.DEFAULT_NAME
+        else ""
+    )
+    return f"{block_name}{schedule.court.name} 第{schedule.order}試合"
+
+
+def _round_robin_search_row(match, tournament, schedule=None):
+    schedule = schedule or _schedule_for_match(
+        match,
+        is_tournament=False,
+    )
+
+    return {
+        "kind": "リーグ",
+        "category": match.group.category.name,
+        "stage": match.group.stage.name if match.group.stage else "-",
+        "container": f"{match.group.name}リーグ",
+        "match_label": (
+            f"{match.pair1.pair_code} vs {match.pair2.pair_code}"
+        ),
+        "entries": f"{match.pair1.display_name} vs {match.pair2.display_name}",
+        "schedule": _schedule_text(schedule),
+        "status": _schedule_status(schedule, match),
+        "score": _score_text(match),
+        "input_url": reverse(
+            "input_match_score",
+            kwargs={"match_id": match.id},
+        ),
+        "detail_url": (
+            f"{reverse('category_detail', kwargs={'category_id': match.group.category.id})}"
+            f"#group-{match.group.id}"
+        ),
+        "can_input": True,
+    }
+
+
+def _tournament_search_row(match, tournament, schedule=None):
+    schedule = schedule or _schedule_for_match(
+        match,
+        is_tournament=True,
+    )
+    pair1 = match.pair1.display_name if match.pair1 else "未確定"
+    pair2 = match.pair2.display_name if match.pair2 else "未確定"
+
+    return {
+        "kind": "トーナメント",
+        "category": match.bracket.category.name,
+        "stage": match.bracket.stage.name if match.bracket.stage else "-",
+        "container": match.bracket.name,
+        "match_label": match.match_label or match.match_code,
+        "entries": f"{pair1} vs {pair2}",
+        "schedule": _schedule_text(schedule),
+        "status": _schedule_status(schedule, match),
+        "score": _score_text(match),
+        "input_url": reverse(
+            "input_tournament_match_score",
+            kwargs={
+                "code": tournament.code,
+                "match_id": match.id,
+            },
+        ),
+        "detail_url": reverse(
+            "tournament_bracket_detail",
+            kwargs={
+                "code": tournament.code,
+                "bracket_id": match.bracket.id,
+            },
+        ),
+        "can_input": bool(match.pair1_id and match.pair2_id),
+    }
+
+
+def _search_matches_by_entry(tournament, category, entry_number):
+    number = entry_number.strip().upper()
+    number_as_int = int(number) if number.isdigit() else None
+    rows = []
+
+    round_robin_matches = (
+        RoundRobinMatch.objects.filter(
+            group__category=category,
+        )
+        .filter(
+            Q(pair1__pair_code__iexact=number)
+            | Q(pair2__pair_code__iexact=number)
+        )
+        .select_related(
+            "group",
+            "group__stage",
+            "group__category",
+            "pair1",
+            "pair2",
+        )
+        .order_by(
+            "group__stage__display_order",
+            "group__display_order",
+            "group__name",
+            "pair1__display_order",
+            "pair2__display_order",
+            "meeting_number",
+        )
+    )
+
+    for match in round_robin_matches:
+        rows.append(_round_robin_search_row(match, tournament))
+
+    tournament_entry_filter = (
+        Q(pair1__pair_code__iexact=number)
+        | Q(pair2__pair_code__iexact=number)
+    )
+
+    if number_as_int is not None:
+        tournament_entry_filter |= (
+            Q(pair1__display_order=number_as_int)
+            | Q(pair2__display_order=number_as_int)
+        )
+
+    tournament_matches = (
+        TournamentMatch.objects.filter(
+            bracket__category=category,
+        )
+        .filter(tournament_entry_filter)
+        .select_related(
+            "bracket",
+            "bracket__stage",
+            "bracket__category",
+            "pair1",
+            "pair2",
+        )
+        .order_by(
+            "bracket__stage__display_order",
+            "bracket__display_order",
+            "bracket__name",
+            "round_number",
+            "match_number",
+        )
+    )
+
+    for match in tournament_matches:
+        rows.append(_tournament_search_row(match, tournament))
+
+    return rows
+
+
+def _search_matches_by_schedule(tournament, court, order):
+    schedules = (
+        Schedule.objects.filter(
+            court=court,
+            order=order,
+        )
+        .select_related(
+            "schedule_block",
+            "court",
+            "round_robin_match",
+            "round_robin_match__group",
+            "round_robin_match__group__stage",
+            "round_robin_match__group__category",
+            "round_robin_match__pair1",
+            "round_robin_match__pair2",
+            "tournament_match",
+            "tournament_match__bracket",
+            "tournament_match__bracket__stage",
+            "tournament_match__bracket__category",
+            "tournament_match__pair1",
+            "tournament_match__pair2",
+        )
+        .order_by(
+            "schedule_block__display_order",
+            "schedule_block__id",
+        )
+    )
+
+    rows = []
+
+    for schedule in schedules:
+        if schedule.round_robin_match_id:
+            rows.append(
+                _round_robin_search_row(
+                    schedule.round_robin_match,
+                    tournament,
+                    schedule,
+                )
+            )
+        elif schedule.tournament_match_id:
+            rows.append(
+                _tournament_search_row(
+                    schedule.tournament_match,
+                    tournament,
+                    schedule,
+                )
+            )
+
+    return rows
+
+
+def reception_match_search(request, code):
+    """受付でスコアシートからリーグ/トーナメント試合を探す。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    form = ReceptionMatchSearchForm(
+        request.GET or None,
+        tournament=tournament,
+    )
+    results = []
+    searched = bool(request.GET)
+
+    if searched and form.is_valid():
+        mode = form.cleaned_data["search_mode"]
+
+        if mode == ReceptionMatchSearchForm.SEARCH_BY_ENTRY:
+            results = _search_matches_by_entry(
+                tournament,
+                form.cleaned_data["category"],
+                form.cleaned_data["entry_number"],
+            )
+        elif mode == ReceptionMatchSearchForm.SEARCH_BY_SCHEDULE:
+            results = _search_matches_by_schedule(
+                tournament,
+                form.cleaned_data["court"],
+                form.cleaned_data["order"],
+            )
+
+    return render(
+        request,
+        "core/reception_match_search.html",
+        {
+            "tournament": tournament,
+            "form": form,
+            "results": results,
+            "searched": searched,
+        },
     )
 
 

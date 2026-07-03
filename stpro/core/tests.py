@@ -5013,6 +5013,13 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "進出元一覧・入れ替え")
         self.assertContains(response, "試合進行CSV取込")
         self.assertContains(response, "旧リーグ枠CSV取込")
+        self.assertContains(
+            response,
+            reverse(
+                "reception_match_search",
+                kwargs={"code": tournament.code},
+            ),
+        )
         self.assertLess(
             content.index("当日運営"),
             content.index("Stage・結果反映"),
@@ -5196,6 +5203,192 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "優勝者表示の概念図")
         self.assertContains(response, "片側・横書き")
         self.assertContains(response, "左右・縦書き")
+
+
+class ReceptionMatchSearchTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="受付検索大会",
+            code="RECEPTION",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        self.league_stage = Stage.objects.create(
+            category=self.category,
+            code="L",
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.tournament_stage = Stage.objects.create(
+            category=self.category,
+            code="T",
+            name="本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.league_stage,
+            name="A",
+        )
+        self.league_entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="1",
+            display_order=1,
+            player1_name="予選1A",
+            player2_name="予選1B",
+        )
+        self.league_entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="2",
+            display_order=2,
+            player1_name="予選2A",
+            player2_name="予選2B",
+        )
+        self.round_robin_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entry1,
+            pair2=self.league_entry2,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.tournament_stage,
+            name="決勝",
+        )
+        self.tournament_entry1 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="1",
+            display_order=1,
+            player1_name="本戦1A",
+            player2_name="本戦1B",
+        )
+        self.tournament_entry2 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="本戦2A",
+            player2_name="本戦2B",
+        )
+        self.tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=self.tournament_entry1,
+            pair2=self.tournament_entry2,
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1",
+        )
+        self.block = ScheduleBlock.get_default(self.tournament)
+        self.schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=3,
+            tournament_match=self.tournament_match,
+        )
+
+    def test_reception_search_page_is_displayed(self):
+        response = self.client.get(
+            reverse(
+                "reception_match_search",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "受付・結果入力")
+        self.assertContains(response, "カテゴリ + 番号で探す")
+        self.assertContains(response, "コート + 第何試合で探す")
+
+    def test_reception_search_finds_matches_by_category_and_number(self):
+        response = self.client.get(
+            reverse(
+                "reception_match_search",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "search_mode": "entry",
+                "category": str(self.category.id),
+                "entry_number": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "決勝")
+        self.assertContains(response, "予選1A・予選1B")
+        self.assertContains(response, "本戦1A・本戦1B")
+        self.assertContains(
+            response,
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            ),
+        )
+
+    def test_reception_search_finds_match_by_court_and_order(self):
+        response = self.client.get(
+            reverse(
+                "reception_match_search",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "search_mode": "schedule",
+                "court": str(self.court.id),
+                "order": "3",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "1 第3試合")
+        self.assertContains(response, "トーナメント")
+        self.assertContains(response, "1回戦1")
+        self.assertContains(response, "結果入力")
+        self.assertContains(
+            response,
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+        )
+
+    def test_reception_search_shows_empty_result_message(self):
+        response = self.client.get(
+            reverse(
+                "reception_match_search",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "search_mode": "entry",
+                "category": str(self.category.id),
+                "entry_number": "99",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "該当する試合が見つかりませんでした。")
 
 
 class CategoryStageOverviewTests(TestCase):

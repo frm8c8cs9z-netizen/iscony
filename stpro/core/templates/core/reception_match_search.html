@@ -1,0 +1,117 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>受付・結果入力</h2>
+        <p class="subtle-text">
+            {{ tournament.name }}
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'maintenance_menu' tournament.code %}">
+            管理メニューへ戻る
+        </a>
+        <a href="{% url 'schedule_view' tournament.code %}">
+            試合進行表
+        </a>
+    </div>
+</div>
+
+<h3>カテゴリ + 番号で探す</h3>
+
+<form method="get" class="search-box">
+    <input type="hidden" name="search_mode" value="entry">
+    <p>
+        {{ form.category.label_tag }}
+        {{ form.category }}
+        {{ form.entry_number.label_tag }}
+        {{ form.entry_number }}
+        <button type="submit">
+            検索
+        </button>
+    </p>
+    {% if form.category.errors or form.entry_number.errors %}
+        <p style="color:red;">
+            {{ form.category.errors|join:" " }}
+            {{ form.entry_number.errors|join:" " }}
+        </p>
+    {% endif %}
+</form>
+
+<h3>コート + 第何試合で探す</h3>
+
+<form method="get" class="search-box">
+    <input type="hidden" name="search_mode" value="schedule">
+    <p>
+        {{ form.court.label_tag }}
+        {{ form.court }}
+        {{ form.order.label_tag }}
+        {{ form.order }}
+        <button type="submit">
+            検索
+        </button>
+    </p>
+    {% if form.court.errors or form.order.errors %}
+        <p style="color:red;">
+            {{ form.court.errors|join:" " }}
+            {{ form.order.errors|join:" " }}
+        </p>
+    {% endif %}
+</form>
+
+{% if searched %}
+    <h3>検索結果</h3>
+
+    {% if results %}
+        <div class="table-wrapper">
+            <table>
+                <tr>
+                    <th>種別</th>
+                    <th>カテゴリ</th>
+                    <th>Stage</th>
+                    <th>リーグ/トーナメント</th>
+                    <th>試合</th>
+                    <th>対戦</th>
+                    <th>進行枠</th>
+                    <th>状態</th>
+                    <th>スコア</th>
+                    <th>操作</th>
+                </tr>
+                {% for row in results %}
+                    <tr>
+                        <td>{{ row.kind }}</td>
+                        <td>{{ row.category }}</td>
+                        <td>{{ row.stage }}</td>
+                        <td>{{ row.container }}</td>
+                        <td>{{ row.match_label }}</td>
+                        <td>{{ row.entries }}</td>
+                        <td>{{ row.schedule }}</td>
+                        <td>{{ row.status }}</td>
+                        <td>{{ row.score }}</td>
+                        <td>
+                            <a href="{{ row.input_url }}">
+                                {% if row.can_input %}
+                                    結果入力
+                                {% else %}
+                                    確認
+                                {% endif %}
+                            </a>
+                            ／
+                            <a href="{{ row.detail_url }}">
+                                表へ移動
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        </div>
+    {% else %}
+        <p>
+            該当する試合が見つかりませんでした。
+        </p>
+    {% endif %}
+{% endif %}
+
+{% endblock %}
