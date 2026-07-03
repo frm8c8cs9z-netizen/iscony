@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import Q
 from django.template import Context, Template
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -40,11 +41,13 @@ from .models import (
     ScoreSheetTemplate,
 )
 from .pdf_views import get_score_sheet_template_settings
+from .tournament_views import _should_highlight_svg_winner
 
 from .services import (
     advance_tournament_bye_winners,
     apply_stage_advancements,
     cancel_pair_retirement,
+    clone_tournament_without_results,
     create_extra_round_robin_match,
     insert_round_robin_schedule,
     move_schedule,
@@ -57,9 +60,7 @@ from .services import (
     validate_tournament_score_change,
 )
 from .snapshot_services import (
-    create_category_snapshot,
     create_tournament_snapshot,
-    restore_category_snapshot,
     restore_category_schedule_block_from_tournament_snapshot,
     restore_category_from_tournament_snapshot,
     restore_tournament_snapshot,
@@ -276,6 +277,160 @@ class TournamentAdvancementTests(TestCase):
         self.assertEqual(first_match.winner, self.entries[1])
         self.assertEqual(first_match.retired_entry, self.entries[0])
         self.assertEqual(next_match.pair1, self.entries[1])
+
+    def test_tournament_double_retirement_has_no_winner(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            match_games=7,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        error = save_tournament_retirement(
+            first_match,
+            "both",
+        )
+
+        self.assertIsNone(error)
+
+        first_match.refresh_from_db()
+        next_match.refresh_from_db()
+
+        self.assertEqual(first_match.result_type, TournamentMatch.RESULT_RETIREMENT)
+        self.assertEqual(first_match.pair1_games, 0)
+        self.assertEqual(first_match.pair2_games, 0)
+        self.assertIsNone(first_match.winner)
+        self.assertTrue(first_match.is_double_retirement_result)
+        self.assertIsNone(first_match.retired_entry)
+        self.assertIsNone(next_match.pair1)
+
+    def test_tournament_double_retirement_makes_single_seed_champion(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            match_games=7,
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=None,
+            pair2=self.entries[2],
+            match_games=7,
+        )
+        first_match.next_match = final_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        error = save_tournament_retirement(
+            first_match,
+            "both",
+        )
+
+        self.assertIsNone(error)
+        first_match.refresh_from_db()
+        final_match.refresh_from_db()
+        self.assertTrue(first_match.is_double_retirement_result)
+        self.assertIsNone(first_match.winner)
+        self.assertIsNone(final_match.pair1)
+        self.assertEqual(final_match.pair2, self.entries[2])
+        self.assertEqual(final_match.winner, self.entries[2])
+        self.assertIsNone(final_match.pair1_games)
+        self.assertIsNone(final_match.pair2_games)
+
+    def test_tournament_double_retirement_clears_previously_advanced_winner(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entries[0],
+            match_games=7,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=self.entries[0],
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        error = save_tournament_retirement(
+            first_match,
+            "both",
+        )
+
+        self.assertIsNone(error)
+        first_match.refresh_from_db()
+        next_match.refresh_from_db()
+        self.assertIsNone(first_match.winner)
+        self.assertIsNone(next_match.pair1)
+
+    def test_tournament_double_retirement_is_blocked_when_next_match_has_score(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entries[0],
+            match_games=7,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=self.entries[0],
+            pair2=self.entries[2],
+            pair1_games=4,
+            pair2_games=1,
+            winner=self.entries[0],
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        error = save_tournament_retirement(
+            first_match,
+            "both",
+        )
+
+        self.assertEqual(
+            error,
+            "次の試合に結果が入力されているため、勝者を取り消すことはできません。"
+        )
+        first_match.refresh_from_db()
+        next_match.refresh_from_db()
+        self.assertEqual(first_match.winner, self.entries[0])
+        self.assertEqual(next_match.pair1, self.entries[0])
 
     def test_bye_match_does_not_show_retirement_entry(self):
         match = TournamentMatch.objects.create(
@@ -516,6 +671,58 @@ class TournamentAdvancementTests(TestCase):
         self.assertIsNone(seed_match.pair1_games)
         self.assertIsNone(seed_match.pair2_games)
         self.assertEqual(next_match.pair1, self.entries[0])
+
+    def test_seed_line_highlights_when_seed_becomes_champion_after_double_retirement(self):
+        seed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entries[0],
+            winner=self.entries[0],
+            match_games=7,
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entries[0],
+            pair2=None,
+            winner=self.entries[0],
+            match_games=7,
+        )
+        seed_match.next_match = final_match
+        seed_match.next_slot = "pair1"
+        seed_match.save()
+
+        self.assertTrue(_should_highlight_svg_winner(seed_match))
+
+    def test_unopposed_seed_line_stays_unhighlighted_before_champion_is_decided(self):
+        seed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entries[0],
+            winner=self.entries[0],
+            match_games=7,
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entries[0],
+            pair2=None,
+            winner=None,
+            match_games=7,
+        )
+        seed_match.next_match = final_match
+        seed_match.next_slot = "pair1"
+        seed_match.save()
+
+        self.assertFalse(_should_highlight_svg_winner(seed_match))
 
     def test_bracket_positions_sample_csv_uses_participants(self):
         Participant.objects.create(
@@ -1166,6 +1373,24 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, "山田　太郎・佐藤　次郎")
         self.assertContains(response, "第一クラブ")
         self.assertNotContains(response, "山田・佐藤")
+
+    def test_category_detail_links_back_to_stage_overview(self):
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Stage一覧へ戻る")
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": self.category.id},
+            ),
+        )
 
     def test_league_entry_action_page_shows_retirement_operation(self):
         RoundRobinMatch.objects.create(
@@ -1830,11 +2055,8 @@ class CategorySnapshotTests(TestCase):
             round_robin_match=self.match,
         )
 
-    def test_category_snapshot_restore_resets_progress_and_extra_matches(self):
-        snapshot = create_category_snapshot(
-            self.category,
-            label="開始前",
-        )
+    def test_category_restore_from_tournament_snapshot_resets_progress_and_extra_matches(self):
+        snapshot = create_tournament_snapshot(self.tournament, label="開始前")
 
         extra_match = create_extra_round_robin_match(
             self.group,
@@ -1867,7 +2089,10 @@ class CategorySnapshotTests(TestCase):
             rank=1,
         )
 
-        result = restore_category_snapshot(snapshot)
+        result = restore_category_from_tournament_snapshot(
+            snapshot,
+            self.category,
+        )
 
         self.entry1.refresh_from_db()
         self.match.refresh_from_db()
@@ -1896,7 +2121,7 @@ class CategorySnapshotTests(TestCase):
         self.assertEqual(GroupRanking.objects.count(), 0)
         self.assertEqual(result["deleted_extra_matches"], 1)
 
-    def test_category_snapshot_can_be_created_from_view(self):
+    def test_category_snapshot_view_redirects_to_tournament_snapshot(self):
         response = self.client.post(
             reverse(
                 "category_snapshot_list",
@@ -1911,14 +2136,16 @@ class CategorySnapshotTests(TestCase):
         self.assertRedirects(
             response,
             reverse(
-                "category_snapshot_list",
-                kwargs={"category_id": self.category.id},
+                "tournament_snapshot_list",
+                kwargs={"code": self.tournament.code},
             ),
         )
-        snapshot = OperationSnapshot.objects.get()
-        self.assertEqual(snapshot.label, "リタイア前")
-        self.assertEqual(snapshot.scope_type, OperationSnapshot.SCOPE_CATEGORY)
-        self.assertEqual(snapshot.category, self.category)
+        self.assertEqual(OperationSnapshot.objects.count(), 0)
+        message_text = " ".join(
+            str(message)
+            for message in get_messages(response.wsgi_request)
+        )
+        self.assertIn("カテゴリ単位のスナップショット作成は事故防止", message_text)
 
     def test_tournament_snapshot_can_be_created_from_view(self):
         other_category = Category.objects.create(
@@ -2307,11 +2534,8 @@ class CategorySnapshotTests(TestCase):
         self.assertIn("トーナメント試合", message_text)
         self.assertIn("追加試合削除1件", message_text)
 
-    def test_category_snapshot_restore_blocks_other_category_schedule_slot(self):
-        snapshot = create_category_snapshot(
-            self.category,
-            label="開始前",
-        )
+    def test_tournament_snapshot_category_restore_blocks_other_category_schedule_slot(self):
+        snapshot = create_tournament_snapshot(self.tournament, label="開始前")
         other_category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -2357,7 +2581,10 @@ class CategorySnapshotTests(TestCase):
         )
 
         with self.assertRaises(ValidationError):
-            restore_category_snapshot(snapshot)
+            restore_category_from_tournament_snapshot(
+                snapshot,
+                self.category,
+            )
 
 
 class ImportPairsCsvTests(TestCase):
@@ -4436,6 +4663,312 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(self.target.participant, self.participant2)
 
 
+class TournamentCloneTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="複製元大会",
+            code="CLONESRC",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.next_stage = Stage.objects.create(
+            category=self.category,
+            name="順位戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        self.participant1 = Participant.objects.create(
+            category=self.category,
+            entry_code="A1",
+            organization="所属1",
+            player1_name="選手1A",
+            player2_name="選手1B",
+            display_order=1,
+        )
+        self.participant2 = Participant.objects.create(
+            category=self.category,
+            entry_code="A2",
+            organization="所属2",
+            player1_name="選手2A",
+            player2_name="選手2B",
+            display_order=2,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+        )
+        self.entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            participant=self.participant1,
+            pair_code="1",
+            display_order=1,
+            organization=self.participant1.organization,
+            player1_name=self.participant1.player1_name,
+            player2_name=self.participant1.player2_name,
+            retired=True,
+            retired_reason="テスト",
+        )
+        self.entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            participant=self.participant2,
+            pair_code="2",
+            display_order=2,
+            organization=self.participant2.organization,
+            player1_name=self.participant2.player1_name,
+            player2_name=self.participant2.player2_name,
+        )
+        self.target_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            participant=self.participant1,
+            pair_code="3",
+            display_order=3,
+            organization=self.participant1.organization,
+            player1_name=self.participant1.player1_name,
+            player2_name=self.participant1.player2_name,
+        )
+        self.round_robin_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=0,
+            pair2_games=4,
+            completed=True,
+            result_type=RoundRobinMatch.RESULT_RETIREMENT,
+        )
+        GroupRanking.objects.create(
+            group=self.group,
+            pair=self.entry2,
+            wins=1,
+            losses=0,
+            rank=1,
+        )
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="1日目",
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+        )
+        self.schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=1,
+            round_robin_match=self.round_robin_match,
+            called=True,
+            started=True,
+            finished=True,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.next_stage,
+            name="本戦",
+        )
+        self.tournament_entry1 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            participant=self.participant1,
+            pair_code="T1",
+            display_order=1,
+            organization=self.participant1.organization,
+            player1_name=self.participant1.player1_name,
+            player2_name=self.participant1.player2_name,
+        )
+        self.tournament_entry2 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            participant=self.participant2,
+            pair_code="T2",
+            display_order=2,
+            organization=self.participant2.organization,
+            player1_name=self.participant2.player1_name,
+            player2_name=self.participant2.player2_name,
+        )
+        self.target_tournament_entry = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            participant=self.participant1,
+            pair_code="T3",
+            display_order=3,
+            organization=self.participant1.organization,
+            player1_name=self.participant1.player1_name,
+            player2_name=self.participant1.player2_name,
+            source_pair=self.entry1,
+        )
+        self.tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.tournament_entry1,
+            pair2=self.tournament_entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.tournament_entry1,
+        )
+        self.next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.tournament_entry1,
+        )
+        self.tournament_match.next_match = self.next_match
+        self.tournament_match.next_slot = "pair1"
+        self.tournament_match.save()
+        AdvancementSource.objects.create(
+            target_league_entry=self.target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=self.target_tournament_entry,
+            source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            source_stage=self.next_stage,
+            source_match=self.tournament_match,
+            source_result=AdvancementSource.RESULT_WINNER,
+        )
+        ScheduleReplacementHistory.objects.create(
+            schedule=self.schedule,
+            original_match=self.round_robin_match,
+            replacement_match=None,
+            replacement_label="差し替え",
+            original_schedule_block=self.block,
+            original_court=self.court,
+            original_order=1,
+            original_called=True,
+            original_started=True,
+            original_finished=True,
+        )
+
+    def test_clone_tournament_without_results_resets_operational_state(self):
+        clone = clone_tournament_without_results(
+            self.tournament,
+            name="複製先大会",
+            code="CLONEDST",
+        )
+
+        self.assertEqual(clone.name, "複製先大会")
+        self.assertEqual(clone.code, "CLONEDST")
+        self.assertEqual(
+            Category.objects.filter(tournament=clone).count(),
+            1,
+        )
+        self.assertEqual(
+            Participant.objects.filter(category__tournament=clone).count(),
+            2,
+        )
+        self.assertEqual(
+            RoundRobinMatch.objects.filter(
+                group__category__tournament=clone,
+                pair1_games__isnull=True,
+                pair2_games__isnull=True,
+                completed=False,
+                result_type=RoundRobinMatch.RESULT_NORMAL,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            GroupRanking.objects.filter(
+                group__category__tournament=clone,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(
+                category__tournament=clone,
+                retired=True,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            Schedule.objects.filter(
+                court__tournament=clone,
+                called=True,
+            ).count(),
+            0,
+        )
+        self.assertEqual(
+            ScheduleReplacementHistory.objects.filter(
+                schedule__court__tournament=clone,
+            ).count(),
+            0,
+        )
+
+        cloned_match = TournamentMatch.objects.get(
+            bracket__category__tournament=clone,
+            match_code="M1",
+        )
+        cloned_next_match = TournamentMatch.objects.get(
+            bracket__category__tournament=clone,
+            match_code="M2",
+        )
+        self.assertIsNone(cloned_match.pair1_games)
+        self.assertIsNone(cloned_match.pair2_games)
+        self.assertIsNone(cloned_match.winner)
+        self.assertEqual(
+            cloned_match.result_type,
+            TournamentMatch.RESULT_NORMAL,
+        )
+        self.assertIsNone(cloned_next_match.pair1)
+
+        cloned_target = LeagueEntry.objects.get(
+            category__tournament=clone,
+            pair_code="3",
+        )
+        self.assertIsNone(cloned_target.participant)
+        self.assertEqual(cloned_target.player1_name, "")
+
+        cloned_tournament_target = TournamentEntry.objects.get(
+            bracket__category__tournament=clone,
+            pair_code="T3",
+        )
+        self.assertIsNone(cloned_tournament_target.participant)
+        self.assertIsNone(cloned_tournament_target.source_pair)
+        self.assertEqual(cloned_tournament_target.player1_name, "")
+
+        self.assertEqual(
+            AdvancementSource.objects.filter(
+                Q(target_league_entry__category__tournament=clone)
+                | Q(target_tournament_entry__bracket__category__tournament=clone)
+            ).count(),
+            2,
+        )
+
+    def test_clone_tournament_view_creates_clone_and_redirects(self):
+        response = self.client.post(
+            reverse(
+                "clone_tournament",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "name": "画面複製大会",
+                "code": "screenclone",
+            },
+        )
+
+        clone = Tournament.objects.get(code="SCREENCLONE")
+        self.assertRedirects(
+            response,
+            reverse(
+                "maintenance_menu",
+                kwargs={"code": clone.code},
+            ),
+        )
+        self.assertEqual(clone.name, "画面複製大会")
+
+
 class MaintenanceMenuTests(TestCase):
 
     def test_category_quick_actions_are_displayed_in_display_order(self):
@@ -4470,6 +5003,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "設定")
         self.assertContains(response, "大会デフォルト")
         self.assertContains(response, "大会設定")
+        self.assertContains(response, "大会複製")
         self.assertContains(response, "Stage一覧")
         self.assertContains(response, "トーナメント一覧・個別設定")
         self.assertContains(response, "進出元一覧・入れ替え")
@@ -4484,11 +5018,18 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(
             response,
             reverse(
+                "clone_tournament",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
                 "category_stage_overview",
                 kwargs={"category_id": first_category.id},
             ),
         )
-        self.assertContains(
+        self.assertNotContains(
             response,
             reverse(
                 "category_snapshot_list",

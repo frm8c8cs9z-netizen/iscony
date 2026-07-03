@@ -1397,6 +1397,17 @@ class TournamentMatch(models.Model):
         return self.result_type == self.RESULT_RETIREMENT
 
     @property
+    def is_double_retirement_result(self):
+        return bool(
+            self.is_retirement_result
+            and self.pair1_id
+            and self.pair2_id
+            and not self.winner_id
+            and self.pair1_games == 0
+            and self.pair2_games == 0
+        )
+
+    @property
     def retired_entry(self):
         if (
             not self.is_retirement_result

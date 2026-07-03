@@ -62,11 +62,14 @@ def _entry_score_text(match, side):
 
     entry = getattr(match, side)
 
-    if not entry or not match.winner_id:
+    if not entry:
         return ""
 
-    if match.retired_entry == entry:
+    if match.is_double_retirement_result or match.retired_entry == entry:
         return "R"
+
+    if not match.winner_id:
+        return ""
 
     games = (
         match.pair1_games
@@ -90,7 +93,13 @@ def _should_show_svg_score(match, side):
 
     entry = getattr(match, side)
 
-    if not entry or not match.winner_id:
+    if not entry:
+        return False
+
+    if match.is_double_retirement_result:
+        return True
+
+    if not match.winner_id:
         return False
 
     if score_display_mode == TournamentBracket.SCORE_DISPLAY_BOTH:
@@ -126,6 +135,9 @@ def _should_highlight_svg_winner(match):
 
     if not match.next_match:
         return False
+
+    if match.next_match.winner_id == match.winner_id:
+        return True
 
     if match.next_slot == "pair1":
         return bool(match.next_match.pair2_id)
@@ -1492,12 +1504,13 @@ def input_tournament_match_score(request, code, match_id):
                 bracket_id=match.bracket.id
             )
 
-        if action in ["retire_pair1", "retire_pair2"]:
-            retired_side = (
-                "pair1"
-                if action == "retire_pair1"
-                else "pair2"
-            )
+        if action in ["retire_pair1", "retire_pair2", "retire_both"]:
+            retired_side_map = {
+                "retire_pair1": "pair1",
+                "retire_pair2": "pair2",
+                "retire_both": "both",
+            }
+            retired_side = retired_side_map[action]
             error = save_tournament_retirement(
                 match,
                 retired_side,

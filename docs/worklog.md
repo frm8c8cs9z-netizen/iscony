@@ -1,0 +1,102 @@
+# Worklog
+
+このファイルは、Codex がこのリポジトリでコード変更・DB操作・運用確認を行ったときに、作業内容を短く残すためのログです。
+
+運用ルール:
+- Codex が実装や実データ操作をしたら、作業の最後にこのファイルへ追記する。
+- チャット全文ではなく、あとから再開するために必要な判断・変更点・確認結果を残す。
+- テスト未実行や失敗があれば、その理由も書く。
+
+## 2026-07-02
+
+### やったこと
+- カテゴリ単体スナップショット作成・直接復元を停止し、大会全体スナップショットから復元範囲を指定する運用へ整理。
+- カテゴリ別スナップショット画面のテンプレートを削除し、古いURLは大会スナップショット画面へ誘導する互換動作に変更。
+- 実データ `ケンコーカップ2026` を、結果未入力状態の大会 `ケンコーカップ2026_1` / `KENKOCUP2026_1` として複製。
+- トーナメント結果入力に `両者リタイア` を追加。
+- 両者リタイア時は `0-0`、勝者なし、リタイア結果として保存し、次試合へ勝者を送らないようにした。
+- 両者リタイアで次試合が片側シードだけになった場合、そのシードを不戦通過/優勝として `winner` にする処理を追加。
+- 両者リタイアやシード優勝を、トーナメント表・進行表・コート表示・メンテ画面で正しく表示するよう調整。
+- 実例 `ケンコーカップ2026 / 女子A / 5-6位L-3位` で、シード勝ち上がり線が赤くならない原因を確認し、SVG赤線判定を修正。
+
+### 主な変更ファイル
+- `stpro/core/models.py`
+- `stpro/core/services.py`
+- `stpro/core/tournament_views.py`
+- `stpro/core/snapshot_views.py`
+- `stpro/core/snapshot_services.py`
+- `stpro/core/templates/core/input_score.html`
+- `stpro/core/templates/core/tournament_bracket_detail.html`
+- `stpro/core/templates/core/_tournament_match_box.html`
+- `stpro/core/templates/core/tournament_match_maintenance.html`
+- `stpro/core/templates/core/tournament_schedule.html`
+- `stpro/core/templates/core/court_status.html`
+- `stpro/core/templates/core/schedule.html`
+- `stpro/core/templates/core/maintenance_menu.html`
+- `stpro/core/templates/core/category_stage_overview.html`
+- `stpro/core/tests.py`
+
+### 実データ操作
+- `ケンコーカップ2026` から `ケンコーカップ2026_1` を作成。
+- 複製先の確認結果:
+  - カテゴリ 4
+  - 参加者 136
+  - Stage 35
+  - グループ 64
+  - リーグ枠 272
+  - リーグ試合 471
+  - トーナメント 46
+  - トーナメント枠 112
+  - トーナメント試合 80
+  - コート 16
+  - 日程区分 2
+  - 進行枠 537
+  - 進出元設定 248
+- 複製先では、リーグ結果・トーナメント結果・順位表・進行状態・差し替え履歴・リタイア状態が 0 件であることを確認。
+- `ケンコーカップ2026 / 女子A / 5-6位L-3位` で、`S1 1-3位 -> M2 winner 1-3位` の赤線判定が `True` になることを確認。
+
+### 確認
+- `./venv/bin/python stpro/manage.py test core.tests.CategorySnapshotTests core.tests.MaintenanceMenuTests --keepdb`
+- `./venv/bin/python stpro/manage.py test core.tests.TournamentAdvancementTests --keepdb`
+- `./venv/bin/python stpro/manage.py test core --keepdb`
+- 最終確認時点で `core` は 156 tests OK。
+
+### 次候補
+- 大会複製を管理画面の正式機能にする。
+- 両者リタイア時のPDF/帳票表示を確認する。
+- 大会全体スナップショットからのカテゴリ復元・日程復元を実データで運用確認する。
+
+### 追記: 大会複製UI化
+- 大会構成を結果未入力状態で複製する `clone_tournament_without_results` を追加。
+- 管理メニューから `大会複製` 画面へ移動できるようにした。
+- 複製画面では、新しい大会名と大会コードを入力して複製できる。
+- 複製対象:
+  - カテゴリ、Stage、参加者、リーグ枠、トーナメント枠、リーグ試合、トーナメント試合、コート、日程区分、進行表、進出元設定。
+- 複製しない/初期化するもの:
+  - リーグ結果、トーナメント結果、順位表、呼出・試合中・完了状態、リタイア状態、差し替え履歴、スナップショット。
+- 反映済みの後続Stage枠は、複製先では AdvancementSource の未反映枠として空に戻す。
+- 変更ファイル:
+  - `stpro/core/services.py`
+  - `stpro/core/forms.py`
+  - `stpro/core/views.py`
+  - `stpro/core/urls.py`
+  - `stpro/core/templates/core/clone_tournament.html`
+  - `stpro/core/templates/core/maintenance_menu.html`
+  - `stpro/core/tests.py`
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentCloneTests core.tests.MaintenanceMenuTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 158 tests OK。
+
+### 追記: リーグ表からStage一覧への戻り導線
+- リーグ表画面 `category_detail.html` の上部に `Stage一覧へ戻る` を追加。
+- 試合進行表・カテゴリ一覧へのリンクも同じヘッダー内にまとめた。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 159 tests OK。
+
+### 追記: 当日受付UI案とコミット運用
+- `TODO.md` に、リーグ試合とトーナメント試合を同じ画面で検索・入力できる当日受付用UI案を追加。
+- 今後は、修正ごとに作業内容を区切ってコミットする運用に戻す。
+- この追記自体はTODO/運用ログ更新のみのため、追加テストは不要。

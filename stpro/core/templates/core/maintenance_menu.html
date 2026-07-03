@@ -66,7 +66,6 @@
         <th>カテゴリ</th>
         <th>進行・結果</th>
         <th>枠・調整</th>
-        <th>退避</th>
     </tr>
     {% for category in categories %}
         <tr>
@@ -85,15 +84,10 @@
                     トーナメント
                 </a>
             </td>
-            <td>
-                <a href="{% url 'category_snapshot_list' category.id %}">
-                    スナップショット
-                </a>
-            </td>
         </tr>
     {% empty %}
         <tr>
-            <td colspan="4">
+            <td colspan="3">
                 カテゴリがありません。
             </td>
         </tr>
@@ -222,6 +216,14 @@
             </a>
         </td>
         <td>手入力でトーナメント表を作る導線は今後整理します。</td>
+    </tr>
+    <tr>
+        <td>
+            <a href="{% url 'clone_tournament' tournament.code %}">
+                大会複製
+            </a>
+        </td>
+        <td>現在の大会構成を、結果未入力状態の新しい大会として複製します。</td>
     </tr>
 </table>
 

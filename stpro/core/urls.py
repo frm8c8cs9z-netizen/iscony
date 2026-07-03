@@ -36,6 +36,12 @@ urlpatterns = [
         name="tournament_settings",
     ),
 
+    path(
+        "tournament/<str:code>/clone/",
+        views.clone_tournament_view,
+        name="clone_tournament",
+    ),
+
     # =====================================================
     # カテゴリ詳細
     # =====================================================

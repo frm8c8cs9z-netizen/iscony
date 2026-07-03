@@ -226,28 +226,6 @@ def build_category_snapshot_payload(category):
     }
 
 
-def create_category_snapshot(category, label, note=""):
-    """カテゴリ単位の進行・結果スナップショットを作成する。"""
-
-    if not label:
-        label = timezone.localtime().strftime("%Y-%m-%d %H:%M")
-
-    payload = build_category_snapshot_payload(category)
-
-    snapshot = OperationSnapshot(
-        tournament=category.tournament,
-        category=category,
-        scope_type=OperationSnapshot.SCOPE_CATEGORY,
-        label=label,
-        note=note,
-        snapshot_json=payload,
-    )
-    snapshot.full_clean()
-    snapshot.save()
-
-    return snapshot
-
-
 def build_tournament_snapshot_payload(tournament):
     """大会全体を、カテゴリ単位スナップショットの束としてJSON化する。"""
 
@@ -568,20 +546,6 @@ def _restore_category_payload(
         "advancement_sources": len(payload["advancement_sources"]),
         "deleted_extra_matches": deleted_extra_count,
     }
-
-
-def restore_category_snapshot(snapshot):
-    """カテゴリ単位のスナップショットから進行・結果状態を復元する。"""
-
-    if snapshot.scope_type != OperationSnapshot.SCOPE_CATEGORY:
-        raise ValidationError("カテゴリ単位のスナップショットだけ復元できます。")
-
-    category = snapshot.category
-
-    if not isinstance(category, Category):
-        raise ValidationError("スナップショットのカテゴリが見つかりません。")
-
-    return _restore_category_payload(category, snapshot.snapshot_json)
 
 
 def _find_category_payload(snapshot, category):

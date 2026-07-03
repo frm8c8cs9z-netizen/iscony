@@ -6,9 +6,17 @@
 
 {% block content %}
 
-<h2>
-    {{ category.name }}
-</h2>
+<div class="page-heading">
+    <div>
+        <h2>{{ category.name }} リーグ表</h2>
+        <p class="subtle-text">{{ tournament.name }}</p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'category_stage_overview' category.id %}">Stage一覧へ戻る</a>
+        <a href="{% url 'schedule_view' tournament.code %}">試合進行表</a>
+        <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
+    </div>
+</div>
 
 <p>
     リーグ参加者表示:
@@ -30,14 +38,6 @@
     </a>
 
 </p>
-<p>
-
-    <a href="{% url 'schedule_view' tournament.code %}">
-        試合進行表
-    </a>
-
-</p>
-
 {% for data in group_data %}
 
 <div class="group-box" id="group-{{ data.group.id }}">

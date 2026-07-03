@@ -48,7 +48,7 @@
             {% if match.pair1 %}
                 {{ match.pair1.code }}
                 {{ match.pair1.display_name }}
-                {% if match.pair1 and match.retired_entry == match.pair1 %}
+                {% if match.pair1 and match.is_double_retirement_result or match.pair1 and match.retired_entry == match.pair1 %}
                     (R)
                 {% endif %}
             {% else %}
@@ -60,7 +60,7 @@
             {% if match.pair2 %}
                 {{ match.pair2.code }}
                 {{ match.pair2.display_name }}
-                {% if match.pair2 and match.retired_entry == match.pair2 %}
+                {% if match.pair2 and match.is_double_retirement_result or match.pair2 and match.retired_entry == match.pair2 %}
                     (R)
                 {% endif %}
             {% else %}
@@ -73,6 +73,8 @@
         <td>
             {% if match.match_code|slice:":1" == "S" %}
                 内部通過
+            {% elif match.is_double_retirement_result %}
+                両者リタイア
             {% elif match.is_retirement_result %}
                 リタイア勝ち
             {% elif match.pair1_games != None and match.pair2_games != None %}

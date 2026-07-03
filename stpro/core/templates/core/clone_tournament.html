@@ -1,0 +1,58 @@
+{% extends "core/base.html" %}
+
+{% block title %}
+大会複製
+{% endblock %}
+
+{% block content %}
+
+<h2>{{ tournament.name }} 大会複製</h2>
+
+<p>
+    <a href="{% url 'maintenance_menu' tournament.code %}">
+        管理メニューへ戻る
+    </a>
+</p>
+
+<p>
+    カテゴリ、Stage、参加者、リーグ枠、トーナメント枠、試合、コート、進行表、進出元設定を複製します。
+    リーグ結果、トーナメント結果、順位、呼出・試合中・完了状態、リタイア状態、差し替え履歴、スナップショットは複製しません。
+</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    {{ form.non_field_errors }}
+
+    <table>
+        <tr>
+            <th>{{ form.name.label_tag }}</th>
+            <td>
+                {{ form.name }}
+                {{ form.name.errors }}
+            </td>
+        </tr>
+        <tr>
+            <th>{{ form.code.label_tag }}</th>
+            <td>
+                {{ form.code }}
+                {{ form.code.errors }}
+                {% if form.code.help_text %}
+                    <br>
+                    <small>{{ form.code.help_text }}</small>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <p>
+        <button
+            type="submit"
+            onclick="return confirm('結果未入力状態の新しい大会を作成します。実行しますか？');"
+        >
+            結果なしで大会を複製
+        </button>
+    </p>
+</form>
+
+{% endblock %}

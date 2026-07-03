@@ -6,9 +6,7 @@ from django.utils import timezone
 from .models import Category, OperationSnapshot, ScheduleBlock, Tournament
 from .snapshot_services import (
     AUTO_TYPE_STAGE_ADVANCEMENT,
-    create_category_snapshot,
     create_tournament_snapshot,
-    restore_category_snapshot,
     restore_category_schedule_block_from_tournament_snapshot,
     restore_category_from_tournament_snapshot,
     restore_tournament_snapshot,
@@ -177,88 +175,46 @@ def tournament_snapshot_list(request, code):
 
 
 def category_snapshot_list(request, category_id):
-    """カテゴリ単位のスナップショット一覧と作成フォーム。"""
+    """カテゴリ単体保存を避け、大会全体スナップショットへ誘導する。"""
 
     category = get_object_or_404(
         Category.objects.select_related("tournament"),
         id=category_id,
     )
-
-    if request.method == "POST":
-        label = (
-            request.POST.get("label", "").strip()
-            or timezone.localtime().strftime("%Y-%m-%d %H:%M")
-        )
-        note = request.POST.get("note", "").strip()
-
-        snapshot = create_category_snapshot(
-            category,
-            label=label,
-            note=note,
-        )
-        messages.success(
-            request,
-            f"{category.name} のスナップショットを作成しました: {snapshot.label}",
-        )
-
-        return redirect(
-            "category_snapshot_list",
-            category_id=category.id,
-        )
-
-    snapshots = OperationSnapshot.objects.filter(
-        scope_type=OperationSnapshot.SCOPE_CATEGORY,
-        category=category,
+    messages.warning(
+        request,
+        (
+            "カテゴリ単位のスナップショット作成は事故防止のため停止しています。"
+            "大会全体スナップショットを作成し、復元時にカテゴリや日程区分を指定してください。"
+        ),
     )
 
-    return render(
-        request,
-        "core/category_snapshot_list.html",
-        {
-            "category": category,
-            "snapshot_rows": _snapshot_rows(
-                snapshots,
-                scope=OperationSnapshot.SCOPE_CATEGORY,
-            ),
-        },
+    return redirect(
+        "tournament_snapshot_list",
+        code=category.tournament.code,
     )
 
 
 def restore_category_snapshot_view(request, snapshot_id):
-    """カテゴリ単位のスナップショットを復元する。"""
+    """カテゴリ単体スナップショットの直接復元を停止する。"""
 
     snapshot = get_object_or_404(
         OperationSnapshot.objects.select_related(
-            "category__tournament",
+            "tournament",
         ),
         id=snapshot_id,
     )
-    category = snapshot.category
-
-    if request.method != "POST":
-        return redirect(
-            "category_snapshot_list",
-            category_id=category.id,
-        )
-
-    try:
-        result = restore_category_snapshot(snapshot)
-    except ValidationError as error:
-        messages.error(request, " ".join(error.messages))
-    else:
-        messages.success(
-            request,
-            (
-                f"{category.name} をスナップショット「{snapshot.label}」へ復元しました。"
-                "復元内容: 進行表、リーグ結果、トーナメント結果、"
-                "リタイア状態、追加試合、差し替え履歴、後続Stage参照。"
-                f"復元件数: {_restore_detail_message(result)}。"
-            ),
-        )
+    messages.error(
+        request,
+        (
+            "カテゴリ単位スナップショットの直接復元は停止しています。"
+            "大会全体スナップショットから復元範囲を指定してください。"
+        ),
+    )
 
     return redirect(
-        "category_snapshot_list",
-        category_id=category.id,
+        "tournament_snapshot_list",
+        code=snapshot.tournament.code,
     )
 
 

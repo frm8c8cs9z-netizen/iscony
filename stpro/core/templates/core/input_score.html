@@ -125,6 +125,16 @@
             >
                 下側リタイア
             </button>
+
+            <button
+                type="submit"
+                name="action"
+                value="retire_both"
+                class="danger-button"
+                onclick="return confirm('この試合を両者リタイア扱いにしますか？勝者は次の試合へ進みません。');"
+            >
+                両者リタイア
+            </button>
         {% endif %}
 
         {% if match.pair1_games != None and match.pair2_games != None %}

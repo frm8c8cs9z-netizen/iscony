@@ -376,6 +376,35 @@ class TournamentSettingsForm(forms.ModelForm):
         }
 
 
+class TournamentCloneForm(forms.Form):
+
+    name = forms.CharField(
+        max_length=100,
+        label="新しい大会名",
+    )
+    code = forms.CharField(
+        max_length=20,
+        label="新しい大会コード",
+        help_text="英数字などの短い識別子を入力します。保存時に大文字へ変換されます。",
+    )
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+
+        if Tournament.objects.filter(name=name).exists():
+            raise forms.ValidationError("この大会名は既に使われています。")
+
+        return name
+
+    def clean_code(self):
+        code = self.cleaned_data["code"].strip().upper()
+
+        if Tournament.objects.filter(code=code).exists():
+            raise forms.ValidationError("この大会コードは既に使われています。")
+
+        return code
+
+
 class TournamentBracketForm(forms.ModelForm):
 
     class Meta:

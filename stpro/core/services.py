@@ -7,17 +7,333 @@ from django.utils import timezone
 
 from .models import (
     AdvancementSource,
+    Category,
+    Court,
+    Group,
     LeagueEntry,
     GroupRanking,
+    Participant,
     RoundRobinMatch,
     Schedule,
+    ScheduleBlock,
     ScheduleReplacementHistory,
     Stage,
+    Tournament,
+    TournamentBracket,
     TournamentEntry,
     TournamentMatch,
-    
 )
 from .snapshot_services import create_stage_advancement_snapshot_once
+
+
+def clone_tournament_without_results(source, *, name, code):
+    """大会構成を複製し、結果・進行状態は未入力へ戻す。"""
+
+    if not isinstance(source, Tournament):
+        raise ValidationError("複製元の大会を指定してください。")
+
+    name = (name or "").strip()
+    code = (code or "").strip().upper()
+
+    if not name:
+        raise ValidationError("複製先の大会名を入力してください。")
+
+    if not code:
+        raise ValidationError("複製先の大会コードを入力してください。")
+
+    if Tournament.objects.filter(name=name).exists():
+        raise ValidationError(f"大会名が既に存在します: {name}")
+
+    if Tournament.objects.filter(code=code).exists():
+        raise ValidationError(f"大会コードが既に存在します: {code}")
+
+    category_map = {}
+    stage_map = {}
+    participant_map = {}
+    group_map = {}
+    league_entry_map = {}
+    schedule_block_map = {}
+    court_map = {}
+    bracket_map = {}
+    tournament_entry_map = {}
+    round_robin_match_map = {}
+    tournament_match_map = {}
+
+    with transaction.atomic():
+        clone = Tournament.objects.create(
+            name=name,
+            code=code,
+            start_date=source.start_date,
+            is_public=source.is_public,
+            score_sheet_template=source.score_sheet_template,
+            default_league_entry_display_mode=source.default_league_entry_display_mode,
+            default_tournament_entry_display_mode=source.default_tournament_entry_display_mode,
+            default_tournament_layout_type=source.default_tournament_layout_type,
+            default_champion_display_mode=source.default_champion_display_mode,
+            default_single_champion_display_mode=source.default_single_champion_display_mode,
+            default_split_champion_display_mode=source.default_split_champion_display_mode,
+            default_tournament_score_display_mode=source.default_tournament_score_display_mode,
+            default_champion_text_layout=source.default_champion_text_layout,
+            default_single_champion_text_layout=source.default_single_champion_text_layout,
+            default_split_champion_text_layout=source.default_split_champion_text_layout,
+        )
+
+        for old in Category.objects.filter(
+            tournament=source,
+        ).order_by("id"):
+            category_map[old.id] = Category.objects.create(
+                tournament=clone,
+                name=old.name,
+                display_order=old.display_order,
+            )
+
+        for old in Stage.objects.filter(
+            category__tournament=source,
+        ).order_by("id"):
+            stage_map[old.id] = Stage.objects.create(
+                category=category_map[old.category_id],
+                code=old.code,
+                name=old.name,
+                stage_type=old.stage_type,
+                display_order=old.display_order,
+            )
+
+        for old in Participant.objects.filter(
+            category__tournament=source,
+        ).order_by("id"):
+            participant_map[old.id] = Participant.objects.create(
+                category=category_map[old.category_id],
+                entry_code=old.entry_code,
+                organization=old.organization,
+                player1_name=old.player1_name,
+                player2_name=old.player2_name,
+                display_order=old.display_order,
+            )
+
+        for old in Group.objects.filter(
+            category__tournament=source,
+        ).order_by("id"):
+            group_map[old.id] = Group.objects.create(
+                category=category_map[old.category_id],
+                stage=stage_map.get(old.stage_id),
+                name=old.name,
+                display_order=old.display_order,
+            )
+
+        for old in LeagueEntry.objects.filter(
+            category__tournament=source,
+        ).order_by("id"):
+            league_entry_map[old.id] = LeagueEntry.objects.create(
+                category=category_map[old.category_id],
+                group=group_map[old.group_id],
+                participant=participant_map.get(old.participant_id),
+                pair_code=old.pair_code,
+                display_order=old.display_order,
+                organization=old.organization,
+                player1_name=old.player1_name,
+                player2_name=old.player2_name,
+                retired=False,
+                retired_reason="",
+            )
+
+        for old in ScheduleBlock.objects.filter(
+            tournament=source,
+        ).order_by("id"):
+            schedule_block_map[old.id] = ScheduleBlock.objects.create(
+                tournament=clone,
+                name=old.name,
+                display_order=old.display_order,
+            )
+
+        for old in Court.objects.filter(
+            tournament=source,
+        ).order_by("id"):
+            court_map[old.id] = Court.objects.create(
+                tournament=clone,
+                name=old.name,
+                display_order=old.display_order,
+            )
+
+        for old in TournamentBracket.objects.filter(
+            category__tournament=source,
+        ).order_by("id"):
+            bracket_map[old.id] = TournamentBracket.objects.create(
+                category=category_map[old.category_id],
+                stage=stage_map.get(old.stage_id),
+                name=old.name,
+                display_order=old.display_order,
+                use_tournament_defaults=old.use_tournament_defaults,
+                layout_type=old.layout_type,
+                score_display_mode=old.score_display_mode,
+                champion_display_mode=old.champion_display_mode,
+                champion_text_layout=old.champion_text_layout,
+                entry_display_mode=old.entry_display_mode,
+            )
+
+        for old in TournamentEntry.objects.filter(
+            bracket__category__tournament=source,
+        ).order_by("id"):
+            tournament_entry_map[old.id] = TournamentEntry.objects.create(
+                bracket=bracket_map[old.bracket_id],
+                participant=participant_map.get(old.participant_id),
+                pair_code=old.pair_code,
+                organization=old.organization,
+                player1_name=old.player1_name,
+                player2_name=old.player2_name,
+                display_order=old.display_order,
+                source_pair=league_entry_map.get(old.source_pair_id),
+            )
+
+        for old in RoundRobinMatch.objects.filter(
+            group__category__tournament=source,
+        ).order_by("id"):
+            round_robin_match_map[old.id] = RoundRobinMatch.objects.create(
+                group=group_map[old.group_id],
+                pair1=league_entry_map[old.pair1_id],
+                pair2=league_entry_map[old.pair2_id],
+                meeting_number=old.meeting_number,
+                counts_for_ranking=old.counts_for_ranking,
+                note=old.note,
+                result_type=RoundRobinMatch.RESULT_NORMAL,
+                pair1_games=None,
+                pair2_games=None,
+                match_games=old.match_games,
+                completed=False,
+            )
+
+        old_tournament_matches = list(
+            TournamentMatch.objects.filter(
+                bracket__category__tournament=source,
+            ).order_by("id")
+        )
+        for old in old_tournament_matches:
+            tournament_match_map[old.id] = TournamentMatch.objects.create(
+                bracket=bracket_map[old.bracket_id],
+                round_number=old.round_number,
+                match_number=old.match_number,
+                match_code=old.match_code,
+                match_label=old.match_label,
+                pair1=tournament_entry_map.get(old.pair1_id),
+                pair2=tournament_entry_map.get(old.pair2_id),
+                pair1_games=None,
+                pair2_games=None,
+                match_games=old.match_games,
+                result_type=TournamentMatch.RESULT_NORMAL,
+                winner=None,
+                next_match=None,
+                next_slot=old.next_slot,
+            )
+
+        for old in old_tournament_matches:
+            if old.next_match_id:
+                TournamentMatch.objects.filter(
+                    id=tournament_match_map[old.id].id,
+                ).update(
+                    next_match=tournament_match_map.get(old.next_match_id),
+                )
+
+        for old in old_tournament_matches:
+            if (
+                not old.winner_id
+                or not old.next_match_id
+                or not old.next_slot
+            ):
+                continue
+
+            if (
+                old.pair1_games is None
+                and old.pair2_games is None
+                and old.result_type == TournamentMatch.RESULT_NORMAL
+            ):
+                continue
+
+            new_next = tournament_match_map.get(old.next_match_id)
+            new_winner = tournament_entry_map.get(old.winner_id)
+
+            if not new_next or not new_winner:
+                continue
+
+            update = {}
+
+            if (
+                old.next_slot == "pair1"
+                and new_next.pair1_id == new_winner.id
+            ):
+                update["pair1"] = None
+
+            if (
+                old.next_slot == "pair2"
+                and new_next.pair2_id == new_winner.id
+            ):
+                update["pair2"] = None
+
+            if update:
+                TournamentMatch.objects.filter(
+                    id=new_next.id,
+                ).update(**update)
+
+        sources = AdvancementSource.objects.filter(
+            Q(target_league_entry__category__tournament=source)
+            | Q(target_tournament_entry__bracket__category__tournament=source)
+        ).order_by("id")
+        for old in sources:
+            new = AdvancementSource.objects.create(
+                target_league_entry=league_entry_map.get(
+                    old.target_league_entry_id
+                ),
+                target_tournament_entry=tournament_entry_map.get(
+                    old.target_tournament_entry_id
+                ),
+                source_type=old.source_type,
+                source_stage=stage_map.get(old.source_stage_id),
+                source_group=group_map.get(old.source_group_id),
+                source_rank=old.source_rank,
+                source_match=tournament_match_map.get(old.source_match_id),
+                source_result=old.source_result,
+            )
+
+            if new.target_league_entry_id:
+                LeagueEntry.objects.filter(
+                    id=new.target_league_entry_id,
+                ).update(
+                    participant=None,
+                    organization="",
+                    player1_name="",
+                    player2_name="",
+                    retired=False,
+                    retired_reason="",
+                )
+
+            if new.target_tournament_entry_id:
+                TournamentEntry.objects.filter(
+                    id=new.target_tournament_entry_id,
+                ).update(
+                    participant=None,
+                    source_pair=None,
+                    organization="",
+                    player1_name="",
+                    player2_name="",
+                )
+
+        for old in Schedule.objects.filter(
+            court__tournament=source,
+        ).order_by("id"):
+            Schedule.objects.create(
+                schedule_block=schedule_block_map[old.schedule_block_id],
+                court=court_map[old.court_id],
+                order=old.order,
+                round_robin_match=round_robin_match_map.get(
+                    old.round_robin_match_id
+                ),
+                tournament_match=tournament_match_map.get(
+                    old.tournament_match_id
+                ),
+                called=False,
+                started=False,
+                finished=False,
+            )
+
+    return clone
 
 
 def _resolved_advancement_entry(source):
@@ -917,6 +1233,46 @@ def advance_tournament_winner(
     match.next_match.save()
 
 
+def advance_tournament_single_entry_winners(match):
+    """片側だけが残った通常試合を不戦通過として後続へ流す。"""
+
+    if not match:
+        return
+
+    match = TournamentMatch.objects.select_for_update().get(
+        id=match.id
+    )
+
+    winner = get_single_tournament_entry(match)
+
+    if not winner:
+        return
+
+    if tournament_match_has_score(match):
+        return
+
+    if match.winner != winner:
+        clear_advanced_tournament_winner(
+            match,
+            match.winner,
+        )
+
+        match.winner = winner
+        match.save(
+            update_fields=["winner"]
+        )
+
+    advance_tournament_winner(
+        match,
+        winner,
+    )
+
+    if match.next_match_id:
+        advance_tournament_single_entry_winners(
+            match.next_match
+        )
+
+
 def advance_tournament_bye_winners(bracket):
     """S試合は表示用ではなく、bye通過を次試合へ流す内部試合として扱う。"""
 
@@ -1037,7 +1393,7 @@ def save_tournament_score(
 
 
 def save_tournament_retirement(match, retired_side):
-    """トーナメント試合を、指定側のリタイアによる相手勝ちとして保存する。"""
+    """トーナメント試合をリタイア結果として保存する。"""
 
     with transaction.atomic():
 
@@ -1048,7 +1404,7 @@ def save_tournament_retirement(match, retired_side):
         if not match.pair1 or not match.pair2:
             return "対戦ペアが未確定です。"
 
-        if retired_side not in ["pair1", "pair2"]:
+        if retired_side not in ["pair1", "pair2", "both"]:
             return "リタイアする側を確認してください。"
 
         win_games = (match.match_games // 2) + 1
@@ -1057,16 +1413,33 @@ def save_tournament_retirement(match, retired_side):
             pair1_games = 0
             pair2_games = win_games
             winner = match.pair2
-        else:
+        elif retired_side == "pair2":
             pair1_games = win_games
             pair2_games = 0
             winner = match.pair1
+        else:
+            pair1_games = 0
+            pair2_games = 0
+            winner = None
 
-        error = validate_tournament_score_change(
-            match,
-            pair1_games,
-            pair2_games,
-        )
+        if retired_side == "both":
+            error = None
+
+            if (
+                match.winner
+                and match.next_match
+                and tournament_match_has_score(match.next_match)
+            ):
+                error = (
+                    "次の試合に結果が入力されているため、"
+                    "勝者を取り消すことはできません。"
+                )
+        else:
+            error = validate_tournament_score_change(
+                match,
+                pair1_games,
+                pair2_games,
+            )
 
         if error:
             return error
@@ -1094,10 +1467,15 @@ def save_tournament_retirement(match, retired_side):
             finished=True,
         )
 
-        advance_tournament_winner(
-            match,
-            winner,
-        )
+        if winner:
+            advance_tournament_winner(
+                match,
+                winner,
+            )
+        elif retired_side == "both" and match.next_match_id:
+            advance_tournament_single_entry_winners(
+                match.next_match
+            )
 
     return None
 

@@ -5,6 +5,7 @@ core.views
 リーグ戦、トーナメント、CSV取込、PDF出力は専用ビューへ分離済み。
 """
 
+from django.contrib import messages
 from django.db.models import Max
 from django.urls import reverse
 from django.core.exceptions import ValidationError
@@ -29,10 +30,12 @@ from .forms import (
     ScheduleEditForm,
     ScheduleMoveForm,
     CategoryForm,
+    TournamentCloneForm,
     TournamentSettingsForm,
 )
 
 from .services import (
+    clone_tournament_without_results,
     move_schedule,
 )
 
@@ -298,6 +301,77 @@ def tournament_settings(request, code):
     return render(
         request,
         "core/tournament_settings.html",
+        {
+            "tournament": tournament,
+            "form": form,
+        },
+    )
+
+
+def clone_tournament_view(request, code):
+    """大会構成を、結果未入力状態の新大会として複製する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+
+    def unique_initial_name():
+        number = 1
+
+        while Tournament.objects.filter(
+            name=f"{tournament.name}_{number}",
+        ).exists():
+            number += 1
+
+        return f"{tournament.name}_{number}"
+
+    def unique_initial_code():
+        base_code = tournament.code.replace("_", "")
+        number = 1
+
+        while Tournament.objects.filter(
+            code=f"{base_code}_{number}",
+        ).exists():
+            number += 1
+
+        return f"{base_code}_{number}"
+
+    if request.method == "POST":
+        form = TournamentCloneForm(request.POST)
+
+        if form.is_valid():
+            try:
+                cloned_tournament = clone_tournament_without_results(
+                    tournament,
+                    name=form.cleaned_data["name"],
+                    code=form.cleaned_data["code"],
+                )
+            except ValidationError as error:
+                form.add_error(None, " ".join(error.messages))
+            else:
+                messages.success(
+                    request,
+                    (
+                        f"{tournament.name} を {cloned_tournament.name} "
+                        "として結果未入力状態で複製しました。"
+                    ),
+                )
+                return redirect(
+                    "maintenance_menu",
+                    code=cloned_tournament.code,
+                )
+    else:
+        form = TournamentCloneForm(
+            initial={
+                "name": unique_initial_name(),
+                "code": unique_initial_code(),
+            }
+        )
+
+    return render(
+        request,
+        "core/clone_tournament.html",
         {
             "tournament": tournament,
             "form": form,
