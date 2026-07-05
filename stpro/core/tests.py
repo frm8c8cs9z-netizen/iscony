@@ -725,6 +725,32 @@ class TournamentAdvancementTests(TestCase):
 
         self.assertFalse(_should_highlight_svg_winner(seed_match))
 
+    def test_seed_line_stays_unhighlighted_before_next_match_result(self):
+        seed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entries[0],
+            winner=self.entries[0],
+            match_games=7,
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            winner=None,
+            match_games=7,
+        )
+        seed_match.next_match = next_match
+        seed_match.next_slot = "pair1"
+        seed_match.save()
+
+        self.assertFalse(_should_highlight_svg_winner(seed_match))
+
     def test_bracket_positions_sample_csv_uses_participants(self):
         Participant.objects.create(
             category=self.category,
@@ -6795,7 +6821,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('y2="139.0"', svg_content)
         self.assertNotIn(">S1<", svg_content)
 
-    def test_tournament_bracket_detail_delays_seed_winner_highlight_until_opponent_ready(self):
+    def test_tournament_bracket_detail_delays_seed_winner_highlight_until_result(self):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
@@ -6855,7 +6881,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             content.index("</svg>")
         ]
 
-        self.assertIn('class="winner-line"', svg_content)
+        self.assertNotIn('class="winner-line"', svg_content)
 
     def test_tournament_bracket_detail_keeps_three_entry_loser_finalist_advance_line(self):
         self.use_individual_bracket_settings()

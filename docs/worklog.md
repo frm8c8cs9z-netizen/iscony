@@ -275,3 +275,15 @@
   - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests core.tests.MaintenanceMenuTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 171 tests OK。
+
+### トーナメントS試合の赤線表示条件調整
+- 実データ `出雲大社カップ2026 / 一般男子 / 決勝トーナメント` で、2回戦から始まるS由来の枠が結果前から赤線表示される問題を確認。
+- 対象例: `M7`, `M8`, `M9`, `M11`, `M12`, `M15`, `M16`, `M17`, `M18`, `M19`, `M20`。
+- DB上では対象M試合にスコアや `winner` は入っておらず、S試合側の赤線判定が「次試合の反対側に相手がいる」だけで成立していたことが原因。
+- S試合の赤線は、次試合で同じ選手が勝者になった場合、または次試合にスコアが入力された場合だけ表示するように変更。
+- これにより、未入力の2回戦枠は赤くせず、試合後はシードが勝っても負けても「そこまで進出した線」は残せる。
+- 確認:
+  - 実データで `S2`, `S4`, `S6`, `S9`, `S11`, `S15`, `S17`, `S19`, `S21`, `S23`, `S25` の赤線判定が `False` になることを確認。
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentAdvancementTests core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 172 tests OK。

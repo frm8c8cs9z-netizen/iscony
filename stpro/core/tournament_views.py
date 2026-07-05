@@ -139,13 +139,10 @@ def _should_highlight_svg_winner(match):
     if match.next_match.winner_id == match.winner_id:
         return True
 
-    if match.next_slot == "pair1":
-        return bool(match.next_match.pair2_id)
-
-    if match.next_slot == "pair2":
-        return bool(match.next_match.pair1_id)
-
-    return False
+    return (
+        match.next_match.pair1_games is not None
+        or match.next_match.pair2_games is not None
+    )
 
 
 def _should_highlight_svg_advance(match, svg):
