@@ -676,8 +676,11 @@ def _stage_reimport_protection_errors(stages):
         ).filter(
             Q(pair1_games__isnull=False)
             | Q(pair2_games__isnull=False)
-            | Q(winner__isnull=False)
             | ~Q(result_type=TournamentMatch.RESULT_NORMAL)
+            | (
+                Q(winner__isnull=False)
+                & ~Q(match_code__startswith="S")
+            )
         ).exists()
 
         if tournament_has_result:

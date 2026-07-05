@@ -287,3 +287,14 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentAdvancementTests core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 172 tests OK。
+
+### Stage再取込保護のS試合winner除外
+- 実データ `出雲大社カップ2026` で、`一般男子`、`シニア男子一部`、`シニア男子二部`、`シニア男子三部` の `決勝トーナメント` をStage CSV再取込しようとすると、トーナメント結果入力済みとしてブロックされる問題を確認。
+- 該当Stageではスコア入力は0件で、`winner` が入っていたのはS試合の自動bye通過だけだった。
+- Stage再取込保護では、S試合の `winner` だけを実結果扱いから除外するよう変更。
+- スコア入力、リタイアなど通常ではない結果、S以外の `winner` は従来どおり再取込をブロックする。
+- 実データの該当4Stageで `_stage_reimport_protection_errors` が空になることを確認。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.ImportStageSlotsCsvTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 173 tests OK。

@@ -3554,6 +3554,71 @@ class ImportStageSlotsCsvTests(TestCase):
         self.assertEqual(match.pair1_games, 4)
         self.assertEqual(match.pair2_games, 2)
 
+    def test_reimport_stage_with_seed_winner_only_is_allowed(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        participant_1 = self._create_participant(
+            category,
+            "E001",
+        )
+        participant_2 = self._create_participant(
+            category,
+            "E002",
+        )
+        entry_1 = TournamentEntry.objects.create(
+            bracket=bracket,
+            participant=participant_1,
+            pair_code="1",
+            display_order=1,
+            organization=participant_1.organization,
+            player1_name=participant_1.player1_name,
+            player2_name=participant_1.player2_name,
+        )
+        TournamentEntry.objects.create(
+            bracket=bracket,
+            participant=participant_2,
+            pair_code="2",
+            display_order=2,
+            organization=participant_2.organization,
+            player1_name=participant_2.player1_name,
+            player2_name=participant_2.player2_name,
+        )
+        seed_match = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=entry_1,
+            winner=entry_1,
+        )
+
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,決勝トーナメント,T,,本戦,1,1,E001,,,,,\n"
+            "男子B,決勝トーナメント,T,,本戦,2,2,E002,,,,,\n"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+            response.content.decode("utf-8"),
+        )
+        self.assertFalse(
+            TournamentMatch.objects.filter(id=seed_match.id).exists()
+        )
+
     def test_reimport_stage_with_schedule_is_blocked(self):
         category = Category.objects.create(
             tournament=self.tournament,
