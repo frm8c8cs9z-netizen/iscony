@@ -250,8 +250,100 @@
 
 <p>
     通常の当日運営ではあまり使わない入口です。
-    手入力作成や旧形式CSVの扱いは、必要な場合だけここから確認します。
+    手入力作成、事故対応、旧形式CSVの扱いは、必要な場合だけここから確認します。
 </p>
+
+<h4>将来のオンライン作成UIに再利用</h4>
+
+<table>
+    <tr>
+        <th>やりたいこと</th>
+        <th>入口</th>
+        <th>用途</th>
+    </tr>
+    <tr>
+        <td>カテゴリを作る</td>
+        <td>
+            <a href="{% url 'add_category' tournament.code %}">
+                カテゴリ追加
+            </a>
+        </td>
+        <td>CSVなしで大会を作る時の入口候補です。通常は参加者CSV取込を使います。</td>
+    </tr>
+    <tr>
+        <td>リーグ枠を調整する</td>
+        <td>
+            {% for category in categories %}
+                <a href="{% url 'pair_maintenance' category.id %}">
+                    {{ category.name }} リーグ枠
+                </a>{% if not forloop.last %} ／ {% endif %}
+            {% empty %}
+                カテゴリがありません
+            {% endfor %}
+        </td>
+        <td>リーグ枠作成、参加者貼り付け、枠修正の土台になる画面です。</td>
+    </tr>
+    <tr>
+        <td>トーナメント枠を作る</td>
+        <td>
+            <a href="{% url 'add_tournament_bracket' tournament.code %}">
+                トーナメント追加
+            </a>
+            ／
+            <a href="{% url 'bracket_list' tournament.code %}">
+                トーナメント一覧・個別設定
+            </a>
+        </td>
+        <td>トーナメント表の作成、表示設定、試合生成・編集へ進む入口です。</td>
+    </tr>
+</table>
+
+<h4>当日事故対応として維持</h4>
+
+<table>
+    <tr>
+        <th>やりたいこと</th>
+        <th>入口</th>
+        <th>用途</th>
+    </tr>
+    <tr>
+        <td>結果・順位・枠を復旧する</td>
+        <td>
+            <a href="{% url 'tournament_snapshot_list' tournament.code %}">
+                大会スナップショット
+            </a>
+            ／
+            <a href="{% url 'advancement_source_list' tournament.code %}">
+                進出元一覧・入れ替え
+            </a>
+        </td>
+        <td>誤入力、誤反映、進出元の入れ替えが必要になった時に使います。</td>
+    </tr>
+    <tr>
+        <td>試合順・コートを直す</td>
+        <td>
+            <a href="{% url 'schedule_maintenance' tournament.code %}">
+                進行メンテナンス
+            </a>
+        </td>
+        <td>未配置トーナメント試合の追加、試合順・コート変更、進行枠の修正を行います。</td>
+    </tr>
+    <tr>
+        <td>リーグの順位やリタイアを直す</td>
+        <td>
+            {% for category in categories %}
+                <a href="{% url 'category_detail' category.id %}">
+                    {{ category.name }} リーグ表
+                </a>{% if not forloop.last %} ／ {% endif %}
+            {% empty %}
+                カテゴリがありません
+            {% endfor %}
+        </td>
+        <td>順位計算、順位手入力、追加対戦、リタイア対応が必要な時に使います。</td>
+    </tr>
+</table>
+
+<h4>互換用として一時維持</h4>
 
 <table>
     <tr>
@@ -260,19 +352,36 @@
     </tr>
     <tr>
         <td>
-            <a href="{% url 'add_tournament_bracket' tournament.code %}">
-                トーナメント追加
-            </a>
-        </td>
-        <td>手入力でトーナメント表を作る導線は今後整理します。</td>
-    </tr>
-    <tr>
-        <td>
             <a href="{% url 'import_pairs' tournament.code %}">
                 旧リーグ枠CSV取込
             </a>
         </td>
         <td>Stage対応前の互換用入口です。通常はStage枠CSV取込を使います。</td>
+    </tr>
+    <tr>
+        <td>
+            <a href="{% url 'bracket_list' tournament.code %}">
+                トーナメント一覧・個別設定
+            </a>
+        </td>
+        <td>トーナメント個別の旧CSV取込や位置調整は、必要な場合だけ各トーナメントのメンテナンスから確認します。</td>
+    </tr>
+</table>
+
+<h4>削除または隠し機能化を検討</h4>
+
+<table>
+    <tr>
+        <th>入口</th>
+        <th>用途</th>
+    </tr>
+    <tr>
+        <td>
+            <a href="{% url 'pair_search' %}">
+                リーグ枠検索
+            </a>
+        </td>
+        <td>大会横断の古い補助検索です。通常は受付・結果入力の検索を使います。</td>
     </tr>
 </table>
 
