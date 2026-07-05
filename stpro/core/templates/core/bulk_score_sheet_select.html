@@ -1,0 +1,140 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ tournament.name }} 採点票一括出力</h2>
+        <p class="subtle-text">
+            出力範囲を選んで、印刷可能な試合だけPDFにします。
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'maintenance_menu' tournament.code %}">
+            管理メニューへ戻る
+        </a>
+        <a href="{% url 'schedule_view' tournament.code %}">
+            試合進行表
+        </a>
+    </div>
+</div>
+
+<h3>全体出力</h3>
+
+<table>
+    <tr>
+        <th>範囲</th>
+        <th>印刷可能</th>
+        <th>未確定で除外</th>
+        <th>未配置</th>
+        <th>PDF</th>
+    </tr>
+    <tr>
+        <td>リーグすべて</td>
+        <td>{{ league_all.printable_count }}</td>
+        <td>{{ league_all.skipped_count }}</td>
+        <td>{{ league_all.unscheduled_count }}</td>
+        <td>
+            {% if league_all.printable_count %}
+                <a href="{% url 'league_score_sheets_pdf' tournament.code %}" target="_blank">
+                    PDF出力
+                </a>
+            {% else %}
+                <span class="subtle-text">印刷可能な試合なし</span>
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <td>トーナメント1回戦すべて</td>
+        <td>{{ tournament_first_round_all.printable_count }}</td>
+        <td>{{ tournament_first_round_all.skipped_count }}</td>
+        <td>{{ tournament_first_round_all.unscheduled_count }}</td>
+        <td>
+            {% if tournament_first_round_all.printable_count %}
+                <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}" target="_blank">
+                    PDF出力
+                </a>
+            {% else %}
+                <span class="subtle-text">印刷可能な試合なし</span>
+            {% endif %}
+        </td>
+    </tr>
+</table>
+
+<h3>リーグ別</h3>
+
+<table>
+    <tr>
+        <th>範囲</th>
+        <th>印刷可能</th>
+        <th>未確定で除外</th>
+        <th>未配置</th>
+        <th>PDF</th>
+    </tr>
+    {% for row in league_rows %}
+        <tr>
+            <td>
+                {{ row.label }}
+                {% if row.stage_name %}
+                    <span class="subtle-text"> / {{ row.stage_name }}</span>
+                {% endif %}
+            </td>
+            <td>{{ row.printable_count }}</td>
+            <td>{{ row.skipped_count }}</td>
+            <td>{{ row.unscheduled_count }}</td>
+            <td>
+                {% if row.printable_count %}
+                    <a href="{% url 'league_score_sheets_pdf' tournament.code %}{{ row.url }}" target="_blank">
+                        PDF出力
+                    </a>
+                {% else %}
+                    <span class="subtle-text">印刷可能な試合なし</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="5">リーグ試合がありません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
+<h3>トーナメント別</h3>
+
+<table>
+    <tr>
+        <th>範囲</th>
+        <th>印刷可能</th>
+        <th>未確定で除外</th>
+        <th>未配置</th>
+        <th>PDF</th>
+    </tr>
+    {% for row in tournament_rows %}
+        <tr>
+            <td>
+                {{ row.label }}
+                {% if row.stage_name %}
+                    <span class="subtle-text"> / {{ row.stage_name }}</span>
+                {% endif %}
+            </td>
+            <td>{{ row.printable_count }}</td>
+            <td>{{ row.skipped_count }}</td>
+            <td>{{ row.unscheduled_count }}</td>
+            <td>
+                {% if row.printable_count %}
+                    <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}{{ row.url }}" target="_blank">
+                        PDF出力
+                    </a>
+                {% else %}
+                    <span class="subtle-text">印刷可能な試合なし</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="5">トーナメント試合がありません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

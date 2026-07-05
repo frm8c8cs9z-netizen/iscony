@@ -1123,6 +1123,63 @@ class BulkScoreSheetPdfTests(TestCase):
         content = b"".join(response.streaming_content)
         return len(PdfReader(io.BytesIO(content)).pages)
 
+    def test_bulk_score_sheet_select_shows_printable_scope_counts(self):
+        league_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[0],
+            pair2=self.league_entries[1],
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[2],
+            pair2=self.league_entries[3],
+        )
+        tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.tournament_entries[0],
+            pair2=self.tournament_entries[1],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=self.tournament_entries[2],
+            pair2=None,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=league_match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            tournament_match=tournament_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "bulk_score_sheet_select",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "採点票一括出力")
+        self.assertContains(response, "リーグすべて")
+        self.assertContains(response, "女子A Aリーグ")
+        self.assertContains(response, "トーナメント1回戦すべて")
+        self.assertContains(response, "女子A 本戦 準決勝")
+        self.assertContains(response, "未配置")
+        self.assertContains(response, "?group=")
+        self.assertContains(response, "?bracket=")
+
     def test_league_score_sheets_pdf_outputs_scheduled_league_matches(self):
         match1 = RoundRobinMatch.objects.create(
             group=self.group,
@@ -1158,6 +1215,64 @@ class BulkScoreSheetPdfTests(TestCase):
         self.assertEqual(self.response_pdf_page_count(response), 2)
         self.assertIn(
             "league_score_sheets_BULKPDF.pdf",
+            response.headers["Content-Disposition"],
+        )
+
+    def test_league_score_sheets_pdf_filters_by_group(self):
+        other_group = Group.objects.create(
+            category=self.category,
+            name="B",
+            display_order=2,
+        )
+        other_entries = []
+
+        for number in range(1, 3):
+            other_entries.append(
+                LeagueEntry.objects.create(
+                    category=self.category,
+                    group=other_group,
+                    pair_code=f"B{number}",
+                    display_order=number,
+                    player1_name=f"B{number}A",
+                    player2_name=f"B{number}B",
+                )
+            )
+
+        target_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[0],
+            pair2=self.league_entries[1],
+        )
+        other_match = RoundRobinMatch.objects.create(
+            group=other_group,
+            pair1=other_entries[0],
+            pair2=other_entries[1],
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=target_match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            round_robin_match=other_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "league_score_sheets_pdf",
+                kwargs={"code": self.tournament.code},
+            ),
+            {"group": self.group.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.response_pdf_page_count(response), 1)
+        self.assertIn(
+            f"group_{self.group.id}.pdf",
             response.headers["Content-Disposition"],
         )
 
@@ -1213,6 +1328,73 @@ class BulkScoreSheetPdfTests(TestCase):
             response.headers["Content-Disposition"],
         )
         self.assertIsNotNone(unscheduled_first_match.id)
+
+    def test_tournament_score_sheets_pdf_filters_by_bracket_and_round(self):
+        other_bracket = TournamentBracket.objects.create(
+            category=self.category,
+            name="下位",
+            display_order=2,
+        )
+        target_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.tournament_entries[0],
+            pair2=self.tournament_entries[1],
+        )
+        other_entry1 = TournamentEntry.objects.create(
+            bracket=other_bracket,
+            pair_code="1",
+            display_order=1,
+            player1_name="下位1A",
+            player2_name="下位1B",
+        )
+        other_entry2 = TournamentEntry.objects.create(
+            bracket=other_bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="下位2A",
+            player2_name="下位2B",
+        )
+        other_match = TournamentMatch.objects.create(
+            bracket=other_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="L1",
+            pair1=other_entry1,
+            pair2=other_entry2,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            tournament_match=target_match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            tournament_match=other_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_first_round_scheduled_score_sheets_pdf",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "bracket": self.bracket.id,
+                "round": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.response_pdf_page_count(response), 1)
+        self.assertIn(
+            f"bracket_{self.bracket.id}.pdf",
+            response.headers["Content-Disposition"],
+        )
 
 
 class ScheduleMoveLockTests(TestCase):
@@ -5170,8 +5352,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "大会複製")
         self.assertContains(response, "Stage一覧")
         self.assertContains(response, "リーグ表")
-        self.assertContains(response, "リーグ採点票一括")
-        self.assertContains(response, "トーナメント1回戦採点票一括")
+        self.assertContains(response, "採点票一括出力")
         self.assertContains(response, "トーナメント一覧・個別設定")
         self.assertContains(response, "進出元一覧・入れ替え")
         self.assertContains(response, "試合進行CSV取込")
@@ -5186,14 +5367,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(
             response,
             reverse(
-                "league_score_sheets_pdf",
-                kwargs={"code": tournament.code},
-            ),
-        )
-        self.assertContains(
-            response,
-            reverse(
-                "tournament_first_round_scheduled_score_sheets_pdf",
+                "bulk_score_sheet_select",
                 kwargs={"code": tournament.code},
             ),
         )

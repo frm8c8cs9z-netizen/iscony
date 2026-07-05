@@ -225,6 +225,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/score-sheets/",
+        pdf_views.bulk_score_sheet_select,
+        name="bulk_score_sheet_select",
+    ),
+
+    path(
         "tournament/<str:code>/score-sheets/league/",
         pdf_views.league_score_sheets_pdf,
         name="league_score_sheets_pdf",

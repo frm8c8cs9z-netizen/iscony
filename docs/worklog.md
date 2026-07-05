@@ -264,3 +264,14 @@
   - `./venv/bin/python stpro/manage.py check`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 166 tests OK。
+
+### 採点票一括出力の範囲選択
+- 管理メニューの採点票出力入口を、直接PDFではなく `採点票一括出力` の範囲選択画面へ変更。
+- 選択画面では、リーグ全体、トーナメント1回戦全体、リーグ別、トーナメント別/回戦別の出力範囲を表示する。
+- 各範囲に `印刷可能`、`未確定で除外`、`未配置` の件数を出し、PDFを開く前に出力対象を確認できるようにした。
+- 既存のリーグ一括PDFは `group` クエリでリーグ別に絞り込み可能にした。
+- 既存のトーナメント1回戦一括PDFは `bracket` と `round` クエリでトーナメント表/回戦別に絞り込み可能にした。既存の全体1回戦URLとファイル名は互換維持。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests core.tests.MaintenanceMenuTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 171 tests OK。
