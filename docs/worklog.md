@@ -333,3 +333,9 @@
   - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 177 tests OK。
+
+### TODO追記: 採点票テンプレートDB管理
+- `TODO.md` に、採点票テンプレートPDFと印字位置を大会ごとにDB管理する将来案を追記。
+- 現在 `constants.py` に定数として置いている採点票諸元は、新規大会作成時のデフォルト値として扱う方針にした。
+- 最終的には、ユーザがPDFテンプレートを登録し、カテゴリ、コート、回戦、選手名、所属、QR、検索キーなどの印刷アイテムを配置できるインターフェースを検討する。
+- ドキュメント更新のみのためテストは未実行。
