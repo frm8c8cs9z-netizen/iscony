@@ -298,3 +298,11 @@
   - `./venv/bin/python stpro/manage.py test core.tests.ImportStageSlotsCsvTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 173 tests OK。
+
+### 進行表の空コート列非表示
+- 試合進行表で、日程区分ごとに試合が1つもないコート列を表示しないように変更。
+- 例えば午前ブロックに1番コートの試合だけ、午後ブロックに2番コートの試合だけがある場合、それぞれのブロックで必要なコート列だけ表示する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 174 tests OK。

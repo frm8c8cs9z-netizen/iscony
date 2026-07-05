@@ -8152,3 +8152,78 @@ class TournamentScheduleBehaviorTests(TestCase):
                 kwargs={"court_id": self.court.id},
             ),
         )
+
+    def test_schedule_view_hides_empty_courts_per_block(self):
+        court2 = Court.objects.create(
+            tournament=self.tournament,
+            name="2",
+            display_order=2,
+        )
+        morning = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        afternoon = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        match1 = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        match2 = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        Schedule.objects.create(
+            schedule_block=morning,
+            court=self.court,
+            order=1,
+            tournament_match=match1,
+        )
+        Schedule.objects.create(
+            schedule_block=afternoon,
+            court=court2,
+            order=1,
+            tournament_match=match2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "schedule_view",
+                kwargs={"tournament_code": self.tournament.code},
+            )
+        )
+        content = response.content.decode()
+        morning_section = content[
+            content.index("<h2>午前</h2>"):
+            content.index("<h2>午後</h2>")
+        ]
+        afternoon_section = content[
+            content.index("<h2>午後</h2>"):
+        ]
+        morning_section = "".join(morning_section.split())
+        afternoon_section = "".join(afternoon_section.split())
+        morning_header = morning_section[
+            morning_section.index("<thead>"):
+            morning_section.index("</thead>")
+        ]
+        afternoon_header = afternoon_section[
+            afternoon_section.index("<thead>"):
+            afternoon_section.index("</thead>")
+        ]
+
+        self.assertIn("<th>1</th>", morning_header)
+        self.assertNotIn("<th>2</th>", morning_header)
+        self.assertIn("<th>2</th>", afternoon_header)
+        self.assertNotIn("<th>1</th>", afternoon_header)

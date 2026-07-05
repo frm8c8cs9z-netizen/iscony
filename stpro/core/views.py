@@ -219,6 +219,9 @@ def schedule_view(
 
     for block in blocks:
         block_schedules = schedules.filter(schedule_block=block)
+        block_courts = courts.filter(
+            schedule__schedule_block=block,
+        ).distinct()
         max_order = block_schedules.aggregate(
             Max("order")
         )["order__max"] or 0
@@ -227,7 +230,7 @@ def schedule_view(
         for order in range(1, max_order + 1):
             row = {"order": order, "cells": []}
 
-            for court in courts:
+            for court in block_courts:
                 row["cells"].append(
                     block_schedules.filter(
                         court=court,
@@ -239,6 +242,7 @@ def schedule_view(
 
         block_tables.append({
             "block": block,
+            "courts": block_courts,
             "table": table,
         })
 
@@ -247,7 +251,6 @@ def schedule_view(
         "core/schedule.html",
         {
             "tournament": tournament,
-            "courts": courts,
             "block_tables": block_tables,
             "show_block_headings": len(block_tables) > 1,
         }
