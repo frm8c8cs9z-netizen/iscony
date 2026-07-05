@@ -10,6 +10,7 @@ import io
 import os
 
 from django.conf import settings
+from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -55,6 +56,66 @@ def _scope_counts(schedules, total_matches):
         "skipped_count": scheduled_count - printable_count,
         "unscheduled_count": max(total_matches - scheduled_count, 0),
     }
+
+
+def _schedule_scope_counts(schedules):
+    scheduled_count = schedules.count()
+    printable_count = schedules.filter(
+        (
+            Q(round_robin_match__isnull=False)
+            & Q(round_robin_match__pair1__isnull=False)
+            & Q(round_robin_match__pair2__isnull=False)
+        )
+        | (
+            Q(tournament_match__isnull=False)
+            & Q(tournament_match__pair1__isnull=False)
+            & Q(tournament_match__pair2__isnull=False)
+        )
+    ).count()
+
+    return {
+        "scheduled_count": scheduled_count,
+        "printable_count": printable_count,
+        "skipped_count": scheduled_count - printable_count,
+    }
+
+
+def _court_scope_rows(tournament):
+    rows = []
+    blocks = ScheduleBlock.objects.filter(
+        tournament=tournament,
+        schedule__isnull=False,
+    ).distinct().order_by(
+        "display_order",
+        "id",
+    )
+    courts = Court.objects.filter(
+        tournament=tournament,
+        schedule__isnull=False,
+    ).distinct().order_by(
+        "display_order",
+        "name",
+    )
+
+    for block in blocks:
+        for court in courts:
+            schedules = Schedule.objects.filter(
+                schedule_block=block,
+                court=court,
+            )
+
+            if not schedules.exists():
+                continue
+
+            rows.append({
+                "block": block,
+                "court": court,
+                "label": f"{block.name} / {court.name}コート",
+                "url": f"?schedule_block={block.id}",
+                **_schedule_scope_counts(schedules),
+            })
+
+    return rows
 
 
 def _league_scope_rows(tournament):
@@ -208,6 +269,7 @@ def bulk_score_sheet_select(request, code):
                 first_round_schedules,
                 first_round_count,
             ),
+            "court_rows": _court_scope_rows(tournament),
             "league_rows": _league_scope_rows(tournament),
             "tournament_rows": _tournament_scope_rows(tournament),
         },
@@ -500,6 +562,7 @@ def court_score_sheets_pdf(request, court_id):
     schedules = Schedule.objects.filter(
         court=court
     ).select_related(
+        "schedule_block",
         "court",
         "round_robin_match",
         "round_robin_match__group",
@@ -512,15 +575,26 @@ def court_score_sheets_pdf(request, court_id):
         "tournament_match__pair1",
         "tournament_match__pair2",
     ).order_by(
-        "order"
+        "schedule_block__display_order",
+        "schedule_block__id",
+        "order",
     )
 
     schedule_block_id = request.GET.get("schedule_block")
+    filename = f"score_sheets_court_{court.id}.pdf"
 
     if schedule_block_id:
+        schedule_block = get_object_or_404(
+            ScheduleBlock,
+            id=schedule_block_id,
+            tournament=tournament,
+        )
         schedules = schedules.filter(
-            schedule_block_id=schedule_block_id,
-            schedule_block__tournament=tournament,
+            schedule_block=schedule_block,
+        )
+        filename = (
+            f"score_sheets_court_{court.id}_"
+            f"block_{schedule_block.id}.pdf"
         )
 
     writer = PdfWriter()
@@ -589,7 +663,7 @@ def court_score_sheets_pdf(request, court_id):
     return FileResponse(
         output,
         as_attachment=False,
-        filename=f"score_sheets_court_{court.id}.pdf"
+        filename=filename,
     )
 
 

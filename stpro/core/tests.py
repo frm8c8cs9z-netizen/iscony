@@ -1202,6 +1202,10 @@ class BulkScoreSheetPdfTests(TestCase):
         self.assertContains(response, "女子A Aリーグ")
         self.assertContains(response, "トーナメント1回戦すべて")
         self.assertContains(response, "女子A 本戦 準決勝")
+        self.assertContains(response, "コート別")
+        self.assertContains(response, "1コート")
+        self.assertContains(response, "登録済み")
+        self.assertContains(response, "schedule_block=")
         self.assertContains(response, "未配置")
         self.assertContains(response, "?group=")
         self.assertContains(response, "?bracket=")
@@ -1299,6 +1303,55 @@ class BulkScoreSheetPdfTests(TestCase):
         self.assertEqual(self.response_pdf_page_count(response), 1)
         self.assertIn(
             f"group_{self.group.id}.pdf",
+            response.headers["Content-Disposition"],
+        )
+
+    def test_court_score_sheets_pdf_filters_by_schedule_block(self):
+        morning = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        afternoon = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        morning_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[0],
+            pair2=self.league_entries[1],
+        )
+        afternoon_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[2],
+            pair2=self.league_entries[3],
+        )
+        Schedule.objects.create(
+            schedule_block=morning,
+            court=self.court1,
+            order=1,
+            round_robin_match=morning_match,
+        )
+        Schedule.objects.create(
+            schedule_block=afternoon,
+            court=self.court1,
+            order=1,
+            round_robin_match=afternoon_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "court_score_sheets_pdf",
+                kwargs={"court_id": self.court1.id},
+            ),
+            {"schedule_block": morning.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.response_pdf_page_count(response), 1)
+        self.assertIn(
+            f"block_{morning.id}.pdf",
             response.headers["Content-Disposition"],
         )
 

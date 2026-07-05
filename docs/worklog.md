@@ -306,3 +306,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 174 tests OK。
+
+### 採点票一括出力のコート別出力
+- `採点票一括出力` 画面に、日程区分とコートごとのPDF出力行を追加。
+- 各行に `印刷可能`、`未確定で除外`、`登録済み` の件数を表示し、リーグ/トーナメント混在のコートでも印刷可能数を正しく数えるようにした。
+- 既存のコート別PDF出力は `schedule_block` クエリで日程区分ごとに絞り込めるようにし、絞り込み時のファイル名にブロックIDを含めるようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 175 tests OK。

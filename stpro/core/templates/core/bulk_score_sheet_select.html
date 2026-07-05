@@ -61,6 +61,39 @@
     </tr>
 </table>
 
+<h3>コート別</h3>
+
+<table>
+    <tr>
+        <th>範囲</th>
+        <th>印刷可能</th>
+        <th>未確定で除外</th>
+        <th>登録済み</th>
+        <th>PDF</th>
+    </tr>
+    {% for row in court_rows %}
+        <tr>
+            <td>{{ row.label }}</td>
+            <td>{{ row.printable_count }}</td>
+            <td>{{ row.skipped_count }}</td>
+            <td>{{ row.scheduled_count }}</td>
+            <td>
+                {% if row.printable_count %}
+                    <a href="{% url 'court_score_sheets_pdf' row.court.id %}{{ row.url }}" target="_blank">
+                        PDF出力
+                    </a>
+                {% else %}
+                    <span class="subtle-text">印刷可能な試合なし</span>
+                {% endif %}
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="5">コートに登録された試合がありません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
 <h3>リーグ別</h3>
 
 <table>
