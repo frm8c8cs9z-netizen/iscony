@@ -349,3 +349,16 @@
   - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 178 tests OK。
+
+### 画面・URL棚卸し
+- `docs/screen_inventory.md` を追加し、現在のURL/画面を分類した。
+- 現時点では一般利用者向けの完成画面はまだなく、既存画面は開発初期の確認画面、当日運営、事前準備、メンテナンスが混在しているという前提で整理。
+- 分類:
+  - 一般公開用候補
+  - 当日運営で使う画面
+  - 事前準備で使う画面
+  - Stage・結果反映・復元
+  - トーナメント運営・設定
+  - 旧実装・整理候補
+- `category_detail` は一般向けではなく、開発初期のリーグ確認/運営画面として扱い、公開用リーグ表は別途分離する方針を明記。
+- ドキュメント更新のみのためテストは未実行。
