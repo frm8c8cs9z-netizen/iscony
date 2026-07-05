@@ -96,12 +96,67 @@
 | `import_bracket_positions` / `download_bracket_positions_sample` | `/tournament/<code>/bracket/<id>/import/positions/` | トーナメント位置CSV取込。 | 実運用で必要なら維持。Stage枠CSVとの役割重複を確認。 |
 | `add_category` | `/tournament/<code>/category/add/` | カテゴリ手入力追加。 | CSVなし準備導線として将来整理。通常運用では目立たせない。 |
 
+## 整理判定
+
+旧実装・整理候補は、すぐ削除するものとしてではなく、次の4種類に分けて扱う。
+
+### 将来のオンライン作成UIに再利用
+
+最終的にリーグもトーナメントもオンラインで作成できるようにするため、現在の画面が粗くても、ドメイン処理や編集単位として再利用できるものは残す。
+
+| URL name | 扱い | 理由 |
+| --- | --- | --- |
+| `add_category` | 維持・再設計 | CSVなしで大会を作る場合のカテゴリ作成入口になる。 |
+| `pair_maintenance` / `edit_pair` | 維持・再設計 | リーグ枠作成、参加者貼り付け、枠修正の土台になる。 |
+| `generate_group_matches` | 維持・再設計 | リーグ枠から総当たり試合を作る処理として必要になる。 |
+| `add_tournament_bracket` | 維持・再設計 | トーナメント表を画面から作る入口になる。 |
+| `edit_tournament_bracket` | 維持 | トーナメント表の表示・設定調整で今後も必要。 |
+| `generate_tournament_matches` | 維持・再設計 | トーナメント枠から試合を生成する処理として必要になる。 |
+| `edit_tournament_match` | 維持・再設計 | トーナメント枠、対戦番号、進出元、表示位置の手修正に必要。 |
+
+### 当日事故対応として維持
+
+通常導線では目立たせないが、現場で結果、順位、リタイア、進行表に問題が起きた時の復旧手段として残す。
+
+| URL name | 扱い | 理由 |
+| --- | --- | --- |
+| `add_extra_round_robin_match` | 維持 | リタイアや順位決定で追加対戦が必要になった時の対応。 |
+| `calculate_category_ranking` | 維持 | リーグ順位の再計算や確認に必要。 |
+| `edit_group_ranking` | 維持 | 同率判定など、自動判定だけでは決められない順位の手入力に必要。 |
+| `league_entry_action` / `retire_pair` / `cancel_retire_pair` | 維持 | リーグ枠のリタイア、復帰、対象外化などの事故対応に必要。 |
+| `add_tournament_match_schedule` | 維持 | 未配置になったトーナメント試合を進行表へ戻す時に必要。 |
+| `move_schedule` | 維持 | 当日のコート変更・試合順変更に必要。 |
+| `restore_*` | 維持 | 誤入力や誤反映から戻すための重要な安全装置。 |
+
+### 互換用として一時維持
+
+現行の推奨導線ではないが、過去のCSVやデータ移行、確認作業でまだ役に立つ可能性があるもの。一定期間使わなければ削除候補に回す。
+
+| URL name | 扱い | 理由 |
+| --- | --- | --- |
+| `import_pairs` | 一時維持 | Stage対応前の旧リーグ枠CSV取込。現行はStage枠CSVを推奨。 |
+| `import_tournament_schedule` | 一時維持 | トーナメント個別進行CSV。現行は大会全体の試合進行CSVを推奨。 |
+| `import_bracket_seeds` | 一時維持 | シードCSV取込。Stage枠CSVや位置CSVで代替できるか確認する。 |
+| `import_bracket_positions` / `download_bracket_positions_sample` | 一時維持 | トーナメント位置調整に必要か、Stage枠CSVと役割が重複するか確認する。 |
+| `category_snapshot_list` | 一時維持 | 現在は大会スナップショット中心の運用へ寄せているため、互換入口として扱う。 |
+
+### 削除または隠し機能化を検討
+
+将来のオンライン作成UIや当日事故対応に直結しにくいもの。すぐ削除せず、参照元と実運用での使用有無を確認してから判断する。
+
+| URL name | 扱い | 理由 |
+| --- | --- | --- |
+| `pair_search` | 削除または隠し機能化 | 大会横断の古い補助検索。受付検索と役割が重なる。 |
+| `tournament_schedule_view` | 整理候補 | 進行表本体でトーナメント別確認が足りるなら不要になる可能性がある。 |
+| `tournament_match_score_sheet` | 整理候補 | ブラウザ表示用採点票。PDF導線に寄せるなら役割が薄い。 |
+| `tournament_match_score_sheet_pdf` | 維持または統合 | 個別PDFとしては有用だが、進行表ベースの採点票PDFと役割整理が必要。 |
+
 ## 直近の整理方針
 
 1. `category_detail` は一般向けではなく、開発初期のリーグ確認/運営画面として扱う。
 2. 一般公開用リーグ表は別URLで作るか、既存URLに公開/管理モードを分けるか検討する。
 3. `tournament_detail` は現在管理導線が混ざっているため、公開用大会トップと管理トップを分ける。
-4. 旧CSV取込・旧検索・手入力生成系は、まずメニューから隔離し、実運用で不要と判断できたものから削除する。
+4. 旧CSV取込・旧検索・手入力生成系は、整理判定に沿って「将来の作成UI」「当日事故対応」「互換用」「削除候補」に分ける。
 5. 公開用画面を作る時は、操作リンクを出さず、結果確認・順位確認・トーナメント表確認に限定する。
 
 ## 次に作るなら
