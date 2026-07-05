@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -34,6 +35,9 @@ from .models import (
     TournamentMatch,
 )
 from .utils import get_round_label
+
+
+SCORE_SHEET_BASE_FONT = "NotoSansJP"
 
 
 def _scope_counts(schedules, total_matches):
@@ -993,13 +997,13 @@ def create_score_sheet_page(
     )
 
     c.setFont(
-        "NotoSansJP",
+        SCORE_SHEET_BASE_FONT,
         12
     )
 
     jp_style = ParagraphStyle(
         name="Japanese",
-        fontName="NotoSansJP",
+        fontName=SCORE_SHEET_BASE_FONT,
         fontSize=10,
         leading=12,
     )
@@ -1082,10 +1086,13 @@ def draw_score_sheet_content(
         "category"
     ]
 
-    c.drawCentredString(
+    draw_fitted_category_name(
+        c,
+        category_name or "",
         x,
         y,
-        category_name or ""
+        positions.get("category_width", 25 * mm),
+        positions.get("category_height", 9 * mm),
     )
 
     if court_name:
@@ -1230,3 +1237,142 @@ def draw_centered_paragraph(
         x,
         adjusted_y
     )
+
+
+def category_name_text_layout(
+    text,
+    width,
+    *,
+    font_name=SCORE_SHEET_BASE_FONT,
+):
+    """採点票のカテゴリ欄に収めるための行分割とフォントサイズを決める。"""
+
+    text = text or ""
+
+    single_font_size = _fit_font_size(
+        [text],
+        width,
+        font_name=font_name,
+        max_size=12,
+        min_size=7,
+    )
+
+    if single_font_size:
+        return {
+            "lines": [text],
+            "font_size": single_font_size,
+        }
+
+    lines = _split_category_name(text)
+    font_size = _fit_font_size(
+        lines,
+        width,
+        font_name=font_name,
+        max_size=9,
+        min_size=5,
+    ) or 5
+
+    return {
+        "lines": lines,
+        "font_size": font_size,
+    }
+
+
+def draw_fitted_category_name(
+    canvas_obj,
+    text,
+    x,
+    y,
+    width,
+    height,
+):
+    """カテゴリ名を25mm程度の枠に収めて中央描画する。"""
+
+    layout = category_name_text_layout(
+        text,
+        width,
+    )
+    font_size = layout["font_size"]
+    lines = layout["lines"]
+    line_height = font_size + 1
+    total_height = line_height * len(lines)
+    start_y = y + ((total_height - line_height) / 2)
+
+    canvas_obj.setFont(
+        SCORE_SHEET_BASE_FONT,
+        font_size,
+    )
+
+    for index, line in enumerate(lines):
+        canvas_obj.drawCentredString(
+            x,
+            start_y - (index * line_height),
+            line,
+        )
+
+    canvas_obj.setFont(
+        SCORE_SHEET_BASE_FONT,
+        12,
+    )
+
+
+def _fit_font_size(
+    lines,
+    width,
+    *,
+    font_name,
+    max_size,
+    min_size,
+):
+    size = max_size
+
+    while size >= min_size:
+        if all(
+            pdfmetrics.stringWidth(
+                line,
+                font_name,
+                size,
+            ) <= width
+            for line in lines
+        ):
+            return size
+
+        size -= 0.5
+
+    return None
+
+
+def _split_category_name(text):
+    if len(text) <= 1:
+        return [text]
+
+    midpoint = len(text) // 2
+    split_at = midpoint
+
+    separators = [
+        " ",
+        "　",
+        "/",
+        "／",
+        "-",
+        "_",
+    ]
+
+    for separator in separators:
+        positions = [
+            index
+            for index, char in enumerate(text)
+            if char == separator
+        ]
+
+        if positions:
+            split_at = min(
+                positions,
+                key=lambda index: abs(index - midpoint),
+            ) + 1
+            break
+
+    return [
+        text[:split_at],
+        text[split_at:],
+    ]

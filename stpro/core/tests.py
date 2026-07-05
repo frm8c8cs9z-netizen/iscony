@@ -41,7 +41,10 @@ from .models import (
     Participant,
     ScoreSheetTemplate,
 )
-from .pdf_views import get_score_sheet_template_settings
+from .pdf_views import (
+    category_name_text_layout,
+    get_score_sheet_template_settings,
+)
 from .tournament_views import _should_highlight_svg_winner
 
 from .services import (
@@ -1148,6 +1151,26 @@ class BulkScoreSheetPdfTests(TestCase):
     def response_pdf_page_count(self, response):
         content = b"".join(response.streaming_content)
         return len(PdfReader(io.BytesIO(content)).pages)
+
+    def test_category_name_layout_keeps_short_name_on_one_line(self):
+        layout = category_name_text_layout(
+            "女子A",
+            25 * 72 / 25.4,
+            font_name="Helvetica",
+        )
+
+        self.assertEqual(layout["lines"], ["女子A"])
+        self.assertEqual(layout["font_size"], 12)
+
+    def test_category_name_layout_splits_long_name_into_two_lines(self):
+        layout = category_name_text_layout(
+            "シニア男子三部決勝トーナメント",
+            25 * 72 / 25.4,
+            font_name="Helvetica",
+        )
+
+        self.assertEqual(len(layout["lines"]), 2)
+        self.assertLessEqual(layout["font_size"], 9)
 
     def test_bulk_score_sheet_select_shows_printable_scope_counts(self):
         league_match = RoundRobinMatch.objects.create(

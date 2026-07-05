@@ -324,3 +324,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 175 tests OK。
+
+### 採点票PDFのカテゴリ名自動調整
+- 採点票PDFのカテゴリ名が長い場合に、25mm程度のカテゴリ欄へ収まるようフォントサイズを自動調整する処理を追加。
+- 7ptまで縮小しても一行に収まらない場合は、カテゴリ名を二段に分け、二段それぞれが収まるよう5ptまで調整する。
+- 短いカテゴリ名は従来どおり12pt一行で描画する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 177 tests OK。
