@@ -315,3 +315,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 175 tests OK。
+
+### 採点票一括出力画面の件数表示整理
+- `採点票一括出力` 画面の表示順を、現場で使いやすい `コート別`、`リーグ別`、`トーナメント別`、`全体出力` の順に変更。
+- 件数見出しを `進行表登録`、`出力対象`、`未確定`、`未配置` に統一し、コート別・リーグ別・トーナメント別で同じ感覚で読めるようにした。
+- コート別は進行表上の範囲なので、未配置欄は `ー` と表示する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 175 tests OK。

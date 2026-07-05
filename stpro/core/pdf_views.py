@@ -77,6 +77,7 @@ def _schedule_scope_counts(schedules):
         "scheduled_count": scheduled_count,
         "printable_count": printable_count,
         "skipped_count": scheduled_count - printable_count,
+        "unscheduled_count": None,
     }
 
 

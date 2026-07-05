@@ -1204,11 +1204,17 @@ class BulkScoreSheetPdfTests(TestCase):
         self.assertContains(response, "女子A 本戦 準決勝")
         self.assertContains(response, "コート別")
         self.assertContains(response, "1コート")
-        self.assertContains(response, "登録済み")
+        self.assertContains(response, "進行表登録")
+        self.assertContains(response, "出力対象")
+        self.assertContains(response, "未確定")
         self.assertContains(response, "schedule_block=")
         self.assertContains(response, "未配置")
         self.assertContains(response, "?group=")
         self.assertContains(response, "?bracket=")
+        self.assertLess(
+            response.content.decode().index("コート別"),
+            response.content.decode().index("全体出力"),
+        )
 
     def test_league_score_sheets_pdf_outputs_scheduled_league_matches(self):
         match1 = RoundRobinMatch.objects.create(
