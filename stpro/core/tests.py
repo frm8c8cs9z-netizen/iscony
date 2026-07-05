@@ -1384,6 +1384,81 @@ class BulkScoreSheetPdfTests(TestCase):
             response.headers["Content-Disposition"],
         )
 
+    def test_court_score_sheets_pdf_skips_unresolved_advancement_entries(self):
+        source_entry1 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="S1",
+            display_order=5,
+            player1_name="",
+            player2_name="",
+        )
+        source_entry2 = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="S2",
+            display_order=6,
+            player1_name="",
+            player2_name="",
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=source_entry1,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=source_entry2,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+        )
+        unresolved_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=source_entry1,
+            pair2=source_entry2,
+        )
+        resolved_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=self.tournament_entries[0],
+            pair2=self.tournament_entries[1],
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            tournament_match=unresolved_match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            tournament_match=resolved_match,
+        )
+
+        select_response = self.client.get(
+            reverse(
+                "bulk_score_sheet_select",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+        court_row = select_response.context["court_rows"][0]
+
+        self.assertEqual(court_row["scheduled_count"], 2)
+        self.assertEqual(court_row["printable_count"], 1)
+        self.assertEqual(court_row["skipped_count"], 1)
+
+        response = self.client.get(
+            reverse(
+                "court_score_sheets_pdf",
+                kwargs={"court_id": self.court1.id},
+            ),
+            {"schedule_block": self.block.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.response_pdf_page_count(response), 1)
+
     def test_tournament_first_round_sheets_pdf_outputs_only_scheduled_first_round(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,

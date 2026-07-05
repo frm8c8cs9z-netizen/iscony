@@ -10,7 +10,6 @@ import io
 import os
 
 from django.conf import settings
-from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -42,16 +41,11 @@ SCORE_SHEET_BASE_FONT = "NotoSansJP"
 
 def _scope_counts(schedules, total_matches):
     scheduled_count = schedules.count()
-    printable_count = schedules.filter(
-        round_robin_match__pair1__isnull=False,
-        round_robin_match__pair2__isnull=False,
-    ).count()
-
-    if schedules.filter(tournament_match__isnull=False).exists():
-        printable_count = schedules.filter(
-            tournament_match__pair1__isnull=False,
-            tournament_match__pair2__isnull=False,
-        ).count()
+    printable_count = sum(
+        1
+        for schedule in schedules
+        if is_schedule_score_sheet_printable(schedule)
+    )
 
     return {
         "total_count": total_matches,
@@ -64,18 +58,11 @@ def _scope_counts(schedules, total_matches):
 
 def _schedule_scope_counts(schedules):
     scheduled_count = schedules.count()
-    printable_count = schedules.filter(
-        (
-            Q(round_robin_match__isnull=False)
-            & Q(round_robin_match__pair1__isnull=False)
-            & Q(round_robin_match__pair2__isnull=False)
-        )
-        | (
-            Q(tournament_match__isnull=False)
-            & Q(tournament_match__pair1__isnull=False)
-            & Q(tournament_match__pair2__isnull=False)
-        )
-    ).count()
+    printable_count = sum(
+        1
+        for schedule in schedules
+        if is_schedule_score_sheet_printable(schedule)
+    )
 
     return {
         "scheduled_count": scheduled_count,
@@ -355,6 +342,38 @@ def get_score_sheet_entry_data(entry):
     }
 
 
+def is_score_sheet_entry_printable(entry):
+    if not entry:
+        return False
+
+    source = getattr(
+        entry,
+        "advancement_source",
+        None,
+    )
+
+    return not (
+        source
+        and not entry.participant_id
+    )
+
+
+def is_match_score_sheet_printable(match):
+    if not match:
+        return False
+
+    return (
+        is_score_sheet_entry_printable(match.pair1)
+        and is_score_sheet_entry_printable(match.pair2)
+    )
+
+
+def is_schedule_score_sheet_printable(schedule):
+    return is_match_score_sheet_printable(
+        schedule.match
+    )
+
+
 def _schedule_outside_text(schedule):
     block_name = ""
 
@@ -374,7 +393,7 @@ def _schedule_outside_text(schedule):
 def _add_schedule_score_sheet_page(writer, schedule, settings_tuple):
     match = schedule.match
 
-    if not match or not match.pair1 or not match.pair2:
+    if not is_match_score_sheet_printable(match):
         return False
 
     (
@@ -465,7 +484,7 @@ def score_sheet_pdf(request, schedule_id):
             tournament_code=schedule.court.tournament.code
         )
 
-    if not match.pair1 or not match.pair2:
+    if not is_match_score_sheet_printable(match):
 
         return redirect(
             "schedule_view",
@@ -608,10 +627,7 @@ def court_score_sheets_pdf(request, court_id):
 
         match = schedule.match
 
-        if not match:
-            continue
-
-        if not match.pair1 or not match.pair2:
+        if not is_match_score_sheet_printable(match):
             continue
 
         pair1_data = get_score_sheet_entry_data(
@@ -689,6 +705,13 @@ def tournament_match_score_sheet_pdf(
         id=match_id,
         bracket__category__tournament=tournament
     )
+
+    if not is_match_score_sheet_printable(match):
+        return redirect(
+            "tournament_bracket_detail",
+            code=tournament.code,
+            bracket_id=match.bracket_id,
+        )
 
     first_round_count = TournamentMatch.objects.filter(
         bracket=match.bracket,
@@ -785,7 +808,7 @@ def tournament_first_round_score_sheets_pdf(request, code, bracket_id):
 
     for match in matches:
 
-        if not match.pair1 or not match.pair2:
+        if not is_match_score_sheet_printable(match):
             continue
 
         pair1_data = get_score_sheet_entry_data(

@@ -339,3 +339,13 @@
 - 現在 `constants.py` に定数として置いている採点票諸元は、新規大会作成時のデフォルト値として扱う方針にした。
 - 最終的には、ユーザがPDFテンプレートを登録し、カテゴリ、コート、回戦、選手名、所属、QR、検索キーなどの印刷アイテムを配置できるインターフェースを検討する。
 - ドキュメント更新のみのためテストは未実行。
+
+### 採点票PDFの未確定進出元枠除外
+- 実データ `出雲大社カップ2026 / 第一本部 / 1コート / 第11試合 / M1` で、未反映の進出元枠 `S2` と `O2` が採点票PDFに出力される問題を確認。
+- `pair1/pair2` は存在するが、`AdvancementSource` 付きで `participant` 未設定の仮枠だったため、実ペア未確定として扱う必要があった。
+- 採点票出力可否の共通判定を追加し、未反映の進出元枠を含む試合は個別PDF・一括PDF・件数表示のすべてで出力対象外にした。
+- 実データの該当試合で `is_schedule_score_sheet_printable` が `False` になることを確認。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.BulkScoreSheetPdfTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 178 tests OK。
