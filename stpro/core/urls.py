@@ -58,6 +58,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/category/<int:category_id>/public/",
+        stage_views.public_category_results,
+        name="public_category_results",
+    ),
+
+    path(
         "category/<int:category_id>/snapshots/",
         snapshot_views.category_snapshot_list,
         name="category_snapshot_list",

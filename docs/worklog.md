@@ -386,3 +386,14 @@
 - 確認:
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 178 tests OK。
+
+### 公開用カテゴリ結果画面の最小実装
+- 一般利用者向けの第一歩として、読み取り専用のカテゴリ結果画面 `public_category_results` を追加。
+- URLは `tournament/<code>/category/<category_id>/public/` とし、大会コードとカテゴリIDの組み合わせで対象カテゴリを取得する。
+- 大会トップのカテゴリ一覧リンクを、運営用の `category_stage_overview` ではなく公開用カテゴリ結果画面へ変更。
+- 公開用カテゴリ結果画面では、Stageの内部操作を出さず、リーグ/トーナメントの進行状況と表への入口だけを表示。
+- 既存の運営用 `category_stage_overview`、`category_detail`、`tournament_bracket_detail` は残し、公開用リーグ表・公開用トーナメント表の分離は次段階で扱う。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 180 tests OK。

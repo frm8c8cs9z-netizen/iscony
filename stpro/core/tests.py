@@ -6075,6 +6075,166 @@ class CategoryStageOverviewTests(TestCase):
             ),
         )
 
+    def test_tournament_detail_links_to_public_category_results(self):
+        tournament = Tournament.objects.create(
+            name="公開画面大会",
+            code="PUBLICINDEX",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="一般男子",
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_detail",
+                kwargs={"code": tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            ),
+        )
+
+    def test_public_category_results_are_read_only(self):
+        tournament = Tournament.objects.create(
+            name="公開結果大会",
+            code="PUBLICRESULT",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        league_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        tournament_stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=league_stage,
+            name="A",
+        )
+        entry1 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        entry2 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="予選3",
+            player2_name="予選4",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+            pair1_games=1,
+            pair2_games=0,
+        )
+        GroupRanking.objects.create(
+            group=group,
+            pair=entry1,
+            rank=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=tournament_stage,
+            name="本戦",
+        )
+        tournament_entry1 = TournamentEntry.objects.create(
+            bracket=bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="本戦1",
+            player2_name="本戦2",
+        )
+        tournament_entry2 = TournamentEntry.objects.create(
+            bracket=bracket,
+            pair_code="T2",
+            display_order=2,
+            player1_name="本戦3",
+            player2_name="本戦4",
+        )
+        TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=tournament_entry1,
+            pair2=tournament_entry2,
+            winner=tournament_entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "女子A 結果")
+        self.assertContains(response, "予選リーグ")
+        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "1 / 1")
+        self.assertContains(response, "本戦")
+        self.assertContains(response, "トーナメント表")
+        self.assertContains(
+            response,
+            reverse(
+                "category_detail",
+                kwargs={"category_id": category.id},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            ),
+        )
+        self.assertNotContains(response, "後続Stageへ反映")
+        self.assertNotContains(response, "順位入力")
+        self.assertNotContains(response, "結果入力")
+        self.assertNotContains(response, "大会スナップショット")
+        self.assertNotContains(response, "試合進行表")
+
 class TournamentScheduleBehaviorTests(TestCase):
 
     def setUp(self):

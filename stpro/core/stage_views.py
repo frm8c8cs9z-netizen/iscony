@@ -180,3 +180,48 @@ def category_stage_overview(request, category_id):
             "stage_rows": stage_rows,
         },
     )
+
+
+def public_category_results(request, code, category_id):
+    """一般利用者向けにカテゴリ内の結果入口を表示する。"""
+
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        id=category_id,
+        tournament__code=code,
+    )
+    stages = Stage.objects.filter(category=category).order_by(
+        "display_order",
+        "name",
+    )
+    stage_rows = []
+
+    for stage in stages:
+        if stage.stage_type == Stage.TYPE_LEAGUE:
+            containers = _league_stage_data(stage)
+            ready = bool(containers) and all(
+                row["ranking_confirmed"]
+                for row in containers
+            )
+        else:
+            containers = _tournament_stage_data(stage)
+            ready = bool(containers) and all(
+                row["matches_complete"]
+                for row in containers
+            )
+
+        stage_rows.append({
+            "stage": stage,
+            "containers": containers,
+            "ready": ready,
+        })
+
+    return render(
+        request,
+        "core/public_category_results.html",
+        {
+            "category": category,
+            "tournament": category.tournament,
+            "stage_rows": stage_rows,
+        },
+    )

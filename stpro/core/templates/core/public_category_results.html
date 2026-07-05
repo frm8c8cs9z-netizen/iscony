@@ -1,0 +1,90 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ category.name }} 結果{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ category.name }} 結果</h2>
+        <p class="subtle-text">{{ tournament.name }}</p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
+    </div>
+</div>
+
+{% for row in stage_rows %}
+    <section class="stage-section" id="stage-{{ row.stage.id }}">
+        <div class="stage-heading">
+            <div>
+                <span class="stage-order">{{ row.stage.display_order }}</span>
+                <h3>{{ row.stage.name }}</h3>
+            </div>
+            <div>
+                {{ row.stage.get_stage_type_display }} /
+                {% if row.ready %}
+                    <strong>結果確定</strong>
+                {% else %}
+                    進行中
+                {% endif %}
+            </div>
+        </div>
+
+        {% if row.stage.stage_type == "league" %}
+            <table class="stage-table">
+                <tr>
+                    <th>リーグ</th>
+                    <th>参加枠</th>
+                    <th>試合</th>
+                    <th>順位</th>
+                    <th>結果</th>
+                </tr>
+                {% for data in row.containers %}
+                    <tr>
+                        <td>{{ data.group.name }}リーグ</td>
+                        <td>{{ data.entry_count }}</td>
+                        <td>{{ data.finished_count }} / {{ data.match_count }}</td>
+                        <td>
+                            {% if data.ranking_confirmed %}
+                                確定
+                            {% else %}
+                                {{ data.ranking_count }} / {{ data.entry_count }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'category_detail' category.id %}#group-{{ data.group.id }}">リーグ表</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5">リーグがありません。</td></tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <table class="stage-table">
+                <tr>
+                    <th>トーナメント</th>
+                    <th>参加枠</th>
+                    <th>試合</th>
+                    <th>結果</th>
+                </tr>
+                {% for data in row.containers %}
+                    <tr>
+                        <td>{{ data.bracket.name }}</td>
+                        <td>{{ data.entry_count }}</td>
+                        <td>{{ data.finished_count }} / {{ data.match_count }}</td>
+                        <td>
+                            <a href="{% url 'tournament_bracket_detail' tournament.code data.bracket.id %}">トーナメント表</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4">トーナメントがありません。</td></tr>
+                {% endfor %}
+            </table>
+        {% endif %}
+    </section>
+{% empty %}
+    <p>試合結果がありません。</p>
+{% endfor %}
+
+{% endblock %}
