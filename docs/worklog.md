@@ -427,3 +427,9 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 181 tests OK。
+
+### TODO追記: 公開用Stage状態表示
+- `TODO.md` の一般利用者向け画面に、公開用カテゴリ結果画面のStage状態表示を整理する課題を追記。
+- 後続Stageに未反映でまだ始まっていないStageまで `進行中` と見える問題を整理対象にした。
+- `結果待ち`、`未着手`、`進行中`、`結果確定` など、参加者が状況を直感的に理解できる文言へ寄せる方針を記載。
+- ドキュメント更新のみのためテストは未実行。
