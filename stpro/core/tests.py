@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import re
 
 from django.conf import settings
 from django.contrib.messages import get_messages
@@ -6301,6 +6302,79 @@ class TournamentScheduleBehaviorTests(TestCase):
             reverse(
                 "category_stage_overview",
                 kwargs={"category_id": self.category.id},
+            ),
+        )
+
+    def test_unresolved_advancement_entry_svg_label_aligns_with_number(self):
+        self.tournament.default_tournament_entry_display_mode = (
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.tournament.save()
+        source_stage = Stage.objects.create(
+            category=self.category,
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group = Group.objects.create(
+            category=self.category,
+            stage=source_stage,
+            name="D",
+        )
+        unresolved_entry = TournamentEntry.objects.create(
+            bracket=self.bracket,
+            pair_code="D2",
+            display_order=3,
+            player1_name="",
+            player2_name="",
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=unresolved_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=2,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=unresolved_entry,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            content,
+            re.compile(
+                r'<text[^>]*x="28"[^>]*y="75"[^>]*>.*?3.*?</text>',
+                re.S,
+            ),
+        )
+        self.assertRegex(
+            content,
+            re.compile(
+                r'<text[^>]*x="52"[^>]*y="75"[^>]*>.*?D2.*?</text>',
+                re.S,
+            ),
+        )
+        self.assertNotRegex(
+            content,
+            re.compile(
+                r'<text[^>]*x="52"[^>]*y="63"[^>]*>.*?D2.*?</text>',
+                re.S,
             ),
         )
 

@@ -418,3 +418,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 180 tests OK。
+
+### 未確定進出元枠のSVGラベル位置調整
+- トーナメントSVGで、未確定の進出元枠が2行表示モードのY座標計算に乗り、左側の表示順番号と縦位置がずれる問題を修正。
+- 実ペア未確定の `AdvancementSource` 付き枠は、参加者名ではなく枠ラベルとして扱い、1行表示で番号と同じY基準に揃えるようにした。
+- 決勝位置に表示される未確定進出元枠も同じく1行表示にした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 181 tests OK。

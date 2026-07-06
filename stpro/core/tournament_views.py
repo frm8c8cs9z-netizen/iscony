@@ -183,6 +183,16 @@ def _svg_entry_with_org(entry):
     return format_entry_one_line(entry)
 
 
+def _is_unresolved_advancement_entry(entry):
+    """実ペア未確定の進出元枠かどうかを返す。"""
+
+    return (
+        entry
+        and not entry.participant_id
+        and hasattr(entry, "advancement_source")
+    )
+
+
 CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
 CHAMPION_ORIENTATION_VERTICAL = "vertical"
 CHAMPION_ORIENTATION_NONE = "none"
@@ -817,18 +827,28 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "anchor": number_anchor,
                 "url": "",
             })
-            for line_index, line in enumerate(
-                    build_entry_display_lines(
-                        entry,
-                        mode=svg["entry_display_mode"])):
+            if _is_unresolved_advancement_entry(entry):
                 svg["labels"].append({
                     "x": name_x,
-                    "y": y - 7 + (line_index * 18),
-                    "text": line["text"],
-                    "class": line["class"],
+                    "y": y + 5,
+                    "text": entry.display_name,
+                    "class": "entry-text",
                     "anchor": text_anchor,
                     "url": "",
                 })
+            else:
+                for line_index, line in enumerate(
+                        build_entry_display_lines(
+                            entry,
+                            mode=svg["entry_display_mode"])):
+                    svg["labels"].append({
+                        "x": name_x,
+                        "y": y - 7 + (line_index * 18),
+                        "text": line["text"],
+                        "class": line["class"],
+                        "anchor": text_anchor,
+                        "url": "",
+                    })
 
         if line_start != join_x:
             svg["lines"].append({
@@ -1212,23 +1232,33 @@ def _build_svg_bracket_data(bracket, round_data):
                 final_match.round_number,
             )
             if should_show_entry:
-                for line_index, line in enumerate(
-                        build_entry_display_lines(
-                            entry,
-                            mode=svg["entry_display_mode"])):
-                    text = line["text"]
-
-                    if line_index == 0:
-                        text = f"{entry.display_order} {text}"
-
+                if _is_unresolved_advancement_entry(entry):
                     svg["labels"].append({
                         "x": center_x,
-                        "y": y + (line_index * 18),
-                        "text": text,
-                        "class": line["class"],
+                        "y": y,
+                        "text": f"{entry.display_order} {entry.display_name}",
+                        "class": "entry-text",
                         "anchor": "middle",
                         "url": "",
                     })
+                else:
+                    for line_index, line in enumerate(
+                            build_entry_display_lines(
+                                entry,
+                                mode=svg["entry_display_mode"])):
+                        text = line["text"]
+
+                        if line_index == 0:
+                            text = f"{entry.display_order} {text}"
+
+                        svg["labels"].append({
+                            "x": center_x,
+                            "y": y + (line_index * 18),
+                            "text": text,
+                            "class": line["class"],
+                            "anchor": "middle",
+                            "url": "",
+                        })
 
             score = (
                 _entry_score_text(final_match, side_name)
