@@ -6306,6 +6306,81 @@ class CategoryStageOverviewTests(TestCase):
         self.assertNotContains(response, "大会スナップショット")
         self.assertContains(response, "試合進行表へ")
 
+    def test_public_category_results_show_pending_league_schedule_link(self):
+        tournament = Tournament.objects.create(
+            name="公開リーグリンク大会",
+            code="PUBLICLEAGUELINK",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="一般女子",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry1 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="選手1",
+            player2_name="選手2",
+        )
+        entry2 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="選手3",
+            player2_name="選手4",
+        )
+        match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+        )
+        court = Court.objects.create(
+            tournament=tournament,
+            name="1",
+        )
+        schedule = Schedule.objects.create(
+            court=court,
+            order=1,
+            round_robin_match=match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        schedule_url = (
+            reverse(
+                "public_schedule_view",
+                kwargs={"tournament_code": tournament.code},
+            )
+            + f"#schedule-{schedule.id}"
+        )
+        self.assertContains(response, schedule_url)
+        self.assertRegex(
+            response.content.decode(),
+            rf'href="{re.escape(schedule_url)}"[^>]*>\s*-\s*</a>',
+        )
+
     def test_public_category_results_show_stage_status_labels(self):
         tournament = Tournament.objects.create(
             name="公開状態大会",

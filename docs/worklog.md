@@ -485,3 +485,14 @@
 - `docs/screen_inventory.md` に、公開カテゴリ結果画面と公開進行表を第一段階の一般公開画面として追記。
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 183 tests OK。
+
+### 公開リーグ表の未入力リンク修正
+- 公開用カテゴリ結果画面のリーグ表で、進行表に配置済みの未入力試合セルが空文字リンクになり、見た目上押しにくい問題を修正。
+- 未入力だが公開進行表にリンクできるセルは、必ず `-` をリンク文字として表示するようにした。
+- 公開進行表へのリンクURLと `-` 表示をテストで確認するようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 184 tests OK。

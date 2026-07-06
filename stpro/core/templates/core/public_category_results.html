@@ -260,7 +260,7 @@
                                                         >
                                                             {% if score.retired_self %}
                                                                 R
-                                                            {% elif score.value != None %}
+                                                            {% elif score.value != None and score.value != "" %}
                                                                 {{ score.value }}
                                                             {% else %}
                                                                 -
