@@ -496,3 +496,13 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 184 tests OK。
+
+### 公開進行表のカード全体リンク化
+- 一般参加者向け進行表で、各試合カード内の `結果表示` テキストリンクを廃止。
+- 公開進行表ではカード全体を公開カテゴリ結果画面の該当試合アンカーへリンクするようにし、セル内の操作要素を減らした。
+- カード全体リンクでも見た目が崩れないように、公開進行表用のリンクスタイルとフォーカス表示を追加。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 184 tests OK。
