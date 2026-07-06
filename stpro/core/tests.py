@@ -6209,17 +6209,28 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "女子A 結果")
         self.assertContains(response, "予選リーグ")
         self.assertContains(response, "Aリーグ")
-        self.assertContains(response, "1 / 1")
+        self.assertContains(response, "予選1・予選2")
+        self.assertContains(response, "予選3・予選4")
+        self.assertContains(response, "win")
+        self.assertContains(response, "lose")
         self.assertContains(response, "本戦")
-        self.assertContains(response, "トーナメント表")
+        self.assertContains(response, "<svg", html=False)
+        self.assertContains(response, "本戦1・本戦2")
         self.assertContains(
+            response,
+            reverse(
+                "tournament_detail",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        self.assertNotContains(
             response,
             reverse(
                 "category_detail",
                 kwargs={"category_id": category.id},
             ),
         )
-        self.assertContains(
+        self.assertNotContains(
             response,
             reverse(
                 "tournament_bracket_detail",

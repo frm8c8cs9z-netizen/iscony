@@ -48,27 +48,17 @@ from .view_helper import (
 )
 
 
-def category_detail(request, category_id):
-    """
-    カテゴリ内のリーグ表を表示する。
+def build_category_group_data(category, *, groups=None, include_operations=True):
+    """カテゴリ内のリーグ表をテンプレートで描画しやすい形へ整える。"""
 
-    縦軸は自分の得ゲーム数、横軸は相手の得ゲーム数として見せる。
-    同率が出た場合は、そのペアだけを抜き出した補助表も作る。
-    """
+    if groups is None:
+        groups = Group.objects.filter(
+            category=category
+        ).order_by(
+            "display_order",
+            "name",
+        )
 
-    category = get_object_or_404(
-        Category,
-        id=category_id
-    )
-
-    groups = Group.objects.filter(
-        category=category
-    ).order_by(
-        "display_order",
-        "name",
-    )
-
-    # テンプレートでリーグごとに描画しやすい形へ整える。
     group_data = []
     entry_display_mode = resolve_entry_display_mode(
         tournament=category.tournament,
@@ -120,18 +110,20 @@ def category_detail(request, category_id):
             }
             for match in extra_matches
         ]
-        replacement_histories = ScheduleReplacementHistory.objects.filter(
-            replacement_match__group=group,
-            reverted_at__isnull=True,
-        ).select_related(
-            "schedule",
-            "original_match__pair1",
-            "original_match__pair2",
-            "replacement_match__pair1",
-            "replacement_match__pair2",
-            "original_schedule_block",
-            "original_court",
-        )
+        replacement_histories = []
+        if include_operations:
+            replacement_histories = ScheduleReplacementHistory.objects.filter(
+                replacement_match__group=group,
+                reverted_at__isnull=True,
+            ).select_related(
+                "schedule",
+                "original_match__pair1",
+                "original_match__pair2",
+                "replacement_match__pair1",
+                "replacement_match__pair2",
+                "original_schedule_block",
+                "original_court",
+            )
         ranking_matches = RoundRobinMatch.objects.filter(
             group=group,
             counts_for_ranking=True,
@@ -405,6 +397,25 @@ def category_detail(request, category_id):
             "extra_matches": extra_match_rows,
             "replacement_histories": replacement_histories,
         })
+
+    return group_data, entry_display_mode_label
+
+
+def category_detail(request, category_id):
+    """
+    カテゴリ内のリーグ表を表示する。
+
+    縦軸は自分の得ゲーム数、横軸は相手の得ゲーム数として見せる。
+    同率が出た場合は、そのペアだけを抜き出した補助表も作る。
+    """
+
+    category = get_object_or_404(
+        Category,
+        id=category_id
+    )
+    group_data, entry_display_mode_label = build_category_group_data(
+        category,
+    )
 
     return render(
         request,

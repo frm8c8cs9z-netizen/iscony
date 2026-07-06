@@ -397,3 +397,15 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 180 tests OK。
+
+### 公開用カテゴリ結果画面のStage順縦並び表示
+- 参加者がカテゴリ内の結果を流れで追えるよう、公開用カテゴリ結果画面をリンク一覧から実表示へ変更。
+- Stageの `display_order` 順に、リーグ表とトーナメント表を縦に並べて表示するようにした。
+- リーグStageでは、対象Stage内の各リーグ表をその場に表示し、追加試合や同率順位決定補助表も読み取り専用で表示する。
+- トーナメントStageでは、対象Stage内の各トーナメント表をSVGでその場に表示する。
+- 既存の運営用リーグ表データ作成処理とトーナメントSVG作成処理を再利用できるように小さく共通化した。
+- 公開用SVGでは、内部的な結果入力URLを使わず、テキストとして描画して操作リンクを出さない。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 180 tests OK。

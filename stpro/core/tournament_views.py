@@ -1313,24 +1313,8 @@ def _build_svg_bracket_data(bracket, round_data):
     return svg
 
 
-def tournament_bracket_detail(request, code, bracket_id):
-    """
-    トーナメント表を表示する。
-
-    現在はカード型表示を基本にし、build_display_bracket_slots() で
-    シードやbyeを含む表示用スロットへ整形する。
-    """
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=code
-    )
-
-    bracket = get_object_or_404(
-        TournamentBracket,
-        id=bracket_id,
-        category__tournament=tournament
-    )
+def build_tournament_bracket_display_data(bracket):
+    """トーナメント表表示に必要な回戦データとSVGデータを作る。"""
 
     all_matches = TournamentMatch.objects.filter(
         bracket=bracket
@@ -1418,16 +1402,41 @@ def tournament_bracket_detail(request, code, bracket_id):
             "right_matches": matches_in_round[half_count:],
         })
 
+    return {
+        "round_data": round_data,
+        "svg_bracket": svg_bracket,
+        "side_round_data": side_round_data,
+        "final_round": final_round,
+    }
+
+
+def tournament_bracket_detail(request, code, bracket_id):
+    """
+    トーナメント表を表示する。
+
+    現在はカード型表示を基本にし、build_display_bracket_slots() で
+    シードやbyeを含む表示用スロットへ整形する。
+    """
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code
+    )
+
+    bracket = get_object_or_404(
+        TournamentBracket,
+        id=bracket_id,
+        category__tournament=tournament
+    )
+    display_data = build_tournament_bracket_display_data(bracket)
+
     return render(
         request,
         "core/tournament_bracket_detail.html",
         {
             "tournament": tournament,
             "bracket": bracket,
-            "round_data": round_data,
-            "svg_bracket": svg_bracket,
-            "side_round_data": side_round_data,
-            "final_round": final_round,
+            **display_data,
         }
     )
 

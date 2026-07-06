@@ -3,6 +3,7 @@
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
+from .league_views import build_category_group_data
 from .models import (
     AdvancementSource,
     Category,
@@ -14,6 +15,7 @@ from .models import (
     TournamentBracket,
     TournamentMatch,
 )
+from .tournament_views import build_tournament_bracket_display_data
 
 
 def _target_stage(source):
@@ -199,12 +201,34 @@ def public_category_results(request, code, category_id):
     for stage in stages:
         if stage.stage_type == Stage.TYPE_LEAGUE:
             containers = _league_stage_data(stage)
+            groups = Group.objects.filter(stage=stage).order_by(
+                "display_order",
+                "name",
+            )
+            display_groups, _ = build_category_group_data(
+                category,
+                groups=groups,
+                include_operations=False,
+            )
             ready = bool(containers) and all(
                 row["ranking_confirmed"]
                 for row in containers
             )
+            display_brackets = []
         else:
             containers = _tournament_stage_data(stage)
+            display_groups = []
+            brackets = TournamentBracket.objects.filter(stage=stage).order_by(
+                "display_order",
+                "name",
+            )
+            display_brackets = [
+                {
+                    "bracket": bracket,
+                    **build_tournament_bracket_display_data(bracket),
+                }
+                for bracket in brackets
+            ]
             ready = bool(containers) and all(
                 row["matches_complete"]
                 for row in containers
@@ -214,6 +238,8 @@ def public_category_results(request, code, category_id):
             "stage": stage,
             "containers": containers,
             "ready": ready,
+            "display_groups": display_groups,
+            "display_brackets": display_brackets,
         })
 
     return render(
