@@ -115,6 +115,29 @@
         stroke-width: 4;
         fill: none;
     }
+
+    .public-result-nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        gap: 10px;
+        padding: 8px 0;
+        margin-bottom: 12px;
+        background: #fff;
+    }
+
+    .public-result-nav a,
+    .public-schedule-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 2px 8px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #f7fbff;
+    }
+
 </style>
 
 <div class="page-heading">
@@ -125,6 +148,10 @@
     <div class="action-row">
         <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
     </div>
+</div>
+
+<div class="public-result-nav">
+    <a href="{% url 'schedule_view' tournament.code %}">試合進行表へ</a>
 </div>
 
 <div class="public-stage-results">
@@ -184,11 +211,31 @@
                                             {% if score.type == "self" %}
                                                 <td class="self-cell">-</td>
                                             {% else %}
-                                                <td class="{{ score.type }}">
-                                                    {% if score.retired_self %}
-                                                        R
+                                                <td
+                                                    class="{{ score.type }}"
+                                                    {% if score.match and table_row.pair == score.match.pair1 %}
+                                                        id="round-robin-match-{{ score.match.id }}"
+                                                    {% endif %}
+                                                >
+                                                    {% if score.schedule %}
+                                                        <a
+                                                            class="public-schedule-link"
+                                                            href="{% url 'schedule_view' tournament.code %}#schedule-{{ score.schedule.id }}"
+                                                        >
+                                                            {% if score.retired_self %}
+                                                                R
+                                                            {% elif score.value != None %}
+                                                                {{ score.value }}
+                                                            {% else %}
+                                                                進行
+                                                            {% endif %}
+                                                        </a>
                                                     {% else %}
-                                                        {{ score.value|default_if_none:"" }}
+                                                        {% if score.retired_self %}
+                                                            R
+                                                        {% else %}
+                                                            {{ score.value|default_if_none:"" }}
+                                                        {% endif %}
                                                     {% endif %}
                                                 </td>
                                             {% endif %}
@@ -322,25 +369,51 @@
                                     {% endfor %}
 
                                     {% for label in data.svg_bracket.labels %}
-                                        <text
-                                            class="{{ label.class }}"
-                                            x="{{ label.x }}"
-                                            y="{{ label.y }}"
-                                            text-anchor="{{ label.anchor }}"
-                                            {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
-                                        >
-                                            {% if label.lines %}
-                                                {% for line in label.lines %}
-                                                    <tspan
-                                                        x="{{ label.x }}"
-                                                        y="{{ line.y }}"
-                                                        {% if line.class %}class="{{ line.class }}"{% endif %}
-                                                    >{{ line.text }}</tspan>
-                                                {% endfor %}
-                                            {% else %}
-                                                {{ label.text }}
-                                            {% endif %}
-                                        </text>
+                                        {% if label.public_url %}
+                                            <a href="{{ label.public_url }}">
+                                                <text
+                                                    id="tournament-match-{{ label.match_id }}"
+                                                    class="{{ label.class }}"
+                                                    x="{{ label.x }}"
+                                                    y="{{ label.y }}"
+                                                    text-anchor="{{ label.anchor }}"
+                                                    {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+                                                >
+                                                    {% if label.lines %}
+                                                        {% for line in label.lines %}
+                                                            <tspan
+                                                                x="{{ label.x }}"
+                                                                y="{{ line.y }}"
+                                                                {% if line.class %}class="{{ line.class }}"{% endif %}
+                                                            >{{ line.text }}</tspan>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        {{ label.text }}
+                                                    {% endif %}
+                                                </text>
+                                            </a>
+                                        {% else %}
+                                            <text
+                                                {% if label.label_type == "match_code" %}id="tournament-match-{{ label.match_id }}"{% endif %}
+                                                class="{{ label.class }}"
+                                                x="{{ label.x }}"
+                                                y="{{ label.y }}"
+                                                text-anchor="{{ label.anchor }}"
+                                                {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+                                            >
+                                                {% if label.lines %}
+                                                    {% for line in label.lines %}
+                                                        <tspan
+                                                            x="{{ label.x }}"
+                                                            y="{{ line.y }}"
+                                                            {% if line.class %}class="{{ line.class }}"{% endif %}
+                                                        >{{ line.text }}</tspan>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {{ label.text }}
+                                                {% endif %}
+                                            </text>
+                                        {% endif %}
                                     {% endfor %}
                                 </svg>
                             </div>

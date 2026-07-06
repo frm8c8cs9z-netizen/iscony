@@ -793,6 +793,8 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             "anchor": code_anchor,
             "baseline": "middle",
             "url": match_url,
+            "label_type": "match_code",
+            "match_id": match.id,
         })
 
     for side_name, y in [("pair1", y1), ("pair2", y2)]:
@@ -1217,6 +1219,8 @@ def _build_svg_bracket_data(bracket, round_data):
             "anchor": "middle",
             "baseline": "middle",
             "url": _tournament_match_score_url(final_match),
+            "label_type": "match_code",
+            "match_id": final_match.id,
         })
 
         for entry, y, side_name in [

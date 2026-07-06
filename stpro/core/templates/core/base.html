@@ -150,6 +150,12 @@
         text-decoration-thickness: 2px;
     }
 
+    :target {
+        scroll-margin: 40vh 40vw;
+        outline: 3px solid #f0b429;
+        outline-offset: 3px;
+    }
+
     td .score-link {
         font-weight: bold;
     }
@@ -644,6 +650,27 @@
 
 {% block content %}
 {% endblock %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    if (!window.location.hash) {
+        return;
+    }
+
+    const target = document.getElementById(
+        decodeURIComponent(window.location.hash.slice(1))
+    );
+
+    if (target) {
+        window.setTimeout(function () {
+            target.scrollIntoView({
+                block: "center",
+                inline: "center",
+            });
+        }, 0);
+    }
+});
+</script>
 
 </body>
 </html>

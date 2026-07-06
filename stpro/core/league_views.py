@@ -128,6 +128,15 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
             group=group,
             counts_for_ranking=True,
         )
+        schedule_map = {
+            schedule.round_robin_match_id: schedule
+            for schedule in Schedule.objects.filter(
+                round_robin_match__group=group,
+            ).select_related(
+                "court",
+                "schedule_block",
+            )
+        }
 
         # pair1/pair2 の向きに関係なく試合を引けるよう、両向きで保持する。
         match_map = {}
@@ -175,6 +184,7 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
                         "type": "pending",
                         "value": "",
                         "match": match,
+                        "schedule": schedule_map.get(match.id),
                         "retired_match": False,
                         "retired_self": row_pair.retired,
                     })
@@ -203,6 +213,7 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
                     "value": my_score,
                     "opp": opp_score,
                     "match": match,
+                    "schedule": schedule_map.get(match.id),
                     "retired_match": is_retired_match,
                     "retired_self": row_pair.retired,
                 })

@@ -6185,7 +6185,7 @@ class CategoryStageOverviewTests(TestCase):
             player1_name="本戦3",
             player2_name="本戦4",
         )
-        TournamentMatch.objects.create(
+        tournament_match = TournamentMatch.objects.create(
             bracket=bracket,
             round_number=1,
             match_number=1,
@@ -6194,6 +6194,20 @@ class CategoryStageOverviewTests(TestCase):
             pair1=tournament_entry1,
             pair2=tournament_entry2,
             winner=tournament_entry1,
+        )
+        court = Court.objects.create(
+            tournament=tournament,
+            name="1",
+        )
+        league_schedule = Schedule.objects.create(
+            court=court,
+            order=1,
+            round_robin_match=RoundRobinMatch.objects.get(group=group),
+        )
+        tournament_schedule = Schedule.objects.create(
+            court=court,
+            order=2,
+            tournament_match=tournament_match,
         )
 
         response = self.client.get(
@@ -6217,6 +6231,22 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "本戦")
         self.assertContains(response, "<svg", html=False)
         self.assertContains(response, "本戦1・本戦2")
+        self.assertContains(
+            response,
+            f"#schedule-{league_schedule.id}",
+        )
+        self.assertContains(
+            response,
+            f"#schedule-{tournament_schedule.id}",
+        )
+        self.assertContains(
+            response,
+            f'id="round-robin-match-{league_schedule.round_robin_match_id}"',
+        )
+        self.assertContains(
+            response,
+            f'id="tournament-match-{tournament_match.id}"',
+        )
         self.assertContains(
             response,
             reverse(
@@ -6245,7 +6275,7 @@ class CategoryStageOverviewTests(TestCase):
         self.assertNotContains(response, "順位入力")
         self.assertNotContains(response, "結果入力")
         self.assertNotContains(response, "大会スナップショット")
-        self.assertNotContains(response, "試合進行表")
+        self.assertContains(response, "試合進行表へ")
 
 class TournamentScheduleBehaviorTests(TestCase):
 
@@ -8544,8 +8574,34 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "1回戦1")
         self.assertContains(response, "結果入力")
         self.assertContains(response, "採点票PDF")
-        self.assertContains(response, "リーグ表")
-        self.assertContains(response, "トーナメント表")
+        self.assertContains(response, "結果表示")
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "public_category_results",
+                    kwargs={
+                        "code": self.tournament.code,
+                        "category_id": self.category.id,
+                    },
+                )
+                + f"#round-robin-match-{league_match.id}"
+            ),
+        )
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "public_category_results",
+                    kwargs={
+                        "code": self.tournament.code,
+                        "category_id": self.category.id,
+                    },
+                )
+                + f"#tournament-match-{tournament_match.id}"
+            ),
+        )
+        self.assertContains(response, 'id="schedule-')
         self.assertContains(response, "未入力")
         self.assertNotContains(
             response,

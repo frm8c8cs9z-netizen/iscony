@@ -433,3 +433,14 @@
 - 後続Stageに未反映でまだ始まっていないStageまで `進行中` と見える問題を整理対象にした。
 - `結果待ち`、`未着手`、`進行中`、`結果確定` など、参加者が状況を直感的に理解できる文言へ寄せる方針を記載。
 - ドキュメント更新のみのためテストは未実行。
+
+### 公開結果画面と進行表の相互リンク
+- 公開用カテゴリ結果画面と試合進行表を、試合単位のアンカーで相互移動できるようにした。
+- 公開結果画面では、リーグ表のスコアセルから該当する進行表セル `schedule-<id>` へ移動できるようにした。
+- 公開結果画面のトーナメントSVGでは、試合ラベルから該当する進行表セルへ移動できるようにした。
+- 試合進行表では、各進行セルに `schedule-<id>` を付け、各試合カードの `結果表示` から公開結果画面内の `round-robin-match-<id>` / `tournament-match-<id>` へ戻れるようにした。
+- ハッシュ付きURLで移動した時に、対象が縦横とも画面中央付近に来るよう共通スクリプトと `:target` のハイライトを追加。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 181 tests OK。

@@ -2,6 +2,7 @@
 
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from .league_views import build_category_group_data
 from .models import (
@@ -11,6 +12,7 @@ from .models import (
     GroupRanking,
     LeagueEntry,
     RoundRobinMatch,
+    Schedule,
     Stage,
     TournamentBracket,
     TournamentMatch,
@@ -222,13 +224,36 @@ def public_category_results(request, code, category_id):
                 "display_order",
                 "name",
             )
-            display_brackets = [
-                {
-                    "bracket": bracket,
-                    **build_tournament_bracket_display_data(bracket),
+            display_brackets = []
+
+            for bracket in brackets:
+                display_data = build_tournament_bracket_display_data(bracket)
+                schedules = Schedule.objects.filter(
+                    tournament_match__bracket=bracket,
+                ).select_related(
+                    "court",
+                    "schedule_block",
+                )
+                schedule_url_by_match_id = {
+                    schedule.tournament_match_id: (
+                        f"{reverse('schedule_view', kwargs={'tournament_code': code})}"
+                        f"#schedule-{schedule.id}"
+                    )
+                    for schedule in schedules
                 }
-                for bracket in brackets
-            ]
+
+                svg_bracket = display_data.get("svg_bracket")
+                if svg_bracket:
+                    for label in svg_bracket["labels"]:
+                        if label.get("label_type") == "match_code":
+                            label["public_url"] = schedule_url_by_match_id.get(
+                                label.get("match_id")
+                            )
+
+                display_brackets.append({
+                    "bracket": bracket,
+                    **display_data,
+                })
             ready = bool(containers) and all(
                 row["matches_complete"]
                 for row in containers

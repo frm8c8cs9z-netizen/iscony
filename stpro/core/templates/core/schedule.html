@@ -7,6 +7,10 @@
     試合進行
 </h1>
 
+<p>
+    各試合カードの「結果表示」から、公開用のカテゴリ結果画面内の該当箇所へ移動できます。
+</p>
+
 {% for block_table in block_tables %}
 
 {% if show_block_headings %}
@@ -34,7 +38,9 @@
                 <th>{{ row.order }}</th>
 
                 {% for schedule in row.cells %}
-                    <td class="
+                    <td
+                        {% if schedule %}id="schedule-{{ schedule.id }}"{% endif %}
+                        class="
                         {% if schedule %}
                             {% if schedule.finished %}
                                 finished-cell
@@ -96,8 +102,8 @@
                                             <a href="{% url 'input_match_score' match.id %}?next={{ request.path }}">
                                                 結果入力
                                             </a>
-                                            <a href="{% url 'category_detail' match.group.category.id %}#group-{{ match.group.id }}">
-                                                リーグ表
+                                            <a href="{% url 'public_category_results' tournament.code match.group.category.id %}#round-robin-match-{{ match.id }}">
+                                                結果表示
                                             </a>
                                     {% elif schedule.is_tournament %}
                                         <div class="schedule-context">
@@ -161,8 +167,8 @@
                                                     確認
                                                 </a>
                                             {% endif %}
-                                            <a href="{% url 'tournament_bracket_detail' tournament.code match.bracket.id %}">
-                                                トーナメント表
+                                            <a href="{% url 'public_category_results' tournament.code match.bracket.category.id %}#tournament-match-{{ match.id }}">
+                                                結果表示
                                             </a>
                                     {% endif %}
 
