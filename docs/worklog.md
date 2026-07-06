@@ -444,3 +444,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 181 tests OK。
+
+### 公開リーグ表の進行表リンク表示調整
+- 公開用カテゴリ結果画面のリーグ表で、進行表へのリンクがボタン風に強く見えすぎていたため、スコアセル内の自然なリンク表示へ調整。
+- 上部の `試合進行表へ` はボタン風のまま残し、リーグ表内ではスコアそのものを押せる見た目に寄せた。
+- 未入力だが進行表に配置済みのセルは、ボタン風の `進行` 表示ではなく `-` をリンクとして表示するようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 181 tests OK。

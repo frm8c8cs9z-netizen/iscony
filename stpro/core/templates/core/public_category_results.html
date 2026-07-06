@@ -127,8 +127,7 @@
         background: #fff;
     }
 
-    .public-result-nav a,
-    .public-schedule-link {
+    .public-result-nav a {
         display: inline-flex;
         align-items: center;
         min-height: 28px;
@@ -136,6 +135,21 @@
         border: 1px solid #b8c7dc;
         border-radius: 4px;
         background: #f7fbff;
+    }
+
+    .public-schedule-link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 100%;
+        color: inherit;
+        font-weight: bold;
+        text-decoration: none;
+    }
+
+    .public-schedule-link:hover {
+        text-decoration: underline;
     }
 
 </style>
@@ -227,7 +241,7 @@
                                                             {% elif score.value != None %}
                                                                 {{ score.value }}
                                                             {% else %}
-                                                                進行
+                                                                -
                                                             {% endif %}
                                                         </a>
                                                     {% else %}
