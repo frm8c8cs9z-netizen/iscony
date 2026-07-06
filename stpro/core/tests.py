@@ -5993,6 +5993,16 @@ class ReceptionMatchSearchTests(TestCase):
 
 class CategoryStageOverviewTests(TestCase):
 
+    def _stage_section(self, response, stage):
+        content = response.content.decode()
+        start = content.index(f'id="stage-{stage.id}"')
+        next_start = content.find('<section class="stage-section"', start + 1)
+
+        if next_start == -1:
+            return content[start:]
+
+        return content[start:next_start]
+
     def test_league_and_tournament_are_displayed_in_stage_order(self):
         tournament = Tournament.objects.create(
             name="Stage進行大会",
@@ -6276,6 +6286,169 @@ class CategoryStageOverviewTests(TestCase):
         self.assertNotContains(response, "結果入力")
         self.assertNotContains(response, "大会スナップショット")
         self.assertContains(response, "試合進行表へ")
+
+    def test_public_category_results_show_stage_status_labels(self):
+        tournament = Tournament.objects.create(
+            name="公開状態大会",
+            code="PUBLICSTATUS",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子B",
+        )
+        not_started_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        waiting_stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        in_progress_stage = Stage.objects.create(
+            category=category,
+            name="2位トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=3,
+        )
+        confirmed_stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=4,
+        )
+
+        source_group = Group.objects.create(
+            category=category,
+            stage=not_started_stage,
+            name="A",
+        )
+        source_entry1 = LeagueEntry.objects.create(
+            category=category,
+            group=source_group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        source_entry2 = LeagueEntry.objects.create(
+            category=category,
+            group=source_group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="予選3",
+            player2_name="予選4",
+        )
+        RoundRobinMatch.objects.create(
+            group=source_group,
+            pair1=source_entry1,
+            pair2=source_entry2,
+        )
+
+        waiting_group = Group.objects.create(
+            category=category,
+            stage=waiting_stage,
+            name="決勝A",
+        )
+        waiting_entry = LeagueEntry.objects.create(
+            category=category,
+            group=waiting_group,
+            pair_code="W1",
+            display_order=1,
+            player1_name="",
+            player2_name="",
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=waiting_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=not_started_stage,
+            source_group=source_group,
+            source_rank=1,
+        )
+
+        progress_bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=in_progress_stage,
+            name="2位T",
+        )
+        progress_entries = [
+            TournamentEntry.objects.create(
+                bracket=progress_bracket,
+                pair_code=f"P{number}",
+                display_order=number,
+                player1_name=f"途中{number}A",
+                player2_name=f"途中{number}B",
+            )
+            for number in range(1, 5)
+        ]
+        TournamentMatch.objects.create(
+            bracket=progress_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=progress_entries[0],
+            pair2=progress_entries[1],
+            winner=progress_entries[0],
+        )
+        TournamentMatch.objects.create(
+            bracket=progress_bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            match_label="1回戦2",
+            pair1=progress_entries[2],
+            pair2=progress_entries[3],
+        )
+
+        confirmed_bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=confirmed_stage,
+            name="決勝T",
+        )
+        confirmed_entry1 = TournamentEntry.objects.create(
+            bracket=confirmed_bracket,
+            pair_code="C1",
+            display_order=1,
+            player1_name="確定1",
+            player2_name="確定2",
+        )
+        confirmed_entry2 = TournamentEntry.objects.create(
+            bracket=confirmed_bracket,
+            pair_code="C2",
+            display_order=2,
+            player1_name="確定3",
+            player2_name="確定4",
+        )
+        TournamentMatch.objects.create(
+            bracket=confirmed_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="決勝",
+            pair1=confirmed_entry1,
+            pair2=confirmed_entry2,
+            winner=confirmed_entry1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("これから", self._stage_section(response, not_started_stage))
+        self.assertIn("結果待ち", self._stage_section(response, waiting_stage))
+        self.assertIn("進行中", self._stage_section(response, in_progress_stage))
+        self.assertIn("結果確定", self._stage_section(response, confirmed_stage))
 
 class TournamentScheduleBehaviorTests(TestCase):
 

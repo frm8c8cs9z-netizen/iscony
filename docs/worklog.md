@@ -396,6 +396,8 @@
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 182 tests OK。
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 180 tests OK。
 
 ### 公開用カテゴリ結果画面のStage順縦並び表示
@@ -460,3 +462,12 @@
 - 進行表、採点票PDF、将来の電子スコアシートで指定審判を確認できるようにすること、試合順やコート変更時にも紐づきが崩れないようにすることを整理した。
 - 一般参加者向けの進行表にも指定審判を表示し、参加選手が自分の審判担当を確認できるようにする方針を追記。
 - ドキュメント更新のみのためテストは未実行。
+
+### 公開用Stage状態表示の改善
+- 公開用カテゴリ結果画面で、Stage状態を `結果確定` / `進行中` の2択から、`これから`、`結果待ち`、`進行中`、`結果確定` の4状態へ変更。
+- 後続Stageの進出元枠が未反映で、まだ試合結果が入っていない場合は `結果待ち` と表示するようにした。
+- 試合結果や順位が一部でも入っているStageは `進行中`、全リーグ順位または全トーナメント試合が完了しているStageは `結果確定` と表示する。
+- トーナメントの両者リタイア結果も、公開状態判定では結果入力済みとして扱うようにした。
+- `TODO.md` に、第1段階として4状態表示を実装済みであることを追記。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`

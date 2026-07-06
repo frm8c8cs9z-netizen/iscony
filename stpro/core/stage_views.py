@@ -87,7 +87,16 @@ def _tournament_stage_data(stage):
             bracket=bracket,
         ).exclude(match_code__startswith="S")
         match_count = matches.count()
-        finished_count = matches.filter(winner__isnull=False).count()
+        finished_count = matches.filter(
+            Q(winner__isnull=False)
+            | Q(
+                result_type=TournamentMatch.RESULT_RETIREMENT,
+                pair1_games=0,
+                pair2_games=0,
+                pair1__isnull=False,
+                pair2__isnull=False,
+            )
+        ).count()
 
         rows.append({
             "bracket": bracket,
@@ -101,6 +110,50 @@ def _tournament_stage_data(stage):
         })
 
     return rows
+
+
+def _pending_advancement_source_count(stage):
+    return AdvancementSource.objects.filter(
+        Q(
+            target_league_entry__group__stage=stage,
+            target_league_entry__participant__isnull=True,
+        )
+        | Q(
+            target_tournament_entry__bracket__stage=stage,
+            target_tournament_entry__participant__isnull=True,
+        )
+    ).count()
+
+
+def _public_stage_status(containers, ready, pending_source_count):
+    if ready:
+        return {
+            "key": "confirmed",
+            "label": "結果確定",
+        }
+
+    has_result = any(
+        row.get("finished_count", 0) > 0
+        or row.get("ranking_count", 0) > 0
+        for row in containers
+    )
+
+    if has_result:
+        return {
+            "key": "in_progress",
+            "label": "進行中",
+        }
+
+    if pending_source_count:
+        return {
+            "key": "waiting",
+            "label": "結果待ち",
+        }
+
+    return {
+        "key": "not_started",
+        "label": "これから",
+    }
 
 
 def _advancement_data(stage):
@@ -259,10 +312,18 @@ def public_category_results(request, code, category_id):
                 for row in containers
             )
 
+        pending_source_count = _pending_advancement_source_count(stage)
+        status = _public_stage_status(
+            containers,
+            ready,
+            pending_source_count,
+        )
         stage_rows.append({
             "stage": stage,
             "containers": containers,
             "ready": ready,
+            "status": status,
+            "pending_source_count": pending_source_count,
             "display_groups": display_groups,
             "display_brackets": display_brackets,
         })

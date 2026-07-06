@@ -19,6 +19,30 @@
         margin-bottom: 10px;
     }
 
+    .public-stage-status {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        background: #f0f3f6;
+        color: #27313a;
+        font-weight: 700;
+    }
+
+    .public-stage-status.confirmed {
+        background: #e8f5ec;
+        color: #1d6b36;
+    }
+
+    .public-stage-status.in_progress {
+        background: #fff4df;
+        color: #835100;
+    }
+
+    .public-stage-status.waiting {
+        background: #eef2ff;
+        color: #314a97;
+    }
+
     .svg-bracket-wrap {
         border: 1px solid #c9c9c9;
         overflow: auto;
@@ -177,12 +201,10 @@
                     <h3>{{ row.stage.name }}</h3>
                 </div>
                 <div>
-                    {{ row.stage.get_stage_type_display }} /
-                    {% if row.ready %}
-                        <strong>結果確定</strong>
-                    {% else %}
-                        進行中
-                    {% endif %}
+                    {{ row.stage.get_stage_type_display }}
+                    <span class="public-stage-status {{ row.status.key }}">
+                        {{ row.status.label }}
+                    </span>
                 </div>
             </div>
 
