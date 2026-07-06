@@ -1,0 +1,201 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<style>
+    .public-schedule-note {
+        color: #555;
+        margin-bottom: 16px;
+    }
+
+    .public-schedule-table {
+        min-width: 960px;
+    }
+
+    .public-schedule-actions {
+        margin-top: 10px;
+    }
+
+    .public-schedule-actions a {
+        font-weight: 700;
+    }
+</style>
+
+<div class="page-heading">
+    <div>
+        <h2>{{ tournament.name }} 試合進行</h2>
+        <p class="subtle-text">一般参加者向け</p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
+    </div>
+</div>
+
+<p class="public-schedule-note">
+    各試合カードの「結果表示」から、カテゴリ別の結果画面へ移動できます。
+</p>
+
+{% for block_table in block_tables %}
+
+{% if show_block_headings %}
+    <h2>{{ block_table.block.name }}</h2>
+{% endif %}
+
+<div class="table-wrapper">
+    <table border="1" class="public-schedule-table">
+        <thead>
+            <tr>
+                <th>試合順</th>
+
+                {% for court in block_table.courts %}
+                    <th>{{ court.name }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for row in block_table.table %}
+                <tr>
+                    <th>{{ row.order }}</th>
+
+                    {% for schedule in row.cells %}
+                        <td
+                            {% if schedule %}id="schedule-{{ schedule.id }}"{% endif %}
+                            class="
+                            {% if schedule %}
+                                {% if schedule.finished %}
+                                    finished-cell
+                                {% elif schedule.started %}
+                                    started-cell
+                                {% elif schedule.called %}
+                                    called-cell
+                                {% endif %}
+                            {% endif %}
+                        ">
+                            {% if schedule %}
+                                {% with match=schedule.match %}
+                                    <div class="schedule-match-card">
+                                        <div class="schedule-card-head">
+                                            <span class="schedule-order-label">
+                                                {{ schedule.court.name }} 第{{ schedule.order }}試合
+                                            </span>
+                                            <span class="schedule-status-label">
+                                                {% if schedule.finished %}
+                                                    完了
+                                                {% elif schedule.started %}
+                                                    試合中
+                                                {% elif schedule.called %}
+                                                    呼出済
+                                                {% elif match.pair1_games != None and match.pair2_games != None %}
+                                                    結果入力済み
+                                                {% else %}
+                                                    未入力
+                                                {% endif %}
+                                            </span>
+                                        </div>
+
+                                        {% if schedule.is_round_robin %}
+                                            <div class="schedule-context">
+                                                <strong>{{ match.group.category.name }}</strong>
+                                                /
+                                                {{ match.group.name }}リーグ
+                                                {% if match.group.stage %}
+                                                    <span>（{{ match.group.stage.name }}）</span>
+                                                {% endif %}
+                                            </div>
+
+                                            <div class="schedule-pair-line">
+                                                <span>{{ match.pair1.code }} {{ match.pair1.short_name }}</span>
+                                                {% if match.pair1_games != None and match.pair2_games != None %}
+                                                    <strong>{{ match.pair1_games }}</strong>
+                                                {% endif %}
+                                            </div>
+                                            <div class="schedule-vs">vs</div>
+                                            <div class="schedule-pair-line">
+                                                <span>{{ match.pair2.code }} {{ match.pair2.short_name }}</span>
+                                                {% if match.pair1_games != None and match.pair2_games != None %}
+                                                    <strong>{{ match.pair2_games }}</strong>
+                                                {% endif %}
+                                            </div>
+
+                                            <div class="public-schedule-actions">
+                                                <a href="{% url 'public_category_results' tournament.code match.group.category.id %}#round-robin-match-{{ match.id }}">
+                                                    結果表示
+                                                </a>
+                                            </div>
+                                        {% elif schedule.is_tournament %}
+                                            <div class="schedule-context">
+                                                <strong>{{ match.bracket.category.name }}</strong>
+                                                /
+                                                {{ match.bracket.name }}
+                                                {% if match.match_label or match.match_code %}
+                                                    /
+                                                    {{ match.match_label|default:match.match_code }}
+                                                {% endif %}
+                                                {% if match.bracket.stage %}
+                                                    <span>（{{ match.bracket.stage.name }}）</span>
+                                                {% endif %}
+                                            </div>
+
+                                            <div class="schedule-pair-line">
+                                                <span>
+                                                    {% if match.pair1 %}
+                                                        {{ match.pair1.code }} {{ match.pair1.short_name }}
+                                                    {% else %}
+                                                        未確定
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            <div class="schedule-vs">vs</div>
+                                            <div class="schedule-pair-line">
+                                                <span>
+                                                    {% if match.pair2 %}
+                                                        {{ match.pair2.code }} {{ match.pair2.short_name }}
+                                                    {% else %}
+                                                        未確定
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+
+                                            {% if match.pair1_games != None and match.pair2_games != None %}
+                                                <div class="schedule-score-line">
+                                                    <strong>
+                                                        {% if match.pair1 and match.is_double_retirement_result or match.pair1 and match.retired_entry == match.pair1 %}
+                                                            R
+                                                        {% else %}
+                                                            {{ match.pair1_games }}
+                                                        {% endif %}
+                                                        -
+                                                        {% if match.pair2 and match.is_double_retirement_result or match.pair2 and match.retired_entry == match.pair2 %}
+                                                            R
+                                                        {% else %}
+                                                            {{ match.pair2_games }}
+                                                        {% endif %}
+                                                    </strong>
+                                                </div>
+                                            {% endif %}
+
+                                            <div class="public-schedule-actions">
+                                                <a href="{% url 'public_category_results' tournament.code match.bracket.category.id %}#tournament-match-{{ match.id }}">
+                                                    結果表示
+                                                </a>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% endwith %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% empty %}
+    <p>進行表はまだ登録されていません。</p>
+{% endfor %}
+
+{% endblock %}

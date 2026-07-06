@@ -6114,6 +6114,13 @@ class CategoryStageOverviewTests(TestCase):
                 },
             ),
         )
+        self.assertContains(
+            response,
+            reverse(
+                "public_schedule_view",
+                kwargs={"tournament_code": tournament.code},
+            ),
+        )
         self.assertNotContains(
             response,
             reverse(
@@ -6243,11 +6250,23 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "本戦1・本戦2")
         self.assertContains(
             response,
-            f"#schedule-{league_schedule.id}",
+            (
+                reverse(
+                    "public_schedule_view",
+                    kwargs={"tournament_code": tournament.code},
+                )
+                + f"#schedule-{league_schedule.id}"
+            ),
         )
         self.assertContains(
             response,
-            f"#schedule-{tournament_schedule.id}",
+            (
+                reverse(
+                    "public_schedule_view",
+                    kwargs={"tournament_code": tournament.code},
+                )
+                + f"#schedule-{tournament_schedule.id}"
+            ),
         )
         self.assertContains(
             response,
@@ -8781,6 +8800,115 @@ class TournamentScheduleBehaviorTests(TestCase):
             reverse(
                 "court_score_sheets_pdf",
                 kwargs={"court_id": self.court.id},
+            ),
+        )
+
+    def test_public_schedule_view_is_read_only(self):
+        group = Group.objects.create(
+            category=self.category,
+            name="A",
+        )
+        league_entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L1",
+            display_order=1,
+            player1_name="予選1A",
+            player2_name="予選1B",
+        )
+        league_entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L2",
+            display_order=2,
+            player1_name="予選2A",
+            player2_name="予選2B",
+        )
+        league_match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=league_entry1,
+            pair2=league_entry2,
+        )
+        tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        league_schedule = Schedule.objects.create(
+            court=self.court,
+            order=1,
+            round_robin_match=league_match,
+        )
+        tournament_schedule = Schedule.objects.create(
+            court=self.court,
+            order=2,
+            tournament_match=tournament_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_schedule_view",
+                kwargs={"tournament_code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "一般参加者向け")
+        self.assertContains(response, "1 第1試合")
+        self.assertContains(response, "1 第2試合")
+        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "1回戦1")
+        self.assertContains(response, f'id="schedule-{league_schedule.id}"')
+        self.assertContains(response, f'id="schedule-{tournament_schedule.id}"')
+        self.assertContains(response, "結果表示")
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "public_category_results",
+                    kwargs={
+                        "code": self.tournament.code,
+                        "category_id": self.category.id,
+                    },
+                )
+                + f"#round-robin-match-{league_match.id}"
+            ),
+        )
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "public_category_results",
+                    kwargs={
+                        "code": self.tournament.code,
+                        "category_id": self.category.id,
+                    },
+                )
+                + f"#tournament-match-{tournament_match.id}"
+            ),
+        )
+        self.assertNotContains(response, "結果入力")
+        self.assertNotContains(response, "採点票PDF")
+        self.assertNotContains(
+            response,
+            reverse("move_schedule", kwargs={"schedule_id": league_schedule.id}),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": league_match.id},
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "score_sheet_pdf",
+                kwargs={"schedule_id": league_schedule.id},
             ),
         )
 

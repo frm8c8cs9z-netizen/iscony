@@ -445,6 +445,8 @@
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 183 tests OK。
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 181 tests OK。
 
 ### 公開リーグ表の進行表リンク表示調整
@@ -471,3 +473,15 @@
 - `TODO.md` に、第1段階として4状態表示を実装済みであることを追記。
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 182 tests OK。
+
+### 一般参加者向け進行表の追加
+- 一般参加者向けの読み取り専用進行表 `public_schedule_view` を追加。
+- URLは `/tournament/<code>/public-schedule/` とし、既存の運営用 `schedule_view` と進行表データ作成処理を共有するようにした。
+- 公開用進行表では、結果入力、採点票PDF、試合移動などの運営操作を出さず、各試合カードから公開カテゴリ結果画面の該当試合へ移動できる `結果表示` だけを出す。
+- 公開カテゴリ結果画面から進行表へ戻るリンクと、リーグ表/トーナメントSVG内の進行表アンカーリンクを公開進行表へ向け替えた。
+- 大会トップの `試合進行表` リンクも公開進行表へ向け替え、参加者が運営用進行表へ入りにくくした。
+- `docs/screen_inventory.md` に、公開カテゴリ結果画面と公開進行表を第一段階の一般公開画面として追記。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`

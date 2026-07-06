@@ -189,7 +189,7 @@
 </div>
 
 <div class="public-result-nav">
-    <a href="{% url 'schedule_view' tournament.code %}">試合進行表へ</a>
+    <a href="{% url 'public_schedule_view' tournament.code %}">試合進行表へ</a>
 </div>
 
 <div class="public-stage-results">
@@ -256,7 +256,7 @@
                                                     {% if score.schedule %}
                                                         <a
                                                             class="public-schedule-link"
-                                                            href="{% url 'schedule_view' tournament.code %}#schedule-{{ score.schedule.id }}"
+                                                            href="{% url 'public_schedule_view' tournament.code %}#schedule-{{ score.schedule.id }}"
                                                         >
                                                             {% if score.retired_self %}
                                                                 R

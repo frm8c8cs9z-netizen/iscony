@@ -289,7 +289,7 @@ def public_category_results(request, code, category_id):
                 )
                 schedule_url_by_match_id = {
                     schedule.tournament_match_id: (
-                        f"{reverse('schedule_view', kwargs={'tournament_code': code})}"
+                        f"{reverse('public_schedule_view', kwargs={'tournament_code': code})}"
                         f"#schedule-{schedule.id}"
                     )
                     for schedule in schedules

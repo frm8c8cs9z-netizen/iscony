@@ -164,22 +164,11 @@ def court_status(request, tournament_code):
     )
 
 
-def schedule_view(
-        request,
-        tournament_code
-    ):
+def _schedule_block_tables(tournament):
     """
-    試合順を縦軸、コートを横軸にした進行表を表示する。
-
     Schedule はリーグ戦とトーナメントの両方を指すため、
     select_related では両系統の match 情報をまとめて先読みする。
     """
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=tournament_code
-    )
-
     schedules = (
         Schedule.objects
         .filter(
@@ -246,6 +235,21 @@ def schedule_view(
             "table": table,
         })
 
+    return block_tables
+
+
+def schedule_view(
+        request,
+        tournament_code
+    ):
+    """試合順を縦軸、コートを横軸にした運営用の進行表を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=tournament_code
+    )
+    block_tables = _schedule_block_tables(tournament)
+
     return render(
         request,
         "core/schedule.html",
@@ -276,6 +280,29 @@ def maintenance_menu(request, code):
         {
             "tournament": tournament,
             "categories": categories,
+        }
+    )
+
+
+def public_schedule_view(
+        request,
+        tournament_code
+    ):
+    """一般参加者向けに、操作リンクを出さない進行表を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=tournament_code
+    )
+    block_tables = _schedule_block_tables(tournament)
+
+    return render(
+        request,
+        "core/public_schedule.html",
+        {
+            "tournament": tournament,
+            "block_tables": block_tables,
+            "show_block_headings": len(block_tables) > 1,
         }
     )
 

@@ -178,6 +178,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:tournament_code>/public-schedule/",
+        views.public_schedule_view,
+        name="public_schedule_view",
+    ),
+
+    path(
         "match/<int:match_id>/score/",
         league_views.input_match_score,
         name="input_match_score",
