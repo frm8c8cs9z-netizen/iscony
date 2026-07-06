@@ -453,3 +453,9 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 181 tests OK。
+
+### TODO追記: 進行表の指定審判
+- `TODO.md` の管理UIに、進行表で試合ごとの指定審判を保持する課題を追記。
+- 指定審判あり/なしの両方を扱い、特にリーグ戦では同リーグ内で試合のない選手・ペアを審判にする運用を想定する方針を記載。
+- 進行表、採点票PDF、将来の電子スコアシートで指定審判を確認できるようにすること、試合順やコート変更時にも紐づきが崩れないようにすることを整理した。
+- ドキュメント更新のみのためテストは未実行。
