@@ -409,3 +409,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 180 tests OK。
+
+### 公開用トーナメントSVGの左起点表示
+- 公開用カテゴリ結果画面内のトーナメントSVGが表示領域いっぱいに引き伸ばされ、画面中央寄りに見える状態を調整。
+- `.svg-bracket` の `min-width: 100%` をやめ、SVG本来の幅で左起点に表示するようにした。
+- 大きいトーナメントは従来どおり横スクロールで確認する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 180 tests OK。
