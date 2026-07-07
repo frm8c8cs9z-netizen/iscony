@@ -9049,6 +9049,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "1回戦1")
         self.assertContains(response, f'id="schedule-{league_schedule.id}"')
         self.assertContains(response, f'id="schedule-{tournament_schedule.id}"')
+        self.assertNotContains(response, "未入力")
         self.assertNotContains(response, "結果表示")
         self.assertContains(
             response,

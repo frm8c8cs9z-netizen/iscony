@@ -545,3 +545,13 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 188 tests OK。
+
+### 公開進行表の固定見出しと未入力表示整理
+- 一般参加者向け進行表で、横スクロール・縦スクロール時に確認しやすいよう、コート見出し行と試合順列を sticky 表示にした。
+- 公開進行表では、結果未入力の試合に `未入力` バッジを表示しないようにした。
+- 完了、試合中、呼出済、結果入力済みの状態表示は引き続き表示する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 188 tests OK。
