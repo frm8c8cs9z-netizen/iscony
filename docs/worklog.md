@@ -564,3 +564,14 @@
 - 公開進行表側に持っていた固定表示CSSは共通スタイルへ移し、運営用進行表にも同じ表示を適用した。
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 188 tests OK。
+
+### 公開進行表とカテゴリ結果の往復導線
+- 一般参加者向け進行表の試合カードからカテゴリ結果画面へ移動する際、`from_schedule` を付けて元の進行表セルを保持するようにした。
+- カテゴリ結果画面の `試合進行表へ` リンクは、元の進行表セルが分かる場合は `#schedule-...` 付きで戻るようにした。
+- `from_schedule` はビュー側で同一大会内の `Schedule` に限定してからテンプレートへ渡すようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 188 tests OK。

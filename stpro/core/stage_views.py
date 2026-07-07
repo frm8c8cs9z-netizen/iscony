@@ -247,6 +247,15 @@ def public_category_results(request, code, category_id):
         id=category_id,
         tournament__code=code,
     )
+    return_schedule_id = None
+    from_schedule = request.GET.get("from_schedule")
+    if from_schedule and from_schedule.isdecimal():
+        if Schedule.objects.filter(
+            id=from_schedule,
+            court__tournament=category.tournament,
+        ).exists():
+            return_schedule_id = from_schedule
+
     stages = Stage.objects.filter(category=category).order_by(
         "display_order",
         "name",
@@ -335,5 +344,6 @@ def public_category_results(request, code, category_id):
             "category": category,
             "tournament": category.tournament,
             "stage_rows": stage_rows,
+            "return_schedule_id": return_schedule_id,
         },
     )

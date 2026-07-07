@@ -6313,6 +6313,27 @@ class CategoryStageOverviewTests(TestCase):
         self.assertNotContains(response, "後続Stageへ反映")
         self.assertNotContains(response, "順位入力")
         self.assertNotContains(response, "結果入力")
+
+        response_with_return = self.client.get(
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {"from_schedule": tournament_schedule.id},
+        )
+        self.assertContains(
+            response_with_return,
+            (
+                reverse(
+                    "public_schedule_view",
+                    kwargs={"tournament_code": tournament.code},
+                )
+                + f"#schedule-{tournament_schedule.id}"
+            ),
+        )
         self.assertNotContains(response, "大会スナップショット")
         self.assertContains(response, "試合進行表へ")
 
@@ -9065,6 +9086,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                         "category_id": self.category.id,
                     },
                 )
+                + f"?from_schedule={league_schedule.id}"
                 + f"#round-robin-match-{league_match.id}"
             ),
         )
@@ -9079,6 +9101,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                         "category_id": self.category.id,
                     },
                 )
+                + f"?from_schedule={tournament_schedule.id}"
                 + f"#tournament-match-{tournament_match.id}"
             ),
         )

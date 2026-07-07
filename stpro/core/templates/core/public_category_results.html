@@ -189,7 +189,7 @@
 </div>
 
 <div class="public-result-nav">
-    <a href="{% url 'public_schedule_view' tournament.code %}">試合進行表へ</a>
+    <a href="{% url 'public_schedule_view' tournament.code %}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}">試合進行表へ</a>
 </div>
 
 <div class="public-stage-results">
