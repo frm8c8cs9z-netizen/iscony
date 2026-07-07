@@ -17,7 +17,8 @@
     <h2>{{ block_table.block.name }}</h2>
 {% endif %}
 
-<table border="1">
+<div class="table-wrapper schedule-table-wrapper">
+<table border="1" class="schedule-grid-table">
 
     <thead>
         <tr>
@@ -201,6 +202,7 @@
     </tbody>
 
 </table>
+</div>
 
 {% empty %}
     <p>進行表はまだ登録されていません。</p>

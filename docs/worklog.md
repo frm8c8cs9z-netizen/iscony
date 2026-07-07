@@ -305,6 +305,8 @@
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 188 tests OK。
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 174 tests OK。
 
 ### 採点票一括出力のコート別出力
@@ -555,3 +557,10 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests core.tests.CategoryStageOverviewTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 188 tests OK。
+
+### 進行表のブロック別固定見出し化
+- 運営用進行表と一般参加者向け進行表で、コート見出し行と試合順列を固定表示する共通スタイルを追加。
+- 各 `schedule_block` の表を独立したスクロール領域にし、ブロックをまたぐと固定見出しが自然に切り替わるようにした。
+- 公開進行表側に持っていた固定表示CSSは共通スタイルへ移し、運営用進行表にも同じ表示を適用した。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests --keepdb`

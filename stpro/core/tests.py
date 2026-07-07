@@ -8952,6 +8952,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "結果入力")
         self.assertContains(response, "採点票PDF")
         self.assertContains(response, "結果表示")
+        self.assertContains(response, 'class="schedule-grid-table"')
+        self.assertContains(response, 'class="table-wrapper schedule-table-wrapper"')
         self.assertContains(
             response,
             (
@@ -9049,6 +9051,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "1回戦1")
         self.assertContains(response, f'id="schedule-{league_schedule.id}"')
         self.assertContains(response, f'id="schedule-{tournament_schedule.id}"')
+        self.assertContains(response, 'class="schedule-grid-table"')
+        self.assertContains(response, 'class="table-wrapper schedule-table-wrapper"')
         self.assertNotContains(response, "未入力")
         self.assertNotContains(response, "結果表示")
         self.assertContains(

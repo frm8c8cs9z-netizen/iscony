@@ -77,6 +77,45 @@
         overflow-x: auto;
     }
 
+    .schedule-table-wrapper {
+        max-height: calc(100vh - 140px);
+        margin-bottom: 30px;
+        overflow: auto;
+    }
+
+    .schedule-grid-table {
+        min-width: 960px;
+    }
+
+    .schedule-grid-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+    }
+
+    .schedule-grid-table th:first-child {
+        left: 0;
+        min-width: 72px;
+        position: sticky;
+        z-index: 2;
+    }
+
+    .schedule-grid-table thead th:first-child {
+        z-index: 4;
+    }
+
+    .schedule-grid-table th {
+        background: #f0f0f0;
+    }
+
+    .schedule-grid-table tbody th {
+        background: #f8f9fb;
+    }
+
+    .schedule-grid-table td {
+        vertical-align: top;
+    }
+
     .menu {
         margin-bottom: 20px;
     }

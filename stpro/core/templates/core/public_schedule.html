@@ -8,39 +8,6 @@
         margin-bottom: 16px;
     }
 
-    .public-schedule-table {
-        min-width: 960px;
-    }
-
-    .public-schedule-table thead th {
-        position: sticky;
-        top: 0;
-        z-index: 3;
-    }
-
-    .public-schedule-table th:first-child {
-        left: 0;
-        min-width: 72px;
-        position: sticky;
-        z-index: 2;
-    }
-
-    .public-schedule-table thead th:first-child {
-        z-index: 4;
-    }
-
-    .public-schedule-table th {
-        background: #f0f0f0;
-    }
-
-    .public-schedule-table tbody th {
-        background: #f8f9fb;
-    }
-
-    .public-schedule-table td {
-        vertical-align: top;
-    }
-
     .public-schedule-card-link {
         display: block;
         color: inherit;
@@ -74,8 +41,8 @@
     <h2>{{ block_table.block.name }}</h2>
 {% endif %}
 
-<div class="table-wrapper">
-    <table border="1" class="public-schedule-table">
+<div class="table-wrapper schedule-table-wrapper">
+    <table border="1" class="schedule-grid-table">
         <thead>
             <tr>
                 <th>試合順</th>
