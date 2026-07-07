@@ -132,3 +132,7 @@ STATIC_URL = 'static/'
 # 後続Stage反映の直前に、大会全体スナップショットを自動作成する。
 # 現場運用でスナップショットが増えすぎる場合は False にする。
 ENABLE_AUTO_OPERATION_SNAPSHOT = True
+
+# 一般参加者向けの読み取り専用画面だけに使う短時間キャッシュ。
+# 結果反映の遅れを避けたい場合は 0、負荷が高い場合は 10 などに調整する。
+PUBLIC_VIEW_CACHE_SECONDS = 5

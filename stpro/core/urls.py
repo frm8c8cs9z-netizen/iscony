@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import advancement_views
+from .cache_utils import public_view_cache
 from . import csv_views
 from . import league_views
 from . import pdf_views
@@ -59,7 +60,7 @@ urlpatterns = [
 
     path(
         "tournament/<str:code>/category/<int:category_id>/public/",
-        stage_views.public_category_results,
+        public_view_cache(stage_views.public_category_results),
         name="public_category_results",
     ),
 
@@ -179,7 +180,7 @@ urlpatterns = [
 
     path(
         "tournament/<str:tournament_code>/public-schedule/",
-        views.public_schedule_view,
+        public_view_cache(views.public_schedule_view),
         name="public_schedule_view",
     ),
 

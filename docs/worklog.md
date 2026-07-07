@@ -518,3 +518,14 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 185 tests OK。
+
+### 公開画面の短時間キャッシュ設定
+- 一般参加者向けの読み取り専用画面に、設定値で調整できる短時間キャッシュを追加。
+- `settings.py` に `PUBLIC_VIEW_CACHE_SECONDS = 5` を追加し、負荷や即時性に応じて `0` で無効化、`10` などで延長できるようにした。
+- 対象は公開カテゴリ結果画面 `public_category_results` と公開進行表 `public_schedule_view` のみとし、管理画面や結果入力画面には適用しない。
+- テストではキャッシュ有効時に同じHTMLが返ること、`PUBLIC_VIEW_CACHE_SECONDS = 0` で即時反映されることを確認するようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_uses_configured_cache_timeout core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_cache_can_be_disabled --keepdb`
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 187 tests OK。

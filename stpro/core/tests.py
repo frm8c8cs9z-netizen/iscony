@@ -5,6 +5,7 @@ import re
 
 from django.conf import settings
 from django.contrib.messages import get_messages
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
@@ -5996,6 +5997,12 @@ class ReceptionMatchSearchTests(TestCase):
 
 class CategoryStageOverviewTests(TestCase):
 
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
     def _stage_section(self, response, stage):
         content = response.content.decode()
         start = content.index(f'id="stage-{stage.id}"')
@@ -6550,6 +6557,7 @@ class CategoryStageOverviewTests(TestCase):
 class TournamentScheduleBehaviorTests(TestCase):
 
     def setUp(self):
+        cache.clear()
         self.tournament = Tournament.objects.create(
             name="トーナメント進行テスト",
             code="TSCHED",
@@ -6580,6 +6588,9 @@ class TournamentScheduleBehaviorTests(TestCase):
             tournament=self.tournament,
             name="1",
         )
+
+    def tearDown(self):
+        cache.clear()
 
     def use_individual_bracket_settings(self):
         self.bracket.use_tournament_defaults = False
@@ -8990,6 +9001,109 @@ class TournamentScheduleBehaviorTests(TestCase):
                 kwargs={"schedule_id": league_schedule.id},
             ),
         )
+
+    @override_settings(PUBLIC_VIEW_CACHE_SECONDS=60)
+    def test_public_schedule_view_uses_configured_cache_timeout(self):
+        cache.clear()
+        group = Group.objects.create(
+            category=self.category,
+            name="A",
+        )
+        league_entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L1",
+            display_order=1,
+            player1_name="変更前1A",
+            player2_name="変更前1B",
+        )
+        league_entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L2",
+            display_order=2,
+            player1_name="変更前2A",
+            player2_name="変更前2B",
+        )
+        league_match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=league_entry1,
+            pair2=league_entry2,
+        )
+        Schedule.objects.create(
+            court=self.court,
+            order=1,
+            round_robin_match=league_match,
+        )
+        url = reverse(
+            "public_schedule_view",
+            kwargs={"tournament_code": self.tournament.code},
+        )
+
+        first_response = self.client.get(url)
+        self.assertContains(first_response, "変更前1A")
+
+        league_entry1.player1_name = "変更後1A"
+        league_entry1.save(update_fields=["player1_name"])
+
+        cached_response = self.client.get(url)
+        self.assertContains(cached_response, "変更前1A")
+        self.assertNotContains(cached_response, "変更後1A")
+
+        cache.clear()
+        refreshed_response = self.client.get(url)
+        self.assertContains(refreshed_response, "変更後1A")
+
+        cache.clear()
+
+    @override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+    def test_public_schedule_view_cache_can_be_disabled(self):
+        cache.clear()
+        group = Group.objects.create(
+            category=self.category,
+            name="A",
+        )
+        league_entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L1",
+            display_order=1,
+            player1_name="無効前1A",
+            player2_name="無効前1B",
+        )
+        league_entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L2",
+            display_order=2,
+            player1_name="無効前2A",
+            player2_name="無効前2B",
+        )
+        league_match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=league_entry1,
+            pair2=league_entry2,
+        )
+        Schedule.objects.create(
+            court=self.court,
+            order=1,
+            round_robin_match=league_match,
+        )
+        url = reverse(
+            "public_schedule_view",
+            kwargs={"tournament_code": self.tournament.code},
+        )
+
+        first_response = self.client.get(url)
+        self.assertContains(first_response, "無効前1A")
+
+        league_entry1.player1_name = "無効後1A"
+        league_entry1.save(update_fields=["player1_name"])
+
+        second_response = self.client.get(url)
+        self.assertContains(second_response, "無効後1A")
+
+        cache.clear()
 
     def test_schedule_block_tables_do_not_query_per_cell(self):
         group = Group.objects.create(
