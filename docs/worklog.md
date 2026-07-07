@@ -535,3 +535,13 @@
 - `PUBLIC_VIEW_CACHE_SECONDS` は対象画面、対象外画面、`0` / `5` / `10` / `15` 秒以上の調整目安を整理。
 - 既存の `ENABLE_AUTO_OPERATION_SNAPSHOT` についても、自動スナップショットの目的と無効化の考え方を記載。
 - ドキュメント更新のみのためテストは未実行。
+
+### 公開リーグ表の追加試合表示
+- 公開用カテゴリ結果画面のリーグ表下に、追加試合を読み取り専用で表示する挙動を確認・補強。
+- 既存の `meeting_number > 1` だけでなく、`counts_for_ranking=False` のリーグ試合も追加試合欄へ表示するようにした。
+- 表示項目は、対戦ペア、回数、結果、順位計算対象/対象外、理由。
+- `TODO.md` に、第1段階として公開用カテゴリ結果画面で追加試合表示を実装済みであることを追記。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 188 tests OK。

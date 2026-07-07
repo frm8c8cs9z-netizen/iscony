@@ -87,7 +87,9 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
 
         extra_matches = RoundRobinMatch.objects.filter(
             group=group,
-            meeting_number__gt=1,
+        ).filter(
+            Q(meeting_number__gt=1)
+            | Q(counts_for_ranking=False)
         ).select_related(
             "pair1",
             "pair2",

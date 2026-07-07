@@ -6391,6 +6391,102 @@ class CategoryStageOverviewTests(TestCase):
             rf'href="{re.escape(schedule_url)}"[^>]*>\s*-\s*</a>',
         )
 
+    def test_public_category_results_show_extra_league_matches(self):
+        tournament = Tournament.objects.create(
+            name="公開追加対戦大会",
+            code="PUBLICEXTRA",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="一般男子",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry1 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="追加1",
+            player2_name="追加2",
+        )
+        entry2 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="追加3",
+            player2_name="追加4",
+        )
+        entry3 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A3",
+            display_order=3,
+            player1_name="追加5",
+            player2_name="追加6",
+        )
+        entry4 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A4",
+            display_order=4,
+            player1_name="追加7",
+            player2_name="追加8",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+            meeting_number=2,
+            pair1_games=4,
+            pair2_games=2,
+            note="リタイアに伴う追加対戦",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry3,
+            pair2=entry4,
+            meeting_number=1,
+            counts_for_ranking=False,
+            note="順位対象外の確認試合",
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "追加試合")
+        self.assertContains(response, "2回目")
+        self.assertContains(response, "4-2")
+        self.assertContains(response, "対象")
+        self.assertContains(response, "リタイアに伴う追加対戦")
+        self.assertContains(response, "1回目")
+        self.assertContains(response, "対象外")
+        self.assertContains(response, "順位対象外の確認試合")
+        self.assertNotContains(response, "結果入力")
+
     def test_public_category_results_show_stage_status_labels(self):
         tournament = Tournament.objects.create(
             name="公開状態大会",
