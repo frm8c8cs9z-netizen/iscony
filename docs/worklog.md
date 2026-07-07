@@ -529,3 +529,9 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 187 tests OK。
+
+### 設定パラメータ説明メモの追加
+- `docs/settings.md` を追加し、`settings.py` に持っている運用パラメータの説明を記載。
+- `PUBLIC_VIEW_CACHE_SECONDS` は対象画面、対象外画面、`0` / `5` / `10` / `15` 秒以上の調整目安を整理。
+- 既存の `ENABLE_AUTO_OPERATION_SNAPSHOT` についても、自動スナップショットの目的と無効化の考え方を記載。
+- ドキュメント更新のみのためテストは未実行。
