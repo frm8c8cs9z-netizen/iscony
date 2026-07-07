@@ -506,3 +506,15 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 184 tests OK。
+
+### 公開進行表のDB問い合わせ削減
+- 公開リーグ表から公開進行表へ移動する際、進行表生成が遅くなりやすい原因を修正。
+- これまでは進行表の各マスごとに `Schedule` を検索していたため、日程区分ごとの `試合順 x コート数` に比例してDB問い合わせが増えていた。
+- `Schedule` を一括取得し、`(日程区分, コート, 試合順)` の辞書にしてから表を組み立てるよう変更。
+- 進行表表示で使うリーグ枠・トーナメント枠の進出元情報も `select_related` で先読みし、参加者名表示時の追加問い合わせを抑えた。
+- マス数が増えても進行表データ生成のクエリ数が増えないことをテストで確認するようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_schedule_block_tables_do_not_query_per_cell --keepdb`
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 185 tests OK。

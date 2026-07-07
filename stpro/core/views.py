@@ -6,7 +6,7 @@ core.views
 """
 
 from django.contrib import messages
-from django.db.models import Max, Q
+from django.db.models import Q
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 
@@ -176,44 +176,82 @@ def _schedule_block_tables(tournament):
         )
         .select_related(
             "court",
+            "schedule_block",
 
             "round_robin_match",
             "round_robin_match__pair1",
+            "round_robin_match__pair1__advancement_source",
+            "round_robin_match__pair1__advancement_source__source_group",
+            "round_robin_match__pair1__advancement_source__source_match",
             "round_robin_match__pair2",
+            "round_robin_match__pair2__advancement_source",
+            "round_robin_match__pair2__advancement_source__source_group",
+            "round_robin_match__pair2__advancement_source__source_match",
             "round_robin_match__group",
             "round_robin_match__group__stage",
             "round_robin_match__group__category",
 
             "tournament_match",
             "tournament_match__pair1",
+            "tournament_match__pair1__advancement_source",
+            "tournament_match__pair1__advancement_source__source_group",
+            "tournament_match__pair1__advancement_source__source_match",
             "tournament_match__pair2",
+            "tournament_match__pair2__advancement_source",
+            "tournament_match__pair2__advancement_source__source_group",
+            "tournament_match__pair2__advancement_source__source_match",
             "tournament_match__bracket",
             "tournament_match__bracket__stage",
             "tournament_match__bracket__category",
         )
     )
+    schedule_list = list(schedules)
 
-    courts = Court.objects.filter(
+    courts = list(Court.objects.filter(
         tournament=tournament
     ).order_by(
         "display_order",
         "name",
-    )
+    ))
+    block_by_id = {}
+    court_ids_by_block = {}
+    max_order_by_block = {}
+    schedule_by_cell = {}
 
-    blocks = ScheduleBlock.objects.filter(
-        tournament=tournament,
-        schedule__isnull=False,
-    ).distinct()
+    for schedule in schedule_list:
+        block_by_id[schedule.schedule_block_id] = schedule.schedule_block
+        court_ids_by_block.setdefault(
+            schedule.schedule_block_id,
+            set(),
+        ).add(schedule.court_id)
+        max_order_by_block[schedule.schedule_block_id] = max(
+            max_order_by_block.get(schedule.schedule_block_id, 0),
+            schedule.order,
+        )
+        schedule_by_cell[
+            (
+                schedule.schedule_block_id,
+                schedule.court_id,
+                schedule.order,
+            )
+        ] = schedule
+
+    blocks = sorted(
+        block_by_id.values(),
+        key=lambda block: (
+            block.display_order,
+            block.id,
+        ),
+    )
     block_tables = []
 
     for block in blocks:
-        block_schedules = schedules.filter(schedule_block=block)
-        block_courts = courts.filter(
-            schedule__schedule_block=block,
-        ).distinct()
-        max_order = block_schedules.aggregate(
-            Max("order")
-        )["order__max"] or 0
+        block_courts = [
+            court
+            for court in courts
+            if court.id in court_ids_by_block.get(block.id, set())
+        ]
+        max_order = max_order_by_block.get(block.id, 0)
         table = []
 
         for order in range(1, max_order + 1):
@@ -221,10 +259,13 @@ def _schedule_block_tables(tournament):
 
             for court in block_courts:
                 row["cells"].append(
-                    block_schedules.filter(
-                        court=court,
-                        order=order,
-                    ).first()
+                    schedule_by_cell.get(
+                        (
+                            block.id,
+                            court.id,
+                            order,
+                        )
+                    )
                 )
 
             table.append(row)

@@ -7,9 +7,11 @@ from django.conf import settings
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.db.models import Q
 from django.template import Context, Template
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from pypdf import PdfReader
 
@@ -47,6 +49,7 @@ from .pdf_views import (
     get_score_sheet_template_settings,
 )
 from .tournament_views import _should_highlight_svg_winner
+from .views import _schedule_block_tables
 
 from .services import (
     advance_tournament_bye_winners,
@@ -8987,6 +8990,72 @@ class TournamentScheduleBehaviorTests(TestCase):
                 kwargs={"schedule_id": league_schedule.id},
             ),
         )
+
+    def test_schedule_block_tables_do_not_query_per_cell(self):
+        group = Group.objects.create(
+            category=self.category,
+            name="A",
+        )
+        league_entry1 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L1",
+            display_order=1,
+            player1_name="予選1A",
+            player2_name="予選1B",
+        )
+        league_entry2 = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="L2",
+            display_order=2,
+            player1_name="予選2A",
+            player2_name="予選2B",
+        )
+        courts = [
+            self.court,
+            Court.objects.create(
+                tournament=self.tournament,
+                name="2",
+                display_order=2,
+            ),
+            Court.objects.create(
+                tournament=self.tournament,
+                name="3",
+                display_order=3,
+            ),
+        ]
+        meeting_number = 1
+
+        for order in range(1, 6):
+            for court in courts:
+                match = RoundRobinMatch.objects.create(
+                    group=group,
+                    pair1=league_entry1,
+                    pair2=league_entry2,
+                    meeting_number=meeting_number,
+                )
+                Schedule.objects.create(
+                    court=court,
+                    order=order,
+                    round_robin_match=match,
+                )
+                meeting_number += 1
+
+        with CaptureQueriesContext(connection) as captured:
+            block_tables = _schedule_block_tables(self.tournament)
+
+            for block_table in block_tables:
+                for row in block_table["table"]:
+                    for schedule in row["cells"]:
+                        if schedule:
+                            schedule.match.pair1.short_name
+                            schedule.match.group.category.name
+
+        self.assertLessEqual(len(captured), 2)
+        self.assertEqual(len(block_tables), 1)
+        self.assertEqual(len(block_tables[0]["courts"]), 3)
+        self.assertEqual(len(block_tables[0]["table"]), 5)
 
     def test_schedule_view_hides_empty_courts_per_block(self):
         court2 = Court.objects.create(
