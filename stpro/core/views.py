@@ -52,11 +52,9 @@ from .view_helper import(
 
 
 def tournament_list(request):
-    """公開中の大会一覧を表示する。"""
+    """管理側の大会一覧を表示する。"""
 
-    tournaments = Tournament.objects.filter(
-        is_public=True
-    ).order_by("-start_date")
+    tournaments = Tournament.objects.all().order_by("-start_date")
 
     return render(
         request,
@@ -73,7 +71,6 @@ def tournament_detail(request, code):
     tournament = get_object_or_404(
         Tournament,
         code=code,
-        is_public=True
     )
 
     categories = Category.objects.filter(
@@ -695,6 +692,19 @@ def tournament_settings(request, code):
                 request,
                 "公開トークンを再発行しました。旧公開URLは利用できなくなりました。",
             )
+            return redirect(
+                "tournament_settings",
+                code=tournament.code,
+            )
+
+        if request.POST.get("action") == "update_public_visibility":
+            tournament.is_public = request.POST.get("is_public") == "1"
+            tournament.save(update_fields=["is_public"])
+            cache.clear()
+            if tournament.is_public:
+                messages.success(request, "一般公開を有効にしました。")
+            else:
+                messages.success(request, "一般公開を停止しました。")
             return redirect(
                 "tournament_settings",
                 code=tournament.code,

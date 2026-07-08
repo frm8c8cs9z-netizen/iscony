@@ -650,3 +650,13 @@
   - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_shows_private_public_state core.tests.MaintenanceMenuTests.test_tournament_settings_can_regenerate_public_token --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 193 tests OK。
+
+### `is_public` の意味を一般公開制御へ整理
+- 管理側の大会一覧と大会詳細では `is_public` による絞り込みをやめ、非公開大会でも管理・編集できるようにした。
+- `is_public` は一般参加者向け公開URLを表示できるかどうかの制御として維持。
+- 大会設定画面から一般公開を停止/有効化できるボタンを追加し、切替時は公開ページキャッシュをクリアするようにした。
+- 管理側の大会一覧では非公開大会に `非公開` ラベルを表示。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_shows_private_public_state core.tests.MaintenanceMenuTests.test_private_tournament_remains_visible_to_management_views core.tests.MaintenanceMenuTests.test_tournament_settings_can_update_public_visibility core.tests.CategoryStageOverviewTests.test_public_token_urls_respect_public_flag --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。

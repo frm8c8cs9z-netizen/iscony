@@ -126,6 +126,25 @@
         公開トークン: {{ tournament.public_token }}
     </div>
 
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_public_visibility">
+        {% if tournament.is_public %}
+            <input type="hidden" name="is_public" value="0">
+            <button
+                type="submit"
+                onclick="return confirm('一般公開を停止します。公開URLとQRコードからは表示できなくなります。よろしいですか？');"
+            >
+                一般公開を停止する
+            </button>
+        {% else %}
+            <input type="hidden" name="is_public" value="1">
+            <button type="submit">
+                一般公開を有効にする
+            </button>
+        {% endif %}
+    </form>
+
     <div class="danger-zone">
         <h4>公開URLの再発行</h4>
         <p>

@@ -22,12 +22,16 @@
                 ({{ tournament.start_date }})
             {% endif %}
 
+            {% if not tournament.is_public %}
+                <span>非公開</span>
+            {% endif %}
+
         </li>
 
     {% empty %}
 
         <li>
-            公開中の大会はありません
+            大会はありません
         </li>
 
     {% endfor %}

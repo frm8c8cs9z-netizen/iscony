@@ -5846,6 +5846,91 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "一般参加者向け画面は表示されません")
         self.assertContains(response, "公開画面を開くには公開状態にしてください")
         self.assertNotContains(response, 'target="_blank">公開画面を開く</a>')
+        self.assertContains(response, "一般公開を有効にする")
+
+    def test_private_tournament_remains_visible_to_management_views(self):
+        tournament = Tournament.objects.create(
+            name="管理側非公開大会",
+            code="MANAGEPRIVATE",
+            is_public=False,
+        )
+
+        list_response = self.client.get(reverse("tournament_list"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "管理側非公開大会")
+        self.assertContains(list_response, "非公開")
+
+        detail_response = self.client.get(
+            reverse(
+                "tournament_detail",
+                kwargs={"code": tournament.code},
+            )
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "管理側非公開大会")
+
+        public_response = self.client.get(
+            reverse(
+                "public_tournament_detail",
+                kwargs={"public_token": tournament.public_token},
+            )
+        )
+        self.assertEqual(public_response.status_code, 404)
+
+    def test_tournament_settings_can_update_public_visibility(self):
+        tournament = Tournament.objects.create(
+            name="公開切替大会",
+            code="PUBLICSWITCH",
+        )
+        public_url = reverse(
+            "public_tournament_detail",
+            kwargs={"public_token": tournament.public_token},
+        )
+        self.assertEqual(self.client.get(public_url).status_code, 200)
+
+        response = self.client.post(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+            {
+                "action": "update_public_visibility",
+                "is_public": "0",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        tournament.refresh_from_db()
+        self.assertFalse(tournament.is_public)
+        self.assertEqual(self.client.get(public_url).status_code, 404)
+
+        response = self.client.post(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+            {
+                "action": "update_public_visibility",
+                "is_public": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        tournament.refresh_from_db()
+        self.assertTrue(tournament.is_public)
+        self.assertEqual(self.client.get(public_url).status_code, 200)
 
     def test_tournament_settings_can_regenerate_public_token(self):
         tournament = Tournament.objects.create(
