@@ -224,6 +224,13 @@ class Category(models.Model):
     name = models.CharField(
         max_length=50
     )
+
+    public_token = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        db_index=True,
+    )
     
     display_order = models.IntegerField(default=0)
 
@@ -236,6 +243,19 @@ class Category(models.Model):
     def __str__(self):
 
         return f"{self.tournament.name} - {self.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.public_token:
+            self.public_token = self.generate_public_token()
+
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def generate_public_token(cls):
+        while True:
+            token = f"c_{secrets.token_urlsafe(12)}"
+            if not cls.objects.filter(public_token=token).exists():
+                return token
 
 
 # =========================================================

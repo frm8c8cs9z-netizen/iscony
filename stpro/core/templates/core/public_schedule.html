@@ -77,12 +77,12 @@
                                     {% if schedule.is_round_robin %}
                                         <a
                                             class="public-schedule-card-link"
-                                            href="{% url 'public_category_results_token' tournament.public_token match.group.category.id %}?from_schedule={{ schedule.id }}#round-robin-match-{{ match.id }}"
+                                            href="{% url 'public_category_results_token' tournament.public_token match.group.category.public_token %}?from_schedule={{ schedule.id }}#round-robin-match-{{ match.id }}"
                                         >
                                     {% elif schedule.is_tournament %}
                                         <a
                                             class="public-schedule-card-link"
-                                            href="{% url 'public_category_results_token' tournament.public_token match.bracket.category.id %}?from_schedule={{ schedule.id }}#tournament-match-{{ match.id }}"
+                                            href="{% url 'public_category_results_token' tournament.public_token match.bracket.category.public_token %}?from_schedule={{ schedule.id }}#tournament-match-{{ match.id }}"
                                         >
                                     {% endif %}
                                     <div class="schedule-match-card">

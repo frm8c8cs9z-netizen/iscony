@@ -617,3 +617,17 @@
   - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.MaintenanceMenuTests.test_public_tournament_qr_pdf_outputs_printable_pdf --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 191 tests OK。
+
+### 公開URLのカテゴリトークン化
+- `Category.public_token` を追加し、公開カテゴリ結果URLを `/public/<大会トークン>/category/<カテゴリトークン>/` 形式にした。
+- 既存の `/public/<大会トークン>/category/<カテゴリID>/` は互換用として残し、公開画面内のリンクはカテゴリトークン版へ寄せた。
+- カテゴリ作成時に `c_...` 形式のランダムトークンを自動採番し、Django admin のカテゴリ一覧/検索でも確認できるようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py makemigrations --check --dry-run`
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 191 tests OK。
+
+### DB操作: カテゴリ公開トークンマイグレーション適用
+- `./venv/bin/python stpro/manage.py migrate` を実行し、`core.0034_category_public_token` を適用。
+- 既存カテゴリ 18 件に `public_token` が付与され、空トークンが 0 件であることを確認。

@@ -117,10 +117,12 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "tournament",
+        "public_token",
     )
 
     search_fields = (
         "name",
+        "public_token",
     )
 
     list_filter = (

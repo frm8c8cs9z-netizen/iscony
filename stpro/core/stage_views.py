@@ -374,3 +374,19 @@ def public_category_results_by_token(request, public_token, category_id):
         tournament__is_public=True,
     )
     return _render_public_category_results(request, category)
+
+
+def public_category_results_by_public_tokens(
+    request,
+    public_token,
+    category_public_token,
+):
+    """大会・カテゴリの公開トークンからカテゴリ結果を表示する。"""
+
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        public_token=category_public_token,
+        tournament__public_token=public_token,
+        tournament__is_public=True,
+    )
+    return _render_public_category_results(request, category)

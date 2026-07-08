@@ -73,6 +73,12 @@ urlpatterns = [
     path(
         "public/<str:public_token>/category/<int:category_id>/",
         public_view_cache(stage_views.public_category_results_by_token),
+        name="public_category_results_id_token",
+    ),
+
+    path(
+        "public/<str:public_token>/category/<str:category_public_token>/",
+        public_view_cache(stage_views.public_category_results_by_public_tokens),
         name="public_category_results_token",
     ),
 

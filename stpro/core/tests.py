@@ -6153,7 +6153,7 @@ class CategoryStageOverviewTests(TestCase):
                 "public_category_results_token",
                 kwargs={
                     "public_token": tournament.public_token,
-                    "category_id": category.id,
+                    "category_public_token": category.public_token,
                 },
             ),
         )
@@ -6207,7 +6207,7 @@ class CategoryStageOverviewTests(TestCase):
                 "public_category_results_token",
                 kwargs={
                     "public_token": tournament.public_token,
-                    "category_id": category.id,
+                    "category_public_token": category.public_token,
                 },
             ),
         )
@@ -6224,12 +6224,24 @@ class CategoryStageOverviewTests(TestCase):
                 "public_category_results_token",
                 kwargs={
                     "public_token": tournament.public_token,
-                    "category_id": category.id,
+                    "category_public_token": category.public_token,
                 },
             )
         )
         self.assertEqual(category_response.status_code, 200)
         self.assertContains(category_response, "一般男子 結果")
+
+        legacy_category_response = self.client.get(
+            reverse(
+                "public_category_results_id_token",
+                kwargs={
+                    "public_token": tournament.public_token,
+                    "category_id": category.id,
+                },
+            )
+        )
+        self.assertEqual(legacy_category_response.status_code, 200)
+        self.assertContains(legacy_category_response, "一般男子 結果")
 
         schedule_response = self.client.get(
             reverse(
@@ -9200,7 +9212,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                     "public_category_results_token",
                     kwargs={
                         "public_token": self.tournament.public_token,
-                        "category_id": self.category.id,
+                        "category_public_token": self.category.public_token,
                     },
                 )
                 + f"?from_schedule={league_schedule.id}"
@@ -9215,7 +9227,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                     "public_category_results_token",
                     kwargs={
                         "public_token": self.tournament.public_token,
-                        "category_id": self.category.id,
+                        "category_public_token": self.category.public_token,
                     },
                 )
                 + f"?from_schedule={tournament_schedule.id}"
