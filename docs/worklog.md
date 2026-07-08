@@ -604,3 +604,7 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_uses_configured_cache_timeout core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_cache_can_be_disabled --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 190 tests OK。
+
+### DB操作: 公開URLトークンマイグレーション適用
+- `./venv/bin/python stpro/manage.py migrate` を実行し、`core.0033_tournament_public_token` を適用。
+- 既存大会 6 件に `public_token` が付与され、空トークンが 0 件であることを確認。
