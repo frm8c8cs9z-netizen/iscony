@@ -575,3 +575,8 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 188 tests OK。
+
+### TODO追記: 一般向け表示の次課題
+- 一般利用者向け表示を核にする前提で、トーナメント結果入力後や確認時の表示を `トーナメント表のみ` / `カード型表示` から大会設定で選べる案を `TODO.md` に追記。
+- 一般利用者向けリーグ表について、勝者ゲーム数の丸囲み表示、勝敗色分けの有無、勝者色・敗者色を大会設定で持つ案を `TODO.md` に追記。
+- ドキュメント更新のみのためテストは未実行。
