@@ -5807,7 +5807,11 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "優勝者表示の概念図")
         self.assertContains(response, "片側・横書き")
         self.assertContains(response, "左右・縦書き")
-        self.assertContains(response, "一般公開URL")
+        self.assertContains(response, "一般公開")
+        self.assertContains(response, "公開中")
+        self.assertContains(response, "公開URL")
+        self.assertContains(response, "公開URLの再発行")
+        self.assertContains(response, tournament.public_token)
         self.assertContains(
             response,
             reverse(
@@ -5822,6 +5826,26 @@ class MaintenanceMenuTests(TestCase):
                 kwargs={"code": tournament.code},
             ),
         )
+
+    def test_tournament_settings_page_shows_private_public_state(self):
+        tournament = Tournament.objects.create(
+            name="非公開設定表示テスト",
+            code="PRIVATEVIEW",
+            is_public=False,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "非公開")
+        self.assertContains(response, "一般参加者向け画面は表示されません")
+        self.assertContains(response, "公開画面を開くには公開状態にしてください")
+        self.assertNotContains(response, 'target="_blank">公開画面を開く</a>')
 
     def test_tournament_settings_can_regenerate_public_token(self):
         tournament = Tournament.objects.create(

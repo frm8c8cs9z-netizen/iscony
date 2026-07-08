@@ -4,6 +4,86 @@
 
 {% block content %}
 
+<style>
+    .settings-section {
+        border: 1px solid #c9d3df;
+        margin-bottom: 28px;
+        padding: 16px;
+    }
+
+    .settings-section h3 {
+        margin-top: 0;
+    }
+
+    .public-status-row {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .status-badge {
+        border-radius: 4px;
+        display: inline-block;
+        font-weight: bold;
+        padding: 4px 8px;
+    }
+
+    .status-badge.public {
+        background: #dff5e4;
+        color: #236b36;
+    }
+
+    .status-badge.private {
+        background: #f2f2f2;
+        color: #555;
+    }
+
+    .public-url-field {
+        box-sizing: border-box;
+        margin-bottom: 10px;
+        max-width: 100%;
+        width: 680px;
+    }
+
+    .public-action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 8px 0 14px;
+    }
+
+    .public-token-meta {
+        color: #555;
+        font-size: 0.9em;
+        margin-bottom: 16px;
+    }
+
+    .danger-zone {
+        border-top: 1px solid #e1b5b5;
+        margin-top: 16px;
+        padding-top: 14px;
+    }
+
+    .danger-zone h4 {
+        color: #9b1c1c;
+        margin: 0 0 8px;
+    }
+
+    .danger-button {
+        background: #fff;
+        border: 1px solid #b3261e;
+        color: #9b1c1c;
+        cursor: pointer;
+        padding: 6px 10px;
+    }
+
+    .muted-text {
+        color: #666;
+    }
+</style>
+
 <h2>{{ tournament.name }} 大会設定</h2>
 
 <p>
@@ -11,42 +91,59 @@
     個別のトーナメントで上書きしない限り、この設定が使われます。
 </p>
 
-<h3>一般公開URL</h3>
+<section class="settings-section">
+    <h3>一般公開</h3>
 
-<table border="1">
-    <tr>
-        <th>公開URL</th>
-        <td>
-            <input type="text" value="{{ public_url }}" readonly size="80">
-            <br>
+    <div class="public-status-row">
+        {% if tournament.is_public %}
+            <span class="status-badge public">公開中</span>
+            <span class="muted-text">このURLを知っている人は一般参加者向け画面を表示できます。</span>
+        {% else %}
+            <span class="status-badge private">非公開</span>
+            <span class="muted-text">一般参加者向け画面は表示されません。</span>
+        {% endif %}
+    </div>
+
+    <label for="public-url">公開URL</label><br>
+    <input
+        id="public-url"
+        class="public-url-field"
+        type="text"
+        value="{{ public_url }}"
+        readonly
+    >
+
+    <div class="public-action-row">
+        {% if tournament.is_public %}
             <a href="{{ public_url }}" target="_blank">公開画面を開く</a>
-            /
-            <a href="{% url 'public_tournament_qr_pdf' tournament.code %}" target="_blank">QR印刷</a>
-        </td>
-    </tr>
-    <tr>
-        <th>公開トークン</th>
-        <td>{{ tournament.public_token }}</td>
-    </tr>
-    <tr>
-        <th>公開URL再発行</th>
-        <td>
-            <form method="post">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="regenerate_public_token">
-                <button
-                    type="submit"
-                    onclick="return confirm('公開URLを再発行します。古い公開URLとQRコードは利用できなくなります。よろしいですか？');"
-                >
-                    公開URLを再発行する
-                </button>
-            </form>
-            <p>
-                テスト用に配布したURLを止めたい場合に使います。再発行後はQRコードも印刷し直してください。
-            </p>
-        </td>
-    </tr>
-</table>
+        {% else %}
+            <span class="muted-text">公開画面を開くには公開状態にしてください</span>
+        {% endif %}
+        <a href="{% url 'public_tournament_qr_pdf' tournament.code %}" target="_blank">QR印刷</a>
+    </div>
+
+    <div class="public-token-meta">
+        公開トークン: {{ tournament.public_token }}
+    </div>
+
+    <div class="danger-zone">
+        <h4>公開URLの再発行</h4>
+        <p>
+            テスト用に配布したURLを止めたい場合に使います。再発行後は古い公開URLとQRコードは利用できなくなります。
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="regenerate_public_token">
+            <button
+                class="danger-button"
+                type="submit"
+                onclick="return confirm('公開URLを再発行します。古い公開URLとQRコードは利用できなくなります。よろしいですか？');"
+            >
+                公開URLを再発行する
+            </button>
+        </form>
+    </div>
+</section>
 
 <form method="post">
     {% csrf_token %}

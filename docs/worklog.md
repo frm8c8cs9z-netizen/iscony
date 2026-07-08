@@ -641,3 +641,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_can_regenerate_public_token --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 192 tests OK。
+
+### 大会設定画面の一般公開セクション整理
+- 大会設定画面の一般公開まわりを、公開状態、公開URL、通常操作、危険操作に分けて表示するよう整理。
+- `is_public` の状態に応じて `公開中` / `非公開` を表示し、非公開時は公開画面リンクを押せない表示にした。
+- QR印刷と公開画面リンクは通常操作としてまとめ、公開URL再発行は危険操作として下段に分離。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_shows_private_public_state core.tests.MaintenanceMenuTests.test_tournament_settings_can_regenerate_public_token --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 193 tests OK。
