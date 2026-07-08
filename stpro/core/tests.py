@@ -6606,6 +6606,9 @@ class CategoryStageOverviewTests(TestCase):
                 kwargs={"public_token": tournament.public_token},
             ),
         )
+        self.assertContains(response, 'class="secondary"')
+        self.assertContains(response, 'class="primary"')
+        self.assertContains(response, "カテゴリ一覧")
         self.assertNotContains(
             response,
             reverse(
@@ -6647,8 +6650,9 @@ class CategoryStageOverviewTests(TestCase):
                 + f"#schedule-{tournament_schedule.id}"
             ),
         )
+        self.assertContains(response_with_return, "元の試合へ戻る")
         self.assertNotContains(response, "大会スナップショット")
-        self.assertContains(response, "試合進行表へ")
+        self.assertContains(response, "試合進行表")
 
     def test_public_category_results_show_pending_league_schedule_link(self):
         tournament = Tournament.objects.create(

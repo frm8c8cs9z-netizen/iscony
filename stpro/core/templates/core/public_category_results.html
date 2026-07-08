@@ -145,20 +145,41 @@
         top: 0;
         z-index: 10;
         display: flex;
+        flex-wrap: wrap;
         gap: 10px;
-        padding: 8px 0;
-        margin-bottom: 12px;
+        padding: 10px 0;
+        margin-bottom: 16px;
         background: #fff;
     }
 
     .public-result-nav a {
         display: inline-flex;
         align-items: center;
-        min-height: 28px;
-        padding: 2px 8px;
+        justify-content: center;
+        min-height: 40px;
+        min-width: 132px;
+        padding: 4px 14px;
         border: 1px solid #b8c7dc;
         border-radius: 4px;
         background: #f7fbff;
+        font-weight: bold;
+    }
+
+    .public-result-nav a.primary {
+        background: #1565c0;
+        border-color: #1565c0;
+        color: #fff;
+    }
+
+    .public-result-nav a.secondary {
+        background: #fff;
+        color: #1565c0;
+    }
+
+    @media (max-width: 640px) {
+        .public-result-nav a {
+            flex: 1 1 100%;
+        }
     }
 
     .public-schedule-link {
@@ -183,13 +204,25 @@
         <h2>{{ category.name }} 結果</h2>
         <p class="subtle-text">{{ tournament.name }}</p>
     </div>
-    <div class="action-row">
-        <a href="{% url 'public_tournament_detail' tournament.public_token %}">カテゴリ一覧</a>
-    </div>
 </div>
 
 <div class="public-result-nav">
-    <a href="{{ public_schedule_url }}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}">試合進行表へ</a>
+    <a
+        class="secondary"
+        href="{% url 'public_tournament_detail' tournament.public_token %}"
+    >
+        カテゴリ一覧
+    </a>
+    <a
+        class="primary"
+        href="{{ public_schedule_url }}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}"
+    >
+        {% if return_schedule_id %}
+            元の試合へ戻る
+        {% else %}
+            試合進行表
+        {% endif %}
+    </a>
 </div>
 
 <div class="public-stage-results">

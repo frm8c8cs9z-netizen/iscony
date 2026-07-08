@@ -679,3 +679,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_tournament_detail_links_to_public_category_results core.tests.CategoryStageOverviewTests.test_public_token_urls_show_read_only_pages --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 公開カテゴリ結果画面の戻り導線整理
+- 公開カテゴリ結果画面の上部に、`カテゴリ一覧` と `試合進行表` をまとめたナビを配置。
+- 進行表から `from_schedule` 付きで遷移した場合は、進行表ボタンを `元の試合へ戻る` と表示し、元の `#schedule-...` へ戻る動きを維持。
+- スマホではナビボタンが縦に並ぶようにし、押しやすさを優先。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。
