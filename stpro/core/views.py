@@ -6,6 +6,7 @@ core.views
 """
 
 from django.contrib import messages
+from django.core.cache import cache
 from django.db.models import Q
 from django.urls import reverse
 from django.core.exceptions import ValidationError
@@ -686,6 +687,19 @@ def tournament_settings(request, code):
     )
 
     if request.method == "POST":
+        if request.POST.get("action") == "regenerate_public_token":
+            tournament.public_token = Tournament.generate_public_token()
+            tournament.save(update_fields=["public_token"])
+            cache.clear()
+            messages.success(
+                request,
+                "公開トークンを再発行しました。旧公開URLは利用できなくなりました。",
+            )
+            return redirect(
+                "tournament_settings",
+                code=tournament.code,
+            )
+
         form = TournamentSettingsForm(
             request.POST,
             instance=tournament,

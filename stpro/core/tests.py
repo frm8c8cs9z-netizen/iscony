@@ -5823,6 +5823,71 @@ class MaintenanceMenuTests(TestCase):
             ),
         )
 
+    def test_tournament_settings_can_regenerate_public_token(self):
+        tournament = Tournament.objects.create(
+            name="公開URL再発行大会",
+            code="PUBLICREGEN",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="一般男子",
+        )
+        old_token = tournament.public_token
+        old_public_url = reverse(
+            "public_tournament_detail",
+            kwargs={"public_token": old_token},
+        )
+        self.assertEqual(
+            self.client.get(old_public_url).status_code,
+            200,
+        )
+
+        response = self.client.post(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+            {
+                "action": "regenerate_public_token",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        tournament.refresh_from_db()
+        self.assertNotEqual(tournament.public_token, old_token)
+
+        self.assertEqual(
+            self.client.get(old_public_url).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse(
+                    "public_tournament_detail",
+                    kwargs={"public_token": tournament.public_token},
+                )
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse(
+                    "public_category_results_token",
+                    kwargs={
+                        "public_token": tournament.public_token,
+                        "category_public_token": category.public_token,
+                    },
+                )
+            ).status_code,
+            200,
+        )
+
     def test_public_tournament_qr_pdf_outputs_printable_pdf(self):
         tournament = Tournament.objects.create(
             name="公開QR大会",

@@ -631,3 +631,13 @@
 ### DB操作: カテゴリ公開トークンマイグレーション適用
 - `./venv/bin/python stpro/manage.py migrate` を実行し、`core.0034_category_public_token` を適用。
 - 既存カテゴリ 18 件に `public_token` が付与され、空トークンが 0 件であることを確認。
+
+### 公開URL再発行
+- 大会設定画面に、公開URLを再発行するボタンを追加。
+- 再発行時は `Tournament.public_token` を新しいランダム値へ差し替え、旧公開URLを無効化するようにした。
+- 公開ページの短時間キャッシュで旧URLが残らないよう、再発行時にキャッシュをクリアするようにした。
+- 再発行後はQRコードも印刷し直す必要がある旨を画面に表示。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_can_regenerate_public_token --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 192 tests OK。

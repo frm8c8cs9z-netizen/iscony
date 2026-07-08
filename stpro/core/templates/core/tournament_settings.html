@@ -28,6 +28,24 @@
         <th>公開トークン</th>
         <td>{{ tournament.public_token }}</td>
     </tr>
+    <tr>
+        <th>公開URL再発行</th>
+        <td>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="regenerate_public_token">
+                <button
+                    type="submit"
+                    onclick="return confirm('公開URLを再発行します。古い公開URLとQRコードは利用できなくなります。よろしいですか？');"
+                >
+                    公開URLを再発行する
+                </button>
+            </form>
+            <p>
+                テスト用に配布したURLを止めたい場合に使います。再発行後はQRコードも印刷し直してください。
+            </p>
+        </td>
+    </tr>
 </table>
 
 <form method="post">
