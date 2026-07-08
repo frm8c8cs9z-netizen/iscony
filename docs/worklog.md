@@ -688,3 +688,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 公開進行表からカテゴリ結果への導線強化
+- 一般参加者向け進行表の試合カード下部に `カテゴリ結果を見る` を表示。
+- セル全体クリックは維持しつつ、どこへ移動するかが分かる見た目にした。
+- 管理用に見える `結果表示` 文言は引き続き表示しない。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。

@@ -9393,6 +9393,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, 'class="table-wrapper schedule-table-wrapper"')
         self.assertNotContains(response, "未入力")
         self.assertNotContains(response, "結果表示")
+        self.assertContains(response, "カテゴリ結果を見る")
         self.assertContains(
             response,
             (
