@@ -669,3 +669,13 @@
   - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_shows_private_public_state --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 一般公開トップ画面のスマホ向け整理
+- 公開トップ画面を管理側の大会詳細と分岐し、一般参加者向けの入口として整えた。
+- 公開画面では大会コードを表示せず、大会名、一般参加者向け表示、試合進行表、カテゴリ別結果を中心にした。
+- 試合進行表を大きめの主導線にし、カテゴリ一覧はスマホでも押しやすいリンク一覧にした。
+- 管理側の大会詳細は従来どおり大会コード、管理メニュー、大会設定、カテゴリ一覧を表示。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_tournament_detail_links_to_public_category_results core.tests.CategoryStageOverviewTests.test_public_token_urls_show_read_only_pages --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。

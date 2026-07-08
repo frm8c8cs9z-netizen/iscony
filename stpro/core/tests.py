@@ -6323,6 +6323,8 @@ class CategoryStageOverviewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "大会コード")
+        self.assertContains(response, tournament.code)
         self.assertContains(
             response,
             reverse(
@@ -6376,7 +6378,13 @@ class CategoryStageOverviewTests(TestCase):
         )
         self.assertEqual(home_response.status_code, 200)
         self.assertContains(home_response, "公開トークン大会")
+        self.assertContains(home_response, "一般参加者向け")
+        self.assertContains(home_response, "カテゴリ別結果")
+        self.assertContains(home_response, 'class="public-primary-link"')
+        self.assertContains(home_response, 'class="public-category-link"')
         self.assertNotContains(home_response, "管理メニュー")
+        self.assertNotContains(home_response, "大会コード")
+        self.assertNotContains(home_response, tournament.code)
         self.assertContains(
             home_response,
             reverse(

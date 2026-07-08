@@ -1,19 +1,134 @@
 {% extends "core/base.html" %}
 
+{% block title %}{{ tournament.name }}{% endblock %}
+
 {% block content %}
 
-<h1>
-    {{ tournament.name }}
-</h1>
+{% if public_mode %}
+    <style>
+        .public-home {
+            max-width: 920px;
+        }
 
-<p>
-    大会コード:
-    {{ tournament.code }}
-</p>
+        .public-home-heading {
+            border-bottom: 1px solid #d7dde5;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+        }
 
-<div class="menu">
+        .public-home-heading h1 {
+            font-size: 1.9rem;
+            line-height: 1.25;
+            margin: 0;
+        }
 
-    {% if not public_mode %}
+        .public-home-subtitle {
+            color: #555;
+            margin: 8px 0 0;
+        }
+
+        .public-primary-link {
+            background: #1565c0;
+            color: #fff;
+            display: block;
+            font-size: 1.15rem;
+            font-weight: bold;
+            margin: 0 0 24px;
+            padding: 16px 18px;
+            text-align: center;
+        }
+
+        .public-primary-link:hover {
+            background: #0f4f99;
+        }
+
+        .public-category-list {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .public-category-link {
+            border: 1px solid #c9d3df;
+            color: #123;
+            display: block;
+            font-weight: bold;
+            min-height: 44px;
+            padding: 13px 14px;
+        }
+
+        .public-category-link:hover {
+            background: #f4f8fc;
+            border-color: #1565c0;
+        }
+
+        .public-empty {
+            color: #666;
+            padding: 12px 0;
+        }
+
+        @media (max-width: 640px) {
+            .public-home-heading h1 {
+                font-size: 1.55rem;
+            }
+
+            .public-primary-link {
+                font-size: 1.05rem;
+                padding: 14px 12px;
+            }
+
+            .public-category-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+
+    <div class="public-home">
+        <div class="public-home-heading">
+            <h1>{{ tournament.name }}</h1>
+            <p class="public-home-subtitle">一般参加者向け</p>
+        </div>
+
+        <a
+            class="public-primary-link"
+            href="{% url 'public_schedule_view_token' tournament.public_token %}"
+        >
+            試合進行表
+        </a>
+
+        <h2>カテゴリ別結果</h2>
+
+        {% if categories %}
+            <ul class="public-category-list">
+                {% for category in categories %}
+                    <li>
+                        <a
+                            class="public-category-link"
+                            href="{% url 'public_category_results_token' tournament.public_token category.public_token %}"
+                        >
+                            {{ category.name }}
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="public-empty">カテゴリがありません</p>
+        {% endif %}
+    </div>
+{% else %}
+    <h1>
+        {{ tournament.name }}
+    </h1>
+
+    <p>
+        大会コード:
+        {{ tournament.code }}
+    </p>
+
+    <div class="menu">
         <a href="{% url 'maintenance_menu' tournament.code %}">
             管理メニュー
         </a>
@@ -21,40 +136,31 @@
         <a href="{% url 'tournament_settings' tournament.code %}">
             大会設定
         </a>
-    {% endif %}
 
-    <a href="{% url 'public_schedule_view_token' tournament.public_token %}">
-        試合進行表
-    </a>
+        <a href="{% url 'public_schedule_view_token' tournament.public_token %}">
+            試合進行表
+        </a>
+    </div>
 
-</div>
+    <hr>
 
-<hr>
+    <h2>
+        カテゴリ一覧
+    </h2>
 
-<h2>
-    カテゴリ一覧
-</h2>
-
-<ul>
-
-    {% for category in categories %}
-
-        <li>
-
-            <a href="{% url 'public_category_results_token' tournament.public_token category.public_token %}">
-                {{ category.name }}
-            </a>
-
-        </li>
-
-    {% empty %}
-
-        <li>
-            カテゴリがありません
-        </li>
-
-    {% endfor %}
-
-</ul>
+    <ul>
+        {% for category in categories %}
+            <li>
+                <a href="{% url 'public_category_results_token' tournament.public_token category.public_token %}">
+                    {{ category.name }}
+                </a>
+            </li>
+        {% empty %}
+            <li>
+                カテゴリがありません
+            </li>
+        {% endfor %}
+    </ul>
+{% endif %}
 
 {% endblock %}
