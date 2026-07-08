@@ -660,3 +660,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_shows_private_public_state core.tests.MaintenanceMenuTests.test_private_tournament_remains_visible_to_management_views core.tests.MaintenanceMenuTests.test_tournament_settings_can_update_public_visibility core.tests.CategoryStageOverviewTests.test_public_token_urls_respect_public_flag --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 公開URLコピー操作の追加
+- 大会設定画面の公開URL欄に `コピー` ボタンを追加。
+- HTTPS環境では Clipboard API を使い、非対応環境ではURL欄を選択してコピーしやすくするフォールバックにした。
+- コピー成功時は `コピーしました`、フォールバック時は `選択しました` を一時表示するようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_shows_private_public_state --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。

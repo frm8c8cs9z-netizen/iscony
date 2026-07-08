@@ -42,9 +42,16 @@
 
     .public-url-field {
         box-sizing: border-box;
-        margin-bottom: 10px;
         max-width: 100%;
         width: 680px;
+    }
+
+    .public-url-row {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
     }
 
     .public-action-row {
@@ -79,6 +86,16 @@
         padding: 6px 10px;
     }
 
+    .copy-button {
+        cursor: pointer;
+        padding: 4px 10px;
+    }
+
+    .copy-status {
+        color: #236b36;
+        font-size: 0.9em;
+    }
+
     .muted-text {
         color: #666;
     }
@@ -105,13 +122,28 @@
     </div>
 
     <label for="public-url">公開URL</label><br>
-    <input
-        id="public-url"
-        class="public-url-field"
-        type="text"
-        value="{{ public_url }}"
-        readonly
-    >
+    <div class="public-url-row">
+        <input
+            id="public-url"
+            class="public-url-field"
+            type="text"
+            value="{{ public_url }}"
+            readonly
+        >
+        <button
+            class="copy-button"
+            type="button"
+            data-copy-target="public-url"
+            data-copy-status="public-url-copy-status"
+        >
+            コピー
+        </button>
+        <span
+            id="public-url-copy-status"
+            class="copy-status"
+            aria-live="polite"
+        ></span>
+    </div>
 
     <div class="public-action-row">
         {% if tournament.is_public %}
@@ -163,6 +195,54 @@
         </form>
     </div>
 </section>
+
+<script>
+    (function() {
+        function setCopyStatus(statusElement, text) {
+            statusElement.textContent = text;
+            if (statusElement.dataset.copyTimer) {
+                window.clearTimeout(Number(statusElement.dataset.copyTimer));
+            }
+            statusElement.dataset.copyTimer = window.setTimeout(function() {
+                statusElement.textContent = "";
+                delete statusElement.dataset.copyTimer;
+            }, 2500);
+        }
+
+        document.querySelectorAll("[data-copy-target]").forEach(function(button) {
+            button.addEventListener("click", function() {
+                var target = document.getElementById(button.dataset.copyTarget);
+                var statusElement = document.getElementById(
+                    button.dataset.copyStatus
+                );
+                if (!target || !statusElement) {
+                    return;
+                }
+
+                target.focus();
+                target.select();
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(target.value).then(
+                        function() {
+                            setCopyStatus(statusElement, "コピーしました");
+                        },
+                        function() {
+                            setCopyStatus(statusElement, "選択しました");
+                        }
+                    );
+                } else {
+                    try {
+                        document.execCommand("copy");
+                        setCopyStatus(statusElement, "コピーしました");
+                    } catch (error) {
+                        setCopyStatus(statusElement, "選択しました");
+                    }
+                }
+            });
+        });
+    })();
+</script>
 
 <form method="post">
     {% csrf_token %}

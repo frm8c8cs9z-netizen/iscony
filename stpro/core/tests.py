@@ -5810,6 +5810,8 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "一般公開")
         self.assertContains(response, "公開中")
         self.assertContains(response, "公開URL")
+        self.assertContains(response, "コピー")
+        self.assertContains(response, "コピーしました")
         self.assertContains(response, "公開URLの再発行")
         self.assertContains(response, tournament.public_token)
         self.assertContains(
