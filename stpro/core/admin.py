@@ -71,6 +71,7 @@ class TournamentAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "code",
+        "public_token",
         "start_date",
         "is_public",
         "default_league_entry_display_mode",
@@ -98,6 +99,7 @@ class TournamentAdmin(admin.ModelAdmin):
     search_fields = (
         "name",
         "code",
+        "public_token",
     )
 
     list_filter = (

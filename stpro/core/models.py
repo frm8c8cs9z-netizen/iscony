@@ -1,5 +1,7 @@
 # core/models.py
 
+import secrets
+
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -108,6 +110,13 @@ class Tournament(models.Model):
         default=True
     )
 
+    public_token = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        db_index=True,
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )
@@ -182,8 +191,17 @@ class Tournament(models.Model):
     def save(self, *args, **kwargs):
 
         self.code = self.code.upper()
+        if not self.public_token:
+            self.public_token = self.generate_public_token()
 
         super().save(*args, **kwargs)
+
+    @classmethod
+    def generate_public_token(cls):
+        while True:
+            token = secrets.token_urlsafe(16)
+            if not cls.objects.filter(public_token=token).exists():
+                return token
 
     def __str__(self):
 

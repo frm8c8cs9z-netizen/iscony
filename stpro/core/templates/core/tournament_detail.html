@@ -13,15 +13,17 @@
 
 <div class="menu">
 
-    <a href="{% url 'maintenance_menu' tournament.code %}">
-        管理メニュー
-    </a>
+    {% if not public_mode %}
+        <a href="{% url 'maintenance_menu' tournament.code %}">
+            管理メニュー
+        </a>
 
-    <a href="{% url 'tournament_settings' tournament.code %}">
-        大会設定
-    </a>
+        <a href="{% url 'tournament_settings' tournament.code %}">
+            大会設定
+        </a>
+    {% endif %}
 
-    <a href="{% url 'public_schedule_view' tournament.code %}">
+    <a href="{% url 'public_schedule_view_token' tournament.public_token %}">
         試合進行表
     </a>
 
@@ -39,7 +41,7 @@
 
         <li>
 
-            <a href="{% url 'public_category_results' tournament.code category.id %}">
+            <a href="{% url 'public_category_results_token' tournament.public_token category.id %}">
                 {{ category.name }}
             </a>
 

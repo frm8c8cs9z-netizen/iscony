@@ -6117,9 +6117,9 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(
             response,
             reverse(
-                "public_category_results",
+                "public_category_results_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             ),
@@ -6127,8 +6127,8 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(
             response,
             reverse(
-                "public_schedule_view",
-                kwargs={"tournament_code": tournament.code},
+                "public_schedule_view_token",
+                kwargs={"public_token": tournament.public_token},
             ),
         )
         self.assertNotContains(
@@ -6138,6 +6138,90 @@ class CategoryStageOverviewTests(TestCase):
                 kwargs={"category_id": category.id},
             ),
         )
+
+    def test_public_token_urls_show_read_only_pages(self):
+        tournament = Tournament.objects.create(
+            name="公開トークン大会",
+            code="PUBLICTOKEN",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="一般男子",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+
+        home_response = self.client.get(
+            reverse(
+                "public_tournament_detail",
+                kwargs={"public_token": tournament.public_token},
+            )
+        )
+        self.assertEqual(home_response.status_code, 200)
+        self.assertContains(home_response, "公開トークン大会")
+        self.assertNotContains(home_response, "管理メニュー")
+        self.assertContains(
+            home_response,
+            reverse(
+                "public_category_results_token",
+                kwargs={
+                    "public_token": tournament.public_token,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertContains(
+            home_response,
+            reverse(
+                "public_schedule_view_token",
+                kwargs={"public_token": tournament.public_token},
+            ),
+        )
+
+        category_response = self.client.get(
+            reverse(
+                "public_category_results_token",
+                kwargs={
+                    "public_token": tournament.public_token,
+                    "category_id": category.id,
+                },
+            )
+        )
+        self.assertEqual(category_response.status_code, 200)
+        self.assertContains(category_response, "一般男子 結果")
+
+        schedule_response = self.client.get(
+            reverse(
+                "public_schedule_view_token",
+                kwargs={"public_token": tournament.public_token},
+            )
+        )
+        self.assertEqual(schedule_response.status_code, 200)
+        self.assertContains(schedule_response, "一般参加者向け")
+
+    def test_public_token_urls_respect_public_flag(self):
+        tournament = Tournament.objects.create(
+            name="非公開トークン大会",
+            code="PRIVATEKEY",
+            is_public=False,
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_tournament_detail",
+                kwargs={"public_token": tournament.public_token},
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_public_category_results_are_read_only(self):
         tournament = Tournament.objects.create(
@@ -6262,8 +6346,8 @@ class CategoryStageOverviewTests(TestCase):
             response,
             (
                 reverse(
-                    "public_schedule_view",
-                    kwargs={"tournament_code": tournament.code},
+                    "public_schedule_view_token",
+                    kwargs={"public_token": tournament.public_token},
                 )
                 + f"#schedule-{league_schedule.id}"
             ),
@@ -6272,8 +6356,8 @@ class CategoryStageOverviewTests(TestCase):
             response,
             (
                 reverse(
-                    "public_schedule_view",
-                    kwargs={"tournament_code": tournament.code},
+                    "public_schedule_view_token",
+                    kwargs={"public_token": tournament.public_token},
                 )
                 + f"#schedule-{tournament_schedule.id}"
             ),
@@ -6289,8 +6373,8 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(
             response,
             reverse(
-                "tournament_detail",
-                kwargs={"code": tournament.code},
+                "public_tournament_detail",
+                kwargs={"public_token": tournament.public_token},
             ),
         )
         self.assertNotContains(
@@ -6328,8 +6412,8 @@ class CategoryStageOverviewTests(TestCase):
             response_with_return,
             (
                 reverse(
-                    "public_schedule_view",
-                    kwargs={"tournament_code": tournament.code},
+                    "public_schedule_view_token",
+                    kwargs={"public_token": tournament.public_token},
                 )
                 + f"#schedule-{tournament_schedule.id}"
             ),
@@ -6401,8 +6485,8 @@ class CategoryStageOverviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         schedule_url = (
             reverse(
-                "public_schedule_view",
-                kwargs={"tournament_code": tournament.code},
+                "public_schedule_view_token",
+                kwargs={"public_token": tournament.public_token},
             )
             + f"#schedule-{schedule.id}"
         )
@@ -9080,9 +9164,9 @@ class TournamentScheduleBehaviorTests(TestCase):
             response,
             (
                 reverse(
-                    "public_category_results",
+                    "public_category_results_token",
                     kwargs={
-                        "code": self.tournament.code,
+                        "public_token": self.tournament.public_token,
                         "category_id": self.category.id,
                     },
                 )
@@ -9095,9 +9179,9 @@ class TournamentScheduleBehaviorTests(TestCase):
             response,
             (
                 reverse(
-                    "public_category_results",
+                    "public_category_results_token",
                     kwargs={
-                        "code": self.tournament.code,
+                        "public_token": self.tournament.public_token,
                         "category_id": self.category.id,
                     },
                 )

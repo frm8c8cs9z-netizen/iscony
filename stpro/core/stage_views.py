@@ -239,14 +239,14 @@ def category_stage_overview(request, category_id):
     )
 
 
-def public_category_results(request, code, category_id):
-    """一般利用者向けにカテゴリ内の結果入口を表示する。"""
-
-    category = get_object_or_404(
-        Category.objects.select_related("tournament"),
-        id=category_id,
-        tournament__code=code,
+def _public_schedule_url(tournament):
+    return reverse(
+        "public_schedule_view_token",
+        kwargs={"public_token": tournament.public_token},
     )
+
+
+def _render_public_category_results(request, category):
     return_schedule_id = None
     from_schedule = request.GET.get("from_schedule")
     if from_schedule and from_schedule.isdecimal():
@@ -298,7 +298,7 @@ def public_category_results(request, code, category_id):
                 )
                 schedule_url_by_match_id = {
                     schedule.tournament_match_id: (
-                        f"{reverse('public_schedule_view', kwargs={'tournament_code': code})}"
+                        f"{_public_schedule_url(category.tournament)}"
                         f"#schedule-{schedule.id}"
                     )
                     for schedule in schedules
@@ -345,5 +345,32 @@ def public_category_results(request, code, category_id):
             "tournament": category.tournament,
             "stage_rows": stage_rows,
             "return_schedule_id": return_schedule_id,
+            "public_schedule_url": _public_schedule_url(
+                category.tournament,
+            ),
         },
     )
+
+
+def public_category_results(request, code, category_id):
+    """一般利用者向けにカテゴリ内の結果入口を表示する。"""
+
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        id=category_id,
+        tournament__code=code,
+        tournament__is_public=True,
+    )
+    return _render_public_category_results(request, category)
+
+
+def public_category_results_by_token(request, public_token, category_id):
+    """公開トークンからカテゴリ内の結果入口を表示する。"""
+
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        id=category_id,
+        tournament__public_token=public_token,
+        tournament__is_public=True,
+    )
+    return _render_public_category_results(request, category)

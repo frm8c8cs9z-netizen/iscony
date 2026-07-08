@@ -88,6 +88,33 @@ def tournament_detail(request, code):
         {
             "tournament": tournament,
             "categories": categories,
+            "public_mode": False,
+        }
+    )
+
+
+def public_tournament_detail(request, public_token):
+    """公開トークンから一般利用者向けの大会入口を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        public_token=public_token,
+        is_public=True,
+    )
+    categories = Category.objects.filter(
+        tournament=tournament
+    ).order_by(
+        "display_order",
+        "name",
+    )
+
+    return render(
+        request,
+        "core/tournament_detail.html",
+        {
+            "tournament": tournament,
+            "categories": categories,
+            "public_mode": True,
         }
     )
 
@@ -325,16 +352,7 @@ def maintenance_menu(request, code):
     )
 
 
-def public_schedule_view(
-        request,
-        tournament_code
-    ):
-    """一般参加者向けに、操作リンクを出さない進行表を表示する。"""
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=tournament_code
-    )
+def _render_public_schedule(request, tournament):
     block_tables = _schedule_block_tables(tournament)
 
     return render(
@@ -346,6 +364,31 @@ def public_schedule_view(
             "show_block_headings": len(block_tables) > 1,
         }
     )
+
+
+def public_schedule_view(
+        request,
+        tournament_code
+    ):
+    """一般参加者向けに、操作リンクを出さない進行表を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=tournament_code,
+        is_public=True,
+    )
+    return _render_public_schedule(request, tournament)
+
+
+def public_schedule_view_by_token(request, public_token):
+    """公開トークンから一般参加者向け進行表を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        public_token=public_token,
+        is_public=True,
+    )
+    return _render_public_schedule(request, tournament)
 
 
 def _score_text(match):

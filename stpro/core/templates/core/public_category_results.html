@@ -184,12 +184,12 @@
         <p class="subtle-text">{{ tournament.name }}</p>
     </div>
     <div class="action-row">
-        <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
+        <a href="{% url 'public_tournament_detail' tournament.public_token %}">カテゴリ一覧</a>
     </div>
 </div>
 
 <div class="public-result-nav">
-    <a href="{% url 'public_schedule_view' tournament.code %}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}">試合進行表へ</a>
+    <a href="{{ public_schedule_url }}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}">試合進行表へ</a>
 </div>
 
 <div class="public-stage-results">
@@ -256,7 +256,7 @@
                                                     {% if score.schedule %}
                                                         <a
                                                             class="public-schedule-link"
-                                                            href="{% url 'public_schedule_view' tournament.code %}#schedule-{{ score.schedule.id }}"
+                                                            href="{{ public_schedule_url }}#schedule-{{ score.schedule.id }}"
                                                         >
                                                             {% if score.retired_self %}
                                                                 R

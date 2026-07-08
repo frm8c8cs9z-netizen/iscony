@@ -592,3 +592,15 @@
 - 大会構成、参加者、Stage、結果、順位、進行表、リタイア、差し替え履歴、採点票設定などを別大会として取り込める形を検討する。
 - 個人情報の匿名化、送付前確認、アプリ/端末/発生画面/直前操作などのメタ情報を含める案も追記。
 - ドキュメント更新のみのためテストは未実行。
+
+### 公開URLの大会トークン化
+- `Tournament.public_token` を追加し、既存大会にはマイグレーションでランダムな公開トークンを付与するようにした。
+- 公開大会トップ、公開カテゴリ結果、公開進行表を `/public/<token>/...` 形式のURLでも表示できるようにした。
+- 既存の大会コードURLは互換用として残しつつ、公開画面内のカテゴリ一覧、進行表、カテゴリ結果へのリンクはトークンURLへ寄せた。
+- `is_public=False` の大会は、公開トークンURLでも404になるようにした。
+- Django admin の大会一覧/検索で `public_token` を確認できるようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py makemigrations --check --dry-run`
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_uses_configured_cache_timeout core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_cache_can_be_disabled --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 190 tests OK。
