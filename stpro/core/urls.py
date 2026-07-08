@@ -262,6 +262,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/public-url-qr/",
+        pdf_views.public_tournament_qr_pdf,
+        name="public_tournament_qr_pdf",
+    ),
+
+    path(
         "tournament/<str:code>/score-sheets/league/",
         pdf_views.league_score_sheets_pdf,
         name="league_score_sheets_pdf",

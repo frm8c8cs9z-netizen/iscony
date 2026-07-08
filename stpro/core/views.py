@@ -700,12 +700,20 @@ def tournament_settings(request, code):
     else:
         form = TournamentSettingsForm(instance=tournament)
 
+    public_url = request.build_absolute_uri(
+        reverse(
+            "public_tournament_detail",
+            kwargs={"public_token": tournament.public_token},
+        )
+    )
+
     return render(
         request,
         "core/tournament_settings.html",
         {
             "tournament": tournament,
             "form": form,
+            "public_url": public_url,
         },
     )
 

@@ -608,3 +608,12 @@
 ### DB操作: 公開URLトークンマイグレーション適用
 - `./venv/bin/python stpro/manage.py migrate` を実行し、`core.0033_tournament_public_token` を適用。
 - 既存大会 6 件に `public_token` が付与され、空トークンが 0 件であることを確認。
+
+### 大会設定画面への公開URL/QR追加
+- 大会設定画面に、トークン付きの一般公開URL、公開画面を開くリンク、QR印刷リンク、公開トークン表示を追加。
+- 一般公開URLのQRコードをA4 PDFで出力する `public_tournament_qr_pdf` を追加。
+- QR PDFは既存依存の `reportlab` で生成し、追加ライブラリなしで印刷できるようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.MaintenanceMenuTests.test_public_tournament_qr_pdf_outputs_printable_pdf --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 191 tests OK。

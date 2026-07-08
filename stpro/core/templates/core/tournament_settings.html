@@ -11,6 +11,25 @@
     個別のトーナメントで上書きしない限り、この設定が使われます。
 </p>
 
+<h3>一般公開URL</h3>
+
+<table border="1">
+    <tr>
+        <th>公開URL</th>
+        <td>
+            <input type="text" value="{{ public_url }}" readonly size="80">
+            <br>
+            <a href="{{ public_url }}" target="_blank">公開画面を開く</a>
+            /
+            <a href="{% url 'public_tournament_qr_pdf' tournament.code %}" target="_blank">QR印刷</a>
+        </td>
+    </tr>
+    <tr>
+        <th>公開トークン</th>
+        <td>{{ tournament.public_token }}</td>
+    </tr>
+</table>
+
 <form method="post">
     {% csrf_token %}
 

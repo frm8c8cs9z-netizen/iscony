@@ -10,10 +10,14 @@ import io
 import os
 
 from django.conf import settings
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from pypdf import PdfReader, PdfWriter
+from reportlab.graphics import renderPDF
+from reportlab.graphics.barcode import qr
+from reportlab.graphics.shapes import Drawing
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -37,6 +41,81 @@ from .utils import get_round_label
 
 
 SCORE_SHEET_BASE_FONT = "NotoSansJP"
+
+
+def public_tournament_qr_pdf(request, code):
+    """一般公開URLのQRコードを印刷用PDFとして出力する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    public_url = request.build_absolute_uri(
+        reverse(
+            "public_tournament_detail",
+            kwargs={"public_token": tournament.public_token},
+        )
+    )
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    _, page_height = A4
+
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(24 * mm, page_height - 28 * mm, "Public tournament URL")
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(24 * mm, page_height - 37 * mm, f"Code: {tournament.code}")
+
+    qr_widget = qr.QrCodeWidget(public_url)
+    bounds = qr_widget.getBounds()
+    qr_width = bounds[2] - bounds[0]
+    qr_height = bounds[3] - bounds[1]
+    size = 58 * mm
+    drawing = Drawing(
+        size,
+        size,
+        transform=[
+            size / qr_width,
+            0,
+            0,
+            size / qr_height,
+            0,
+            0,
+        ],
+    )
+    drawing.add(qr_widget)
+    renderPDF.draw(
+        drawing,
+        pdf,
+        24 * mm,
+        page_height - 105 * mm,
+    )
+
+    text = pdf.beginText(24 * mm, page_height - 118 * mm)
+    text.setFont("Helvetica", 9)
+    for line in _wrap_ascii_text(public_url, 95):
+        text.textLine(line)
+    pdf.drawText(text)
+
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/pdf",
+    )
+    response["Content-Disposition"] = (
+        f'inline; filename="public_url_qr_{tournament.code}.pdf"'
+    )
+    return response
+
+
+def _wrap_ascii_text(value, line_length):
+    return [
+        value[index:index + line_length]
+        for index in range(0, len(value), line_length)
+    ]
 
 
 def _scope_counts(schedules, total_matches):

@@ -5807,6 +5807,39 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "優勝者表示の概念図")
         self.assertContains(response, "片側・横書き")
         self.assertContains(response, "左右・縦書き")
+        self.assertContains(response, "一般公開URL")
+        self.assertContains(
+            response,
+            reverse(
+                "public_tournament_detail",
+                kwargs={"public_token": tournament.public_token},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "public_tournament_qr_pdf",
+                kwargs={"code": tournament.code},
+            ),
+        )
+
+    def test_public_tournament_qr_pdf_outputs_printable_pdf(self):
+        tournament = Tournament.objects.create(
+            name="公開QR大会",
+            code="PUBLICQR",
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_tournament_qr_pdf",
+                kwargs={"code": tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        reader = PdfReader(io.BytesIO(response.content))
+        self.assertEqual(len(reader.pages), 1)
 
 
 class ReceptionMatchSearchTests(TestCase):
