@@ -741,3 +741,11 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 自動不戦通過試合の進行表完了同期
+- トーナメントで両者リタイアなどにより後続試合が片側だけになり、勝者が自動決定された場合、その後続試合に紐づく進行表も `called/started/finished=True` に同期するようにした。
+- ケンコーカップ2026 / 女子A / 5-6位L-3位 / 女子A㉓ の実データを同期し、Schedule 3059 が `False/False/False` から `True/True/True` になったことを確認。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentAdvancementTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 196 tests OK。

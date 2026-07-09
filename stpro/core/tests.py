@@ -364,6 +364,52 @@ class TournamentAdvancementTests(TestCase):
         self.assertIsNone(final_match.pair1_games)
         self.assertIsNone(final_match.pair2_games)
 
+    def test_double_retirement_finishes_schedule_for_auto_winner_match(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            match_games=7,
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=None,
+            pair2=self.entries[2],
+            match_games=7,
+        )
+        first_match.next_match = final_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1",
+        )
+        schedule = Schedule.objects.create(
+            court=court,
+            order=1,
+            tournament_match=final_match,
+        )
+
+        error = save_tournament_retirement(
+            first_match,
+            "both",
+        )
+
+        self.assertIsNone(error)
+        final_match.refresh_from_db()
+        schedule.refresh_from_db()
+
+        self.assertEqual(final_match.winner, self.entries[2])
+        self.assertTrue(schedule.called)
+        self.assertTrue(schedule.started)
+        self.assertTrue(schedule.finished)
+
     def test_tournament_double_retirement_clears_previously_advanced_winner(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,

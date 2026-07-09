@@ -1233,6 +1233,18 @@ def advance_tournament_winner(
     match.next_match.save()
 
 
+def mark_tournament_match_schedules_finished(match):
+    """トーナメント試合が自動確定したとき、進行表も完了へ同期する。"""
+
+    Schedule.objects.filter(
+        tournament_match=match,
+    ).update(
+        called=True,
+        started=True,
+        finished=True,
+    )
+
+
 def advance_tournament_single_entry_winners(match):
     """片側だけが残った通常試合を不戦通過として後続へ流す。"""
 
@@ -1261,6 +1273,8 @@ def advance_tournament_single_entry_winners(match):
         match.save(
             update_fields=["winner"]
         )
+
+    mark_tournament_match_schedules_finished(match)
 
     advance_tournament_winner(
         match,
