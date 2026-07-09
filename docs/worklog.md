@@ -723,3 +723,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 公開カテゴリ結果画面の下部ナビ追加
+- 公開カテゴリ結果画面の下部にも、上部と同じ `カテゴリ一覧` / `試合進行表` ナビを追加。
+- 進行表から来た場合は下部でも `元の試合へ戻る` と表示し、元の `#schedule-...` に戻れるようにした。
+- 下部ナビは固定表示にせず、ページ末尾の通常導線として配置。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。

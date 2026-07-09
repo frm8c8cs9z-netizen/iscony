@@ -6608,6 +6608,7 @@ class CategoryStageOverviewTests(TestCase):
         )
         self.assertContains(response, 'class="secondary"')
         self.assertContains(response, 'class="primary"')
+        self.assertContains(response, 'class="public-result-nav bottom"')
         self.assertContains(response, "カテゴリ一覧")
         self.assertNotContains(
             response,

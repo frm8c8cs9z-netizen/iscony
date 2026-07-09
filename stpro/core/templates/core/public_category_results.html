@@ -152,6 +152,13 @@
         background: #fff;
     }
 
+    .public-result-nav.bottom {
+        position: static;
+        margin: 28px 0 0;
+        padding-top: 16px;
+        border-top: 1px solid #d8e0ea;
+    }
+
     .public-result-nav a {
         display: inline-flex;
         align-items: center;
@@ -498,6 +505,25 @@
     {% empty %}
         <p>試合結果がありません。</p>
     {% endfor %}
+</div>
+
+<div class="public-result-nav bottom">
+    <a
+        class="secondary"
+        href="{% url 'public_tournament_detail' tournament.public_token %}"
+    >
+        カテゴリ一覧
+    </a>
+    <a
+        class="primary"
+        href="{{ public_schedule_url }}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}"
+    >
+        {% if return_schedule_id %}
+            元の試合へ戻る
+        {% else %}
+            試合進行表
+        {% endif %}
+    </a>
 </div>
 
 {% endblock %}
