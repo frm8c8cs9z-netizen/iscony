@@ -732,3 +732,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 公開進行表の下部カテゴリ一覧ボタン
+- 一般参加者向け進行表の下部にも `カテゴリ一覧` ボタンを追加。
+- 上部ナビと同じ見た目にしつつ、下部は固定表示にせずページ末尾の通常導線として配置。
+- 上部/下部のカテゴリ一覧ボタンにホバー/フォーカス時の背景と枠線変化を追加。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。

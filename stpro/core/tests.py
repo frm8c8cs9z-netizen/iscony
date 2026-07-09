@@ -9391,6 +9391,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, f'id="schedule-{league_schedule.id}"')
         self.assertContains(response, f'id="schedule-{tournament_schedule.id}"')
         self.assertContains(response, 'class="public-schedule-nav"')
+        self.assertContains(response, 'class="public-schedule-nav bottom"')
         self.assertContains(
             response,
             reverse(

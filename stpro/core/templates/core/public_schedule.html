@@ -34,6 +34,20 @@
         font-weight: bold;
     }
 
+    .public-schedule-nav.bottom {
+        position: static;
+        margin: 28px 0 0;
+        padding-top: 16px;
+        border-top: 1px solid #d8e0ea;
+    }
+
+    .public-schedule-nav a:hover,
+    .public-schedule-nav a:focus {
+        background: #f7fbff;
+        border-color: #1565c0;
+        outline: none;
+    }
+
     .public-schedule-card-link {
         display: block;
         color: inherit;
@@ -322,5 +336,11 @@
 {% empty %}
     <p>進行表はまだ登録されていません。</p>
 {% endfor %}
+
+<div class="public-schedule-nav bottom">
+    <a href="{% url 'public_tournament_detail' tournament.public_token %}">
+        カテゴリ一覧
+    </a>
+</div>
 
 {% endblock %}
