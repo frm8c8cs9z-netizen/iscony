@@ -9286,6 +9286,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             group=group,
             pair_code="L1",
             display_order=1,
+            organization="予選クラブ1",
             player1_name="予選1A",
             player2_name="予選1B",
         )
@@ -9294,6 +9295,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             group=group,
             pair_code="L2",
             display_order=2,
+            organization="予選クラブ2",
             player1_name="予選2A",
             player2_name="予選2B",
         )
@@ -9376,6 +9378,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_public_schedule_view_is_read_only(self):
+        self.entry1.organization = "本戦クラブ1"
+        self.entry1.save(update_fields=["organization"])
+        self.entry2.organization = "本戦クラブ2"
+        self.entry2.save(update_fields=["organization"])
         group = Group.objects.create(
             category=self.category,
             name="A",
@@ -9385,6 +9391,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             group=group,
             pair_code="L1",
             display_order=1,
+            organization="予選クラブ1",
             player1_name="予選1A",
             player2_name="予選1B",
         )
@@ -9393,6 +9400,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             group=group,
             pair_code="L2",
             display_order=2,
+            organization="予選クラブ2",
             player1_name="予選2A",
             player2_name="予選2B",
         )
@@ -9434,6 +9442,11 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "1 第2試合")
         self.assertContains(response, "Aリーグ")
         self.assertContains(response, "1回戦1")
+        self.assertContains(response, "（予選クラブ1）")
+        self.assertContains(response, "（予選クラブ2）")
+        self.assertContains(response, "（本戦クラブ1）")
+        self.assertContains(response, "（本戦クラブ2）")
+        self.assertContains(response, 'class="schedule-entry-org"')
         self.assertContains(response, f'id="schedule-{league_schedule.id}"')
         self.assertContains(response, f'id="schedule-{tournament_schedule.id}"')
         self.assertContains(response, 'class="public-schedule-nav"')

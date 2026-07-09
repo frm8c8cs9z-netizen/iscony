@@ -127,6 +127,23 @@
         font-weight: 600;
     }
 
+    .public-schedule-card-link .schedule-pair-main {
+        min-width: 0;
+    }
+
+    .public-schedule-card-link .schedule-entry-name {
+        display: block;
+    }
+
+    .public-schedule-card-link .schedule-entry-org {
+        color: #667085;
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 500;
+        line-height: 1.25;
+        margin-top: 1px;
+    }
+
     .public-schedule-card-link .schedule-pair-line strong {
         background: #f0f3f6;
         border-radius: 4px;
@@ -253,14 +270,32 @@
                                             </div>
 
                                             <div class="schedule-pair-line">
-                                                <span>{{ match.pair1.code }} {{ match.pair1.short_name }}</span>
+                                                <span class="schedule-pair-main">
+                                                    <span class="schedule-entry-name">
+                                                        {{ match.pair1.code }} {{ match.pair1.short_name }}
+                                                    </span>
+                                                    {% if match.pair1.display_organization %}
+                                                        <span class="schedule-entry-org">
+                                                            （{{ match.pair1.display_organization }}）
+                                                        </span>
+                                                    {% endif %}
+                                                </span>
                                                 {% if match.pair1_games != None and match.pair2_games != None %}
                                                     <strong>{{ match.pair1_games }}</strong>
                                                 {% endif %}
                                             </div>
                                             <div class="schedule-vs">vs</div>
                                             <div class="schedule-pair-line">
-                                                <span>{{ match.pair2.code }} {{ match.pair2.short_name }}</span>
+                                                <span class="schedule-pair-main">
+                                                    <span class="schedule-entry-name">
+                                                        {{ match.pair2.code }} {{ match.pair2.short_name }}
+                                                    </span>
+                                                    {% if match.pair2.display_organization %}
+                                                        <span class="schedule-entry-org">
+                                                            （{{ match.pair2.display_organization }}）
+                                                        </span>
+                                                    {% endif %}
+                                                </span>
                                                 {% if match.pair1_games != None and match.pair2_games != None %}
                                                     <strong>{{ match.pair2_games }}</strong>
                                                 {% endif %}
@@ -280,9 +315,16 @@
                                             </div>
 
                                             <div class="schedule-pair-line">
-                                                <span>
+                                                <span class="schedule-pair-main">
                                                     {% if match.pair1 %}
-                                                        {{ match.pair1.code }} {{ match.pair1.short_name }}
+                                                        <span class="schedule-entry-name">
+                                                            {{ match.pair1.code }} {{ match.pair1.short_name }}
+                                                        </span>
+                                                        {% if match.pair1.display_organization %}
+                                                            <span class="schedule-entry-org">
+                                                                （{{ match.pair1.display_organization }}）
+                                                            </span>
+                                                        {% endif %}
                                                     {% else %}
                                                         未確定
                                                     {% endif %}
@@ -290,9 +332,16 @@
                                             </div>
                                             <div class="schedule-vs">vs</div>
                                             <div class="schedule-pair-line">
-                                                <span>
+                                                <span class="schedule-pair-main">
                                                     {% if match.pair2 %}
-                                                        {{ match.pair2.code }} {{ match.pair2.short_name }}
+                                                        <span class="schedule-entry-name">
+                                                            {{ match.pair2.code }} {{ match.pair2.short_name }}
+                                                        </span>
+                                                        {% if match.pair2.display_organization %}
+                                                            <span class="schedule-entry-org">
+                                                                （{{ match.pair2.display_organization }}）
+                                                            </span>
+                                                        {% endif %}
                                                     {% else %}
                                                         未確定
                                                     {% endif %}

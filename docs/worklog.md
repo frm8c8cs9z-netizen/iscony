@@ -749,3 +749,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentAdvancementTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 196 tests OK。
+
+### 公開進行表カードへの所属表示
+- 一般参加者向け進行表の試合カードで、選手名の下に所属を小さく `（所属）` 形式で表示するようにした。
+- リーグ枠とトーナメント枠の両方で `display_organization` がある場合のみ表示。
+- スコア表示がある場合でも崩れにくいよう、選手名/所属部分を小さなブロックとして整理。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only core.tests.TournamentScheduleBehaviorTests.test_tournament_bracket_detail_places_single_vertical_champion_on_advance_line --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 196 tests OK。
