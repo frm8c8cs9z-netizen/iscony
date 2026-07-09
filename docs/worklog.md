@@ -714,3 +714,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 公開進行表カードの視認性調整
+- セル内に文言を増やさず、試合カードの余白、枠線、左線、ホバー背景で押せる見た目を調整。
+- カテゴリ名を強い行にし、リーグ/トーナメント名・試合名・ステージ名は補助行として表示するよう整理。
+- 呼出済、試合中、完了はカード左線の色でも状態が分かるようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。
