@@ -9389,6 +9389,14 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "1回戦1")
         self.assertContains(response, f'id="schedule-{league_schedule.id}"')
         self.assertContains(response, f'id="schedule-{tournament_schedule.id}"')
+        self.assertContains(response, 'class="public-schedule-nav"')
+        self.assertContains(
+            response,
+            reverse(
+                "public_tournament_detail",
+                kwargs={"public_token": self.tournament.public_token},
+            ),
+        )
         self.assertContains(response, 'class="schedule-grid-table"')
         self.assertContains(response, 'class="table-wrapper schedule-table-wrapper"')
         self.assertNotContains(response, "未入力")

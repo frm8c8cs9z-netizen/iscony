@@ -704,3 +704,13 @@
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。
+
+### 公開進行表上部のカテゴリ一覧ボタン
+- 一般参加者向け進行表の上部に、公開カテゴリ結果画面と同じトーンの `カテゴリ一覧` ボタンを配置。
+- 既存の見出し右側リンクは外し、見出し直下の押しやすいナビとして表示するようにした。
+- スマホではボタンが横幅いっぱいに近い形で表示されるようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 195 tests OK。

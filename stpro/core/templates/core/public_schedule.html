@@ -8,6 +8,32 @@
         margin-bottom: 16px;
     }
 
+    .public-schedule-nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 10px 0;
+        margin-bottom: 16px;
+        background: #fff;
+    }
+
+    .public-schedule-nav a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        min-width: 132px;
+        padding: 4px 14px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #fff;
+        color: #1565c0;
+        font-weight: bold;
+    }
+
     .public-schedule-card-link {
         display: block;
         color: inherit;
@@ -28,6 +54,12 @@
         outline: 2px solid #1565c0;
         outline-offset: 2px;
     }
+
+    @media (max-width: 640px) {
+        .public-schedule-nav a {
+            flex: 1 1 100%;
+        }
+    }
 </style>
 
 <div class="page-heading">
@@ -35,9 +67,12 @@
         <h2>{{ tournament.name }} 試合進行</h2>
         <p class="subtle-text">一般参加者向け</p>
     </div>
-    <div class="action-row">
-        <a href="{% url 'public_tournament_detail' tournament.public_token %}">カテゴリ一覧</a>
-    </div>
+</div>
+
+<div class="public-schedule-nav">
+    <a href="{% url 'public_tournament_detail' tournament.public_token %}">
+        カテゴリ一覧
+    </a>
 </div>
 
 <p class="public-schedule-note">
