@@ -11,27 +11,22 @@
     .public-schedule-card-link {
         display: block;
         color: inherit;
+        cursor: pointer;
         text-decoration: none;
+    }
+
+    .public-schedule-card-link .schedule-match-card {
+        transition: background-color 0.12s ease, outline-color 0.12s ease;
+    }
+
+    .public-schedule-card-link:hover .schedule-match-card {
+        background: #f7fbff;
     }
 
     .public-schedule-card-link:hover .schedule-match-card,
     .public-schedule-card-link:focus .schedule-match-card {
         outline: 2px solid #1565c0;
         outline-offset: 2px;
-    }
-
-    .public-schedule-card-link:hover .schedule-result-link-label,
-    .public-schedule-card-link:focus .schedule-result-link-label {
-        text-decoration: underline;
-    }
-
-    .schedule-result-link-label {
-        border-top: 1px solid #dbe5f0;
-        color: #1565c0;
-        font-weight: bold;
-        margin-top: 8px;
-        padding-top: 7px;
-        text-align: right;
     }
 </style>
 
@@ -194,10 +189,6 @@
                                                 </div>
                                             {% endif %}
                                         {% endif %}
-
-                                        <div class="schedule-result-link-label">
-                                            カテゴリ結果を見る
-                                        </div>
                                     </div>
                                     {% if schedule.is_round_robin or schedule.is_tournament %}
                                         </a>

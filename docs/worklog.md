@@ -697,3 +697,10 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 195 tests OK。
+
+### 公開進行表のセル内リンク文言取り下げ
+- `カテゴリ結果を見る` を各試合カードへ表示する案は、セルごとに文言が増えてしつこく見えるため取り下げ。
+- セル全体クリックは維持し、リンク感はカードのホバー/フォーカス時の背景・アウトラインで控えめに示す方針へ変更。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
