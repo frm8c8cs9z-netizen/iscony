@@ -5804,7 +5804,7 @@ class MaintenanceMenuTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "当日運営")
-        self.assertContains(response, "受付・結果入力")
+        self.assertContains(response, "試合受付・結果入力")
         self.assertContains(response, "採点票出力")
         self.assertContains(response, "Stage・結果反映")
         self.assertContains(response, "大会準備")
@@ -6336,7 +6336,7 @@ class ReceptionMatchSearchTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "受付・結果入力")
+        self.assertContains(response, "試合受付・結果入力")
         self.assertContains(response, "カテゴリ + 番号で探す")
         self.assertContains(response, "コート + 第何試合で探す")
 

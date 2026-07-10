@@ -638,7 +638,7 @@ def _search_matches_by_schedule(tournament, court, order):
 
 
 def reception_match_search(request, code):
-    """受付でスコアシートからリーグ/トーナメント試合を探す。"""
+    """試合受付でスコアシートからリーグ/トーナメント試合を探す。"""
 
     tournament = get_object_or_404(
         Tournament,

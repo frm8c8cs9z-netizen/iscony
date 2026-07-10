@@ -123,7 +123,7 @@ class ExtraRoundRobinMatchForm(forms.Form):
 
 
 class ReceptionMatchSearchForm(forms.Form):
-    """当日受付でスコアシートから試合を探すためのフォーム。"""
+    """当日試合受付でスコアシートから試合を探すためのフォーム。"""
 
     SEARCH_BY_ENTRY = "entry"
     SEARCH_BY_SCHEDULE = "schedule"
