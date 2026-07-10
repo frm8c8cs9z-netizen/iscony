@@ -881,6 +881,10 @@
 - 勝敗セルの見た目と `score-chip` 表示も揃え、管理側と公開側の見た目を合わせた。
 - リーグ順位は勝数だけで止めず、`勝数 → ゲーム差 → 得ゲーム数` の順で一意に決まる場合は自動で `rank` を入れるようにした。
 - 勝数が同じ組み合わせはこれまで通り補助表を出し続けるので、運営の確認導線は維持している。
+
+### 同率順位補助表の順位表示
+- 同率順位決定補助表の右端に順位列を追加し、確定済みの `rank` は空白にせず表示するようにした。
+- まだ決まらない順位は空白のままにして、手入力前提の運用を壊さないようにしている。
 - 確認:
   - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_group_ranking_can_be_auto_assigned_by_game_diff core.tests.RoundRobinMeetingTests.test_category_detail_renders_tie_table_in_round_robin_style core.tests.CategoryStageOverviewTests.test_public_category_results_renders_tie_table_in_round_robin_style core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only --keepdb`
   - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_category_detail_can_disable_league_score_colors core.tests.CategoryStageOverviewTests.test_public_category_results_can_disable_league_score_colors --keepdb`

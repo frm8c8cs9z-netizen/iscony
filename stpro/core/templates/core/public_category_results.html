@@ -428,6 +428,7 @@
                                     <th class="rr-stat-col rr-header">得</th>
                                     <th class="rr-stat-col rr-header">失</th>
                                     <th class="rr-stat-col rr-header">差</th>
+                                    <th class="rr-stat-col rr-header">順位</th>
                                 </tr>
                                 {% for tie_row in tie_table.rows %}
                                     <tr>
@@ -455,6 +456,11 @@
                                         <td class="rr-stat-col">{{ tie_row.stat.games_won }}</td>
                                         <td class="rr-stat-col">{{ tie_row.stat.games_lost }}</td>
                                         <td class="rr-stat-col">{{ tie_row.stat.game_diff }}</td>
+                                        <td class="rr-stat-col">
+                                            {% if tie_row.ranking and tie_row.ranking.rank != None %}
+                                                {{ tie_row.ranking.rank }}
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                 {% endfor %}
                             </table>

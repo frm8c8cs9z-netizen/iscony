@@ -250,6 +250,10 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
             ).select_related(
                 "pair"
             )
+            ranking_map = {
+                ranking.pair_id: ranking
+                for ranking in rankings
+            }
 
             wins_map = {}
 
@@ -385,6 +389,7 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
                         ),
                         "scores": row_scores,
                         "stat": tie_stats[row_pair.id],
+                        "ranking": ranking_map.get(row_pair.id),
                     })
 
                 tie_tables.append({

@@ -2139,6 +2139,10 @@ class RoundRobinMeetingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("同率順位決定補助表", response.content.decode())
         self.assertGreaterEqual(
+            response.content.decode().count('rr-stat-col rr-header">順位'),
+            2,
+        )
+        self.assertGreaterEqual(
             response.content.decode().count('class="round-robin-table"'),
             2,
         )
@@ -6953,6 +6957,10 @@ class CategoryStageOverviewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("同率順位決定補助表", response.content.decode())
+        self.assertGreaterEqual(
+            response.content.decode().count('rr-stat-col rr-header">順位'),
+            2,
+        )
         self.assertGreaterEqual(
             response.content.decode().count('class="round-robin-table"'),
             2,
