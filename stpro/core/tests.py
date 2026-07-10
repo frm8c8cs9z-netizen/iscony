@@ -76,6 +76,37 @@ from .snapshot_services import (
 )
 
 
+def create_league_entry_with_participant(
+    *,
+    category,
+    group,
+    pair_code,
+    display_order,
+    player1_name,
+    player2_name,
+    organization="",
+):
+    participant = Participant.objects.create(
+        category=category,
+        entry_code=pair_code,
+        organization=organization,
+        player1_name=player1_name,
+        player2_name=player2_name,
+        display_order=display_order,
+    )
+
+    return LeagueEntry.objects.create(
+        category=category,
+        group=group,
+        participant=participant,
+        pair_code=pair_code,
+        display_order=display_order,
+        organization="",
+        player1_name="",
+        player2_name="",
+    )
+
+
 class EntryDisplayHelperTests(TestCase):
 
     def setUp(self):
@@ -106,7 +137,7 @@ class EntryDisplayHelperTests(TestCase):
         )
 
     def test_entry_display_helper_accepts_league_entry(self):
-        entry = LeagueEntry.objects.create(
+        entry = create_league_entry_with_participant(
             category=self.category,
             group=self.group,
             pair_code="A1",
@@ -1795,7 +1826,7 @@ class RoundRobinMeetingTests(TestCase):
             stage=self.stage,
             name="A",
         )
-        self.entry1 = LeagueEntry.objects.create(
+        self.entry1 = create_league_entry_with_participant(
             category=self.category,
             group=self.group,
             pair_code="1",
@@ -1803,7 +1834,7 @@ class RoundRobinMeetingTests(TestCase):
             player1_name="選手1A",
             player2_name="選手1B",
         )
-        self.entry2 = LeagueEntry.objects.create(
+        self.entry2 = create_league_entry_with_participant(
             category=self.category,
             group=self.group,
             pair_code="2",
@@ -1885,10 +1916,10 @@ class RoundRobinMeetingTests(TestCase):
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
         self.tournament.save()
-        self.entry1.player1_name = "山田　太郎"
-        self.entry1.player2_name = "佐藤　次郎"
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.player1_name = "山田　太郎"
+        self.entry1.participant.player2_name = "佐藤　次郎"
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         RoundRobinMatch.objects.create(
             group=self.group,
             pair1=self.entry1,
@@ -1948,10 +1979,10 @@ class RoundRobinMeetingTests(TestCase):
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
         self.tournament.save()
-        self.entry1.player1_name = "山田　太郎"
-        self.entry1.player2_name = "佐藤　次郎"
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.player1_name = "山田　太郎"
+        self.entry1.participant.player2_name = "佐藤　次郎"
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         RoundRobinMatch.objects.create(
             group=self.group,
             pair1=self.entry1,
@@ -6172,7 +6203,7 @@ class ReceptionMatchSearchTests(TestCase):
             stage=self.league_stage,
             name="A",
         )
-        self.league_entry1 = LeagueEntry.objects.create(
+        self.league_entry1 = create_league_entry_with_participant(
             category=self.category,
             group=self.group,
             pair_code="1",
@@ -6180,7 +6211,7 @@ class ReceptionMatchSearchTests(TestCase):
             player1_name="予選1A",
             player2_name="予選1B",
         )
-        self.league_entry2 = LeagueEntry.objects.create(
+        self.league_entry2 = create_league_entry_with_participant(
             category=self.category,
             group=self.group,
             pair_code="2",
@@ -6372,7 +6403,7 @@ class CategoryStageOverviewTests(TestCase):
             stage=league_stage,
             name="A",
         )
-        LeagueEntry.objects.create(
+        create_league_entry_with_participant(
             category=category,
             group=group,
             pair_code="A1",
@@ -6602,7 +6633,7 @@ class CategoryStageOverviewTests(TestCase):
             stage=league_stage,
             name="A",
         )
-        entry1 = LeagueEntry.objects.create(
+        entry1 = create_league_entry_with_participant(
             category=category,
             group=group,
             pair_code="A1",
@@ -6610,7 +6641,7 @@ class CategoryStageOverviewTests(TestCase):
             player1_name="予選1",
             player2_name="予選2",
         )
-        entry2 = LeagueEntry.objects.create(
+        entry2 = create_league_entry_with_participant(
             category=category,
             group=group,
             pair_code="A2",
@@ -9359,7 +9390,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             category=self.category,
             name="A",
         )
-        league_entry1 = LeagueEntry.objects.create(
+        league_entry1 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L1",
@@ -9368,7 +9399,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             player1_name="予選1A",
             player2_name="予選1B",
         )
-        league_entry2 = LeagueEntry.objects.create(
+        league_entry2 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L2",
@@ -9464,7 +9495,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             category=self.category,
             name="A",
         )
-        league_entry1 = LeagueEntry.objects.create(
+        league_entry1 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L1",
@@ -9473,7 +9504,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             player1_name="予選1A",
             player2_name="予選1B",
         )
-        league_entry2 = LeagueEntry.objects.create(
+        league_entry2 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L2",
@@ -9598,7 +9629,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             category=self.category,
             name="A",
         )
-        league_entry1 = LeagueEntry.objects.create(
+        league_entry1 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L1",
@@ -9606,7 +9637,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             player1_name="変更前1A",
             player2_name="変更前1B",
         )
-        league_entry2 = LeagueEntry.objects.create(
+        league_entry2 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L2",
@@ -9632,8 +9663,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         first_response = self.client.get(url)
         self.assertContains(first_response, "変更前1A")
 
-        league_entry1.player1_name = "変更後1A"
-        league_entry1.save(update_fields=["player1_name"])
+        league_entry1.participant.player1_name = "変更後1A"
+        league_entry1.participant.save(update_fields=["player1_name"])
 
         cached_response = self.client.get(url)
         self.assertContains(cached_response, "変更前1A")
@@ -9652,7 +9683,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             category=self.category,
             name="A",
         )
-        league_entry1 = LeagueEntry.objects.create(
+        league_entry1 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L1",
@@ -9660,7 +9691,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             player1_name="無効前1A",
             player2_name="無効前1B",
         )
-        league_entry2 = LeagueEntry.objects.create(
+        league_entry2 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L2",
@@ -9686,8 +9717,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         first_response = self.client.get(url)
         self.assertContains(first_response, "無効前1A")
 
-        league_entry1.player1_name = "無効後1A"
-        league_entry1.save(update_fields=["player1_name"])
+        league_entry1.participant.player1_name = "無効後1A"
+        league_entry1.participant.save(update_fields=["player1_name"])
 
         second_response = self.client.get(url)
         self.assertContains(second_response, "無効後1A")
@@ -9699,7 +9730,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             category=self.category,
             name="A",
         )
-        league_entry1 = LeagueEntry.objects.create(
+        league_entry1 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L1",
@@ -9707,7 +9738,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             player1_name="予選1A",
             player2_name="予選1B",
         )
-        league_entry2 = LeagueEntry.objects.create(
+        league_entry2 = create_league_entry_with_participant(
             category=self.category,
             group=group,
             pair_code="L2",

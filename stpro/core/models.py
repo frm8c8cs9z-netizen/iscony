@@ -552,14 +552,7 @@ class LeagueEntry(models.Model):
         if source:
             return source.label
 
-        if not self.player1_name and not self.player2_name:
-            return "未定"
-
-        return (
-            f"{self.player1_name}"
-            f"・"
-            f"{self.player2_name}"
-        )
+        return "未定"
     
     @property
     def display_player1_name(self):
@@ -575,7 +568,7 @@ class LeagueEntry(models.Model):
         if source:
             return source.label
 
-        return self.player1_name
+        return "未定"
 
     @property
     def display_player2_name(self):
@@ -591,7 +584,7 @@ class LeagueEntry(models.Model):
         if source:
             return ""
 
-        return self.player2_name
+        return ""
 
     @property
     def short_name(self):
@@ -608,29 +601,7 @@ class LeagueEntry(models.Model):
             if source:
                 return source.label
 
-            player1_name = self.player1_name
-            player2_name = self.player2_name
-
-        def family_name(name):
-
-            if not name:
-                return ""
-
-            # 全角スペース優先
-            if "　" in name:
-                return name.split("　")[0]
-
-            # 半角スペース
-            if " " in name:
-                return name.split(" ")[0]
-
-            return name
-
-        return (
-            f"{family_name(player1_name)}"
-            f"・"
-            f"{family_name(player2_name)}"
-        )
+            return "未定"
 
     @property
     def display_organization(self):
@@ -638,7 +609,7 @@ class LeagueEntry(models.Model):
         if self.participant:
             return self.participant.organization
 
-        return self.organization
+        return ""
 
     def __str__(self):
         return (

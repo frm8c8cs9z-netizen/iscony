@@ -795,3 +795,15 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategorySnapshotTests core.tests.AdvancementSourceModelTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 199 tests OK。
+
+### LeagueEntry 表示フォールバックの旧列依存を削除
+- `LeagueEntry.display_name` / `display_player1_name` / `display_player2_name` / `short_name` / `display_organization` が、`participant` なし・進出元なしの場合に旧表示列へフォールバックしないように変更。
+- `participant` がある場合は `Participant`、進出元がある場合は `AdvancementSource` を正とし、それ以外は `未定` または空表示に統一。
+- テストでリーグ枠に直接名前を入れていた主要箇所を、`Participant` を作成して `LeagueEntry.participant` に紐づける形へ更新。
+- `LeagueEntry.short_name` が `Participant.short_name` を使うようになったため、進行表テーブル作成時に `pair1/2__participant` を `select_related` し、公開進行表のN+1を防ぐようにした。
+- これで `LeagueEntry` の表示ロジックは旧3列に依存しなくなり、残作業はDB列削除migrationと、その前後の実データ・テストデータ整理。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.EntryDisplayHelperTests core.tests.ReceptionMatchSearchTests core.tests.RoundRobinMeetingTests core.tests.CategoryStageOverviewTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_uses_configured_cache_timeout core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_cache_can_be_disabled core.tests.TournamentScheduleBehaviorTests.test_schedule_block_tables_do_not_query_per_cell --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 199 tests OK。
