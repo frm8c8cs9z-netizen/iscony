@@ -200,8 +200,12 @@ class LeagueEntryAdmin(admin.ModelAdmin):
 
     search_fields = (
         "pair_code",
-        "player1_name",
-        "player2_name",
+        "participant__entry_code",
+        "participant__organization",
+        "participant__player1_name",
+        "participant__player2_name",
+        "advancement_source__source_group__name",
+        "advancement_source__source_match__match_code",
     )
 
     list_filter = (
@@ -232,17 +236,11 @@ class LeagueEntryAdmin(admin.ModelAdmin):
 
     @admin.display(description="選手1")
     def display_player1_name(self, obj):
-        if obj.participant:
-            return obj.participant.player1_name
-
-        return obj.player1_name
+        return obj.display_player1_name
 
     @admin.display(description="選手2")
     def display_player2_name(self, obj):
-        if obj.participant:
-            return obj.participant.player2_name
-
-        return obj.player2_name
+        return obj.display_player2_name
 
 
 # =========================================================

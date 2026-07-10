@@ -2719,6 +2719,53 @@ class CategorySnapshotTests(TestCase):
         self.assertEqual(GroupRanking.objects.count(), 0)
         self.assertEqual(result["deleted_extra_matches"], 1)
 
+    def test_league_entry_snapshot_does_not_store_legacy_display_fields(self):
+        snapshot = create_tournament_snapshot(self.tournament, label="開始前")
+        entry_payload = next(
+            item
+            for item in snapshot.snapshot_json["categories"][0]["league_entries"]
+            if item["id"] == self.entry1.id
+        )
+
+        self.assertNotIn("organization", entry_payload)
+        self.assertNotIn("player1_name", entry_payload)
+        self.assertNotIn("player2_name", entry_payload)
+
+    def test_legacy_league_entry_snapshot_fields_are_not_restored(self):
+        snapshot = create_tournament_snapshot(self.tournament, label="開始前")
+        payload = snapshot.snapshot_json
+        entry_payload = next(
+            item
+            for item in payload["categories"][0]["league_entries"]
+            if item["id"] == self.entry1.id
+        )
+        entry_payload["organization"] = "旧所属"
+        entry_payload["player1_name"] = "旧選手1"
+        entry_payload["player2_name"] = "旧選手2"
+        snapshot.snapshot_json = payload
+        snapshot.save(update_fields=["snapshot_json"])
+
+        self.entry1.organization = "変更所属"
+        self.entry1.player1_name = "変更選手1"
+        self.entry1.player2_name = "変更選手2"
+        self.entry1.save(
+            update_fields=[
+                "organization",
+                "player1_name",
+                "player2_name",
+            ]
+        )
+
+        restore_category_from_tournament_snapshot(
+            snapshot,
+            self.category,
+        )
+
+        self.entry1.refresh_from_db()
+        self.assertEqual(self.entry1.organization, "")
+        self.assertEqual(self.entry1.player1_name, "")
+        self.assertEqual(self.entry1.player2_name, "")
+
     def test_category_snapshot_view_redirects_to_tournament_snapshot(self):
         response = self.client.post(
             reverse(

@@ -76,9 +76,6 @@ def build_category_snapshot_payload(category):
         league_entries.append({
             "id": entry.id,
             "participant_id": entry.participant_id,
-            "organization": entry.organization,
-            "player1_name": entry.player1_name,
-            "player2_name": entry.player2_name,
             "display_order": entry.display_order,
             "retired": entry.retired,
             "retired_reason": entry.retired_reason,
@@ -420,9 +417,9 @@ def _restore_category_payload(
         for item in payload["league_entries"]:
             LeagueEntry.objects.filter(id=item["id"]).update(
                 participant_id=item["participant_id"],
-                organization=item["organization"],
-                player1_name=item["player1_name"],
-                player2_name=item["player2_name"],
+                organization="",
+                player1_name="",
+                player2_name="",
                 display_order=item["display_order"],
                 retired=item["retired"],
                 retired_reason=item["retired_reason"],

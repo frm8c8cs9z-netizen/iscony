@@ -784,3 +784,14 @@
   - `./venv/bin/python stpro/manage.py test core.tests.ImportPairsCsvTests.test_valid_entry_code_creates_pair_from_participant core.tests.ApplyStageAdvancementsTests.test_league_rank_is_applied_to_downstream_entry --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 197 tests OK。
+
+### LeagueEntry 旧表示列の管理画面・スナップショット整理
+- 管理画面のリーグ枠検索を、旧列 `player1_name` / `player2_name` ではなく `participant` の参加者番号・所属・選手名と進出元情報を見る形に変更。
+- 管理画面の選手名表示も `display_player1_name` / `display_player2_name` に委譲し、旧列直参照を避けるようにした。
+- 大会スナップショットの `league_entries` から `organization` / `player1_name` / `player2_name` を保存しないようにした。
+- 古いスナップショットにリーグ枠の旧表示キーが残っていても、復元時は `core_pair` の旧3列へ戻さず空文字に寄せるようにした。
+- トーナメント枠 `TournamentEntry` の表示用列は今回対象外で、従来どおりスナップショット保存・復元対象。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategorySnapshotTests core.tests.AdvancementSourceModelTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 199 tests OK。
