@@ -758,3 +758,10 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_is_read_only core.tests.TournamentScheduleBehaviorTests.test_tournament_bracket_detail_places_single_vertical_champion_on_advance_line --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 196 tests OK。
+
+### リーグ枠・トーナメント枠の表示用重複列整理方針
+- `core_pair` / `LeagueEntry` の `organization`, `player1_name`, `player2_name` が削除可能か確認。
+- 実データでは、`participant` 未設定のリーグ枠に旧3列の表示値は入っておらず、`participant` 設定済みのリーグ枠では `Participant` 側と不一致がないことを確認。
+- 一方で、モデルの `short_name`、管理画面検索、CSV取込、大会複製、スナップショット保存・復元がまだ旧列を参照しているため、DB列の即削除は見送り。
+- `TournamentEntry` 側にも同名の表示用列が残っているため、リーグ枠だけでなくトーナメント枠も段階的に整理するTODOを追加。
+- 次は、表示ロジックを `participant` / 進出元情報ベースへ寄せるところから少しずつ進める。

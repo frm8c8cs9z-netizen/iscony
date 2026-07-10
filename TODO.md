@@ -197,6 +197,15 @@
 
 ## 参加者表示・トーナメント表表示
 
+- `LeagueEntry` / `TournamentEntry` に残っている表示用の重複列を段階的に整理する。
+  - `core_pair` / `LeagueEntry` の `organization`, `player1_name`, `player2_name` は、現在の実データでは `Participant` の重複コピーになっている可能性が高い。
+  - ただし、モデルの `short_name`、管理画面検索、CSV取込、大会複製、スナップショット保存・復元ではまだ旧列を参照・保存しているため、DB列を先に削除しない。
+  - まず `LeagueEntry` の表示は `participant` と `AdvancementSource` を正とし、旧列へのフォールバックをなくせる状態にする。
+  - 次にCSV取込、大会複製、スナップショット保存・復元、管理画面検索、テストデータを `participant` / 進出元情報ベースへ寄せる。
+  - 既存スナップショットとの互換が必要な期間は、旧キーがあっても無視または読み替えできる復元処理を検討する。
+  - `LeagueEntry` 側の移行が安定してから、migrationで `core_pair.organization`, `core_pair.player1_name`, `core_pair.player2_name` を削除する。
+  - `TournamentEntry` 側にも同名の表示用列が残っているため、トーナメント枠の実データ、進出元リーグ枠、手入力枠、未確定枠、スナップショット復元時の扱いを別途確認する。
+  - `TournamentEntry` は、参加者から直接入る枠、リーグ結果から入る枠、トーナメント結果から入る枠が混在するため、`Participant` だけでなく `source_pair` や `AdvancementSource` 相当の情報で表示できるかを整理してから削除可否を判断する。
 - `Participant` を土台に、リーグ・トーナメント共通で選手ごとの所属情報を扱えるようにする。
   - 現在はペア単位の所属表示を前提にしている。
   - 将来的には Player1、Player2 それぞれに `organization` を持たせたい。
