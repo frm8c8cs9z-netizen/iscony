@@ -7343,6 +7343,8 @@ class CategoryStageOverviewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "状態の見方")
+        self.assertContains(response, "まだ始まっていない")
         self.assertIn("未着手", self._stage_section(response, not_started_stage))
         self.assertIn("結果待ち", self._stage_section(response, waiting_stage))
         self.assertIn("進行中", self._stage_section(response, in_progress_stage))

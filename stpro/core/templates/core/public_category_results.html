@@ -43,6 +43,28 @@
         color: #314a97;
     }
 
+    .public-stage-status-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        margin: 10px 0 18px;
+        padding: 10px 12px;
+        border: 1px solid #d8e0ea;
+        border-radius: 4px;
+        background: #f8fafc;
+        font-size: 13px;
+    }
+
+    .public-stage-status-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .public-stage-status-legend-note {
+        color: #55626f;
+    }
+
     .svg-bracket-wrap {
         border: 1px solid #c9c9c9;
         overflow: auto;
@@ -271,6 +293,25 @@
             試合進行表
         {% endif %}
     </a>
+</div>
+
+<div class="public-stage-status-legend" aria-label="ステージ状態の見方">
+    <span class="public-stage-status-legend-item">
+        <span class="public-stage-status not_started">未着手</span>
+        <span class="public-stage-status-legend-note">まだ始まっていない</span>
+    </span>
+    <span class="public-stage-status-legend-item">
+        <span class="public-stage-status waiting">結果待ち</span>
+        <span class="public-stage-status-legend-note">前の結果を待っている</span>
+    </span>
+    <span class="public-stage-status-legend-item">
+        <span class="public-stage-status in_progress">進行中</span>
+        <span class="public-stage-status-legend-note">試合が進んでいる</span>
+    </span>
+    <span class="public-stage-status-legend-item">
+        <span class="public-stage-status confirmed">結果確定</span>
+        <span class="public-stage-status-legend-note">すべて確定している</span>
+    </span>
 </div>
 
 <div class="public-stage-results">
