@@ -3288,8 +3288,16 @@ class ImportPairsCsvTests(TestCase):
         )
 
         self.assertEqual(pair.participant, self.participant)
-        self.assertEqual(pair.player1_name, self.participant.player1_name)
-        self.assertEqual(pair.player2_name, self.participant.player2_name)
+        self.assertEqual(pair.player1_name, "")
+        self.assertEqual(pair.player2_name, "")
+        self.assertEqual(
+            pair.display_player1_name,
+            self.participant.player1_name,
+        )
+        self.assertEqual(
+            pair.display_player2_name,
+            self.participant.player2_name,
+        )
 
 
 class ImportParticipantsCsvTests(TestCase):
@@ -5176,8 +5184,10 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(applied_count, 1)
         self.target.refresh_from_db()
         self.assertEqual(self.target.participant, self.participant1)
-        self.assertEqual(self.target.organization, "第一クラブ")
-        self.assertEqual(self.target.player1_name, "一番 A")
+        self.assertEqual(self.target.organization, "")
+        self.assertEqual(self.target.player1_name, "")
+        self.assertEqual(self.target.display_organization, "第一クラブ")
+        self.assertEqual(self.target.display_player1_name, "一番 A")
 
     def test_auto_snapshot_is_created_before_stage_advancement(self):
         self._finish_preliminary_group()

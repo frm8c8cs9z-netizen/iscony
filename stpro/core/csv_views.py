@@ -1675,13 +1675,6 @@ def import_stage_slots(request, tournament_code):
                                 "player2_name": "",
                             }
 
-                            if participant:
-                                entry_defaults.update({
-                                    "organization": participant.organization,
-                                    "player1_name": participant.player1_name,
-                                    "player2_name": participant.player2_name,
-                                })
-
                             entry = LeagueEntry.objects.create(
                                 **entry_defaults
                             )
@@ -2026,13 +2019,10 @@ def import_pairs(request, tournament_code):
                     "group": group,
                     "display_order": display_order,
                     "participant": participant,
+                    "organization": "",
+                    "player1_name": "",
+                    "player2_name": "",
                 }
-
-                defaults.update({
-                    "organization": participant.organization,
-                    "player1_name": participant.player1_name,
-                    "player2_name": participant.player2_name,
-                })
 
                 LeagueEntry.objects.update_or_create(
                     group=group,

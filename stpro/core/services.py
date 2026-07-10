@@ -129,9 +129,9 @@ def clone_tournament_without_results(source, *, name, code):
                 participant=participant_map.get(old.participant_id),
                 pair_code=old.pair_code,
                 display_order=old.display_order,
-                organization=old.organization,
-                player1_name=old.player1_name,
-                player2_name=old.player2_name,
+                organization="",
+                player1_name="",
+                player2_name="",
                 retired=False,
                 retired_reason="",
             )
@@ -467,24 +467,35 @@ def apply_stage_advancements(source_stage, *, include_snapshot_info=False):
 
         for target, source_entry in resolved:
             target.participant = source_entry.participant
-            target.organization = source_entry.display_organization
-            target.player1_name = source_entry.participant.player1_name
-            target.player2_name = source_entry.participant.player2_name
 
             update_fields = [
                 "participant",
-                "organization",
-                "player1_name",
-                "player2_name",
             ]
 
             if isinstance(target, TournamentEntry):
+                target.organization = source_entry.display_organization
+                target.player1_name = source_entry.participant.player1_name
+                target.player2_name = source_entry.participant.player2_name
                 target.source_pair = (
                     source_entry
                     if isinstance(source_entry, LeagueEntry)
                     else None
                 )
-                update_fields.append("source_pair")
+                update_fields.extend([
+                    "organization",
+                    "player1_name",
+                    "player2_name",
+                    "source_pair",
+                ])
+            else:
+                target.organization = ""
+                target.player1_name = ""
+                target.player2_name = ""
+                update_fields.extend([
+                    "organization",
+                    "player1_name",
+                    "player2_name",
+                ])
 
             target.save(update_fields=update_fields)
 

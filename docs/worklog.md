@@ -774,3 +774,13 @@
   - `./venv/bin/python stpro/manage.py test core.tests.AdvancementSourceModelTests --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 197 tests OK。
+
+### LeagueEntry 旧表示列へのコピー停止
+- CSV取込、リーグ枠CSV更新、大会複製、Stage反映で、`LeagueEntry.organization` / `player1_name` / `player2_name` へ `Participant` 情報をコピーしないように変更。
+- DB列を削除するまでの暫定として、`LeagueEntry` の旧3列には空文字を入れ、表示は `participant` 経由の `display_*` / `short_name` で行う方針にした。
+- トーナメント枠 `TournamentEntry` の旧表示列コピーは別整理対象として残した。
+- 既存DBにすでに入っている旧表示列の値は今回変更していない。後続でスナップショット、管理画面検索、DB列削除と合わせて整理する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.ImportPairsCsvTests.test_valid_entry_code_creates_pair_from_participant core.tests.ApplyStageAdvancementsTests.test_league_rank_is_applied_to_downstream_entry --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 197 tests OK。
