@@ -438,8 +438,6 @@ class TournamentEntryAdmin(admin.ModelAdmin):
 
     search_fields = (
         "pair_code",
-        "player1_name",
-        "player2_name",
         "participant__entry_code",
         "participant__player1_name",
         "participant__player2_name",

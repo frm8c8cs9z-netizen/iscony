@@ -104,6 +104,40 @@ def create_league_entry_with_participant(
     )
 
 
+def create_tournament_entry(
+    *,
+    bracket,
+    pair_code,
+    display_order,
+    participant=None,
+    organization="",
+    player1_name="",
+    player2_name="",
+    **kwargs,
+):
+    if participant is None and (
+        organization
+        or player1_name
+        or player2_name
+    ):
+        participant = Participant.objects.create(
+            category=bracket.category,
+            entry_code=f"T{bracket.id}-{pair_code}",
+            organization=organization,
+            player1_name=player1_name,
+            player2_name=player2_name,
+            display_order=display_order,
+        )
+
+    return TournamentEntry._default_manager.create(
+        bracket=bracket,
+        participant=participant,
+        pair_code=pair_code,
+        display_order=display_order,
+        **kwargs,
+    )
+
+
 class EntryDisplayHelperTests(TestCase):
 
     def setUp(self):
@@ -157,7 +191,7 @@ class EntryDisplayHelperTests(TestCase):
         )
 
     def test_entry_display_helper_accepts_tournament_entry(self):
-        entry = TournamentEntry.objects.create(
+        entry = create_tournament_entry(
             bracket=self.bracket,
             pair_code="1",
             display_order=1,
@@ -234,7 +268,7 @@ class TournamentAdvancementTests(TestCase):
             name="本戦",
         )
         self.entries = [
-            TournamentEntry.objects.create(
+            create_tournament_entry(
                 bracket=self.bracket,
                 pair_code=str(index),
                 display_order=index,
@@ -924,12 +958,10 @@ class AdvancementSourceModelTests(TestCase):
             category=self.category,
             name="決勝T",
         )
-        self.tournament_entry = TournamentEntry.objects.create(
+        self.tournament_entry = create_tournament_entry(
             bracket=self.bracket,
             pair_code="1",
             display_order=1,
-            player1_name="未定1A",
-            player2_name="未定1B",
         )
 
     def test_league_rank_source_can_target_tournament_entry(self):
@@ -1086,7 +1118,7 @@ class AdvancementSourceModelTests(TestCase):
             )
 
     def test_advancement_sources_cannot_be_swapped_after_tournament_score(self):
-        tournament_entry_2 = TournamentEntry.objects.create(
+        tournament_entry_2 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="2",
             display_order=2,
@@ -1214,7 +1246,7 @@ class BulkScoreSheetPdfTests(TestCase):
 
         for number in range(1, 5):
             self.tournament_entries.append(
-                TournamentEntry.objects.create(
+                create_tournament_entry(
                     bracket=self.bracket,
                     pair_code=str(number),
                     display_order=number,
@@ -1470,14 +1502,14 @@ class BulkScoreSheetPdfTests(TestCase):
         )
 
     def test_court_score_sheets_pdf_skips_unresolved_advancement_entries(self):
-        source_entry1 = TournamentEntry.objects.create(
+        source_entry1 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="S1",
             display_order=5,
             player1_name="",
             player2_name="",
         )
-        source_entry2 = TournamentEntry.objects.create(
+        source_entry2 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="S2",
             display_order=6,
@@ -1611,14 +1643,14 @@ class BulkScoreSheetPdfTests(TestCase):
             pair1=self.tournament_entries[0],
             pair2=self.tournament_entries[1],
         )
-        other_entry1 = TournamentEntry.objects.create(
+        other_entry1 = create_tournament_entry(
             bracket=other_bracket,
             pair_code="1",
             display_order=1,
             player1_name="下位1A",
             player2_name="下位1B",
         )
-        other_entry2 = TournamentEntry.objects.create(
+        other_entry2 = create_tournament_entry(
             bracket=other_bracket,
             pair_code="2",
             display_order=2,
@@ -3827,7 +3859,7 @@ class ImportStageSlotsCsvTests(TestCase):
             category,
             "E002",
         )
-        entry_1 = TournamentEntry.objects.create(
+        entry_1 = create_tournament_entry(
             bracket=bracket,
             participant=participant_1,
             pair_code="1",
@@ -3836,7 +3868,7 @@ class ImportStageSlotsCsvTests(TestCase):
             player1_name=participant_1.player1_name,
             player2_name=participant_1.player2_name,
         )
-        TournamentEntry.objects.create(
+        create_tournament_entry(
             bracket=bracket,
             participant=participant_2,
             pair_code="2",
@@ -4379,14 +4411,14 @@ class ImportScheduleCsvTests(TestCase):
             stage=tournament_stage,
             name="本戦",
         )
-        tournament_entry1 = TournamentEntry.objects.create(
+        tournament_entry1 = create_tournament_entry(
             bracket=bracket,
             pair_code="1",
             display_order=1,
             player1_name="T1A",
             player2_name="T1B",
         )
-        tournament_entry2 = TournamentEntry.objects.create(
+        tournament_entry2 = create_tournament_entry(
             bracket=bracket,
             pair_code="2",
             display_order=2,
@@ -4673,14 +4705,14 @@ class ImportScheduleCsvTests(TestCase):
             stage=tournament_stage,
             name="本戦",
         )
-        entry1 = TournamentEntry.objects.create(
+        entry1 = create_tournament_entry(
             bracket=bracket,
             pair_code="1",
             display_order=1,
             player1_name="T1A",
             player2_name="T1B",
         )
-        entry2 = TournamentEntry.objects.create(
+        entry2 = create_tournament_entry(
             bracket=bracket,
             pair_code="2",
             display_order=2,
@@ -5269,7 +5301,7 @@ class ApplyStageAdvancementsTests(TestCase):
             stage=tournament_stage,
             name="予選",
         )
-        tournament_entry1 = TournamentEntry.objects.create(
+        tournament_entry1 = create_tournament_entry(
             bracket=bracket,
             participant=self.participant1,
             pair_code="T1",
@@ -5278,7 +5310,7 @@ class ApplyStageAdvancementsTests(TestCase):
             player1_name=self.participant1.player1_name,
             player2_name=self.participant1.player2_name,
         )
-        tournament_entry2 = TournamentEntry.objects.create(
+        tournament_entry2 = create_tournament_entry(
             bracket=bracket,
             participant=self.participant2,
             pair_code="T2",
@@ -5417,7 +5449,7 @@ class TournamentCloneTests(TestCase):
             stage=self.next_stage,
             name="本戦",
         )
-        self.tournament_entry1 = TournamentEntry.objects.create(
+        self.tournament_entry1 = create_tournament_entry(
             bracket=self.bracket,
             participant=self.participant1,
             pair_code="T1",
@@ -5426,7 +5458,7 @@ class TournamentCloneTests(TestCase):
             player1_name=self.participant1.player1_name,
             player2_name=self.participant1.player2_name,
         )
-        self.tournament_entry2 = TournamentEntry.objects.create(
+        self.tournament_entry2 = create_tournament_entry(
             bracket=self.bracket,
             participant=self.participant2,
             pair_code="T2",
@@ -5435,7 +5467,7 @@ class TournamentCloneTests(TestCase):
             player1_name=self.participant2.player1_name,
             player2_name=self.participant2.player2_name,
         )
-        self.target_tournament_entry = TournamentEntry.objects.create(
+        self.target_tournament_entry = create_tournament_entry(
             bracket=self.bracket,
             participant=self.participant1,
             pair_code="T3",
@@ -5577,7 +5609,6 @@ class TournamentCloneTests(TestCase):
         )
         self.assertIsNone(cloned_tournament_target.participant)
         self.assertIsNone(cloned_tournament_target.source_pair)
-        self.assertEqual(cloned_tournament_target.player1_name, "")
 
         self.assertEqual(
             AdvancementSource.objects.filter(
@@ -6119,14 +6150,14 @@ class ReceptionMatchSearchTests(TestCase):
             stage=self.tournament_stage,
             name="決勝",
         )
-        self.tournament_entry1 = TournamentEntry.objects.create(
+        self.tournament_entry1 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="1",
             display_order=1,
             player1_name="本戦1A",
             player2_name="本戦1B",
         )
-        self.tournament_entry2 = TournamentEntry.objects.create(
+        self.tournament_entry2 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="2",
             display_order=2,
@@ -6306,7 +6337,7 @@ class CategoryStageOverviewTests(TestCase):
             stage=tournament_stage,
             name="本戦",
         )
-        target_entry = TournamentEntry.objects.create(
+        target_entry = create_tournament_entry(
             bracket=bracket,
             pair_code="T1",
             display_order=1,
@@ -6556,14 +6587,14 @@ class CategoryStageOverviewTests(TestCase):
             stage=tournament_stage,
             name="本戦",
         )
-        tournament_entry1 = TournamentEntry.objects.create(
+        tournament_entry1 = create_tournament_entry(
             bracket=bracket,
             pair_code="T1",
             display_order=1,
             player1_name="本戦1",
             player2_name="本戦2",
         )
-        tournament_entry2 = TournamentEntry.objects.create(
+        tournament_entry2 = create_tournament_entry(
             bracket=bracket,
             pair_code="T2",
             display_order=2,
@@ -6941,7 +6972,7 @@ class CategoryStageOverviewTests(TestCase):
             name="2位T",
         )
         progress_entries = [
-            TournamentEntry.objects.create(
+            create_tournament_entry(
                 bracket=progress_bracket,
                 pair_code=f"P{number}",
                 display_order=number,
@@ -6975,14 +7006,14 @@ class CategoryStageOverviewTests(TestCase):
             stage=confirmed_stage,
             name="決勝T",
         )
-        confirmed_entry1 = TournamentEntry.objects.create(
+        confirmed_entry1 = create_tournament_entry(
             bracket=confirmed_bracket,
             pair_code="C1",
             display_order=1,
             player1_name="確定1",
             player2_name="確定2",
         )
-        confirmed_entry2 = TournamentEntry.objects.create(
+        confirmed_entry2 = create_tournament_entry(
             bracket=confirmed_bracket,
             pair_code="C2",
             display_order=2,
@@ -7032,14 +7063,14 @@ class TournamentScheduleBehaviorTests(TestCase):
             category=self.category,
             name="本戦",
         )
-        self.entry1 = TournamentEntry.objects.create(
+        self.entry1 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="1",
             display_order=1,
             player1_name="選手1A",
             player2_name="選手1B",
         )
-        self.entry2 = TournamentEntry.objects.create(
+        self.entry2 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="2",
             display_order=2,
@@ -7094,7 +7125,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             stage=source_stage,
             name="D",
         )
-        unresolved_entry = TournamentEntry.objects.create(
+        unresolved_entry = create_tournament_entry(
             bracket=self.bracket,
             pair_code="D2",
             display_order=3,
@@ -7262,10 +7293,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.tournament.save()
         self.bracket.entry_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
         self.bracket.save()
-        self.entry1.player1_name = "山田　太郎"
-        self.entry1.player2_name = "佐藤　次郎"
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.player1_name = "山田　太郎"
+        self.entry1.participant.player2_name = "佐藤　次郎"
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -7297,14 +7328,14 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.tournament.save()
         self.bracket.layout_type = TournamentBracket.LAYOUT_INHERIT
         self.bracket.save()
-        entry3 = TournamentEntry.objects.create(
+        entry3 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="3",
             display_order=3,
             player1_name="選手3A",
             player2_name="選手3B",
         )
-        entry4 = TournamentEntry.objects.create(
+        entry4 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="4",
             display_order=4,
@@ -7405,13 +7436,13 @@ class TournamentScheduleBehaviorTests(TestCase):
             Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
         )
         self.tournament.save()
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         entries = [self.entry1, self.entry2]
 
         for number in range(3, 5):
             entries.append(
-                TournamentEntry.objects.create(
+                create_tournament_entry(
                     bracket=self.bracket,
                     pair_code=str(number),
                     display_order=number,
@@ -7536,10 +7567,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
         self.bracket.save()
-        self.entry1.player1_name = "山田　太郎"
-        self.entry1.player2_name = "佐藤　次郎"
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.player1_name = "山田　太郎"
+        self.entry1.participant.player2_name = "佐藤　次郎"
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -7909,14 +7940,14 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
-        entry3 = TournamentEntry.objects.create(
+        entry3 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="3",
             display_order=3,
             player1_name="選手3A",
             player2_name="選手3B",
         )
-        entry4 = TournamentEntry.objects.create(
+        entry4 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="4",
             display_order=4,
@@ -8013,7 +8044,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             pair1=self.entry1,
             pair2=None,
         )
-        entry3 = TournamentEntry.objects.create(
+        entry3 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="3",
             display_order=3,
@@ -8127,7 +8158,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
-        entry3 = TournamentEntry.objects.create(
+        entry3 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="3",
             display_order=3,
@@ -8199,7 +8230,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
-        entry3 = TournamentEntry.objects.create(
+        entry3 = create_tournament_entry(
             bracket=self.bracket,
             pair_code="3",
             display_order=3,
@@ -8275,7 +8306,7 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         for number in range(3, 8):
             entries.append(
-                TournamentEntry.objects.create(
+                create_tournament_entry(
                     bracket=self.bracket,
                     pair_code=str(number),
                     display_order=number,
@@ -8371,8 +8402,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -8417,8 +8448,8 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
         )
         self.bracket.save()
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -8466,8 +8497,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.bracket.champion_text_layout = TournamentBracket.ENTRY_DISPLAY_INHERIT
         self.bracket.save()
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -8501,8 +8532,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
 
     def test_tournament_bracket_detail_expands_single_layout_for_champion(self):
-        self.entry1.organization = "とても長いクラブ名"
-        self.entry1.save()
+        self.entry1.participant.organization = "とても長いクラブ名"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -8592,8 +8623,8 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
         )
         self.bracket.save()
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -8665,13 +8696,13 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
         self.bracket.save()
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         entries = [self.entry1, self.entry2]
 
         for number in range(3, 5):
             entries.append(
-                TournamentEntry.objects.create(
+                create_tournament_entry(
                     bracket=self.bracket,
                     pair_code=str(number),
                     display_order=number,
@@ -8788,13 +8819,13 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
         )
         self.bracket.save()
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         entries = [self.entry1, self.entry2]
 
         for number in range(3, 5):
             entries.append(
-                TournamentEntry.objects.create(
+                create_tournament_entry(
                     bracket=self.bracket,
                     pair_code=str(number),
                     display_order=number,
@@ -8911,7 +8942,7 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         for number in range(3, 5):
             entries.append(
-                TournamentEntry.objects.create(
+                create_tournament_entry(
                     bracket=self.bracket,
                     pair_code=str(number),
                     display_order=number,
@@ -9092,10 +9123,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_tournament_bracket_detail_uses_short_name_and_organization(self):
-        self.entry1.player1_name = "山田　太郎"
-        self.entry1.player2_name = "佐藤　次郎"
-        self.entry1.organization = "第一クラブ"
-        self.entry1.save()
+        self.entry1.participant.player1_name = "山田　太郎"
+        self.entry1.participant.player2_name = "佐藤　次郎"
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -9359,10 +9390,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_public_schedule_view_is_read_only(self):
-        self.entry1.organization = "本戦クラブ1"
-        self.entry1.save(update_fields=["organization"])
-        self.entry2.organization = "本戦クラブ2"
-        self.entry2.save(update_fields=["organization"])
+        self.entry1.participant.organization = "本戦クラブ1"
+        self.entry1.participant.save(update_fields=["organization"])
+        self.entry2.participant.organization = "本戦クラブ2"
+        self.entry2.participant.save(update_fields=["organization"])
         group = Group.objects.create(
             category=self.category,
             name="A",

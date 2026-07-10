@@ -1705,17 +1705,7 @@ def import_stage_slots(request, tournament_code):
                                 "pair_code": row["slot_code"],
                                 "display_order": row["display_order"],
                                 "participant": participant,
-                                "organization": "",
-                                "player1_name": "",
-                                "player2_name": "",
                             }
-
-                            if participant:
-                                entry_defaults.update({
-                                    "organization": participant.organization,
-                                    "player1_name": participant.player1_name,
-                                    "player2_name": participant.player2_name,
-                                })
 
                             entry = TournamentEntry.objects.create(
                                 **entry_defaults

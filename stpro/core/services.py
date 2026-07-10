@@ -174,9 +174,6 @@ def clone_tournament_without_results(source, *, name, code):
                 bracket=bracket_map[old.bracket_id],
                 participant=participant_map.get(old.participant_id),
                 pair_code=old.pair_code,
-                organization=old.organization,
-                player1_name=old.player1_name,
-                player2_name=old.player2_name,
                 display_order=old.display_order,
                 source_pair=league_entry_map.get(old.source_pair_id),
             )
@@ -304,9 +301,6 @@ def clone_tournament_without_results(source, *, name, code):
                 ).update(
                     participant=None,
                     source_pair=None,
-                    organization="",
-                    player1_name="",
-                    player2_name="",
                 )
 
         for old in Schedule.objects.filter(
@@ -467,18 +461,12 @@ def apply_stage_advancements(source_stage, *, include_snapshot_info=False):
             ]
 
             if isinstance(target, TournamentEntry):
-                target.organization = source_entry.display_organization
-                target.player1_name = source_entry.participant.player1_name
-                target.player2_name = source_entry.participant.player2_name
                 target.source_pair = (
                     source_entry
                     if isinstance(source_entry, LeagueEntry)
                     else None
                 )
                 update_fields.extend([
-                    "organization",
-                    "player1_name",
-                    "player2_name",
                     "source_pair",
                 ])
 

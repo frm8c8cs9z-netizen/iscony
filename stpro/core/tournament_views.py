@@ -2351,9 +2351,6 @@ def import_bracket_positions(request, code, bracket_id):
                         participant=participant,
                         pair_code=row["pair_code"],
                         display_order=row["display_order"],
-                        organization=participant.organization,
-                        player1_name=participant.player1_name,
-                        player2_name=participant.player2_name,
                     )
 
                     entries.append(entry)

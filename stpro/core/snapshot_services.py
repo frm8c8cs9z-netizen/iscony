@@ -90,9 +90,6 @@ def build_category_snapshot_payload(category):
             "id": entry.id,
             "participant_id": entry.participant_id,
             "source_pair_id": entry.source_pair_id,
-            "organization": entry.organization,
-            "player1_name": entry.player1_name,
-            "player2_name": entry.player2_name,
             "display_order": entry.display_order,
         })
 
@@ -426,9 +423,6 @@ def _restore_category_payload(
             TournamentEntry.objects.filter(id=item["id"]).update(
                 participant_id=item["participant_id"],
                 source_pair_id=item["source_pair_id"],
-                organization=item["organization"],
-                player1_name=item["player1_name"],
-                player2_name=item["player2_name"],
                 display_order=item["display_order"],
             )
 

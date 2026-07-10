@@ -1136,19 +1136,6 @@ class TournamentEntry(models.Model):
         max_length=20
     )
 
-    organization = models.CharField(
-        max_length=100,
-        blank=True
-    )
-
-    player1_name = models.CharField(
-        max_length=50
-    )
-
-    player2_name = models.CharField(
-        max_length=50
-    )
-
     display_order = models.IntegerField(
         default=0
     )
@@ -1171,6 +1158,9 @@ class TournamentEntry(models.Model):
         if self.participant:
             return self.participant.player1_name
 
+        if self.source_pair:
+            return self.source_pair.display_player1_name
+
         source = getattr(
             self,
             "advancement_source",
@@ -1180,12 +1170,15 @@ class TournamentEntry(models.Model):
         if source:
             return source.label
 
-        return self.player1_name
+        return "未定"
     
     @property
     def display_player2_name(self):
         if self.participant:
             return self.participant.player2_name
+
+        if self.source_pair:
+            return self.source_pair.display_player2_name
 
         source = getattr(
             self,
@@ -1196,7 +1189,7 @@ class TournamentEntry(models.Model):
         if source:
             return ""
 
-        return self.player2_name
+        return ""
     
     @property
     def display_name(self):
@@ -1208,6 +1201,9 @@ class TournamentEntry(models.Model):
                 f"{self.participant.player2_name}"
             )
 
+        if self.source_pair:
+            return self.source_pair.display_name
+
         source = getattr(
             self,
             "advancement_source",
@@ -1217,52 +1213,37 @@ class TournamentEntry(models.Model):
         if source:
             return source.label
 
-        if not self.player1_name and not self.player2_name:
-            return "未定"
-
-        return (
-            f"{self.player1_name}"
-            f"・"
-            f"{self.player2_name}"
-        )
+        return "未定"
     
     @property
     def short_name(self):
 
-        if not self.participant:
-            source = getattr(
-                self,
-                "advancement_source",
-                None
-            )
+        if self.participant:
+            return self.participant.short_name
 
-            if source:
-                return source.label
+        if self.source_pair:
+            return self.source_pair.short_name
 
-        def family_name(name):
-
-            if not name:
-                return ""
-
-            # 全角スペース優先
-            if "　" in name:
-                return name.split("　")[0]
-
-            # 半角スペース
-            if " " in name:
-                return name.split(" ")[0]
-
-            return name
-
-        return (
-            f"{family_name(self.player1_name)}"
-            f"・"
-            f"{family_name(self.player2_name)}"
+        source = getattr(
+            self,
+            "advancement_source",
+            None
         )
+
+        if source:
+            return source.label
+
+        return "未定"
     
     @property
     def display_organization(self):
-        return ( self.organization )
+        if self.participant:
+            return self.participant.organization
+
+        if self.source_pair:
+            return self.source_pair.display_organization
+
+        return ""
     
     @property
     def code(self):

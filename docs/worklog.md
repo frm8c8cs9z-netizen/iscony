@@ -820,3 +820,16 @@
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - `./venv/bin/python stpro/manage.py makemigrations --check --dry-run`
   - 最終確認時点で `core` は 199 tests OK。
+
+### TournamentEntry 旧表示列のDB削除
+- `TournamentEntry` モデルから `organization` / `player1_name` / `player2_name` を削除。
+- 表示は `participant`、リーグ由来の `source_pair`、未確定枠の `AdvancementSource` を正として組み立てる形に統一。
+- CSV取込、大会複製、Stage反映、スナップショット保存・復元、トーナメント結果入力テンプレートから旧3列への参照・コピーを削除。
+- テストデータ作成は、トーナメント枠に名前を直接持たせず、必要に応じて `Participant` を作成して `TournamentEntry.participant` に紐づける形へ整理。
+- migration `0036_remove_tournamententry_organization_and_more.py` を追加し、ローカルDBへ適用。
+- DB introspectionで `core_tournamententry` の列が `id`, `pair_code`, `display_order`, `bracket_id`, `participant_id`, `source_pair_id` だけになったことを確認。
+- 確認:
+  - `./venv/bin/python stpro/manage.py migrate`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - `./venv/bin/python stpro/manage.py makemigrations --check --dry-run`
+  - 最終確認時点で `core` は 199 tests OK。
