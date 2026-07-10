@@ -43,11 +43,37 @@
         color: #314a97;
     }
 
+    .public-result-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 14px;
+        padding: 10px 0;
+        margin-bottom: 16px;
+        background: #fff;
+        border-bottom: 1px solid #d8e0ea;
+    }
+
+    .public-result-toolbar-category {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border: 1px solid #b8c7dc;
+        border-radius: 999px;
+        background: #f7fbff;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
     .public-stage-status-legend {
         display: flex;
         flex-wrap: wrap;
         gap: 8px 14px;
-        margin: 10px 0 18px;
+        margin: 0;
         padding: 10px 12px;
         border: 1px solid #d8e0ea;
         border-radius: 4px;
@@ -173,15 +199,9 @@
     }
 
     .public-result-nav {
-        position: sticky;
-        top: 0;
-        z-index: 10;
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        padding: 10px 0;
-        margin-bottom: 16px;
-        background: #fff;
     }
 
     .public-result-nav.bottom {
@@ -276,42 +296,46 @@
     </div>
 </div>
 
-<div class="public-result-nav">
-    <a
-        class="secondary"
-        href="{% url 'public_tournament_detail' tournament.public_token %}"
-    >
-        カテゴリ一覧
-    </a>
-    <a
-        class="primary"
-        href="{{ public_schedule_url }}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}"
-    >
-        {% if return_schedule_id %}
-            元の試合へ戻る
-        {% else %}
-            試合進行表
-        {% endif %}
-    </a>
-</div>
-
-<div class="public-stage-status-legend" aria-label="ステージ状態の見方">
-    <span class="public-stage-status-legend-item">
-        <span class="public-stage-status not_started">未着手</span>
-        <span class="public-stage-status-legend-note">まだ始まっていない</span>
-    </span>
-    <span class="public-stage-status-legend-item">
-        <span class="public-stage-status waiting">結果待ち</span>
-        <span class="public-stage-status-legend-note">前の結果を待っている</span>
-    </span>
-    <span class="public-stage-status-legend-item">
-        <span class="public-stage-status in_progress">進行中</span>
-        <span class="public-stage-status-legend-note">試合が進んでいる</span>
-    </span>
-    <span class="public-stage-status-legend-item">
-        <span class="public-stage-status confirmed">結果確定</span>
-        <span class="public-stage-status-legend-note">すべて確定している</span>
-    </span>
+<div class="public-result-toolbar">
+    <div class="public-result-toolbar-category">
+        {{ category.name }}
+    </div>
+    <div class="public-result-nav">
+        <a
+            class="secondary"
+            href="{% url 'public_tournament_detail' tournament.public_token %}"
+        >
+            カテゴリ一覧
+        </a>
+        <a
+            class="primary"
+            href="{{ public_schedule_url }}{% if return_schedule_id %}#schedule-{{ return_schedule_id }}{% endif %}"
+        >
+            {% if return_schedule_id %}
+                元の試合へ戻る
+            {% else %}
+                試合進行表
+            {% endif %}
+        </a>
+    </div>
+    <div class="public-stage-status-legend" aria-label="ステージ状態の見方">
+        <span class="public-stage-status-legend-item">
+            <span class="public-stage-status not_started">未着手</span>
+            <span class="public-stage-status-legend-note">まだ始まっていない</span>
+        </span>
+        <span class="public-stage-status-legend-item">
+            <span class="public-stage-status waiting">結果待ち</span>
+            <span class="public-stage-status-legend-note">前の結果を待っている</span>
+        </span>
+        <span class="public-stage-status-legend-item">
+            <span class="public-stage-status in_progress">進行中</span>
+            <span class="public-stage-status-legend-note">試合が進んでいる</span>
+        </span>
+        <span class="public-stage-status-legend-item">
+            <span class="public-stage-status confirmed">結果確定</span>
+            <span class="public-stage-status-legend-note">すべて確定している</span>
+        </span>
+    </div>
 </div>
 
 <div class="public-stage-results">
