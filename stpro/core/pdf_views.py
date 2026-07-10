@@ -8,6 +8,7 @@ core.pdf_views
 
 import io
 import os
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse
@@ -33,6 +34,7 @@ from .models import (
     RoundRobinMatch,
     Schedule,
     ScheduleBlock,
+    Stage,
     Tournament,
     TournamentBracket,
     TournamentMatch,
@@ -151,7 +153,20 @@ def _schedule_scope_counts(schedules):
     }
 
 
-def _court_scope_rows(tournament):
+def _query_suffix(params):
+    filtered = {
+        key: value
+        for key, value in params.items()
+        if value not in (None, "")
+    }
+
+    if not filtered:
+        return ""
+
+    return urlencode(filtered)
+
+
+def _court_scope_rows(tournament, court_id=None):
     rows = []
     blocks = ScheduleBlock.objects.filter(
         tournament=tournament,
@@ -167,6 +182,9 @@ def _court_scope_rows(tournament):
         "display_order",
         "name",
     )
+
+    if court_id:
+        courts = courts.filter(id=court_id)
 
     for block in blocks:
         for court in courts:
@@ -189,7 +207,7 @@ def _court_scope_rows(tournament):
     return rows
 
 
-def _league_scope_rows(tournament):
+def _league_scope_rows(tournament, stage_id=None, court_id=None):
     rows = []
     groups = Group.objects.filter(
         category__tournament=tournament,
@@ -203,6 +221,8 @@ def _league_scope_rows(tournament):
         "display_order",
         "name",
     )
+    if stage_id:
+        groups = groups.filter(stage_id=stage_id)
 
     for group in groups:
         matches = RoundRobinMatch.objects.filter(
@@ -212,9 +232,15 @@ def _league_scope_rows(tournament):
             court__tournament=tournament,
             round_robin_match__group=group,
         )
+        if court_id:
+            schedules = schedules.filter(
+                court_id=court_id,
+            )
         total_matches = matches.count()
 
         if not total_matches and not schedules.exists():
+            continue
+        if court_id and not schedules.exists():
             continue
 
         rows.append({
@@ -244,7 +270,7 @@ def _round_label_for_bracket(bracket, round_number):
     )
 
 
-def _tournament_scope_rows(tournament):
+def _tournament_scope_rows(tournament, stage_id=None, court_id=None):
     rows = []
     brackets = TournamentBracket.objects.filter(
         category__tournament=tournament,
@@ -258,6 +284,8 @@ def _tournament_scope_rows(tournament):
         "display_order",
         "name",
     )
+    if stage_id:
+        brackets = brackets.filter(stage_id=stage_id)
 
     for bracket in brackets:
         round_numbers = (
@@ -279,9 +307,15 @@ def _tournament_scope_rows(tournament):
                 tournament_match__bracket=bracket,
                 tournament_match__round_number=round_number,
             )
+            if court_id:
+                schedules = schedules.filter(
+                    court_id=court_id,
+                )
             total_matches = matches.count()
 
             if not total_matches and not schedules.exists():
+                continue
+            if court_id and not schedules.exists():
                 continue
 
             round_label = _round_label_for_bracket(
@@ -311,21 +345,81 @@ def bulk_score_sheet_select(request, code):
         code=code,
     )
 
+    league_stage_id = request.GET.get("league_stage")
+    tournament_stage_id = request.GET.get("tournament_stage")
+    court_id = request.GET.get("court")
+
     all_league_schedules = Schedule.objects.filter(
         court__tournament=tournament,
         round_robin_match__isnull=False,
     )
+    if league_stage_id:
+        all_league_schedules = all_league_schedules.filter(
+            round_robin_match__group__stage_id=league_stage_id,
+        )
+    if court_id:
+        all_league_schedules = all_league_schedules.filter(
+            court_id=court_id,
+        )
     all_league_count = RoundRobinMatch.objects.filter(
         group__category__tournament=tournament,
     ).count()
+    if league_stage_id:
+        all_league_count = RoundRobinMatch.objects.filter(
+            group__stage_id=league_stage_id,
+        ).count()
     first_round_schedules = Schedule.objects.filter(
         court__tournament=tournament,
         tournament_match__round_number=1,
     )
+    if tournament_stage_id:
+        first_round_schedules = first_round_schedules.filter(
+            tournament_match__bracket__stage_id=tournament_stage_id,
+        )
+    if court_id:
+        first_round_schedules = first_round_schedules.filter(
+            court_id=court_id,
+        )
     first_round_count = TournamentMatch.objects.filter(
         bracket__category__tournament=tournament,
         round_number=1,
     ).count()
+    if tournament_stage_id:
+        first_round_count = TournamentMatch.objects.filter(
+            bracket__stage_id=tournament_stage_id,
+            round_number=1,
+        ).count()
+
+    league_stages = Stage.objects.filter(
+        category__tournament=tournament,
+        stage_type=Stage.TYPE_LEAGUE,
+    ).order_by(
+        "category__display_order",
+        "category__name",
+        "display_order",
+        "name",
+    )
+    tournament_stages = Stage.objects.filter(
+        category__tournament=tournament,
+        stage_type=Stage.TYPE_TOURNAMENT,
+    ).order_by(
+        "category__display_order",
+        "category__name",
+        "display_order",
+        "name",
+    )
+    courts = Court.objects.filter(
+        tournament=tournament,
+    ).order_by(
+        "display_order",
+        "name",
+    )
+
+    active_query = _query_suffix({
+        "league_stage": league_stage_id,
+        "tournament_stage": tournament_stage_id,
+        "court": court_id,
+    })
 
     return render(
         request,
@@ -340,9 +434,30 @@ def bulk_score_sheet_select(request, code):
                 first_round_schedules,
                 first_round_count,
             ),
-            "court_rows": _court_scope_rows(tournament),
-            "league_rows": _league_scope_rows(tournament),
-            "tournament_rows": _tournament_scope_rows(tournament),
+            "court_rows": _court_scope_rows(tournament, court_id=court_id),
+            "league_rows": _league_scope_rows(
+                tournament,
+                stage_id=league_stage_id,
+                court_id=court_id,
+            ),
+            "tournament_rows": _tournament_scope_rows(
+                tournament,
+                stage_id=tournament_stage_id,
+                court_id=court_id,
+            ),
+            "league_stages": league_stages,
+            "tournament_stages": tournament_stages,
+            "courts": courts,
+            "selected_league_stage": int(league_stage_id)
+            if league_stage_id and league_stage_id.isdigit()
+            else None,
+            "selected_tournament_stage": int(tournament_stage_id)
+            if tournament_stage_id and tournament_stage_id.isdigit()
+            else None,
+            "selected_court": int(court_id)
+            if court_id and court_id.isdigit()
+            else None,
+            "selected_query": active_query,
         },
     )
 
@@ -699,7 +814,6 @@ def court_score_sheets_pdf(request, court_id):
             f"score_sheets_court_{court.id}_"
             f"block_{schedule_block.id}.pdf"
         )
-
     writer = PdfWriter()
 
     for schedule in schedules:
@@ -935,6 +1049,9 @@ def league_score_sheets_pdf(request, code):
         code=code,
     )
     group_id = request.GET.get("group")
+    stage_id = request.GET.get("league_stage")
+    court_id = request.GET.get("court")
+    schedule_id = request.GET.get("schedule")
     schedules = (
         Schedule.objects.filter(
             court__tournament=tournament,
@@ -959,6 +1076,24 @@ def league_score_sheets_pdf(request, code):
     )
     filename = f"league_score_sheets_{tournament.code}.pdf"
 
+    if stage_id:
+        schedules = schedules.filter(
+            round_robin_match__group__stage_id=stage_id,
+        )
+        filename = (
+            f"league_score_sheets_{tournament.code}_"
+            f"stage_{stage_id}.pdf"
+        )
+
+    if court_id:
+        schedules = schedules.filter(
+            court_id=court_id,
+        )
+        filename = (
+            f"league_score_sheets_{tournament.code}_"
+            f"court_{court_id}.pdf"
+        )
+
     if group_id:
         group = get_object_or_404(
             Group,
@@ -971,6 +1106,15 @@ def league_score_sheets_pdf(request, code):
         filename = (
             f"league_score_sheets_{tournament.code}_"
             f"group_{group.id}.pdf"
+        )
+
+    if schedule_id:
+        schedules = schedules.filter(
+            id=schedule_id,
+        )
+        filename = (
+            f"league_score_sheets_{tournament.code}_"
+            f"schedule_{schedule_id}.pdf"
         )
 
     return _scheduled_score_sheets_response(
@@ -992,6 +1136,9 @@ def tournament_first_round_scheduled_score_sheets_pdf(request, code):
         code=code,
     )
     bracket_id = request.GET.get("bracket")
+    stage_id = request.GET.get("tournament_stage")
+    court_id = request.GET.get("court")
+    schedule_id = request.GET.get("schedule")
     round_number = request.GET.get("round", "1")
 
     try:
@@ -1021,6 +1168,10 @@ def tournament_first_round_scheduled_score_sheets_pdf(request, code):
             "order",
         )
     )
+    if stage_id:
+        schedules = schedules.filter(
+            tournament_match__bracket__stage_id=stage_id,
+        )
     if round_number == 1 and not bracket_id:
         filename = (
             f"tournament_first_round_score_sheets_"
@@ -1045,6 +1196,26 @@ def tournament_first_round_scheduled_score_sheets_pdf(request, code):
             f"tournament_round_{round_number}_"
             f"score_sheets_{tournament.code}_"
             f"bracket_{bracket.id}.pdf"
+        )
+
+    if court_id:
+        schedules = schedules.filter(
+            court_id=court_id,
+        )
+        filename = (
+            f"tournament_round_{round_number}_"
+            f"score_sheets_{tournament.code}_"
+            f"court_{court_id}.pdf"
+        )
+
+    if schedule_id:
+        schedules = schedules.filter(
+            id=schedule_id,
+        )
+        filename = (
+            f"tournament_round_{round_number}_"
+            f"score_sheets_{tournament.code}_"
+            f"schedule_{schedule_id}.pdf"
         )
 
     return _scheduled_score_sheets_response(

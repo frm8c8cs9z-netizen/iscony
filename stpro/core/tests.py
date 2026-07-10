@@ -1358,6 +1358,106 @@ class BulkScoreSheetPdfTests(TestCase):
             response.content.decode().index("全体出力"),
         )
 
+    def test_bulk_score_sheet_select_filters_by_stage_and_court(self):
+        league_stage = Stage.objects.create(
+            category=self.category,
+            code="L2",
+            name="順位リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        tournament_stage = Stage.objects.create(
+            category=self.category,
+            code="T2",
+            name="下位本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=3,
+        )
+        filtered_group = Group.objects.create(
+            category=self.category,
+            stage=league_stage,
+            name="B",
+            display_order=2,
+        )
+        filtered_league_entries = [
+            LeagueEntry.objects.create(
+                category=self.category,
+                group=filtered_group,
+                pair_code=f"B{number}",
+                display_order=number,
+            )
+            for number in range(1, 3)
+        ]
+        filtered_league_match = RoundRobinMatch.objects.create(
+            group=filtered_group,
+            pair1=filtered_league_entries[0],
+            pair2=filtered_league_entries[1],
+        )
+        filtered_bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=tournament_stage,
+            name="下位",
+            display_order=2,
+        )
+        filtered_tournament_entry1 = create_tournament_entry(
+            bracket=filtered_bracket,
+            pair_code="B1",
+            display_order=1,
+            player1_name="下位1A",
+            player2_name="下位1B",
+        )
+        filtered_tournament_entry2 = create_tournament_entry(
+            bracket=filtered_bracket,
+            pair_code="B2",
+            display_order=2,
+            player1_name="下位2A",
+            player2_name="下位2B",
+        )
+        filtered_tournament_match = TournamentMatch.objects.create(
+            bracket=filtered_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="MB1",
+            pair1=filtered_tournament_entry1,
+            pair2=filtered_tournament_entry2,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court2,
+            order=1,
+            round_robin_match=filtered_league_match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court2,
+            order=2,
+            tournament_match=filtered_tournament_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "bulk_score_sheet_select",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "league_stage": str(league_stage.id),
+                "tournament_stage": str(tournament_stage.id),
+                "court": str(self.court2.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["league_rows"]), 1)
+        self.assertContains(response, "Bリーグ")
+        self.assertContains(response, "順位リーグ")
+        self.assertEqual(len(response.context["tournament_rows"]), 1)
+        self.assertContains(response, "下位本戦")
+        self.assertEqual(len(response.context["court_rows"]), 1)
+        self.assertEqual(
+            response.context["selected_query"],
+            f"league_stage={league_stage.id}&tournament_stage={tournament_stage.id}&court={self.court2.id}",
+        )
+
     def test_league_score_sheets_pdf_outputs_scheduled_league_matches(self):
         match1 = RoundRobinMatch.objects.create(
             group=self.group,
@@ -1451,6 +1551,108 @@ class BulkScoreSheetPdfTests(TestCase):
             f"group_{self.group.id}.pdf",
             response.headers["Content-Disposition"],
         )
+
+    def test_league_score_sheets_pdf_filters_by_stage_and_court(self):
+        target_stage = Stage.objects.create(
+            category=self.category,
+            code="LX",
+            name="順位リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        target_group = Group.objects.create(
+            category=self.category,
+            stage=target_stage,
+            name="B",
+            display_order=2,
+        )
+        target_entry1 = create_league_entry_with_participant(
+            category=self.category,
+            group=target_group,
+            pair_code="B1",
+            display_order=1,
+            player1_name="順位1A",
+            player2_name="順位1B",
+        )
+        target_entry2 = create_league_entry_with_participant(
+            category=self.category,
+            group=target_group,
+            pair_code="B2",
+            display_order=2,
+            player1_name="順位2A",
+            player2_name="順位2B",
+        )
+        target_match = RoundRobinMatch.objects.create(
+            group=target_group,
+            pair1=target_entry1,
+            pair2=target_entry2,
+        )
+        other_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[0],
+            pair2=self.league_entries[1],
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=target_match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court2,
+            order=2,
+            round_robin_match=other_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "league_score_sheets_pdf",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "stage": target_stage.id,
+                "court": self.court1.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.response_pdf_page_count(response), 1)
+
+    def test_league_score_sheets_pdf_filters_by_schedule(self):
+        match1 = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[0],
+            pair2=self.league_entries[1],
+        )
+        match2 = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entries[2],
+            pair2=self.league_entries[3],
+        )
+        schedule1 = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=match1,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            round_robin_match=match2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "league_score_sheets_pdf",
+                kwargs={"code": self.tournament.code},
+            ),
+            {"schedule": schedule1.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.response_pdf_page_count(response), 1)
 
     def test_court_score_sheets_pdf_filters_by_schedule_block(self):
         morning = ScheduleBlock.objects.create(
@@ -1695,6 +1897,77 @@ class BulkScoreSheetPdfTests(TestCase):
             f"bracket_{self.bracket.id}.pdf",
             response.headers["Content-Disposition"],
         )
+
+    def test_tournament_score_sheets_pdf_filters_by_stage_and_court(self):
+        target_stage = Stage.objects.create(
+            category=self.category,
+            code="TX",
+            name="順位本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        target_bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=target_stage,
+            name="下位",
+            display_order=2,
+        )
+        target_entry1 = create_tournament_entry(
+            bracket=target_bracket,
+            pair_code="B1",
+            display_order=1,
+            player1_name="順位1A",
+            player2_name="順位1B",
+        )
+        target_entry2 = create_tournament_entry(
+            bracket=target_bracket,
+            pair_code="B2",
+            display_order=2,
+            player1_name="順位2A",
+            player2_name="順位2B",
+        )
+        target_match = TournamentMatch.objects.create(
+            bracket=target_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="TB1",
+            pair1=target_entry1,
+            pair2=target_entry2,
+        )
+        other_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.tournament_entries[0],
+            pair2=self.tournament_entries[1],
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court2,
+            order=1,
+            tournament_match=target_match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            tournament_match=other_match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_first_round_scheduled_score_sheets_pdf",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "stage": target_stage.id,
+                "court": self.court2.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.response_pdf_page_count(response), 1)
 
 
 class ScheduleMoveLockTests(TestCase):

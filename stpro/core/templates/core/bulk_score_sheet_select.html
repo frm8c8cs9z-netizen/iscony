@@ -19,6 +19,42 @@
     </div>
 </div>
 
+<form method="get" class="search-box">
+    <p>
+        <label for="league_stage">リーグStage</label>
+        <select id="league_stage" name="league_stage">
+            <option value="">すべて</option>
+            {% for stage in league_stages %}
+                <option value="{{ stage.id }}" {% if selected_league_stage == stage.id %}selected{% endif %}>
+                    {{ stage.category.name }} / {{ stage.name }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <label for="tournament_stage">トーナメントStage</label>
+        <select id="tournament_stage" name="tournament_stage">
+            <option value="">すべて</option>
+            {% for stage in tournament_stages %}
+                <option value="{{ stage.id }}" {% if selected_tournament_stage == stage.id %}selected{% endif %}>
+                    {{ stage.category.name }} / {{ stage.name }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <label for="court">コート</label>
+        <select id="court" name="court">
+            <option value="">すべて</option>
+            {% for court in courts %}
+                <option value="{{ court.id }}" {% if selected_court == court.id %}selected{% endif %}>
+                    {{ court.name }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <button type="submit">絞り込み</button>
+    </p>
+</form>
+
 <h3>コート別</h3>
 
 <table>
@@ -39,7 +75,7 @@
             <td>ー</td>
             <td>
                 {% if row.printable_count %}
-                    <a href="{% url 'court_score_sheets_pdf' row.court.id %}{{ row.url }}" target="_blank">
+                    <a href="{% url 'court_score_sheets_pdf' row.court.id %}{{ row.url }}{% if selected_query %}&{{ selected_query }}{% endif %}" target="_blank">
                         PDF出力
                     </a>
                 {% else %}
@@ -79,7 +115,7 @@
             <td>{{ row.unscheduled_count }}</td>
             <td>
                 {% if row.printable_count %}
-                    <a href="{% url 'league_score_sheets_pdf' tournament.code %}{{ row.url }}" target="_blank">
+                    <a href="{% url 'league_score_sheets_pdf' tournament.code %}{{ row.url }}{% if selected_query %}&{{ selected_query }}{% endif %}" target="_blank">
                         PDF出力
                     </a>
                 {% else %}
@@ -119,7 +155,7 @@
             <td>{{ row.unscheduled_count }}</td>
             <td>
                 {% if row.printable_count %}
-                    <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}{{ row.url }}" target="_blank">
+                    <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}{{ row.url }}{% if selected_query %}&{{ selected_query }}{% endif %}" target="_blank">
                         PDF出力
                     </a>
                 {% else %}
@@ -153,7 +189,7 @@
         <td>{{ league_all.unscheduled_count }}</td>
         <td>
             {% if league_all.printable_count %}
-                <a href="{% url 'league_score_sheets_pdf' tournament.code %}" target="_blank">
+                <a href="{% url 'league_score_sheets_pdf' tournament.code %}{% if selected_query %}?{{ selected_query }}{% endif %}" target="_blank">
                     PDF出力
                 </a>
             {% else %}
@@ -169,7 +205,7 @@
         <td>{{ tournament_first_round_all.unscheduled_count }}</td>
         <td>
             {% if tournament_first_round_all.printable_count %}
-                <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}" target="_blank">
+                <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}{% if selected_query %}?{{ selected_query }}{% endif %}" target="_blank">
                     PDF出力
                 </a>
             {% else %}
