@@ -843,3 +843,13 @@
   - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_public_category_results_show_pending_league_schedule_link --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 199 tests OK。
+
+### リーグ表の色分け切り替えと共有バッジ
+- 大会設定に `リーグ表の色分け` を追加し、リーグ表の勝敗セルを色付き/色なしで切り替えられるようにした。
+- 公開カテゴリ結果画面と管理側のリーグ表の両方で、勝者側のゲーム数を丸囲みバッジ `score-chip` で表示するようにした。
+- 大会複製時には色分け設定も引き継ぐようにした。
+- 確認:
+  - `./venv/bin/python stpro/manage.py migrate`
+  - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_category_detail_uses_tournament_default_entry_display_mode core.tests.RoundRobinMeetingTests.test_category_detail_can_disable_league_score_colors core.tests.MaintenanceMenuTests.test_tournament_settings_can_update_default_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.CategoryStageOverviewTests.test_public_category_results_can_disable_league_score_colors --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 201 tests OK。

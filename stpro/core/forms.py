@@ -407,6 +407,7 @@ class TournamentSettingsForm(forms.ModelForm):
 
         fields = [
             "default_league_entry_display_mode",
+            "default_league_score_color_mode",
             "default_tournament_entry_display_mode",
             "default_tournament_layout_type",
             "default_single_champion_display_mode",
@@ -418,6 +419,7 @@ class TournamentSettingsForm(forms.ModelForm):
 
         labels = {
             "default_league_entry_display_mode": "リーグ参加者表示",
+            "default_league_score_color_mode": "リーグ表の色分け",
             "default_tournament_entry_display_mode": "トーナメント参加者表示",
             "default_tournament_layout_type": "トーナメント表示方式",
             "default_single_champion_display_mode": "片側表示時の優勝者表示",
@@ -430,6 +432,9 @@ class TournamentSettingsForm(forms.ModelForm):
         help_texts = {
             "default_league_entry_display_mode": (
                 "リーグ表、進行表、補助表などでリーグ枠を表示するときの標準形式です。"
+            ),
+            "default_league_score_color_mode": (
+                "リーグ表の勝敗セルに色を付けるかどうかを指定します。"
             ),
             "default_tournament_entry_display_mode": (
                 "トーナメント表に参加者名を表示するときの標準形式です。"

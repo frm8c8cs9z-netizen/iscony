@@ -128,19 +128,6 @@
         fill: #222;
     }
 
-    .score-chip {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 1.9em;
-        min-height: 1.9em;
-        padding: 0 0.4em;
-        border: 2px solid currentColor;
-        border-radius: 999px;
-        line-height: 1;
-        box-sizing: border-box;
-    }
-
     td.win {
         background: #eef8f1;
         color: #1d6b36;
@@ -311,7 +298,7 @@
                                                 <td class="self-cell">-</td>
                                             {% else %}
                                                 <td
-                                                    class="{{ score.type }}"
+                                                    class="{% if use_league_score_colors %}{{ score.type }}{% endif %}"
                                                     {% if score.match and table_row.pair == score.match.pair1 %}
                                                         id="round-robin-match-{{ score.match.id }}"
                                                     {% endif %}
@@ -421,7 +408,7 @@
                                             {% if score.type == "self" %}
                                                 <td class="self-cell">-</td>
                                             {% else %}
-                                                <td class="{{ score.type }}">
+                                                <td class="{% if use_league_score_colors %}{{ score.type }}{% endif %}">
                                                     {% if score.type == "win" and score.value != None and score.value != "" %}
                                                         <span class="score-chip">{{ score.value }}</span>
                                                     {% else %}

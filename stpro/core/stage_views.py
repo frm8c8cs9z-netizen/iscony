@@ -348,6 +348,10 @@ def _render_public_category_results(request, category):
             "public_schedule_url": _public_schedule_url(
                 category.tournament,
             ),
+            "use_league_score_colors": (
+                category.tournament.default_league_score_color_mode
+                != category.tournament.LEAGUE_SCORE_COLOR_NONE
+            ),
         },
     )
 

@@ -61,6 +61,8 @@ class Tournament(models.Model):
     SCORE_DISPLAY_LOSER = "loser"
     SCORE_DISPLAY_BOTH = "both"
     SCORE_DISPLAY_NONE = "none"
+    LEAGUE_SCORE_COLOR_COLORED = "colored"
+    LEAGUE_SCORE_COLOR_NONE = "none"
 
     ENTRY_DISPLAY_CHOICES = [
         (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
@@ -84,6 +86,11 @@ class Tournament(models.Model):
         (SCORE_DISPLAY_LOSER, "負けのみ"),
         (SCORE_DISPLAY_BOTH, "勝ち負け両方"),
         (SCORE_DISPLAY_NONE, "表示しない"),
+    ]
+
+    LEAGUE_SCORE_COLOR_CHOICES = [
+        (LEAGUE_SCORE_COLOR_COLORED, "あり"),
+        (LEAGUE_SCORE_COLOR_NONE, "なし"),
     ]
 
     CHAMPION_TEXT_CHOICES = [
@@ -168,6 +175,12 @@ class Tournament(models.Model):
         max_length=20,
         choices=SCORE_DISPLAY_CHOICES,
         default=SCORE_DISPLAY_LOSER
+    )
+
+    default_league_score_color_mode = models.CharField(
+        max_length=20,
+        choices=LEAGUE_SCORE_COLOR_CHOICES,
+        default=LEAGUE_SCORE_COLOR_COLORED
     )
 
     default_champion_text_layout = models.CharField(

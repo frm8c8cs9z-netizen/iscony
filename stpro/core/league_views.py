@@ -438,6 +438,10 @@ def category_detail(request, category_id):
             "group_data": group_data,
             "tournament": category.tournament,
             "entry_display_mode_label": entry_display_mode_label,
+            "use_league_score_colors": (
+                category.tournament.default_league_score_color_mode
+                != Tournament.LEAGUE_SCORE_COLOR_NONE
+            ),
         }
     )
 

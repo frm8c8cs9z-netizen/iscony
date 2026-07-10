@@ -2013,6 +2013,31 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, "第一クラブ")
         self.assertNotContains(response, "山田・佐藤")
 
+    def test_category_detail_can_disable_league_score_colors(self):
+        self.tournament.default_league_score_color_mode = (
+            Tournament.LEAGUE_SCORE_COLOR_NONE
+        )
+        self.tournament.save()
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "score-chip")
+        self.assertNotContains(response, 'class="win"')
+        self.assertNotContains(response, 'class="lose"')
+
     def test_category_detail_links_back_to_stage_overview(self):
         response = self.client.get(
             reverse(
@@ -5792,6 +5817,9 @@ class MaintenanceMenuTests(TestCase):
                 "default_league_entry_display_mode": (
                     Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
                 ),
+                "default_league_score_color_mode": (
+                    Tournament.LEAGUE_SCORE_COLOR_NONE
+                ),
                 "default_tournament_entry_display_mode": (
                     Tournament.ENTRY_DISPLAY_ONE_LINE
                 ),
@@ -5827,6 +5855,10 @@ class MaintenanceMenuTests(TestCase):
         self.assertEqual(
             tournament.default_league_entry_display_mode,
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE,
+        )
+        self.assertEqual(
+            tournament.default_league_score_color_mode,
+            Tournament.LEAGUE_SCORE_COLOR_NONE,
         )
         self.assertEqual(
             tournament.default_tournament_entry_display_mode,
@@ -5874,6 +5906,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "参加者表示")
         self.assertContains(response, "トーナメント表")
         self.assertContains(response, "優勝者表示")
+        self.assertContains(response, "リーグ表の色分け")
         self.assertContains(response, "片側表示")
         self.assertContains(response, "左右表示")
         self.assertContains(response, "リーグ表とトーナメント表")
@@ -6731,6 +6764,71 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response_with_return, "元の試合へ戻る")
         self.assertNotContains(response, "大会スナップショット")
         self.assertContains(response, "試合進行表")
+
+    def test_public_category_results_can_disable_league_score_colors(self):
+        tournament = Tournament.objects.create(
+            name="公開結果色なし大会",
+            code="PUBLICNOCOLOR",
+            default_league_score_color_mode=Tournament.LEAGUE_SCORE_COLOR_NONE,
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry1 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        entry2 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="予選3",
+            player2_name="予選4",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+            pair1_games=1,
+            pair2_games=0,
+        )
+        GroupRanking.objects.create(
+            group=group,
+            pair=entry1,
+            rank=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "score-chip")
+        self.assertNotContains(response, 'class="win"')
+        self.assertNotContains(response, 'class="lose"')
 
     def test_public_category_results_show_pending_league_schedule_link(self):
         tournament = Tournament.objects.create(
