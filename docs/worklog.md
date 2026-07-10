@@ -890,3 +890,6 @@
   - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_category_detail_can_disable_league_score_colors core.tests.CategoryStageOverviewTests.test_public_category_results_can_disable_league_score_colors --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 204 tests OK。
+
+### ヘッダの大会一覧リンク削除
+- `base.html` のロゴ直下にあった `大会一覧` リンクを削除し、ヘッダをロゴだけにした。
