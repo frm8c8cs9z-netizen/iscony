@@ -853,3 +853,12 @@
   - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_category_detail_uses_tournament_default_entry_display_mode core.tests.RoundRobinMeetingTests.test_category_detail_can_disable_league_score_colors core.tests.MaintenanceMenuTests.test_tournament_settings_can_update_default_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings core.tests.CategoryStageOverviewTests.test_public_category_results_can_disable_league_score_colors --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 201 tests OK。
+
+### リーグ表セル幅の統一
+- 管理側・公開側のリーグ表に `round-robin-table` を付け、軸になるヘッダ列と勝敗列の幅を固定化した。
+- 列幅を固定したうえで、行ラベル・列ラベルは折り返し可能にし、長い文字列でもセル幅の中で読めるようにした。
+- 同率補助表にも同じ列幅ルールを適用して、リーグ表全体の見た目を揃えた。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_category_detail_uses_tournament_default_entry_display_mode core.tests.RoundRobinMeetingTests.test_category_detail_can_disable_league_score_colors core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only core.tests.CategoryStageOverviewTests.test_public_category_results_can_disable_league_score_colors core.tests.MaintenanceMenuTests.test_tournament_settings_can_update_default_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 201 tests OK。

@@ -90,6 +90,36 @@
         overflow-x: auto;
     }
 
+    .round-robin-table {
+        table-layout: fixed;
+        width: max-content;
+        min-width: 100%;
+    }
+
+    .round-robin-table .rr-code-col {
+        width: 56px;
+    }
+
+    .round-robin-table .rr-name-col {
+        width: 168px;
+    }
+
+    .round-robin-table .rr-score-col,
+    .round-robin-table .rr-stat-col {
+        width: 58px;
+    }
+
+    .round-robin-table .rr-header {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        line-height: 1.15;
+        white-space: normal;
+    }
+
+    .round-robin-table .rr-header-inner {
+        display: block;
+    }
+
     .schedule-table-wrapper {
         max-height: calc(100vh - 140px);
         margin-bottom: 30px;

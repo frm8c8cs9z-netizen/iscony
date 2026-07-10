@@ -54,24 +54,24 @@
 
     <div class="table-wrapper">
 
-        <table>
+        <table class="round-robin-table">
 
             <tr>
 
-                <th></th>
-                <th></th>
+                <th class="rr-code-col"></th>
+                <th class="rr-name-col"></th>
 
                 {% for pair in data.pairs %}
 
-                    <th class="{% if pair.retired %}retired-pair{% endif %}">
-                        {{ pair.pair_code }}
+                    <th class="rr-code-col rr-header {% if pair.retired %}retired-pair{% endif %}">
+                        <span class="rr-header-inner">{{ pair.pair_code }}</span>
                     </th>
 
                 {% endfor %}
 
-                <th>勝</th>
-                <th>敗</th>
-                <th>順位</th>
+                <th class="rr-stat-col rr-header">勝</th>
+                <th class="rr-stat-col rr-header">敗</th>
+                <th class="rr-stat-col rr-header">順位</th>
 
             </tr>
 
@@ -79,23 +79,23 @@
 
             <tr>
 
-                <th class="{% if row.pair.retired %}retired-pair{% endif %}">
+                <th class="rr-code-col rr-header {% if row.pair.retired %}retired-pair{% endif %}">
 
                     {% if row.pair and row.pair.id %}
 
                         {% if row.pair.retired %}
-                            <span style="color:red;">{{ row.pair.pair_code }}</span>
+                            <span class="rr-header-inner" style="color:red;">{{ row.pair.pair_code }}</span>
                         {% else %}
-                            {{ row.pair.pair_code }}
+                            <span class="rr-header-inner">{{ row.pair.pair_code }}</span>
                         {% endif %}
 
                     {% endif %}
 
                 </th>
-                <th class="{% if row.pair.retired %}retired-pair{% endif %}">
+                <th class="rr-name-col rr-header {% if row.pair.retired %}retired-pair{% endif %}">
                     <a href="{% url 'league_entry_action' row.pair.id %}">
                         {% for line in row.pair_display_lines %}
-                            {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                            <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
                         {% endfor %}
                     </a>
                 </th>
@@ -110,7 +110,7 @@
 
                     {% else %}
  
-                        <td class="{% if use_league_score_colors %}{{ score.type }}{% endif %} hover-cell">
+                        <td class="rr-score-col {% if use_league_score_colors %}{{ score.type }}{% endif %} hover-cell">
 
                             {% if score.match %}
                                 <!--x
@@ -153,21 +153,21 @@
 
                 {% if row.ranking %}
 
-                    <td>
+                    <td class="rr-stat-col">
                         {{ row.ranking.wins }}
                     </td>
 
-                    <td>
+                    <td class="rr-stat-col">
                         {{ row.ranking.losses }}
                     </td>
 
-                    <td>
+                    <td class="rr-stat-col">
                         {{ row.ranking.rank|default_if_none:"" }}
                     </td>
 
                 {% else %}
 
-                    <td colspan="3">
+                    <td colspan="3" class="rr-stat-col">
                         未集計
                     </td>
 

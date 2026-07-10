@@ -2007,6 +2007,7 @@ class RoundRobinMeetingTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="round-robin-table"')
         self.assertContains(response, "リーグ参加者表示")
         self.assertContains(response, "フル名前/所属2段")
         self.assertContains(response, "山田　太郎・佐藤　次郎")
@@ -2034,6 +2035,7 @@ class RoundRobinMeetingTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="round-robin-table"')
         self.assertContains(response, "score-chip")
         self.assertNotContains(response, 'class="win"')
         self.assertNotContains(response, 'class="lose"')
@@ -6670,6 +6672,7 @@ class CategoryStageOverviewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="round-robin-table"')
         self.assertContains(response, "女子A 結果")
         self.assertContains(response, "予選リーグ")
         self.assertContains(response, "Aリーグ")
@@ -6826,6 +6829,7 @@ class CategoryStageOverviewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="round-robin-table"')
         self.assertContains(response, "score-chip")
         self.assertNotContains(response, 'class="win"')
         self.assertNotContains(response, 'class="lose"')
