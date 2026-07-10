@@ -597,8 +597,7 @@ class LeagueEntry(models.Model):
     def short_name(self):
 
         if self.participant:
-            player1_name = self.participant.player1_name
-            player2_name = self.participant.player2_name
+            return self.participant.short_name
         else:
             source = getattr(
                 self,

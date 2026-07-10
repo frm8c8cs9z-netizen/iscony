@@ -767,7 +767,7 @@
 - 次は、表示ロジックを `participant` / 進出元情報ベースへ寄せるところから少しずつ進める。
 
 ### LeagueEntry short_name の participant 参照化
-- `LeagueEntry.short_name` が `participant` 設定済みでも旧列 `player1_name` / `player2_name` を参照していたため、`participant` の選手名を優先して短縮名を作るように変更。
+- `LeagueEntry.short_name` が `participant` 設定済みでも旧列 `player1_name` / `player2_name` を参照していたため、`Participant.short_name` へ委譲するように変更。
 - `participant` がない枠は、従来どおり `AdvancementSource` があれば進出元ラベル、なければ旧列フォールバックを使う。
 - 旧列が古い値でも `participant` 側の名前で短縮表示されるテストを追加。
 - 確認:
