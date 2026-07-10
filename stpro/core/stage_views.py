@@ -152,7 +152,7 @@ def _public_stage_status(containers, ready, pending_source_count):
 
     return {
         "key": "not_started",
-        "label": "これから",
+        "label": "未着手",
     }
 
 
