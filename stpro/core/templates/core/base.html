@@ -162,9 +162,16 @@
     }
 
     .site-brand {
-        display: inline-flex;
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
         align-items: center;
-        margin: 0 0 8px;
+        width: 100%;
+        margin: 0 0 16px;
+        padding: 8px 0 10px;
+        background: #fff;
+        border-bottom: 1px solid #d8e0ea;
     }
 
     .site-brand a {
@@ -728,8 +735,6 @@
         <img src="{% static 'core/images/iscony_v001.png' %}" alt="ソフトテニス大会管理">
     </a>
 </h1>
-
-<hr>
 
 {% if messages %}
     <div class="messages">
