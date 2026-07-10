@@ -863,3 +863,8 @@
   - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_category_detail_uses_tournament_default_entry_display_mode core.tests.RoundRobinMeetingTests.test_category_detail_can_disable_league_score_colors core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only core.tests.CategoryStageOverviewTests.test_public_category_results_can_disable_league_score_colors core.tests.MaintenanceMenuTests.test_tournament_settings_can_update_default_display_settings core.tests.MaintenanceMenuTests.test_tournament_settings_page_groups_display_settings --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 201 tests OK。
+
+### ヘッダロゴの画像化
+- `base.html` 上部の「ソフトテニス大会管理」を `iscony_v001.png` のロゴ画像に差し替えた。
+- ロゴは `core/static/core/images/iscony_v001.png` に置き、ホームへのリンクは維持したまま見出し表示だけを画像化した。
+- 画面幅に収まるよう、ロゴの最大幅を制限してある。

@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    {% load static %}
 
     <title>
         {% block title %}
@@ -158,6 +159,23 @@
 
     .schedule-grid-table td {
         vertical-align: top;
+    }
+
+    .site-brand {
+        display: inline-flex;
+        align-items: center;
+        margin: 0 0 8px;
+    }
+
+    .site-brand a {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .site-brand img {
+        display: block;
+        max-width: min(100%, 780px);
+        height: auto;
     }
 
     .menu {
@@ -705,9 +723,9 @@
 </head>
 <body>
 
-<h1>
-    <a href="{% url 'tournament_list' %}">
-        ソフトテニス大会管理
+<h1 class="site-brand">
+    <a href="{% url 'tournament_list' %}" aria-label="ソフトテニス大会管理">
+        <img src="{% static 'core/images/iscony_v001.png' %}" alt="ソフトテニス大会管理">
     </a>
 </h1>
 
