@@ -469,19 +469,6 @@ class LeagueEntry(models.Model):
         default=0
     )
 
-    organization = models.CharField(
-        max_length=100,
-        blank=True
-    )
-
-    player1_name = models.CharField(
-        max_length=100
-    )
-
-    player2_name = models.CharField(
-        max_length=100
-    )
-    
     retired = models.BooleanField(default=False)
     
     retired_reason = models.CharField(

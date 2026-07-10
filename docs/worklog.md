@@ -807,3 +807,16 @@
   - `./venv/bin/python stpro/manage.py test core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_uses_configured_cache_timeout core.tests.TournamentScheduleBehaviorTests.test_public_schedule_view_cache_can_be_disabled core.tests.TournamentScheduleBehaviorTests.test_schedule_block_tables_do_not_query_per_cell --keepdb`
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - 最終確認時点で `core` は 199 tests OK。
+
+### core_pair 旧表示列のDB削除
+- `LeagueEntry` モデルから `organization` / `player1_name` / `player2_name` を削除。
+- migration `0035_remove_leagueentry_organization_and_more.py` を追加し、ローカルDBへ適用。
+- CSV取込、大会複製、Stage反映、スナップショット復元、テストデータ作成から、削除した旧3列への指定を削除。
+- 古いスナップショットにリーグ枠の旧表示キーが残っていても、復元処理では無視する形を維持。
+- DB introspectionで `core_pair` の列が `id`, `pair_code`, `display_order`, `retired`, `retired_reason`, `category_id`, `group_id`, `participant_id` だけになったことを確認。
+- `TournamentEntry` 側の同名表示列は今回対象外で、次以降に別整理する。
+- 確認:
+  - `./venv/bin/python stpro/manage.py migrate`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - `./venv/bin/python stpro/manage.py makemigrations --check --dry-run`
+  - 最終確認時点で `core` は 199 tests OK。

@@ -1670,9 +1670,6 @@ def import_stage_slots(request, tournament_code):
                                 "pair_code": row["slot_code"],
                                 "display_order": row["display_order"],
                                 "participant": participant,
-                                "organization": "",
-                                "player1_name": "",
-                                "player2_name": "",
                             }
 
                             entry = LeagueEntry.objects.create(
@@ -2019,9 +2016,6 @@ def import_pairs(request, tournament_code):
                     "group": group,
                     "display_order": display_order,
                     "participant": participant,
-                    "organization": "",
-                    "player1_name": "",
-                    "player2_name": "",
                 }
 
                 LeagueEntry.objects.update_or_create(

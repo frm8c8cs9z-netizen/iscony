@@ -417,9 +417,6 @@ def _restore_category_payload(
         for item in payload["league_entries"]:
             LeagueEntry.objects.filter(id=item["id"]).update(
                 participant_id=item["participant_id"],
-                organization="",
-                player1_name="",
-                player2_name="",
                 display_order=item["display_order"],
                 retired=item["retired"],
                 retired_reason=item["retired_reason"],

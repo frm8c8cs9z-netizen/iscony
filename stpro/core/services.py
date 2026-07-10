@@ -129,9 +129,6 @@ def clone_tournament_without_results(source, *, name, code):
                 participant=participant_map.get(old.participant_id),
                 pair_code=old.pair_code,
                 display_order=old.display_order,
-                organization="",
-                player1_name="",
-                player2_name="",
                 retired=False,
                 retired_reason="",
             )
@@ -297,9 +294,6 @@ def clone_tournament_without_results(source, *, name, code):
                     id=new.target_league_entry_id,
                 ).update(
                     participant=None,
-                    organization="",
-                    player1_name="",
-                    player2_name="",
                     retired=False,
                     retired_reason="",
                 )
@@ -486,15 +480,6 @@ def apply_stage_advancements(source_stage, *, include_snapshot_info=False):
                     "player1_name",
                     "player2_name",
                     "source_pair",
-                ])
-            else:
-                target.organization = ""
-                target.player1_name = ""
-                target.player2_name = ""
-                update_fields.extend([
-                    "organization",
-                    "player1_name",
-                    "player2_name",
                 ])
 
             target.save(update_fields=update_fields)

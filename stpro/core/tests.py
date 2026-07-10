@@ -101,9 +101,6 @@ def create_league_entry_with_participant(
         participant=participant,
         pair_code=pair_code,
         display_order=display_order,
-        organization="",
-        player1_name="",
-        player2_name="",
     )
 
 
@@ -922,8 +919,6 @@ class AdvancementSourceModelTests(TestCase):
             group=self.group,
             pair_code="1",
             display_order=1,
-            player1_name="選手1A",
-            player2_name="選手1B",
         )
         self.bracket = TournamentBracket.objects.create(
             category=self.category,
@@ -993,9 +988,6 @@ class AdvancementSourceModelTests(TestCase):
             participant=participant,
             pair_code="P1",
             display_order=10,
-            organization="旧所属",
-            player1_name="旧一　太郎",
-            player2_name="旧二　次郎",
         )
 
         self.assertEqual(entry.short_name, "正一・正二")
@@ -1016,16 +1008,12 @@ class AdvancementSourceModelTests(TestCase):
             group=self.group,
             pair_code="A4",
             display_order=4,
-            player1_name="",
-            player2_name="",
         )
         entry_b2 = LeagueEntry.objects.create(
             category=self.category,
             group=self.group,
             pair_code="B2",
             display_order=2,
-            player1_name="",
-            player2_name="",
         )
         source_d2 = AdvancementSource.objects.create(
             target_league_entry=entry_a4,
@@ -1068,8 +1056,6 @@ class AdvancementSourceModelTests(TestCase):
             group=self.group,
             pair_code="2",
             display_order=2,
-            player1_name="選手2A",
-            player2_name="選手2B",
         )
         source_1 = AdvancementSource.objects.create(
             target_league_entry=self.league_entry,
@@ -1217,8 +1203,6 @@ class BulkScoreSheetPdfTests(TestCase):
                     group=self.group,
                     pair_code=str(number),
                     display_order=number,
-                    player1_name=f"予選{number}A",
-                    player2_name=f"予選{number}B",
                 )
             )
 
@@ -1395,8 +1379,6 @@ class BulkScoreSheetPdfTests(TestCase):
                     group=other_group,
                     pair_code=f"B{number}",
                     display_order=number,
-                    player1_name=f"B{number}A",
-                    player2_name=f"B{number}B",
                 )
             )
 
@@ -1703,16 +1685,12 @@ class ScheduleMoveLockTests(TestCase):
             group=self.group,
             pair_code="25",
             display_order=25,
-            player1_name="選手25A",
-            player2_name="選手25B",
         )
         self.pair2 = LeagueEntry.objects.create(
             category=self.category,
             group=self.group,
             pair_code="26",
             display_order=26,
-            player1_name="選手26A",
-            player2_name="選手26B",
         )
         self.court = Court.objects.create(
             tournament=self.tournament,
@@ -2227,8 +2205,6 @@ class RoundRobinMeetingTests(TestCase):
             group=self.group,
             pair_code="3",
             display_order=3,
-            player1_name="選手3A",
-            player2_name="選手3B",
         )
         RoundRobinMatch.objects.create(
             group=self.group,
@@ -2331,8 +2307,6 @@ class RoundRobinMeetingTests(TestCase):
             group=self.group,
             pair_code="3",
             display_order=3,
-            player1_name="選手3A",
-            player2_name="選手3B",
         )
         RoundRobinMatch.objects.create(
             group=self.group,
@@ -2434,8 +2408,6 @@ class RoundRobinMeetingTests(TestCase):
             group=self.group,
             pair_code="3",
             display_order=3,
-            player1_name="選手3A",
-            player2_name="選手3B",
         )
         completed_match = RoundRobinMatch.objects.create(
             group=self.group,
@@ -2500,8 +2472,6 @@ class RoundRobinMeetingTests(TestCase):
             group=self.group,
             pair_code="3",
             display_order=3,
-            player1_name="選手3A",
-            player2_name="選手3B",
             retired=True,
         )
 
@@ -2528,8 +2498,6 @@ class RoundRobinMeetingTests(TestCase):
             group=self.group,
             pair_code="3",
             display_order=3,
-            player1_name="選手3A",
-            player2_name="選手3B",
         )
         cancelled_match = RoundRobinMatch.objects.create(
             group=self.group,
@@ -2652,16 +2620,12 @@ class CategorySnapshotTests(TestCase):
             group=self.group,
             pair_code="1",
             display_order=1,
-            player1_name="選手1A",
-            player2_name="選手1B",
         )
         self.entry2 = LeagueEntry.objects.create(
             category=self.category,
             group=self.group,
             pair_code="2",
             display_order=2,
-            player1_name="選手2A",
-            player2_name="選手2B",
         )
         self.match = RoundRobinMatch.objects.create(
             group=self.group,
@@ -2776,26 +2740,15 @@ class CategorySnapshotTests(TestCase):
         snapshot.snapshot_json = payload
         snapshot.save(update_fields=["snapshot_json"])
 
-        self.entry1.organization = "変更所属"
-        self.entry1.player1_name = "変更選手1"
-        self.entry1.player2_name = "変更選手2"
-        self.entry1.save(
-            update_fields=[
-                "organization",
-                "player1_name",
-                "player2_name",
-            ]
-        )
-
         restore_category_from_tournament_snapshot(
             snapshot,
             self.category,
         )
 
         self.entry1.refresh_from_db()
-        self.assertEqual(self.entry1.organization, "")
-        self.assertEqual(self.entry1.player1_name, "")
-        self.assertEqual(self.entry1.player2_name, "")
+        self.assertFalse(hasattr(self.entry1, "organization"))
+        self.assertFalse(hasattr(self.entry1, "player1_name"))
+        self.assertFalse(hasattr(self.entry1, "player2_name"))
 
     def test_category_snapshot_view_redirects_to_tournament_snapshot(self):
         response = self.client.post(
@@ -2843,16 +2796,12 @@ class CategorySnapshotTests(TestCase):
             group=other_group,
             pair_code="1",
             display_order=1,
-            player1_name="他1A",
-            player2_name="他1B",
         )
         other_entry2 = LeagueEntry.objects.create(
             category=other_category,
             group=other_group,
             pair_code="2",
             display_order=2,
-            player1_name="他2A",
-            player2_name="他2B",
         )
         RoundRobinMatch.objects.create(
             group=other_group,
@@ -2919,16 +2868,12 @@ class CategorySnapshotTests(TestCase):
             group=other_group,
             pair_code="1",
             display_order=1,
-            player1_name="他1A",
-            player2_name="他1B",
         )
         other_entry2 = LeagueEntry.objects.create(
             category=other_category,
             group=other_group,
             pair_code="2",
             display_order=2,
-            player1_name="他2A",
-            player2_name="他2B",
         )
         other_match = RoundRobinMatch.objects.create(
             group=other_group,
@@ -3106,16 +3051,12 @@ class CategorySnapshotTests(TestCase):
             group=other_group,
             pair_code="1",
             display_order=1,
-            player1_name="他1A",
-            player2_name="他1B",
         )
         other_entry2 = LeagueEntry.objects.create(
             category=other_category,
             group=other_group,
             pair_code="2",
             display_order=2,
-            player1_name="他2A",
-            player2_name="他2B",
         )
         other_match = RoundRobinMatch.objects.create(
             group=other_group,
@@ -3231,16 +3172,12 @@ class CategorySnapshotTests(TestCase):
             group=other_group,
             pair_code="1",
             display_order=1,
-            player1_name="他1A",
-            player2_name="他1B",
         )
         other_entry2 = LeagueEntry.objects.create(
             category=other_category,
             group=other_group,
             pair_code="2",
             display_order=2,
-            player1_name="他2A",
-            player2_name="他2B",
         )
         other_match = RoundRobinMatch.objects.create(
             group=other_group,
@@ -3366,8 +3303,6 @@ class ImportPairsCsvTests(TestCase):
         )
 
         self.assertEqual(pair.participant, self.participant)
-        self.assertEqual(pair.player1_name, "")
-        self.assertEqual(pair.player2_name, "")
         self.assertEqual(
             pair.display_player1_name,
             self.participant.player1_name,
@@ -4028,8 +3963,6 @@ class ImportStageSlotsCsvTests(TestCase):
             pair_code="1",
             display_order=1,
             participant=participant,
-            player1_name=participant.player1_name,
-            player2_name=participant.player2_name,
         )
         target_entry = LeagueEntry.objects.create(
             category=category,
@@ -4037,8 +3970,6 @@ class ImportStageSlotsCsvTests(TestCase):
             pair_code="A1",
             display_order=1,
             participant=participant,
-            player1_name=participant.player1_name,
-            player2_name=participant.player2_name,
         )
         AdvancementSource.objects.create(
             target_league_entry=target_entry,
@@ -4130,8 +4061,6 @@ class ImportStageSlotsCsvTests(TestCase):
             category=category,
             group=group_a,
             pair_code="1",
-            player1_name="A1",
-            player2_name="A2",
         )
 
         with self.assertRaises(ValidationError):
@@ -4139,8 +4068,6 @@ class ImportStageSlotsCsvTests(TestCase):
                 category=category,
                 group=group_b,
                 pair_code="1",
-                player1_name="B1",
-                player2_name="B2",
             )
 
     def test_duplicate_tournament_display_order_is_reported_before_db_error(self):
@@ -4420,16 +4347,12 @@ class ImportScheduleCsvTests(TestCase):
             group=group,
             pair_code="1",
             display_order=1,
-            player1_name=f"{stage_name}1A",
-            player2_name=f"{stage_name}1B",
         )
         entry2 = LeagueEntry.objects.create(
             category=self.category,
             group=group,
             pair_code="2",
             display_order=2,
-            player1_name=f"{stage_name}2A",
-            player2_name=f"{stage_name}2B",
         )
         match = RoundRobinMatch.objects.create(
             group=group,
@@ -4572,8 +4495,6 @@ class ImportScheduleCsvTests(TestCase):
                 group=group_b,
                 pair_code=code,
                 display_order=int(code),
-                player1_name=f"選手{code}A",
-                player2_name=f"選手{code}B",
             )
 
         response = self._post_csv(
@@ -4897,8 +4818,6 @@ class AdvancementSourceListViewTests(TestCase):
             group=final_group,
             pair_code="A1",
             display_order=1,
-            player1_name="",
-            player2_name="",
         )
         AdvancementSource.objects.create(
             target_league_entry=target_entry,
@@ -4955,8 +4874,6 @@ class AdvancementSourceListViewTests(TestCase):
             group=final_group,
             pair_code="1",
             display_order=1,
-            player1_name="",
-            player2_name="",
         )
         AdvancementSource.objects.create(
             target_league_entry=target_entry,
@@ -5016,16 +4933,12 @@ class AdvancementSourceListViewTests(TestCase):
             group=final_group_a,
             pair_code="4",
             display_order=4,
-            player1_name="",
-            player2_name="",
         )
         entry_b2 = LeagueEntry.objects.create(
             category=self.category,
             group=final_group_b,
             pair_code="2",
             display_order=2,
-            player1_name="",
-            player2_name="",
         )
         AdvancementSource.objects.create(
             target_league_entry=entry_a4,
@@ -5093,16 +5006,12 @@ class AdvancementSourceListViewTests(TestCase):
             group=final_group_a,
             pair_code="4",
             display_order=4,
-            player1_name="",
-            player2_name="",
         )
         entry_b2 = LeagueEntry.objects.create(
             category=self.category,
             group=final_group_b,
             pair_code="2",
             display_order=2,
-            player1_name="",
-            player2_name="",
         )
         source_d2 = AdvancementSource.objects.create(
             target_league_entry=entry_a4,
@@ -5200,9 +5109,6 @@ class ApplyStageAdvancementsTests(TestCase):
             participant=self.participant1,
             pair_code="A1",
             display_order=1,
-            organization=self.participant1.organization,
-            player1_name=self.participant1.player1_name,
-            player2_name=self.participant1.player2_name,
         )
         self.entry2 = LeagueEntry.objects.create(
             category=self.category,
@@ -5210,17 +5116,12 @@ class ApplyStageAdvancementsTests(TestCase):
             participant=self.participant2,
             pair_code="A2",
             display_order=2,
-            organization=self.participant2.organization,
-            player1_name=self.participant2.player1_name,
-            player2_name=self.participant2.player2_name,
         )
         self.target = LeagueEntry.objects.create(
             category=self.category,
             group=self.final_group,
             pair_code="F1",
             display_order=1,
-            player1_name="",
-            player2_name="",
         )
         self.source = AdvancementSource.objects.create(
             target_league_entry=self.target,
@@ -5262,8 +5163,6 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(applied_count, 1)
         self.target.refresh_from_db()
         self.assertEqual(self.target.participant, self.participant1)
-        self.assertEqual(self.target.organization, "")
-        self.assertEqual(self.target.player1_name, "")
         self.assertEqual(self.target.display_organization, "第一クラブ")
         self.assertEqual(self.target.display_player1_name, "一番 A")
 
@@ -5463,9 +5362,6 @@ class TournamentCloneTests(TestCase):
             participant=self.participant1,
             pair_code="1",
             display_order=1,
-            organization=self.participant1.organization,
-            player1_name=self.participant1.player1_name,
-            player2_name=self.participant1.player2_name,
             retired=True,
             retired_reason="テスト",
         )
@@ -5475,9 +5371,6 @@ class TournamentCloneTests(TestCase):
             participant=self.participant2,
             pair_code="2",
             display_order=2,
-            organization=self.participant2.organization,
-            player1_name=self.participant2.player1_name,
-            player2_name=self.participant2.player2_name,
         )
         self.target_entry = LeagueEntry.objects.create(
             category=self.category,
@@ -5485,9 +5378,6 @@ class TournamentCloneTests(TestCase):
             participant=self.participant1,
             pair_code="3",
             display_order=3,
-            organization=self.participant1.organization,
-            player1_name=self.participant1.player1_name,
-            player2_name=self.participant1.player2_name,
         )
         self.round_robin_match = RoundRobinMatch.objects.create(
             group=self.group,
@@ -5679,7 +5569,7 @@ class TournamentCloneTests(TestCase):
             pair_code="3",
         )
         self.assertIsNone(cloned_target.participant)
-        self.assertEqual(cloned_target.player1_name, "")
+        self.assertFalse(hasattr(cloned_target, "player1_name"))
 
         cloned_tournament_target = TournamentEntry.objects.get(
             bracket__category__tournament=clone,
@@ -6835,16 +6725,12 @@ class CategoryStageOverviewTests(TestCase):
             group=group,
             pair_code="A1",
             display_order=1,
-            player1_name="選手1",
-            player2_name="選手2",
         )
         entry2 = LeagueEntry.objects.create(
             category=category,
             group=group,
             pair_code="A2",
             display_order=2,
-            player1_name="選手3",
-            player2_name="選手4",
         )
         match = RoundRobinMatch.objects.create(
             group=group,
@@ -6910,32 +6796,24 @@ class CategoryStageOverviewTests(TestCase):
             group=group,
             pair_code="A1",
             display_order=1,
-            player1_name="追加1",
-            player2_name="追加2",
         )
         entry2 = LeagueEntry.objects.create(
             category=category,
             group=group,
             pair_code="A2",
             display_order=2,
-            player1_name="追加3",
-            player2_name="追加4",
         )
         entry3 = LeagueEntry.objects.create(
             category=category,
             group=group,
             pair_code="A3",
             display_order=3,
-            player1_name="追加5",
-            player2_name="追加6",
         )
         entry4 = LeagueEntry.objects.create(
             category=category,
             group=group,
             pair_code="A4",
             display_order=4,
-            player1_name="追加7",
-            player2_name="追加8",
         )
         RoundRobinMatch.objects.create(
             group=group,
@@ -7025,16 +6903,12 @@ class CategoryStageOverviewTests(TestCase):
             group=source_group,
             pair_code="A1",
             display_order=1,
-            player1_name="予選1",
-            player2_name="予選2",
         )
         source_entry2 = LeagueEntry.objects.create(
             category=category,
             group=source_group,
             pair_code="A2",
             display_order=2,
-            player1_name="予選3",
-            player2_name="予選4",
         )
         RoundRobinMatch.objects.create(
             group=source_group,
@@ -7052,8 +6926,6 @@ class CategoryStageOverviewTests(TestCase):
             group=waiting_group,
             pair_code="W1",
             display_order=1,
-            player1_name="",
-            player2_name="",
         )
         AdvancementSource.objects.create(
             target_league_entry=waiting_entry,
