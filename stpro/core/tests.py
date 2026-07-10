@@ -6644,6 +6644,7 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "予選3・予選4")
         self.assertContains(response, "win")
         self.assertContains(response, "lose")
+        self.assertContains(response, 'class="score-chip"')
         self.assertContains(response, "本戦")
         self.assertContains(response, "<svg", html=False)
         self.assertContains(response, "本戦1・本戦2")

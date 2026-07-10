@@ -833,3 +833,13 @@
   - `./venv/bin/python stpro/manage.py test core --keepdb`
   - `./venv/bin/python stpro/manage.py makemigrations --check --dry-run`
   - 最終確認時点で `core` は 199 tests OK。
+
+### 公開リーグ結果の勝者セル強調
+- 公開カテゴリ結果画面のリーグ表で、勝者側のゲーム数を丸囲み表示するようにした。
+- 色分けだけに頼らず、勝ったセルそのものを `score-chip` として見つけやすくした。
+- 進行表へのリンク付きセルでも丸囲みが崩れないことを確認した。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core.tests.CategoryStageOverviewTests.test_public_category_results_show_pending_league_schedule_link --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 199 tests OK。
