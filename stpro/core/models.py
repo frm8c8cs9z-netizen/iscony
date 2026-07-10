@@ -596,7 +596,10 @@ class LeagueEntry(models.Model):
     @property
     def short_name(self):
 
-        if not self.participant:
+        if self.participant:
+            player1_name = self.participant.player1_name
+            player2_name = self.participant.player2_name
+        else:
             source = getattr(
                 self,
                 "advancement_source",
@@ -605,6 +608,9 @@ class LeagueEntry(models.Model):
 
             if source:
                 return source.label
+
+            player1_name = self.player1_name
+            player2_name = self.player2_name
 
         def family_name(name):
 
@@ -622,9 +628,9 @@ class LeagueEntry(models.Model):
             return name
 
         return (
-            f"{family_name(self.player1_name)}"
+            f"{family_name(player1_name)}"
             f"・"
-            f"{family_name(self.player2_name)}"
+            f"{family_name(player2_name)}"
         )
 
     @property

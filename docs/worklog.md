@@ -765,3 +765,12 @@
 - 一方で、モデルの `short_name`、管理画面検索、CSV取込、大会複製、スナップショット保存・復元がまだ旧列を参照しているため、DB列の即削除は見送り。
 - `TournamentEntry` 側にも同名の表示用列が残っているため、リーグ枠だけでなくトーナメント枠も段階的に整理するTODOを追加。
 - 次は、表示ロジックを `participant` / 進出元情報ベースへ寄せるところから少しずつ進める。
+
+### LeagueEntry short_name の participant 参照化
+- `LeagueEntry.short_name` が `participant` 設定済みでも旧列 `player1_name` / `player2_name` を参照していたため、`participant` の選手名を優先して短縮名を作るように変更。
+- `participant` がない枠は、従来どおり `AdvancementSource` があれば進出元ラベル、なければ旧列フォールバックを使う。
+- 旧列が古い値でも `participant` 側の名前で短縮表示されるテストを追加。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.AdvancementSourceModelTests --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 197 tests OK。

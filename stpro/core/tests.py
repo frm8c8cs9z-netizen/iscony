@@ -948,6 +948,27 @@ class AdvancementSourceModelTests(TestCase):
         self.assertEqual(source.label, "M1勝者")
         self.assertEqual(self.league_entry.display_name, "M1勝者")
 
+    def test_league_entry_short_name_uses_participant(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P1",
+            organization="正所属",
+            player1_name="正一　太郎",
+            player2_name="正二　次郎",
+        )
+        entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            participant=participant,
+            pair_code="P1",
+            display_order=10,
+            organization="旧所属",
+            player1_name="旧一　太郎",
+            player2_name="旧二　次郎",
+        )
+
+        self.assertEqual(entry.short_name, "正一・正二")
+
     def test_advancement_sources_can_be_swapped_between_league_entries(self):
         group_d = Group.objects.create(
             category=self.category,
