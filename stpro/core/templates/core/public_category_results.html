@@ -441,7 +441,7 @@
                                         </th>
                                         {% for score in tie_row.scores %}
                                             {% if score.type == "self" %}
-                                                <td class="self-cell">-</td>
+                                                <td class="rr-score-col self-cell">-</td>
                                             {% else %}
                                                 <td class="rr-score-col {% if use_league_score_colors %}{{ score.type }}{% endif %}">
                                                     {% if score.type == "win" and score.value != None and score.value != "" %}

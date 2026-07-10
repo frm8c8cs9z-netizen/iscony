@@ -875,3 +875,14 @@
 ### ヘッダロゴの余白圧縮
 - `iscony_v001.png` の白い余白をトリミングし、見えているロゴ本体が小さく見えるようにした。
 - ヘッダ側の表示幅もさらに抑えて、ロゴの実見サイズがだいたい75%程度になるように寄せた。
+
+### 同率順位補助表の統一と順位自動入力
+- 同率順位決定補助表をリーグ表と同じ `round-robin-table` / `rr-*` レイアウトに統一した。
+- 勝敗セルの見た目と `score-chip` 表示も揃え、管理側と公開側の見た目を合わせた。
+- リーグ順位は勝数だけで止めず、`勝数 → ゲーム差 → 得ゲーム数` の順で一意に決まる場合は自動で `rank` を入れるようにした。
+- 勝数が同じ組み合わせはこれまで通り補助表を出し続けるので、運営の確認導線は維持している。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_group_ranking_can_be_auto_assigned_by_game_diff core.tests.RoundRobinMeetingTests.test_category_detail_renders_tie_table_in_round_robin_style core.tests.CategoryStageOverviewTests.test_public_category_results_renders_tie_table_in_round_robin_style core.tests.CategoryStageOverviewTests.test_public_category_results_are_read_only --keepdb`
+  - `./venv/bin/python stpro/manage.py test core.tests.RoundRobinMeetingTests.test_category_detail_can_disable_league_score_colors core.tests.CategoryStageOverviewTests.test_public_category_results_can_disable_league_score_colors --keepdb`
+  - `./venv/bin/python stpro/manage.py test core --keepdb`
+  - 最終確認時点で `core` は 204 tests OK。

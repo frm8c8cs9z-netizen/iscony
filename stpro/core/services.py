@@ -897,35 +897,67 @@ def update_group_ranking(
         rankings[match.pair2.id]["games_won"] += match.pair2_games
         rankings[match.pair2.id]["games_lost"] += match.pair1_games
 
+    for pair in pairs:
+        data = rankings[pair.id]
+        data["game_diff"] = (
+            data["games_won"]
+            - data["games_lost"]
+        )
+
+    def ranking_sort_key(pair):
+        data = rankings[pair.id]
+        return (
+            -data["wins"],
+            -data["game_diff"],
+            -data["games_won"],
+            data["games_lost"],
+            pair.display_order,
+            pair.pair_code,
+        )
+
+    resolved_rank_keys = {}
+
+    if all_matches_finished:
+        for pair in pairs:
+            data = rankings[pair.id]
+            resolved_rank_keys.setdefault(
+                (
+                    data["wins"],
+                    data["game_diff"],
+                    data["games_won"],
+                ),
+                0
+            )
+            resolved_rank_keys[
+                (
+                    data["wins"],
+                    data["game_diff"],
+                    data["games_won"],
+                )
+            ] += 1
+
     sorted_pairs = sorted(
         pairs,
-        key=lambda p: rankings[p.id]["wins"],
-        reverse=True
+        key=ranking_sort_key
     )
 
     for index, pair in enumerate(sorted_pairs, start=1):
 
         data = rankings[pair.id]
 
-        game_diff = (
-            data["games_won"]
-            - data["games_lost"]
+        rank_key = (
+            data["wins"],
+            data["game_diff"],
+            data["games_won"],
         )
 
-        same_count = sum(
-            1
-            for other_pair in sorted_pairs
-            if rankings[other_pair.id]["wins"] == data["wins"]
-        )
-
-        if not all_matches_finished:
-            calculated_rank = None
+        if (
+            all_matches_finished
+            and resolved_rank_keys.get(rank_key, 0) == 1
+        ):
+            calculated_rank = index
         else:
-            calculated_rank = (
-                None
-                if same_count > 1
-                else index
-            )
+            calculated_rank = None
 
         existing_ranking = GroupRanking.objects.filter(
             group=group,
@@ -953,7 +985,7 @@ def update_group_ranking(
                 "losses": data["losses"],
                 "games_won": data["games_won"],
                 "games_lost": data["games_lost"],
-                "game_diff": game_diff,
+                "game_diff": data["game_diff"],
                 "rank": rank,
             }
         )

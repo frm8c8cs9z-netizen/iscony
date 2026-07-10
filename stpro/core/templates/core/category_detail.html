@@ -268,63 +268,59 @@
         </p>
 
 {% for tie_table in data.tie_tables %}
+    <div class="table-wrapper">
+        <h4>
+            同率順位決定補助表
+            （{{ tie_table.wins }}勝）
+        </h4>
 
-    <h4>
-        同率順位決定補助表
-        （{{ tie_table.wins }}勝）
-    </h4>
-
-    <table border="1">
-
-        <tr>
-            <th></th>
-            <th></th>
-
-            {% for pair_data in tie_table.pairs %}
-                <th>
-                    {{ pair_data.pair.pair_code }}
-                </th>
-            {% endfor %}
-
-            <th>得</th>
-            <th>失</th>
-            <th>差</th>
-        </tr>
-
-        {% for row in tie_table.rows %}
-
+        <table class="round-robin-table">
             <tr>
-                <th>
-                    {{ row.pair.pair_code }}
-                </th>
-
-                <th>
-                    {% for line in row.pair_display_lines %}
-                        {{ line.text }}{% if not forloop.last %}<br>{% endif %}
-                    {% endfor %}
-                </th>
-
-                {% for score in row.scores %}
-
-                    {% if score.type == "self" %}
-                        <td class="self-cell">-</td>
-                    {% else %}
-                        <td class="{{ score.type }}">
-                            {{ score.value|default_if_none:"" }}
-                        </td>
-                    {% endif %}
-
+                <th class="rr-code-col"></th>
+                <th class="rr-name-col"></th>
+                {% for pair_data in tie_table.pairs %}
+                    <th class="rr-code-col rr-header">
+                        <span class="rr-header-inner">{{ pair_data.pair.pair_code }}</span>
+                    </th>
                 {% endfor %}
-
-                <td>{{ row.stat.games_won }}</td>
-                <td>{{ row.stat.games_lost }}</td>
-                <td>{{ row.stat.game_diff }}</td>
+                <th class="rr-stat-col rr-header">得</th>
+                <th class="rr-stat-col rr-header">失</th>
+                <th class="rr-stat-col rr-header">差</th>
             </tr>
 
-        {% endfor %}
+            {% for row in tie_table.rows %}
+                <tr>
+                    <th class="rr-code-col rr-header">
+                        <span class="rr-header-inner">{{ row.pair.pair_code }}</span>
+                    </th>
 
-    </table>
+                    <th class="rr-name-col rr-header">
+                        {% for line in row.pair_display_lines %}
+                            <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    </th>
 
+                    {% for score in row.scores %}
+                        {% if score.type == "self" %}
+                            <td class="rr-score-col self-cell">-</td>
+                        {% else %}
+                            <td class="rr-score-col {{ score.type }}">
+                                {% if score.type == "win" and score.value != None and score.value != "" %}
+                                    <span class="score-chip">{{ score.value }}</span>
+                                {% else %}
+                                    {{ score.value|default_if_none:"" }}
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                    {% endfor %}
+
+                    <td class="rr-stat-col">{{ row.stat.games_won }}</td>
+                    <td class="rr-stat-col">{{ row.stat.games_lost }}</td>
+                    <td class="rr-stat-col">{{ row.stat.game_diff }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    </div>
 {% endfor %}
 
 

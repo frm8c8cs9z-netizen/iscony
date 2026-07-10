@@ -1921,6 +1921,60 @@ class RoundRobinMeetingTests(TestCase):
         self.assertEqual((ranking1.wins, ranking1.losses), (1, 0))
         self.assertEqual((ranking2.wins, ranking2.losses), (0, 1))
 
+    def test_group_ranking_can_be_auto_assigned_by_game_diff(self):
+        entry3 = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry2,
+            pair2=entry3,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=entry3,
+            pair2=self.entry1,
+            pair1_games=3,
+            pair2_games=2,
+            completed=True,
+        )
+
+        update_group_ranking(self.group, reset_rank=True)
+
+        rankings = list(
+            GroupRanking.objects.filter(
+                group=self.group,
+            ).order_by(
+                "rank",
+                "pair__display_order",
+            )
+        )
+
+        self.assertEqual(
+            [ranking.pair.pair_code for ranking in rankings],
+            ["1", "2", "3"],
+        )
+        self.assertEqual(
+            [ranking.rank for ranking in rankings],
+            [1, 2, 3],
+        )
+
     def test_extra_meeting_is_displayed_below_league_table(self):
         self.tournament.default_league_entry_display_mode = (
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
@@ -2039,6 +2093,55 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, "score-chip")
         self.assertNotContains(response, 'class="win"')
         self.assertNotContains(response, 'class="lose"')
+
+    def test_category_detail_renders_tie_table_in_round_robin_style(self):
+        entry3 = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A3",
+            display_order=3,
+            player1_name="予選5",
+            player2_name="予選6",
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry2,
+            pair2=entry3,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=entry3,
+            pair2=self.entry1,
+            pair1_games=3,
+            pair2_games=2,
+            completed=True,
+        )
+        update_group_ranking(self.group, reset_rank=True)
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("同率順位決定補助表", response.content.decode())
+        self.assertGreaterEqual(
+            response.content.decode().count('class="round-robin-table"'),
+            2,
+        )
 
     def test_category_detail_links_back_to_stage_overview(self):
         response = self.client.get(
@@ -6767,6 +6870,93 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response_with_return, "元の試合へ戻る")
         self.assertNotContains(response, "大会スナップショット")
         self.assertContains(response, "試合進行表")
+
+    def test_public_category_results_renders_tie_table_in_round_robin_style(self):
+        tournament = Tournament.objects.create(
+            name="公開同率補助表大会",
+            code="PUBLICTIESTYLE",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry1 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        entry2 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="予選3",
+            player2_name="予選4",
+        )
+        entry3 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A3",
+            display_order=3,
+            player1_name="予選5",
+            player2_name="予選6",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry2,
+            pair2=entry3,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry3,
+            pair2=entry1,
+            pair1_games=3,
+            pair2_games=2,
+            completed=True,
+        )
+        update_group_ranking(group, reset_rank=True)
+
+        response = self.client.get(
+            reverse(
+                "public_category_results",
+                kwargs={
+                    "code": tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("同率順位決定補助表", response.content.decode())
+        self.assertGreaterEqual(
+            response.content.decode().count('class="round-robin-table"'),
+            2,
+        )
 
     def test_public_category_results_can_disable_league_score_colors(self):
         tournament = Tournament.objects.create(
