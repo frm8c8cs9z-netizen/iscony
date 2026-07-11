@@ -354,6 +354,73 @@ def maintenance_menu(request, code):
     )
 
 
+def result_input_select(request, code):
+    """コートと試合順から結果入力対象を素早く選ぶ。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    courts = Court.objects.filter(
+        tournament=tournament,
+    ).order_by(
+        "display_order",
+        "name",
+    )
+    orders = (
+        Schedule.objects.filter(
+            court__tournament=tournament,
+        )
+        .order_by("order")
+        .values_list("order", flat=True)
+        .distinct()
+    )
+
+    court_id = request.GET.get("court")
+    order_value = request.GET.get("order")
+    selected_court = None
+    selected_order = None
+    results = []
+    searched = bool(court_id and order_value)
+
+    if court_id:
+        selected_court = get_object_or_404(
+            Court,
+            id=court_id,
+            tournament=tournament,
+        )
+
+    if order_value:
+        try:
+            selected_order = int(order_value)
+        except ValueError:
+            selected_order = None
+
+    if selected_court and selected_order is not None:
+        results = _search_matches_by_schedule(
+            tournament,
+            selected_court,
+            selected_order,
+        )
+
+        if len(results) == 1 and results[0]["can_input"]:
+            return redirect(results[0]["input_url"])
+
+    return render(
+        request,
+        "core/result_input_select.html",
+        {
+            "tournament": tournament,
+            "courts": courts,
+            "orders": orders,
+            "selected_court": selected_court,
+            "selected_order": selected_order,
+            "results": results,
+            "searched": searched,
+        },
+    )
+
+
 def _render_public_schedule(request, tournament):
     block_tables = _schedule_block_tables(tournament)
 

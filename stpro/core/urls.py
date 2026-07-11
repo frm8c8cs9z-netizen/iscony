@@ -38,6 +38,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/result-input/select/",
+        views.result_input_select,
+        name="result_input_select",
+    ),
+
+    path(
         "tournament/<str:code>/clone/",
         views.clone_tournament_view,
         name="clone_tournament",

@@ -1,0 +1,124 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>試合選択</h2>
+        <p class="subtle-text">
+            {{ tournament.name }}
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'maintenance_menu' tournament.code %}">
+            管理メニューへ戻る
+        </a>
+        <a href="{% url 'schedule_view' tournament.code %}">
+            試合進行表
+        </a>
+        <a href="{% url 'reception_match_search' tournament.code %}">
+            詳細検索
+        </a>
+    </div>
+</div>
+
+<h3>コートを選ぶ</h3>
+
+<div class="choice-row">
+    {% for court in courts %}
+        <a
+            href="?court={{ court.id }}{% if selected_order is not None %}&order={{ selected_order }}{% endif %}"
+            class="{% if selected_court and selected_court.id == court.id %}choice-active{% endif %}"
+        >
+            {{ court.name }}コート
+        </a>
+    {% empty %}
+        <span class="subtle-text">コートがありません。</span>
+    {% endfor %}
+</div>
+
+<h3>試合順を選ぶ</h3>
+
+<div class="choice-row">
+    {% for order in orders %}
+        <a
+            href="?order={{ order }}{% if selected_court %}&court={{ selected_court.id }}{% endif %}"
+            class="{% if selected_order == order %}choice-active{% endif %}"
+        >
+            第{{ order }}試合
+        </a>
+    {% empty %}
+        <span class="subtle-text">試合がありません。</span>
+    {% endfor %}
+</div>
+
+{% if selected_court or selected_order is not None %}
+    <p class="subtle-text">
+        {% if selected_court %}
+            {{ selected_court.name }}コート
+        {% else %}
+            コート未選択
+        {% endif %}
+        /
+        {% if selected_order is not None %}
+            第{{ selected_order }}試合
+        {% else %}
+            試合順未選択
+        {% endif %}
+    </p>
+{% endif %}
+
+{% if searched %}
+    <h3>候補</h3>
+
+    {% if results %}
+        <div class="table-wrapper">
+            <table>
+                <tr>
+                    <th>種別</th>
+                    <th>カテゴリ</th>
+                    <th>Stage</th>
+                    <th>リーグ/トーナメント</th>
+                    <th>試合</th>
+                    <th>対戦</th>
+                    <th>進行枠</th>
+                    <th>状態</th>
+                    <th>スコア</th>
+                    <th>操作</th>
+                </tr>
+                {% for row in results %}
+                    <tr>
+                        <td>{{ row.kind }}</td>
+                        <td>{{ row.category }}</td>
+                        <td>{{ row.stage }}</td>
+                        <td>{{ row.container }}</td>
+                        <td>{{ row.match_label }}</td>
+                        <td>{{ row.entries }}</td>
+                        <td>{{ row.schedule }}</td>
+                        <td>{{ row.status }}</td>
+                        <td>{{ row.score }}</td>
+                        <td>
+                            <a href="{{ row.input_url }}">
+                                {% if row.can_input %}
+                                    結果入力
+                                {% else %}
+                                    確認
+                                {% endif %}
+                            </a>
+                            ／
+                            <a href="{{ row.detail_url }}">
+                                表へ移動
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </table>
+        </div>
+    {% else %}
+        <p>
+            該当する試合が見つかりませんでした。
+        </p>
+    {% endif %}
+{% endif %}
+
+{% endblock %}

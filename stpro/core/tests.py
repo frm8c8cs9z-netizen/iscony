@@ -6077,7 +6077,8 @@ class MaintenanceMenuTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "当日運営")
-        self.assertContains(response, "試合受付・結果入力")
+        self.assertContains(response, "試合選択")
+        self.assertContains(response, "詳細検索")
         self.assertContains(response, "採点票出力")
         self.assertContains(response, "Stage・結果反映")
         self.assertContains(response, "大会準備")
@@ -6693,6 +6694,98 @@ class ReceptionMatchSearchTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "該当する試合が見つかりませんでした。")
+
+
+class ResultInputSelectTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="選択大会",
+            code="SELECT",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            code="L",
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+        )
+        self.entry1 = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="1",
+            display_order=1,
+            player1_name="選択1A",
+            player2_name="選択1B",
+        )
+        self.entry2 = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="2",
+            display_order=2,
+            player1_name="選択2A",
+            player2_name="選択2B",
+        )
+        self.match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1",
+        )
+        self.block = ScheduleBlock.get_default(self.tournament)
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=3,
+            round_robin_match=self.match,
+        )
+
+    def test_result_input_select_page_is_displayed(self):
+        response = self.client.get(
+            reverse(
+                "result_input_select",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "試合選択")
+        self.assertContains(response, "1コート")
+        self.assertContains(response, "第3試合")
+        self.assertContains(response, "詳細検索")
+
+    def test_result_input_select_redirects_when_unique_match_is_selected(self):
+        response = self.client.get(
+            reverse(
+                "result_input_select",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "court": str(self.court.id),
+                "order": "3",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.match.id},
+            ),
+            fetch_redirect_response=False,
+        )
 
 
 class CategoryStageOverviewTests(TestCase):
