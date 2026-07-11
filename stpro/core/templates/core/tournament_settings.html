@@ -244,6 +244,49 @@
     })();
 </script>
 
+<section class="settings-section">
+    <h3>結果入力の進行枠</h3>
+
+    <p>
+        結果入力画面で選ぶ進行枠を設定します。表示だけして選ばせない枠や、初期選択の枠をここで決めます。
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_schedule_blocks">
+
+        <table border="1">
+            <tr>
+                <th>進行枠</th>
+                <th>結果入力で表示</th>
+                <th>結果入力で選択可</th>
+                <th>初期選択</th>
+            </tr>
+            {% for block, block_form in schedule_block_forms %}
+                <tr>
+                    <td>
+                        <strong>{{ block.name }}</strong><br>
+                        <small class="muted-text">表示順 {{ block.display_order }}</small>
+                    </td>
+                    <td>{{ block_form.result_input_visible }}</td>
+                    <td>{{ block_form.result_input_selectable }}</td>
+                    <td>{{ block_form.result_input_default }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4">進行枠がありません。</td>
+                </tr>
+            {% endfor %}
+        </table>
+
+        <p class="muted-text">
+            初期選択は1つだけを推奨します。選択可能な進行枠が1つだけなら、結果入力画面で自動選択されます。
+        </p>
+
+        <button type="submit">進行枠設定を保存</button>
+    </form>
+</section>
+
 <form method="post">
     {% csrf_token %}
 

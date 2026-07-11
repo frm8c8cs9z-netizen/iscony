@@ -6321,6 +6321,70 @@ class MaintenanceMenuTests(TestCase):
             ),
         )
 
+    def test_tournament_settings_page_shows_schedule_block_settings(self):
+        tournament = Tournament.objects.create(
+            name="進行枠設定表示テスト",
+            code="BLOCKVIEW",
+        )
+        ScheduleBlock.get_default(tournament)
+
+        response = self.client.get(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "結果入力の進行枠")
+        self.assertContains(response, "結果入力で表示")
+        self.assertContains(response, "結果入力で選択可")
+        self.assertContains(response, "初期選択")
+        self.assertContains(response, "本日程")
+
+    def test_tournament_settings_can_update_schedule_block_selection_flags(self):
+        tournament = Tournament.objects.create(
+            name="進行枠設定更新テスト",
+            code="BLOCKEDIT",
+        )
+        block1 = ScheduleBlock.get_default(tournament)
+        block2 = ScheduleBlock.objects.create(
+            tournament=tournament,
+            name="2日目",
+            display_order=2,
+        )
+
+        response = self.client.post(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+            {
+                "action": "update_schedule_blocks",
+                f"block-{block1.id}-result_input_visible": "on",
+                f"block-{block1.id}-result_input_selectable": "on",
+                f"block-{block1.id}-result_input_default": "on",
+                f"block-{block2.id}-result_input_visible": "on",
+                f"block-{block2.id}-result_input_selectable": "on",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        block1.refresh_from_db()
+        block2.refresh_from_db()
+        self.assertTrue(block1.result_input_visible)
+        self.assertTrue(block1.result_input_selectable)
+        self.assertTrue(block1.result_input_default)
+        self.assertTrue(block2.result_input_visible)
+        self.assertTrue(block2.result_input_selectable)
+        self.assertFalse(block2.result_input_default)
+
     def test_tournament_settings_page_shows_private_public_state(self):
         tournament = Tournament.objects.create(
             name="非公開設定表示テスト",
@@ -6762,6 +6826,8 @@ class ResultInputSelectTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "試合選択")
+        self.assertContains(response, "進行枠を選ぶ")
+        self.assertContains(response, "本日程")
         self.assertContains(response, "1コート")
         self.assertContains(response, "第3試合")
         self.assertContains(response, "詳細検索")

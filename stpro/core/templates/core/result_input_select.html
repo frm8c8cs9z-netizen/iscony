@@ -22,50 +22,87 @@
     </div>
 </div>
 
-<h3>コートを選ぶ</h3>
+<h3>進行枠を選ぶ</h3>
 
-<div class="choice-row">
-    {% for court in courts %}
-        <a
-            href="?court={{ court.id }}{% if selected_order is not None %}&order={{ selected_order }}{% endif %}"
-            class="{% if selected_court and selected_court.id == court.id %}choice-active{% endif %}"
-        >
-            {{ court.name }}コート
-        </a>
-    {% empty %}
-        <span class="subtle-text">コートがありません。</span>
-    {% endfor %}
-</div>
-
-<h3>試合順を選ぶ</h3>
-
-<div class="choice-row">
-    {% for order in orders %}
-        <a
-            href="?order={{ order }}{% if selected_court %}&court={{ selected_court.id }}{% endif %}"
-            class="{% if selected_order == order %}choice-active{% endif %}"
-        >
-            第{{ order }}試合
-        </a>
-    {% empty %}
-        <span class="subtle-text">試合がありません。</span>
-    {% endfor %}
-</div>
-
-{% if selected_court or selected_order is not None %}
+{% if selected_block %}
     <p class="subtle-text">
-        {% if selected_court %}
-            {{ selected_court.name }}コート
-        {% else %}
-            コート未選択
-        {% endif %}
-        /
-        {% if selected_order is not None %}
-            第{{ selected_order }}試合
-        {% else %}
-            試合順未選択
-        {% endif %}
+        選択中の進行枠:
+        <strong>{{ selected_block.name }}</strong>
     </p>
+{% else %}
+    <p class="subtle-text">
+        先に進行枠を選んでください。
+    </p>
+{% endif %}
+
+<div class="choice-row">
+    {% for block in blocks %}
+        {% if block.result_input_selectable %}
+            <a
+                href="?schedule_block={{ block.id }}{% if selected_court %}&court={{ selected_court.id }}{% endif %}{% if selected_order is not None %}&order={{ selected_order }}{% endif %}"
+                class="{% if selected_block and selected_block.id == block.id %}choice-active{% endif %}"
+            >
+                {{ block.name }}
+                {% if block.result_input_default %}
+                    <span class="subtle-text">・初期</span>
+                {% endif %}
+            </a>
+        {% else %}
+            <span class="subtle-text">
+                {{ block.name }}
+            </span>
+        {% endif %}
+    {% empty %}
+        <span class="subtle-text">進行枠がありません。</span>
+    {% endfor %}
+</div>
+
+{% if selected_block %}
+    <h3>コートを選ぶ</h3>
+
+    <div class="choice-row">
+        {% for court in courts %}
+            <a
+                href="?schedule_block={{ selected_block.id }}&court={{ court.id }}{% if selected_order is not None %}&order={{ selected_order }}{% endif %}"
+                class="{% if selected_court and selected_court.id == court.id %}choice-active{% endif %}"
+            >
+                {{ court.name }}コート
+            </a>
+        {% empty %}
+            <span class="subtle-text">コートがありません。</span>
+        {% endfor %}
+    </div>
+
+    <h3>試合順を選ぶ</h3>
+
+    <div class="choice-row">
+        {% for order in orders %}
+            <a
+                href="?schedule_block={{ selected_block.id }}&order={{ order }}{% if selected_court %}&court={{ selected_court.id }}{% endif %}"
+                class="{% if selected_order == order %}choice-active{% endif %}"
+            >
+                第{{ order }}試合
+            </a>
+        {% empty %}
+            <span class="subtle-text">試合がありません。</span>
+        {% endfor %}
+    </div>
+
+    {% if selected_court or selected_order is not None %}
+        <p class="subtle-text">
+            {% if selected_court %}
+                {{ selected_court.name }}コート
+            {% else %}
+                コート未選択
+            {% endif %}
+            /
+            {% if selected_order is not None %}
+                第{{ selected_order }}試合
+            {% else %}
+                試合順未選択
+            {% endif %}
+        </p>
+    {% endif %}
 {% endif %}
 
 {% if searched %}

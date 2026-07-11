@@ -863,6 +863,18 @@ class ScheduleBlock(models.Model):
         default=0,
     )
 
+    result_input_visible = models.BooleanField(
+        default=True,
+    )
+
+    result_input_selectable = models.BooleanField(
+        default=True,
+    )
+
+    result_input_default = models.BooleanField(
+        default=False,
+    )
+
     class Meta:
         unique_together = (
             "tournament",
@@ -878,9 +890,27 @@ class ScheduleBlock(models.Model):
         block, _ = cls.objects.get_or_create(
             tournament=tournament,
             name=cls.DEFAULT_NAME,
-            defaults={"display_order": 0},
+            defaults={
+                "display_order": 0,
+                "result_input_visible": True,
+                "result_input_selectable": True,
+                "result_input_default": True,
+            },
         )
         return block
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        if self.result_input_default and self.tournament_id:
+            ScheduleBlock.objects.filter(
+                tournament_id=self.tournament_id,
+                result_input_default=True,
+            ).exclude(
+                pk=self.pk,
+            ).update(
+                result_input_default=False,
+            )
 
     def __str__(self):
         return f"{self.tournament.name} {self.name}"

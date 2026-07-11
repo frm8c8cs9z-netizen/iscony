@@ -33,6 +33,7 @@ from .forms import (
     ScheduleMoveForm,
     CategoryForm,
     ReceptionMatchSearchForm,
+    ScheduleBlockSettingsForm,
     TournamentCloneForm,
     TournamentSettingsForm,
 )
@@ -361,6 +362,30 @@ def result_input_select(request, code):
         Tournament,
         code=code,
     )
+    blocks = ScheduleBlock.objects.filter(
+        tournament=tournament,
+        result_input_visible=True,
+    ).order_by(
+        "display_order",
+        "id",
+    )
+    selected_block_id = request.GET.get("schedule_block")
+    selected_block = None
+    if selected_block_id:
+        selected_block = blocks.filter(
+            id=selected_block_id,
+            result_input_selectable=True,
+        ).first()
+    if not selected_block:
+        default_blocks = blocks.filter(
+            result_input_default=True,
+            result_input_selectable=True,
+        )
+        if default_blocks.count() == 1:
+            selected_block = default_blocks.first()
+        elif blocks.filter(result_input_selectable=True).count() == 1:
+            selected_block = blocks.filter(result_input_selectable=True).first()
+
     courts = Court.objects.filter(
         tournament=tournament,
     ).order_by(
@@ -375,13 +400,31 @@ def result_input_select(request, code):
         .values_list("order", flat=True)
         .distinct()
     )
-
     court_id = request.GET.get("court")
     order_value = request.GET.get("order")
     selected_court = None
     selected_order = None
     results = []
-    searched = bool(court_id and order_value)
+    searched = bool(selected_block and court_id and order_value)
+
+    if selected_block:
+        block_courts = Court.objects.filter(
+            schedule__schedule_block=selected_block,
+            tournament=tournament,
+        ).distinct().order_by(
+            "display_order",
+            "name",
+        )
+        if block_courts.exists():
+            courts = block_courts
+        orders = (
+            Schedule.objects.filter(
+                schedule_block=selected_block,
+            )
+            .order_by("order")
+            .values_list("order", flat=True)
+            .distinct()
+        )
 
     if court_id:
         selected_court = get_object_or_404(
@@ -389,6 +432,11 @@ def result_input_select(request, code):
             id=court_id,
             tournament=tournament,
         )
+        if selected_block and not Schedule.objects.filter(
+            schedule_block=selected_block,
+            court=selected_court,
+        ).exists():
+            selected_court = None
 
     if order_value:
         try:
@@ -396,11 +444,12 @@ def result_input_select(request, code):
         except ValueError:
             selected_order = None
 
-    if selected_court and selected_order is not None:
+    if selected_block and selected_court and selected_order is not None:
         results = _search_matches_by_schedule(
             tournament,
             selected_court,
             selected_order,
+            schedule_block=selected_block,
         )
 
         if len(results) == 1 and results[0]["can_input"]:
@@ -411,6 +460,8 @@ def result_input_select(request, code):
         "core/result_input_select.html",
         {
             "tournament": tournament,
+            "blocks": blocks,
+            "selected_block": selected_block,
             "courts": courts,
             "orders": orders,
             "selected_court": selected_court,
@@ -653,7 +704,7 @@ def _search_matches_by_entry(tournament, category, entry_number):
     return rows
 
 
-def _search_matches_by_schedule(tournament, court, order):
+def _search_matches_by_schedule(tournament, court, order, schedule_block=None):
     schedules = (
         Schedule.objects.filter(
             court=court,
@@ -680,6 +731,10 @@ def _search_matches_by_schedule(tournament, court, order):
             "schedule_block__id",
         )
     )
+    if schedule_block:
+        schedules = schedules.filter(
+            schedule_block=schedule_block,
+        )
 
     rows = []
 
@@ -753,6 +808,8 @@ def tournament_settings(request, code):
         Tournament,
         code=code,
     )
+    blocks = None
+    schedule_block_forms = None
 
     if request.method == "POST":
         if request.POST.get("action") == "regenerate_public_token":
@@ -766,6 +823,64 @@ def tournament_settings(request, code):
             return redirect(
                 "tournament_settings",
                 code=tournament.code,
+            )
+
+        if request.POST.get("action") == "update_schedule_blocks":
+            blocks = ScheduleBlock.objects.filter(
+                tournament=tournament,
+            ).order_by(
+                "display_order",
+                "id",
+            )
+            block_forms = [
+                ScheduleBlockSettingsForm(
+                    request.POST,
+                    instance=block,
+                    prefix=f"block-{block.id}",
+                )
+                for block in blocks
+            ]
+
+            if all(form.is_valid() for form in block_forms):
+                selected_defaults = [
+                    form
+                    for form in block_forms
+                    if form.cleaned_data.get("result_input_default")
+                ]
+                if len(selected_defaults) > 1:
+                    for form in selected_defaults:
+                        form.add_error(
+                            "result_input_default",
+                            "初期選択は1つだけにしてください。",
+                        )
+                else:
+                    for form in block_forms:
+                        form.save()
+                    messages.success(
+                        request,
+                        "進行枠の結果入力設定を更新しました。",
+                    )
+                    return redirect(
+                        "tournament_settings",
+                        code=tournament.code,
+                    )
+
+            form = TournamentSettingsForm(instance=tournament)
+            public_url = request.build_absolute_uri(
+                reverse(
+                    "public_tournament_detail",
+                    kwargs={"public_token": tournament.public_token},
+                )
+            )
+            return render(
+                request,
+                "core/tournament_settings.html",
+                {
+                    "tournament": tournament,
+                    "form": form,
+                    "public_url": public_url,
+                    "schedule_block_forms": list(zip(blocks, block_forms)),
+                },
             )
 
         if request.POST.get("action") == "update_public_visibility":
@@ -795,6 +910,22 @@ def tournament_settings(request, code):
     else:
         form = TournamentSettingsForm(instance=tournament)
 
+    if schedule_block_forms is None:
+        blocks = ScheduleBlock.objects.filter(
+            tournament=tournament,
+        ).order_by(
+            "display_order",
+            "id",
+        )
+        block_forms = [
+            ScheduleBlockSettingsForm(
+                instance=block,
+                prefix=f"block-{block.id}",
+            )
+            for block in blocks
+        ]
+        schedule_block_forms = list(zip(blocks, block_forms))
+
     public_url = request.build_absolute_uri(
         reverse(
             "public_tournament_detail",
@@ -809,6 +940,7 @@ def tournament_settings(request, code):
             "tournament": tournament,
             "form": form,
             "public_url": public_url,
+            "schedule_block_forms": schedule_block_forms,
         },
     )
 

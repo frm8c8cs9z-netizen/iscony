@@ -384,10 +384,16 @@ class ScheduleBlockAdmin(admin.ModelAdmin):
         "name",
         "tournament",
         "display_order",
+        "result_input_visible",
+        "result_input_selectable",
+        "result_input_default",
     )
 
     list_filter = (
         "tournament",
+        "result_input_visible",
+        "result_input_selectable",
+        "result_input_default",
     )
 
 
