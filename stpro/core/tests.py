@@ -6104,6 +6104,13 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(
             response,
             reverse(
+                "result_input_select",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
                 "bulk_score_sheet_select",
                 kwargs={"code": tournament.code},
             ),
@@ -6675,8 +6682,10 @@ class ReceptionMatchSearchTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "試合受付・結果入力")
+        self.assertContains(response, "試合選択")
         self.assertContains(response, "カテゴリ + 番号で探す")
         self.assertContains(response, "コート + 第何試合で探す")
+        self.assertContains(response, "結果入力ハブ")
 
     def test_reception_search_finds_matches_by_category_and_number(self):
         response = self.client.get(
@@ -6826,11 +6835,13 @@ class ResultInputSelectTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "試合選択")
+        self.assertContains(response, "試合受付・結果入力")
         self.assertContains(response, "進行枠を選ぶ")
         self.assertContains(response, "本日程")
         self.assertContains(response, "1コート")
         self.assertContains(response, "第3試合")
         self.assertContains(response, "詳細検索")
+        self.assertContains(response, "QRやマッチキーから入る入口")
 
     def test_result_input_select_redirects_when_unique_match_is_selected(self):
         response = self.client.get(

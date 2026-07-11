@@ -10,6 +10,9 @@
         </p>
     </div>
     <div class="action-row">
+        <a href="{% url 'result_input_select' tournament.code %}">
+            試合選択
+        </a>
         <a href="{% url 'maintenance_menu' tournament.code %}">
             管理メニューへ戻る
         </a>
@@ -19,7 +22,17 @@
     </div>
 </div>
 
-<h3>カテゴリ + 番号で探す</h3>
+<p class="subtle-text">
+    この画面は、今は既存の検索入口を並べた結果入力ハブです。
+    将来的にはマッチキーやQRもここへ集約します。
+</p>
+
+<div class="choice-row">
+    <a href="#entry-search">カテゴリ + 番号</a>
+    <a href="#schedule-search">コート + 第何試合</a>
+</div>
+
+<h3 id="entry-search">カテゴリ + 番号で探す</h3>
 
 <form method="get" class="search-box">
     <input type="hidden" name="search_mode" value="entry">
@@ -40,7 +53,7 @@
     {% endif %}
 </form>
 
-<h3>コート + 第何試合で探す</h3>
+<h3 id="schedule-search">コート + 第何試合で探す</h3>
 
 <form method="get" class="search-box">
     <input type="hidden" name="search_mode" value="schedule">
