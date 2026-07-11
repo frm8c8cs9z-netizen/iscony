@@ -226,6 +226,17 @@
 - まずは `試合選択`、`試合受付・結果入力`、`match_key`、公開画面と管理画面の役割分担を初期項目としてまとめた。
 - これからは、会話で決まったことを `spec.md` に積み、実装や確認は従来どおり `worklog.md` と `TODO.md` に分けて残す。
 
+### match_key の第1段階を実装
+- `RoundRobinMatch` と `TournamentMatch` に `match_key` を追加し、数字だけの短いキーを保存するようにした。
+- 種別は `1=リーグ`、`2=トーナメント` とし、Damm 法のチェックデジットを付ける形にした。
+- 受付検索画面に `マッチキー` 検索を追加し、1件に定まる場合は結果入力画面へ直遷移するようにした。
+- `試合選択` と `試合受付・結果入力` の往復導線はそのまま残し、キー入力は受付検索側で受ける構成にした。
+- 複製・スナップショット保存/復元にも `match_key` を含め、過去データのキーが落ちないようにした。
+- 既存データは大会ごとに順番を振ってバックフィルする migration を追加した。
+- 確認:
+  - `./venv/bin/python stpro/manage.py test core.tests.ReceptionMatchSearchTests core.tests.ResultInputSelectTests core.tests.TournamentCloneTests core.tests.CategorySnapshotTests --keepdb`
+  - 最終確認時点で 22 tests OK。
+
 ### TODO追記: 採点票一括出力の範囲選択
 - `TODO.md` に、採点票PDF一括出力は範囲選択できないと実運用では粗いという判断を追記。
 - 最初の予選リーグは事前に全試合を印刷できるが、リーグ結果から次リーグへ進む場合は、結果反映状況によって印刷可能な範囲が変わる。

@@ -11,6 +11,7 @@ from .models import (
     ScheduleBlock,
     Court,
 )
+from .match_keys import normalize_match_key
 
 
 class CSVUploadForm(forms.Form):
@@ -127,10 +128,12 @@ class ReceptionMatchSearchForm(forms.Form):
 
     SEARCH_BY_ENTRY = "entry"
     SEARCH_BY_SCHEDULE = "schedule"
+    SEARCH_BY_KEY = "key"
 
     SEARCH_MODE_CHOICES = [
         (SEARCH_BY_ENTRY, "カテゴリ + 番号"),
         (SEARCH_BY_SCHEDULE, "コート + 第何試合"),
+        (SEARCH_BY_KEY, "マッチキー"),
     ]
 
     search_mode = forms.ChoiceField(
@@ -159,6 +162,12 @@ class ReceptionMatchSearchForm(forms.Form):
         min_value=1,
         label="第何試合",
     )
+    match_key = forms.CharField(
+        required=False,
+        max_length=30,
+        label="マッチキー",
+        help_text="数字だけで入力できます。記号は省略してかまいません。",
+    )
 
     def __init__(self, *args, tournament=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -185,6 +194,9 @@ class ReceptionMatchSearchForm(forms.Form):
     def clean(self):
         cleaned_data = super().clean()
         mode = cleaned_data.get("search_mode") or self.SEARCH_BY_ENTRY
+        cleaned_data["match_key"] = normalize_match_key(
+            cleaned_data.get("match_key")
+        )
 
         if mode == self.SEARCH_BY_ENTRY:
             if not cleaned_data.get("category"):
@@ -197,6 +209,9 @@ class ReceptionMatchSearchForm(forms.Form):
                 self.add_error("court", "コートを選択してください。")
             if not cleaned_data.get("order"):
                 self.add_error("order", "第何試合を入力してください。")
+
+        if mode == self.SEARCH_BY_KEY and not cleaned_data.get("match_key"):
+            self.add_error("match_key", "マッチキーを入力してください。")
 
         return cleaned_data
 

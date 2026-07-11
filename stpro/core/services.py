@@ -194,6 +194,7 @@ def clone_tournament_without_results(source, *, name, code):
                 pair2_games=None,
                 match_games=old.match_games,
                 completed=False,
+                match_key=old.match_key,
             )
 
         old_tournament_matches = list(
@@ -217,6 +218,7 @@ def clone_tournament_without_results(source, *, name, code):
                 winner=None,
                 next_match=None,
                 next_slot=old.next_slot,
+                match_key=old.match_key,
             )
 
         for old in old_tournament_matches:

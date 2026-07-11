@@ -37,6 +37,9 @@ from .forms import (
     TournamentCloneForm,
     TournamentSettingsForm,
 )
+from .match_keys import (
+    format_match_key_display,
+)
 
 from .services import (
     clone_tournament_without_results,
@@ -581,6 +584,7 @@ def _round_robin_search_row(match, tournament, schedule=None):
         "match_label": (
             f"{match.pair1.pair_code} vs {match.pair2.pair_code}"
         ),
+        "match_key": format_match_key_display(match.match_key),
         "entries": f"{match.pair1.display_name} vs {match.pair2.display_name}",
         "schedule": _schedule_text(schedule),
         "status": _schedule_status(schedule, match),
@@ -611,6 +615,7 @@ def _tournament_search_row(match, tournament, schedule=None):
         "stage": match.bracket.stage.name if match.bracket.stage else "-",
         "container": match.bracket.name,
         "match_label": match.match_label or match.match_code,
+        "match_key": format_match_key_display(match.match_key),
         "entries": f"{pair1} vs {pair2}",
         "schedule": _schedule_text(schedule),
         "status": _schedule_status(schedule, match),
@@ -759,6 +764,61 @@ def _search_matches_by_schedule(tournament, court, order, schedule_block=None):
     return rows
 
 
+def _search_matches_by_key(tournament, match_key):
+    rows = []
+
+    round_robin_matches = (
+        RoundRobinMatch.objects.filter(
+            group__category__tournament=tournament,
+            match_key=match_key,
+        )
+        .select_related(
+            "group",
+            "group__stage",
+            "group__category",
+            "pair1",
+            "pair2",
+        )
+        .order_by(
+            "group__stage__display_order",
+            "group__display_order",
+            "group__name",
+            "meeting_number",
+            "id",
+        )
+    )
+
+    for match in round_robin_matches:
+        rows.append(_round_robin_search_row(match, tournament))
+
+    tournament_matches = (
+        TournamentMatch.objects.filter(
+            bracket__category__tournament=tournament,
+            match_key=match_key,
+        )
+        .select_related(
+            "bracket",
+            "bracket__stage",
+            "bracket__category",
+            "pair1",
+            "pair2",
+        )
+        .order_by(
+            "bracket__stage__display_order",
+            "bracket__display_order",
+            "bracket__name",
+            "round_number",
+            "match_number",
+            "id",
+        )
+    )
+
+    for match in tournament_matches:
+        rows.append(_tournament_search_row(match, tournament))
+
+    return rows
+
+
 def reception_match_search(request, code):
     """試合受付でスコアシートからリーグ/トーナメント試合を探す。"""
 
@@ -788,6 +848,13 @@ def reception_match_search(request, code):
                 form.cleaned_data["court"],
                 form.cleaned_data["order"],
             )
+        elif mode == ReceptionMatchSearchForm.SEARCH_BY_KEY:
+            results = _search_matches_by_key(
+                tournament,
+                form.cleaned_data["match_key"],
+            )
+            if len(results) == 1:
+                return redirect(results[0]["input_url"])
 
     return render(
         request,

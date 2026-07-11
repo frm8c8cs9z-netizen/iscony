@@ -111,6 +111,7 @@ def build_category_snapshot_payload(category):
             "pair2_games": match.pair2_games,
             "match_games": match.match_games,
             "completed": match.completed,
+            "match_key": match.match_key,
         })
 
     tournament_matches = []
@@ -130,6 +131,7 @@ def build_category_snapshot_payload(category):
             "next_match_id": match.next_match_id,
             "next_slot": match.next_slot,
             "match_label": match.match_label,
+            "match_key": match.match_key,
         })
 
     rankings = []
@@ -204,7 +206,7 @@ def build_category_snapshot_payload(category):
         })
 
     return {
-        "version": 1,
+        "version": 2,
         "scope_type": OperationSnapshot.SCOPE_CATEGORY,
         "category_id": category.id,
         "tournament_id": category.tournament_id,
@@ -440,23 +442,30 @@ def _restore_category_payload(
                 pair2_games=item["pair2_games"],
                 match_games=item["match_games"],
                 completed=item["completed"],
+                match_key=item.get("match_key", ""),
             )
 
         for item in payload["tournament_matches"]:
-            TournamentMatch.objects.filter(id=item["id"]).update(
-                pair1_id=item["pair1_id"],
-                pair2_id=item["pair2_id"],
-                pair1_games=item["pair1_games"],
-                pair2_games=item["pair2_games"],
-                match_games=item["match_games"],
-                result_type=item.get(
+            update_fields = {
+                "pair1_id": item["pair1_id"],
+                "pair2_id": item["pair2_id"],
+                "pair1_games": item["pair1_games"],
+                "pair2_games": item["pair2_games"],
+                "match_games": item["match_games"],
+                "result_type": item.get(
                     "result_type",
                     TournamentMatch.RESULT_NORMAL,
                 ),
-                winner_id=item["winner_id"],
-                next_match_id=item["next_match_id"],
-                next_slot=item["next_slot"],
-                match_label=item["match_label"],
+                "winner_id": item["winner_id"],
+                "next_match_id": item["next_match_id"],
+                "next_slot": item["next_slot"],
+                "match_label": item["match_label"],
+            }
+            if item.get("match_key"):
+                update_fields["match_key"] = item["match_key"]
+
+            TournamentMatch.objects.filter(id=item["id"]).update(
+                **update_fields,
             )
 
         for item in payload["group_rankings"]:

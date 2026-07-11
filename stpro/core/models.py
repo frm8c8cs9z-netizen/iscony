@@ -12,6 +12,12 @@ from .display_helpers import (
     ENTRY_DISPLAY_ONE_LINE as DISPLAY_ONE_LINE,
     ENTRY_DISPLAY_SHORT_ORG_2LINE as DISPLAY_SHORT_ORG_2LINE,
 )
+from .match_keys import (
+    MATCH_KEY_KIND_LEAGUE,
+    MATCH_KEY_KIND_TOURNAMENT,
+    build_match_key,
+    next_match_key_sequence,
+)
 
 
 # =========================================================
@@ -679,6 +685,12 @@ class RoundRobinMatch(models.Model):
         default=RESULT_NORMAL,
     )
 
+    match_key = models.CharField(
+        max_length=20,
+        blank=True,
+        db_index=True,
+    )
+
     pair1_games = models.IntegerField(
         null=True,
         blank=True
@@ -752,6 +764,30 @@ class RoundRobinMatch(models.Model):
 
     def winning_games(self):
         return (self.match_games +1) // 2
+
+    def match_key_kind(self):
+        return MATCH_KEY_KIND_LEAGUE
+
+    def assign_match_key(self):
+        if self.match_key:
+            return
+
+        tournament = self.group.category.tournament
+        existing = RoundRobinMatch.objects.filter(
+            group__category__tournament=tournament,
+        )
+        next_sequence = next_match_key_sequence(
+            existing,
+            self.match_key_kind(),
+        )
+        self.match_key = build_match_key(
+            self.match_key_kind(),
+            next_sequence,
+        )
+
+    def save(self, *args, **kwargs):
+        self.assign_match_key()
+        super().save(*args, **kwargs)
 
     def __str__(self):
 
@@ -1369,6 +1405,12 @@ class TournamentMatch(models.Model):
         default=RESULT_NORMAL,
     )
 
+    match_key = models.CharField(
+        max_length=20,
+        blank=True,
+        db_index=True,
+    )
+
     winner = models.ForeignKey(
         TournamentEntry,
         null=True,
@@ -1395,6 +1437,30 @@ class TournamentMatch(models.Model):
             ("bracket", "match_code"),
             ("bracket", "round_number", "match_number"),
         )
+
+    def match_key_kind(self):
+        return MATCH_KEY_KIND_TOURNAMENT
+
+    def assign_match_key(self):
+        if self.match_key:
+            return
+
+        tournament = self.bracket.category.tournament
+        existing = TournamentMatch.objects.filter(
+            bracket__category__tournament=tournament,
+        )
+        next_sequence = next_match_key_sequence(
+            existing,
+            self.match_key_kind(),
+        )
+        self.match_key = build_match_key(
+            self.match_key_kind(),
+            next_sequence,
+        )
+
+    def save(self, *args, **kwargs):
+        self.assign_match_key()
+        super().save(*args, **kwargs)
 
     def __str__(self):
 

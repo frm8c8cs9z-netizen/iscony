@@ -30,6 +30,7 @@
 <div class="choice-row">
     <a href="#entry-search">カテゴリ + 番号</a>
     <a href="#schedule-search">コート + 第何試合</a>
+    <a href="#key-search">マッチキー</a>
 </div>
 
 <h3 id="entry-search">カテゴリ + 番号で探す</h3>
@@ -74,6 +75,24 @@
     {% endif %}
 </form>
 
+<h3 id="key-search">マッチキーで探す</h3>
+
+<form method="get" class="search-box">
+    <input type="hidden" name="search_mode" value="key">
+    <p>
+        {{ form.match_key.label_tag }}
+        {{ form.match_key }}
+        <button type="submit">
+            検索
+        </button>
+    </p>
+    {% if form.match_key.errors %}
+        <p style="color:red;">
+            {{ form.match_key.errors|join:" " }}
+        </p>
+    {% endif %}
+</form>
+
 {% if searched %}
     <h3>検索結果</h3>
 
@@ -86,6 +105,7 @@
                     <th>Stage</th>
                     <th>リーグ/トーナメント</th>
                     <th>試合</th>
+                    <th>キー</th>
                     <th>対戦</th>
                     <th>進行枠</th>
                     <th>状態</th>
@@ -99,6 +119,7 @@
                         <td>{{ row.stage }}</td>
                         <td>{{ row.container }}</td>
                         <td>{{ row.match_label }}</td>
+                        <td>{{ row.match_key }}</td>
                         <td>{{ row.entries }}</td>
                         <td>{{ row.schedule }}</td>
                         <td>{{ row.status }}</td>

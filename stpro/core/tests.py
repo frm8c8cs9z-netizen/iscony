@@ -25,6 +25,7 @@ from .display_helpers import (
     format_entry_one_line,
     resolve_entry_display_mode,
 )
+from .match_keys import format_match_key_display
 from .models import (
     Category,
     AdvancementSource,
@@ -3160,10 +3161,16 @@ class CategorySnapshotTests(TestCase):
             for item in snapshot.snapshot_json["categories"][0]["league_entries"]
             if item["id"] == self.entry1.id
         )
+        match_payload = next(
+            item
+            for item in snapshot.snapshot_json["categories"][0]["round_robin_matches"]
+            if item["id"] == self.match.id
+        )
 
         self.assertNotIn("organization", entry_payload)
         self.assertNotIn("player1_name", entry_payload)
         self.assertNotIn("player2_name", entry_payload)
+        self.assertEqual(match_payload["match_key"], self.match.match_key)
 
     def test_legacy_league_entry_snapshot_fields_are_not_restored(self):
         snapshot = create_tournament_snapshot(self.tournament, label="開始前")
@@ -5994,6 +6001,8 @@ class TournamentCloneTests(TestCase):
             bracket__category__tournament=clone,
             match_code="M2",
         )
+        self.assertEqual(cloned_match.match_key, self.tournament_match.match_key)
+        self.assertEqual(cloned_next_match.match_key, self.next_match.match_key)
         self.assertIsNone(cloned_match.pair1_games)
         self.assertIsNone(cloned_match.pair2_games)
         self.assertIsNone(cloned_match.winner)
@@ -6685,6 +6694,7 @@ class ReceptionMatchSearchTests(TestCase):
         self.assertContains(response, "試合選択")
         self.assertContains(response, "カテゴリ + 番号で探す")
         self.assertContains(response, "コート + 第何試合で探す")
+        self.assertContains(response, "マッチキーで探す")
         self.assertContains(response, "結果入力ハブ")
 
     def test_reception_search_finds_matches_by_category_and_number(self):
@@ -6768,6 +6778,32 @@ class ReceptionMatchSearchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "該当する試合が見つかりませんでした。")
 
+    def test_reception_search_finds_match_by_match_key(self):
+        response = self.client.get(
+            reverse(
+                "reception_match_search",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "search_mode": "key",
+                "match_key": format_match_key_display(
+                    self.tournament_match.match_key
+                ),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            ),
+            fetch_redirect_response=False,
+        )
+
 
 class ResultInputSelectTests(TestCase):
 
@@ -6842,6 +6878,7 @@ class ResultInputSelectTests(TestCase):
         self.assertContains(response, "第3試合")
         self.assertContains(response, "詳細検索")
         self.assertContains(response, "QRやマッチキーから入る入口")
+        self.assertContains(response, "キー")
 
     def test_result_input_select_redirects_when_unique_match_is_selected(self):
         response = self.client.get(
