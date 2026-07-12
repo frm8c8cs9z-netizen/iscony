@@ -173,6 +173,14 @@ class ReceptionMatchSearchForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.tournament = tournament
 
+        self.fields["match_key"].widget.attrs.update(
+            {
+                "inputmode": "numeric",
+                "autocomplete": "off",
+                "placeholder": "1234567",
+            }
+        )
+
         if tournament:
             self.fields["category"].queryset = (
                 Category.objects.filter(

@@ -6695,6 +6695,7 @@ class ReceptionMatchSearchTests(TestCase):
         self.assertContains(response, "カテゴリ + 番号で探す")
         self.assertContains(response, "コート + 第何試合で探す")
         self.assertContains(response, "マッチキーで探す")
+        self.assertContains(response, "QRを読み取る")
         self.assertContains(response, "結果入力ハブ")
 
     def test_reception_search_finds_matches_by_category_and_number(self):
