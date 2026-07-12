@@ -1,6 +1,6 @@
 # Settings
 
-このメモは、`stpro/config/settings.py` に追加している運用パラメータの意味と調整目安をまとめる。
+このメモは、`iscony/config/settings.py` に追加している運用パラメータの意味と調整目安をまとめる。
 
 ## `PUBLIC_VIEW_CACHE_SECONDS`
 
