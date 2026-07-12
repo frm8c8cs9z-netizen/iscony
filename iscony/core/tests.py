@@ -1272,6 +1272,14 @@ class BulkScoreSheetPdfTests(TestCase):
         content = b"".join(response.streaming_content)
         return len(PdfReader(io.BytesIO(content)).pages)
 
+    def response_pdf_text(self, response):
+        content = b"".join(response.streaming_content)
+        reader = PdfReader(io.BytesIO(content))
+        return "\n".join(
+            page.extract_text() or ""
+            for page in reader.pages
+        )
+
     def test_category_name_layout_keeps_short_name_on_one_line(self):
         layout = category_name_text_layout(
             "女子A",
@@ -1831,6 +1839,34 @@ class BulkScoreSheetPdfTests(TestCase):
             response.headers["Content-Disposition"],
         )
         self.assertIsNotNone(unscheduled_first_match.id)
+
+    def test_score_sheet_pdf_prints_match_key_and_label(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.tournament_entries[0],
+            pair2=self.tournament_entries[1],
+        )
+        schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            tournament_match=match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "score_sheet_pdf",
+                kwargs={"schedule_id": schedule.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        text = self.response_pdf_text(response)
+        self.assertIn("マッチキー", text)
+        self.assertIn(format_match_key_display(match.match_key), text)
 
     def test_tournament_score_sheets_pdf_filters_by_bracket_and_round(self):
         other_bracket = TournamentBracket.objects.create(

@@ -28,6 +28,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
 from .constants import SCORE_SHEET_POSITION_PATTERNS
+from .match_keys import format_match_key_display
 from .models import (
     Court,
     Group,
@@ -118,6 +119,19 @@ def _wrap_ascii_text(value, line_length):
         value[index:index + line_length]
         for index in range(0, len(value), line_length)
     ]
+
+
+def _match_key_qr_url(request, tournament_code, match_key):
+    if not match_key:
+        return ""
+
+    base_url = request.build_absolute_uri(
+        reverse(
+            "reception_match_search",
+            kwargs={"code": tournament_code},
+        )
+    )
+    return f"{base_url}?{urlencode({'search_mode': 'key', 'match_key': match_key})}"
 
 
 def _scope_counts(schedules, total_matches):
@@ -584,7 +598,7 @@ def _schedule_outside_text(schedule):
     )
 
 
-def _add_schedule_score_sheet_page(writer, schedule, settings_tuple):
+def _add_schedule_score_sheet_page(writer, schedule, settings_tuple, request):
     match = schedule.match
 
     if not is_match_score_sheet_printable(match):
@@ -601,6 +615,12 @@ def _add_schedule_score_sheet_page(writer, schedule, settings_tuple):
     )
     pair2_data = get_score_sheet_entry_data(
         match.pair2
+    )
+    match_key = format_match_key_display(match.match_key)
+    qr_url = _match_key_qr_url(
+        request,
+        schedule.court.tournament.code,
+        match.match_key,
     )
 
     if schedule.is_round_robin:
@@ -622,6 +642,8 @@ def _add_schedule_score_sheet_page(writer, schedule, settings_tuple):
         round_label=round_label,
         pair1_data=pair1_data,
         pair2_data=pair2_data,
+        match_key=match_key,
+        qr_url=qr_url,
         outside_text=_schedule_outside_text(schedule),
         position_key=position_key,
         use_base_pdf=use_base_pdf,
@@ -632,7 +654,7 @@ def _add_schedule_score_sheet_page(writer, schedule, settings_tuple):
     return True
 
 
-def _scheduled_score_sheets_response(schedules, tournament, filename):
+def _scheduled_score_sheets_response(schedules, tournament, filename, request):
     settings_tuple = get_score_sheet_template_settings(
         tournament
     )
@@ -643,6 +665,7 @@ def _scheduled_score_sheets_response(schedules, tournament, filename):
             writer,
             schedule,
             settings_tuple,
+            request,
         )
 
     output = io.BytesIO()
@@ -694,6 +717,12 @@ def score_sheet_pdf(request, schedule_id):
     pair2_data = get_score_sheet_entry_data(
         match.pair2
     )
+    match_key = format_match_key_display(match.match_key)
+    qr_url = _match_key_qr_url(
+        request,
+        tournament.code,
+        match.match_key,
+    )
 
     (
         position_key,
@@ -736,6 +765,8 @@ def score_sheet_pdf(request, schedule_id):
         round_label=round_label,
         pair1_data=pair1_data,
         pair2_data=pair2_data,
+        match_key=match_key,
+        qr_url=qr_url,
         outside_text=outside_text,
         position_key=position_key,
         use_base_pdf=use_base_pdf,
@@ -830,6 +861,12 @@ def court_score_sheets_pdf(request, court_id):
         pair2_data = get_score_sheet_entry_data(
             match.pair2
         )
+        match_key = format_match_key_display(match.match_key)
+        qr_url = _match_key_qr_url(
+            request,
+            tournament.code,
+            match.match_key,
+        )
 
         if schedule.is_round_robin:
 
@@ -862,6 +899,8 @@ def court_score_sheets_pdf(request, court_id):
             round_label=round_label,
             pair1_data=pair1_data,
             pair2_data=pair2_data,
+            match_key=match_key,
+            qr_url=qr_url,
             outside_text=outside_text,
             position_key=position_key,
             use_base_pdf=use_base_pdf,
@@ -933,6 +972,12 @@ def tournament_match_score_sheet_pdf(
     pair2_data = get_score_sheet_entry_data(
         match.pair2
     )
+    match_key = format_match_key_display(match.match_key)
+    qr_url = _match_key_qr_url(
+        request,
+        tournament.code,
+        match.match_key,
+    )
 
     writer = PdfWriter()
 
@@ -942,6 +987,8 @@ def tournament_match_score_sheet_pdf(
         round_label=round_label,
         pair1_data=pair1_data,
         pair2_data=pair2_data,
+        match_key=match_key,
+        qr_url=qr_url,
         outside_text=None,
         position_key=position_key,
         use_base_pdf=use_base_pdf,
@@ -1011,6 +1058,12 @@ def tournament_first_round_score_sheets_pdf(request, code, bracket_id):
         pair2_data = get_score_sheet_entry_data(
             match.pair2
         )
+        match_key = format_match_key_display(match.match_key)
+        qr_url = _match_key_qr_url(
+            request,
+            tournament.code,
+            match.match_key,
+        )
 
         page = create_score_sheet_page(
             category_name=match.bracket.category.name,
@@ -1018,6 +1071,8 @@ def tournament_first_round_score_sheets_pdf(request, code, bracket_id):
             round_label="1回戦",
             pair1_data=pair1_data,
             pair2_data=pair2_data,
+            match_key=match_key,
+            qr_url=qr_url,
             outside_text=None,
             position_key=position_key,
             use_base_pdf=use_base_pdf,
@@ -1121,6 +1176,7 @@ def league_score_sheets_pdf(request, code):
         schedules,
         tournament,
         filename=filename,
+        request=request,
     )
 
 
@@ -1222,6 +1278,7 @@ def tournament_first_round_scheduled_score_sheets_pdf(request, code):
         schedules,
         tournament,
         filename=filename,
+        request=request,
     )
 
 
@@ -1232,6 +1289,8 @@ def create_score_sheet_page(
     round_label,
     pair1_data,
     pair2_data,
+    match_key="",
+    qr_url="",
     outside_text=None,
     position_key="standard",
     use_base_pdf=True,
@@ -1290,6 +1349,8 @@ def create_score_sheet_page(
         round_label=round_label,
         pair1_data=pair1_data,
         pair2_data=pair2_data,
+        match_key=match_key,
+        qr_url=qr_url,
         outside_text=outside_text,
     )
 
@@ -1323,6 +1384,8 @@ def draw_score_sheet_content(
     round_label,
     pair1_data,
     pair2_data,
+    match_key="",
+    qr_url="",
     outside_text=None,
 ):
     """
@@ -1353,6 +1416,68 @@ def draw_score_sheet_content(
             x,
             y,
             outside_text
+        )
+
+    if match_key:
+        x, y = positions[
+            "match_key"
+        ]
+        c.setFont(
+            SCORE_SHEET_BASE_FONT,
+            7,
+        )
+        c.drawString(
+            x,
+            y,
+            "マッチキー"
+        )
+        x, y = positions[
+            "match_key_value"
+        ]
+        c.setFont(
+            SCORE_SHEET_BASE_FONT,
+            10,
+        )
+        c.drawString(
+            x,
+            y,
+            match_key
+        )
+        c.setFont(
+            SCORE_SHEET_BASE_FONT,
+            12,
+        )
+
+    if qr_url:
+        x, y = positions[
+            "qr"
+        ]
+        qr_size = positions.get(
+            "qr_size",
+            18 * mm,
+        )
+        qr_widget = qr.QrCodeWidget(qr_url)
+        bounds = qr_widget.getBounds()
+        qr_width = bounds[2] - bounds[0]
+        qr_height = bounds[3] - bounds[1]
+        drawing = Drawing(
+            qr_size,
+            qr_size,
+            transform=[
+                qr_size / qr_width,
+                0,
+                0,
+                qr_size / qr_height,
+                0,
+                0,
+            ],
+        )
+        drawing.add(qr_widget)
+        renderPDF.draw(
+            drawing,
+            c,
+            x,
+            y,
         )
 
     x, y = positions[
