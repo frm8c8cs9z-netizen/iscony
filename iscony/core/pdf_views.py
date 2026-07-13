@@ -28,7 +28,7 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
 from .constants import SCORE_SHEET_POSITION_PATTERNS
-from .match_keys import format_match_key_display
+from .match_keys import format_match_key_display, normalize_match_key
 from .models import (
     Court,
     Group,
@@ -132,16 +132,8 @@ def _draw_qr(pdf, data, x, y, size):
 
 
 def _match_key_qr_url(request, tournament_code, match_key):
-    if not match_key:
-        return ""
-
-    base_url = request.build_absolute_uri(
-        reverse(
-            "reception_match_search",
-            kwargs={"code": tournament_code},
-        )
-    )
-    return f"{base_url}?{urlencode({'search_mode': 'key', 'match_key': match_key, 'prefill': '1'})}"
+    # 互換性のために残すが、採点票ではURLではなく数字列だけをQRに載せる。
+    return normalize_match_key(match_key)
 
 
 def _scope_counts(schedules, total_matches):

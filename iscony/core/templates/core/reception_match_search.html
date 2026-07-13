@@ -236,9 +236,10 @@
                 if (digits) {
                     input.value = digits;
                     input.dispatchEvent(new Event("input", { bubbles: true }));
-                    setStatus("マッチキーを読み取りました");
+                    input.focus();
+                    input.select();
+                    setStatus("マッチキーを入力しました。必要なら検索してください。");
                     stopScanner();
-                    form.requestSubmit();
                     return;
                 }
             }
