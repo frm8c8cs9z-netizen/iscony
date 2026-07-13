@@ -117,7 +117,10 @@
         muted
         style="max-width: 420px; width: 100%; border: 1px solid #999; background: #000;"
     ></video>
+    <canvas id="qr-canvas" hidden></canvas>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
 {% if searched %}
     <h3>検索結果</h3>
@@ -180,10 +183,11 @@
     const stopButton = document.getElementById("qr-stop-button");
     const statusText = document.getElementById("qr-status");
     const video = document.getElementById("qr-video");
+    const canvas = document.getElementById("qr-canvas");
     const form = document.querySelector("form[data-match-key-form]");
     const input = form ? form.querySelector('input[name="match_key"]') : null;
 
-    if (!startButton || !stopButton || !statusText || !video || !form || !input) {
+    if (!startButton || !stopButton || !statusText || !video || !canvas || !form || !input) {
         return;
     }
 
@@ -193,18 +197,38 @@
     const BarcodeDetectorCtor =
         window.BarcodeDetector || window.WebKitBarcodeDetector || null;
     const supportsBarcodeDetector = typeof BarcodeDetectorCtor === "function";
+    const supportsJsQr = typeof window.jsQR === "function";
 
     let stream = null;
     let detector = null;
     let scanning = false;
+    let useCanvasFallback = false;
+    let detectorMissCount = 0;
     let rafId = 0;
 
     function setStatus(message) {
         statusText.textContent = message;
     }
 
+    function fillMatchKey(rawValue) {
+        const digits = (rawValue || "").replace(/\D+/g, "");
+        if (!digits) {
+            return false;
+        }
+
+        input.value = digits;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.focus();
+        input.select();
+        setStatus("マッチキーを入力しました。必要なら検索してください。");
+        stopScanner();
+        return true;
+    }
+
     function stopScanner() {
         scanning = false;
+        useCanvasFallback = false;
+        detectorMissCount = 0;
         startButton.hidden = false;
         stopButton.hidden = true;
         video.hidden = true;
@@ -222,44 +246,92 @@
         video.srcObject = null;
     }
 
-    async function scanFrame() {
-        if (!scanning || !detector) {
+    function scanWithCanvas() {
+        if (!window.jsQR) {
+            setStatus("このブラウザではQRの読み取りを補助できません。手入力で進めてください。");
+            stopScanner();
             return;
         }
 
-        try {
-            const codes = await detector.detect(video);
-            if (codes && codes.length > 0) {
-                const rawValue = codes[0].rawValue || "";
-                const digits = rawValue.replace(/\D+/g, "");
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        if (!context) {
+            setStatus("QR読み取り用のキャンバスを使えませんでした。");
+            stopScanner();
+            return;
+        }
 
-                if (digits) {
-                    input.value = digits;
-                    input.dispatchEvent(new Event("input", { bubbles: true }));
-                    input.focus();
-                    input.select();
-                    setStatus("マッチキーを入力しました。必要なら検索してください。");
-                    stopScanner();
-                    return;
+        const width = video.videoWidth || 640;
+        const height = video.videoHeight || 480;
+        canvas.width = width;
+        canvas.height = height;
+        context.drawImage(video, 0, 0, width, height);
+
+        const imageData = context.getImageData(0, 0, width, height);
+        const code = window.jsQR(imageData.data, width, height, {
+            inversionAttempts: "attemptBoth",
+        });
+
+        if (code && code.data && fillMatchKey(code.data)) {
+            return;
+        }
+    }
+
+    async function scanFrame() {
+        if (!scanning) {
+            return;
+        }
+
+        let shouldScanCanvas = useCanvasFallback;
+
+        try {
+            if (detector && !useCanvasFallback) {
+                const codes = await detector.detect(video);
+                if (codes && codes.length > 0) {
+                    const rawValue = codes[0].rawValue || "";
+                    if (fillMatchKey(rawValue)) {
+                        return;
+                    }
+
+                    detectorMissCount += 1;
+                } else {
+                    detectorMissCount += 1;
+                }
+
+                if (detectorMissCount >= 10 && window.jsQR) {
+                    useCanvasFallback = true;
+                    shouldScanCanvas = true;
+                    setStatus("別の読み取り方法に切り替えています");
                 }
             }
         } catch (error) {
-            setStatus("QRの読み取りでエラーが発生しました");
-            stopScanner();
-            return;
+            if (window.jsQR && !useCanvasFallback) {
+                useCanvasFallback = true;
+                shouldScanCanvas = true;
+                setStatus("別の読み取り方法に切り替えています");
+            } else {
+                setStatus("QRの読み取りでエラーが発生しました");
+                stopScanner();
+                return;
+            }
+        }
+
+        if (shouldScanCanvas) {
+            scanWithCanvas();
         }
 
         rafId = requestAnimationFrame(scanFrame);
     }
 
     async function startScanner() {
-        if (!supportsCamera || !supportsBarcodeDetector) {
+        if (!supportsCamera || (!supportsBarcodeDetector && !supportsJsQr)) {
             setStatus("このブラウザではカメラ読み取りに対応していません。");
             return;
         }
 
         try {
-            detector = new BarcodeDetectorCtor({ formats: ["qr_code"] });
+            detector = supportsBarcodeDetector
+                ? new BarcodeDetectorCtor({ formats: ["qr_code"] })
+                : null;
             stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: { ideal: "environment" },
@@ -274,6 +346,8 @@
             scanning = true;
             startButton.hidden = true;
             stopButton.hidden = false;
+            useCanvasFallback = !supportsBarcodeDetector;
+            detectorMissCount = 0;
             setStatus("QRを読み取り中です");
             rafId = requestAnimationFrame(scanFrame);
         } catch (error) {
@@ -288,7 +362,7 @@
         setStatus("カメラ未起動");
     });
 
-    if (!supportsCamera || !supportsBarcodeDetector) {
+    if (!supportsCamera || (!supportsBarcodeDetector && !supportsJsQr)) {
         setStatus("このブラウザではカメラ読み取りに対応していません。手入力で進めてください。");
         startButton.disabled = true;
     }
