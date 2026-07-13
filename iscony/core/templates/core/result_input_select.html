@@ -9,20 +9,6 @@
             {{ tournament.name }}
         </p>
     </div>
-    <div class="action-row">
-        <a href="{% url 'reception_match_search' tournament.code %}">
-            試合受付・結果入力
-        </a>
-        <a href="{% url 'reception_match_search' tournament.code %}?autostart=1#key-search">
-            結果入力QRを読む
-        </a>
-        <a href="{% url 'maintenance_menu' tournament.code %}">
-            管理メニューへ戻る
-        </a>
-        <a href="{% url 'schedule_view' tournament.code %}">
-            試合進行表
-        </a>
-    </div>
 </div>
 
 <p class="subtle-text">

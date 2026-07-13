@@ -10,20 +10,6 @@
             {{ tournament.name }}
         </p>
     </div>
-    <div class="action-row">
-        <a href="{% url 'result_input_select' tournament.code %}">
-            試合選択
-        </a>
-        <a href="?autostart=1#key-search">
-            結果入力QRを読む
-        </a>
-        <a href="{% url 'maintenance_menu' tournament.code %}">
-            管理メニューへ戻る
-        </a>
-        <a href="{% url 'schedule_view' tournament.code %}">
-            試合進行表
-        </a>
-    </div>
 </div>
 
 <p class="subtle-text">
@@ -216,7 +202,7 @@
         statusText.textContent = message;
     }
 
-    function fillMatchKey(rawValue) {
+    function fillMatchKey(rawValue, autoSubmit = false) {
         const digits = (rawValue || "").replace(/\D+/g, "");
         if (!digits) {
             return false;
@@ -224,10 +210,17 @@
 
         input.value = digits;
         input.dispatchEvent(new Event("input", { bubbles: true }));
+        stopScanner();
+
+        if (autoSubmit) {
+            setStatus("マッチキーを読み取りました。検索しています。");
+            form.requestSubmit();
+            return true;
+        }
+
         input.focus();
         input.select();
         setStatus("マッチキーを入力しました。必要なら検索してください。");
-        stopScanner();
         return true;
     }
 
@@ -251,6 +244,13 @@
 
         video.srcObject = null;
     }
+
+    input.addEventListener("focus", () => {
+        if (scanning) {
+            stopScanner();
+            setStatus("手入力に切り替えました");
+        }
+    });
 
     function scanWithCanvas() {
         if (!window.jsQR) {
@@ -277,7 +277,7 @@
             inversionAttempts: "attemptBoth",
         });
 
-        if (code && code.data && fillMatchKey(code.data)) {
+        if (code && code.data && fillMatchKey(code.data, true)) {
             return;
         }
     }
@@ -294,7 +294,7 @@
                 const codes = await detector.detect(video);
                 if (codes && codes.length > 0) {
                     const rawValue = codes[0].rawValue || "";
-                    if (fillMatchKey(rawValue)) {
+                    if (fillMatchKey(rawValue, true)) {
                         return;
                     }
 

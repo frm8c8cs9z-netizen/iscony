@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    {% load static %}
-    {% load core_extras %}
+{% load static %}
+{% load core_extras %}
 
     <title>
         {% block title %}
@@ -186,7 +186,7 @@
         height: auto;
     }
 
-    .global-shortcuts {
+    .site-nav {
         position: sticky;
         top: 62px;
         z-index: 25;
@@ -199,14 +199,13 @@
         border-bottom: 1px solid #e2e8f0;
     }
 
-    .global-shortcuts a {
+    .site-nav a {
         display: inline-flex;
         align-items: center;
-        min-height: 32px;
-        padding: 4px 10px;
-        border: 1px solid #b8c7dc;
-        border-radius: 4px;
-        background: #f7fbff;
+        min-height: 30px;
+        padding: 2px 0;
+        color: #203040;
+        font-weight: 600;
         white-space: nowrap;
     }
 
@@ -786,37 +785,26 @@
     </a>
 </h1>
 
-{% with shortcut_code=request.resolver_match.kwargs|dict_get:"code" %}
-    {% if not shortcut_code %}
-        {% with shortcut_code=request.resolver_match.kwargs|dict_get:"tournament_code" %}
-            {% if shortcut_code %}
-                <div class="global-shortcuts">
-                    <a href="{% url 'result_input_select' shortcut_code %}">
-                        試合選択 / 詳細検索
-                    </a>
-                    <a href="{% url 'schedule_view' shortcut_code %}">
-                        進行表
-                    </a>
-                    <a href="{% url 'tournament_detail' shortcut_code %}">
-                        大会詳細
-                    </a>
-                </div>
-            {% endif %}
-        {% endwith %}
-    {% else %}
-        <div class="global-shortcuts">
-            <a href="{% url 'result_input_select' shortcut_code %}">
-                試合選択 / 詳細検索
-            </a>
-            <a href="{% url 'schedule_view' shortcut_code %}">
-                進行表
-            </a>
-            <a href="{% url 'tournament_detail' shortcut_code %}">
-                大会詳細
-            </a>
-        </div>
-    {% endif %}
-{% endwith %}
+{% admin_menu_code as shortcut_code %}
+{% if shortcut_code %}
+    <nav class="site-nav" aria-label="大会メニュー">
+        <a href="{% url 'result_input_select' shortcut_code %}">
+            試合選択
+        </a>
+        <a href="{% url 'reception_match_search' shortcut_code %}?autostart=1#key-search">
+            結果入力QR
+        </a>
+        <a href="{% url 'schedule_view' shortcut_code %}">
+            進行表
+        </a>
+        <a href="{% url 'tournament_detail' shortcut_code %}">
+            大会詳細
+        </a>
+        <a href="{% url 'maintenance_menu' shortcut_code %}">
+            管理メニュー
+        </a>
+    </nav>
+{% endif %}
 
 {% if messages %}
     <div class="messages">

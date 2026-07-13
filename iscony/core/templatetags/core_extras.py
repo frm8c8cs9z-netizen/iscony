@@ -1,5 +1,19 @@
 from django import template
 
+from core.models import (
+    Category,
+    Court,
+    Group,
+    LeagueEntry,
+    RoundRobinMatch,
+    Schedule,
+    ScheduleBlock,
+    Stage,
+    Tournament,
+    TournamentBracket,
+    TournamentMatch,
+)
+
 
 register = template.Library()
 
@@ -10,3 +24,205 @@ def dict_get(value, key):
         return ""
 
     return value.get(key, "")
+
+
+def _tournament_code_from_value(value):
+    if value is None:
+        return ""
+
+    if isinstance(value, Tournament):
+        return value.code
+
+    if isinstance(value, Category):
+        return value.tournament.code
+
+    if isinstance(value, Group):
+        return value.category.tournament.code
+
+    if isinstance(value, LeagueEntry):
+        return value.category.tournament.code
+
+    if isinstance(value, RoundRobinMatch):
+        return value.group.category.tournament.code
+
+    if isinstance(value, ScheduleBlock):
+        return value.tournament.code
+
+    if isinstance(value, TournamentBracket):
+        return value.category.tournament.code
+
+    if isinstance(value, TournamentMatch):
+        return value.bracket.category.tournament.code
+
+    if isinstance(value, Court):
+        return value.tournament.code
+
+    if isinstance(value, Stage):
+        return value.category.tournament.code
+
+    if isinstance(value, Schedule):
+        return value.court.tournament.code
+
+    return ""
+
+
+def _tournament_code_from_request(request):
+    resolver_match = getattr(request, "resolver_match", None)
+    if not resolver_match:
+        return ""
+
+    kwargs = resolver_match.kwargs
+    view_name = resolver_match.view_name or ""
+
+    code = kwargs.get("code") or kwargs.get("tournament_code")
+    if code:
+        return code
+
+    category_id = kwargs.get("category_id")
+    if category_id:
+        return (
+            Category.objects.filter(
+                id=category_id
+            ).values_list(
+                "tournament__code",
+                flat=True
+            ).first()
+            or ""
+        )
+
+    group_id = kwargs.get("group_id")
+    if group_id:
+        return (
+            Group.objects.filter(
+                id=group_id
+            ).values_list(
+                "category__tournament__code",
+                flat=True
+            ).first()
+            or ""
+        )
+
+    pair_id = kwargs.get("pair_id")
+    if pair_id:
+        return (
+            LeagueEntry.objects.filter(
+                id=pair_id
+            ).values_list(
+                "category__tournament__code",
+                flat=True
+            ).first()
+            or ""
+        )
+
+    bracket_id = kwargs.get("bracket_id")
+    if bracket_id:
+        return (
+            TournamentBracket.objects.filter(
+                id=bracket_id
+            ).values_list(
+                "category__tournament__code",
+                flat=True
+            ).first()
+            or ""
+        )
+
+    match_id = kwargs.get("match_id")
+    if match_id:
+        if view_name == "input_match_score":
+            return (
+                RoundRobinMatch.objects.filter(
+                    id=match_id
+                ).values_list(
+                    "group__category__tournament__code",
+                    flat=True
+                ).first()
+                or ""
+            )
+
+        if view_name in {
+            "input_tournament_match_score",
+            "edit_tournament_match",
+            "tournament_match_maintenance",
+            "tournament_first_round_score_sheets_pdf",
+            "tournament_match_score_sheet",
+            "add_tournament_match_schedule",
+        }:
+            return (
+                TournamentMatch.objects.filter(
+                    id=match_id
+                ).values_list(
+                    "bracket__category__tournament__code",
+                    flat=True
+                ).first()
+                or ""
+            )
+
+    schedule_id = kwargs.get("schedule_id")
+    if schedule_id:
+        return (
+            Schedule.objects.filter(
+                id=schedule_id
+            ).values_list(
+                "court__tournament__code",
+                flat=True
+            ).first()
+            or ""
+        )
+
+    schedule_block_id = kwargs.get("schedule_block_id")
+    if schedule_block_id:
+        return (
+            ScheduleBlock.objects.filter(
+                id=schedule_block_id
+            ).values_list(
+                "tournament__code",
+                flat=True
+            ).first()
+            or ""
+        )
+
+    court_id = kwargs.get("court_id")
+    if court_id:
+        return (
+            Court.objects.filter(
+                id=court_id
+            ).values_list(
+                "tournament__code",
+                flat=True
+            ).first()
+            or ""
+        )
+
+    return ""
+
+
+@register.simple_tag(takes_context=True)
+def admin_menu_code(context):
+    request = context.get("request")
+    if request:
+        resolver_match = getattr(request, "resolver_match", None)
+        view_name = getattr(resolver_match, "view_name", "") or ""
+        if view_name.startswith("public_"):
+            return ""
+
+    for key in (
+        "tournament",
+        "category",
+        "group",
+        "pair",
+        "match",
+        "bracket",
+        "schedule_block",
+        "court",
+        "stage",
+    ):
+        code = _tournament_code_from_value(context.get(key))
+        if code:
+            return code
+
+    if request and getattr(request, "resolver_match", None):
+        code = _tournament_code_from_request(request)
+        if code:
+            return code
+
+    return ""
