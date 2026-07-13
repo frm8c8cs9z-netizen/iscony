@@ -69,29 +69,13 @@ def public_tournament_qr_pdf(request, code):
     pdf.setFont("Helvetica", 10)
     pdf.drawString(24 * mm, page_height - 37 * mm, f"Code: {tournament.code}")
 
-    qr_widget = qr.QrCodeWidget(public_url)
-    bounds = qr_widget.getBounds()
-    qr_width = bounds[2] - bounds[0]
-    qr_height = bounds[3] - bounds[1]
     size = 58 * mm
-    drawing = Drawing(
-        size,
-        size,
-        transform=[
-            size / qr_width,
-            0,
-            0,
-            size / qr_height,
-            0,
-            0,
-        ],
-    )
-    drawing.add(qr_widget)
-    renderPDF.draw(
-        drawing,
+    _draw_qr(
         pdf,
+        public_url,
         24 * mm,
         page_height - 105 * mm,
+        size,
     )
 
     text = pdf.beginText(24 * mm, page_height - 118 * mm)
@@ -121,6 +105,32 @@ def _wrap_ascii_text(value, line_length):
     ]
 
 
+def _draw_qr(pdf, data, x, y, size):
+    qr_widget = qr.QrCodeWidget(data)
+    bounds = qr_widget.getBounds()
+    qr_width = bounds[2] - bounds[0]
+    qr_height = bounds[3] - bounds[1]
+    drawing = Drawing(
+        size,
+        size,
+        transform=[
+            size / qr_width,
+            0,
+            0,
+            size / qr_height,
+            0,
+            0,
+        ],
+    )
+    drawing.add(qr_widget)
+    renderPDF.draw(
+        drawing,
+        pdf,
+        x,
+        y,
+    )
+
+
 def _match_key_qr_url(request, tournament_code, match_key):
     if not match_key:
         return ""
@@ -131,7 +141,7 @@ def _match_key_qr_url(request, tournament_code, match_key):
             kwargs={"code": tournament_code},
         )
     )
-    return f"{base_url}?{urlencode({'search_mode': 'key', 'match_key': match_key})}"
+    return f"{base_url}?{urlencode({'search_mode': 'key', 'match_key': match_key, 'prefill': '1'})}"
 
 
 def _scope_counts(schedules, total_matches):
@@ -1420,18 +1430,6 @@ def draw_score_sheet_content(
 
     if match_key:
         x, y = positions[
-            "match_key"
-        ]
-        c.setFont(
-            SCORE_SHEET_BASE_FONT,
-            7,
-        )
-        c.drawString(
-            x,
-            y,
-            "マッチキー"
-        )
-        x, y = positions[
             "match_key_value"
         ]
         c.setFont(
@@ -1456,28 +1454,12 @@ def draw_score_sheet_content(
             "qr_size",
             18 * mm,
         )
-        qr_widget = qr.QrCodeWidget(qr_url)
-        bounds = qr_widget.getBounds()
-        qr_width = bounds[2] - bounds[0]
-        qr_height = bounds[3] - bounds[1]
-        drawing = Drawing(
-            qr_size,
-            qr_size,
-            transform=[
-                qr_size / qr_width,
-                0,
-                0,
-                qr_size / qr_height,
-                0,
-                0,
-            ],
-        )
-        drawing.add(qr_widget)
-        renderPDF.draw(
-            drawing,
+        _draw_qr(
             c,
+            qr_url,
             x,
             y,
+            qr_size,
         )
 
     x, y = positions[

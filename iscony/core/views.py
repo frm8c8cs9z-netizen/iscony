@@ -831,7 +831,7 @@ def reception_match_search(request, code):
         tournament=tournament,
     )
     results = []
-    searched = bool(request.GET)
+    searched = bool(request.GET) and request.GET.get("prefill") != "1"
 
     if searched and form.is_valid():
         mode = form.cleaned_data["search_mode"]

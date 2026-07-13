@@ -1865,7 +1865,6 @@ class BulkScoreSheetPdfTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         text = self.response_pdf_text(response)
-        self.assertIn("マッチキー", text)
         self.assertIn(format_match_key_display(match.match_key), text)
 
     def test_tournament_score_sheets_pdf_filters_by_bracket_and_round(self):
@@ -6839,6 +6838,28 @@ class ReceptionMatchSearchTests(TestCase):
                 },
             ),
             fetch_redirect_response=False,
+        )
+
+    def test_reception_search_prefill_does_not_auto_submit(self):
+        response = self.client.get(
+            reverse(
+                "reception_match_search",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "search_mode": "key",
+                "match_key": format_match_key_display(
+                    self.tournament_match.match_key
+                ),
+                "prefill": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["searched"])
+        self.assertContains(
+            response,
+            format_match_key_display(self.tournament_match.match_key),
         )
 
 
