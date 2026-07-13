@@ -13,6 +13,9 @@
         <a href="{% url 'result_input_select' tournament.code %}">
             試合選択
         </a>
+        <a href="?autostart=1#key-search">
+            結果入力QRを読む
+        </a>
         <a href="{% url 'maintenance_menu' tournament.code %}">
             管理メニューへ戻る
         </a>
@@ -198,6 +201,8 @@
         window.BarcodeDetector || window.WebKitBarcodeDetector || null;
     const supportsBarcodeDetector = typeof BarcodeDetectorCtor === "function";
     const supportsJsQr = typeof window.jsQR === "function";
+    const autoStartRequested =
+        new URLSearchParams(window.location.search).get("autostart") === "1";
 
     let stream = null;
     let detector = null;
@@ -365,6 +370,10 @@
     if (!supportsCamera || (!supportsBarcodeDetector && !supportsJsQr)) {
         setStatus("このブラウザではカメラ読み取りに対応していません。手入力で進めてください。");
         startButton.disabled = true;
+    } else if (autoStartRequested) {
+        window.setTimeout(() => {
+            startScanner();
+        }, 0);
     }
 })();
 </script>

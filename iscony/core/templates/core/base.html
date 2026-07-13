@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     {% load static %}
+    {% load core_extras %}
 
     <title>
         {% block title %}
@@ -183,6 +184,30 @@
         display: block;
         max-width: min(100%, 320px);
         height: auto;
+    }
+
+    .global-shortcuts {
+        position: sticky;
+        top: 62px;
+        z-index: 25;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 16px;
+        padding: 8px 0 10px;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .global-shortcuts a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 4px 10px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #f7fbff;
+        white-space: nowrap;
     }
 
     .menu {
@@ -760,6 +785,38 @@
         <img src="{% static 'core/images/iscony_v001.png' %}" alt="ソフトテニス大会管理">
     </a>
 </h1>
+
+{% with shortcut_code=request.resolver_match.kwargs|dict_get:"code" %}
+    {% if not shortcut_code %}
+        {% with shortcut_code=request.resolver_match.kwargs|dict_get:"tournament_code" %}
+            {% if shortcut_code %}
+                <div class="global-shortcuts">
+                    <a href="{% url 'result_input_select' shortcut_code %}">
+                        試合選択 / 詳細検索
+                    </a>
+                    <a href="{% url 'schedule_view' shortcut_code %}">
+                        進行表
+                    </a>
+                    <a href="{% url 'tournament_detail' shortcut_code %}">
+                        大会詳細
+                    </a>
+                </div>
+            {% endif %}
+        {% endwith %}
+    {% else %}
+        <div class="global-shortcuts">
+            <a href="{% url 'result_input_select' shortcut_code %}">
+                試合選択 / 詳細検索
+            </a>
+            <a href="{% url 'schedule_view' shortcut_code %}">
+                進行表
+            </a>
+            <a href="{% url 'tournament_detail' shortcut_code %}">
+                大会詳細
+            </a>
+        </div>
+    {% endif %}
+{% endwith %}
 
 {% if messages %}
     <div class="messages">
