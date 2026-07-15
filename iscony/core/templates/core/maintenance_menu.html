@@ -14,6 +14,11 @@
         <a href="{% url 'tournament_detail' tournament.code %}">
             大会トップへ
         </a>
+        {% if tournament.is_public %}
+            <a href="{% url 'public_tournament_detail' tournament.public_token %}">
+                公開表示
+            </a>
+        {% endif %}
     </div>
 </div>
 

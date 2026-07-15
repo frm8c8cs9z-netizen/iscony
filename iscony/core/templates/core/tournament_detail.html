@@ -128,6 +128,14 @@
         {{ tournament.code }}
     </p>
 
+    {% if not public_mode and tournament.is_public %}
+        <div class="action-row">
+            <a href="{% url 'public_tournament_detail' tournament.public_token %}">
+                公開表示
+            </a>
+        </div>
+    {% endif %}
+
     {% include "core/_admin_quick_links.html" %}
 
     <hr>
