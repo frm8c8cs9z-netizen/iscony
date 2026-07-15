@@ -816,6 +816,7 @@
 </h1>
 
 {% admin_menu_code as shortcut_code %}
+{% admin_menu_public_token as public_token %}
 {% if shortcut_code %}
     <nav class="site-nav" aria-label="大会メニュー">
         <a href="{% url 'result_input_select' shortcut_code %}">
@@ -830,6 +831,11 @@
         <a href="{% url 'tournament_detail' shortcut_code %}">
             大会詳細
         </a>
+        {% if public_token %}
+            <a href="{% url 'public_tournament_detail' public_token %}">
+                公開表示
+            </a>
+        {% endif %}
         <a href="{% url 'maintenance_menu' shortcut_code %}">
             管理メニュー
         </a>

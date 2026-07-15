@@ -3684,119 +3684,6 @@ class CategorySnapshotTests(TestCase):
             )
 
 
-class ImportPairsCsvTests(TestCase):
-
-    def setUp(self):
-        self.tournament = Tournament.objects.create(
-            name="CSVテスト大会",
-            code="CSVPAIR",
-        )
-        self.category = Category.objects.create(
-            tournament=self.tournament,
-            name="男子A",
-        )
-        self.participant = Participant.objects.create(
-            category=self.category,
-            entry_code="E001",
-            organization="テスト所属",
-            player1_name="参加者1A",
-            player2_name="参加者1B",
-        )
-
-    def _post_csv(self, content):
-        csv_file = SimpleUploadedFile(
-            "pairs.csv",
-            content.encode("utf-8-sig"),
-            content_type="text/csv",
-        )
-
-        return self.client.post(
-            reverse(
-                "import_pairs",
-                kwargs={
-                    "tournament_code": self.tournament.code,
-                }
-            ),
-            {
-                "file": csv_file,
-            },
-        )
-
-    def test_entry_code_column_is_required(self):
-        response = self._post_csv(
-            "category,group,pair_code\n"
-            "男子A,A,1\n"
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "CSVに必要な列がありません: entry_code",
-        )
-        self.assertFalse(LeagueEntry.objects.exists())
-
-    def test_entry_code_value_is_required(self):
-        response = self._post_csv(
-            "category,group,pair_code,entry_code\n"
-            "男子A,A,1,\n"
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "2行目: entry_codeが空です。"
-        )
-        self.assertContains(
-            response,
-            "カテゴリ=男子A / リーグ=A / 枠番号=1"
-        )
-        self.assertFalse(LeagueEntry.objects.exists())
-
-    def test_unknown_entry_code_is_reported_with_row_context(self):
-        response = self._post_csv(
-            "category,group,pair_code,entry_code\n"
-            "男子A,A,1,E999\n"
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "2行目: Participantが存在しません。"
-        )
-        self.assertContains(
-            response,
-            "カテゴリ=男子A / リーグ=A / 枠番号=1 / entry_code=E999"
-        )
-        self.assertFalse(LeagueEntry.objects.exists())
-
-    def test_valid_entry_code_creates_pair_from_participant(self):
-        response = self._post_csv(
-            "category,group,pair_code,entry_code\n"
-            "男子A,A,1,E001\n"
-        )
-
-        self.assertEqual(
-            response.status_code,
-            302,
-            response.content.decode("utf-8"),
-        )
-
-        pair = LeagueEntry.objects.get(
-            category=self.category,
-            pair_code="1",
-        )
-
-        self.assertEqual(pair.participant, self.participant)
-        self.assertEqual(
-            pair.display_player1_name,
-            self.participant.player1_name,
-        )
-        self.assertEqual(
-            pair.display_player2_name,
-            self.participant.player2_name,
-        )
-
-
 class ImportParticipantsCsvTests(TestCase):
 
     def setUp(self):
@@ -6229,7 +6116,6 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "トーナメント一覧・個別設定")
         self.assertContains(response, "進出元一覧・入れ替え")
         self.assertContains(response, "試合進行CSV取込")
-        self.assertContains(response, "旧リーグ枠CSV取込")
         self.assertContains(
             response,
             reverse(

@@ -172,13 +172,6 @@ urlpatterns = [
         name='export_stage_slots'
     ),
 
-    # リーグ枠
-    path(
-        'tournament/<str:tournament_code>/import/pairs/',
-        csv_views.import_pairs,
-        name='import_pairs'
-    ),
-
     # コート割
     path(
         'tournament/<str:tournament_code>/import/schedule/',

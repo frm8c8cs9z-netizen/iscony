@@ -128,20 +128,6 @@
         {{ tournament.code }}
     </p>
 
-    <div class="menu">
-        <a href="{% url 'maintenance_menu' tournament.code %}">
-            管理メニュー
-        </a>
-
-        <a href="{% url 'tournament_settings' tournament.code %}">
-            大会設定
-        </a>
-
-        <a href="{% url 'public_schedule_view_token' tournament.public_token %}">
-            試合進行表
-        </a>
-    </div>
-
     {% include "core/_admin_quick_links.html" %}
 
     <hr>
