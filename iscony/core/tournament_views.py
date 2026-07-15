@@ -824,33 +824,33 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             svg["labels"].append({
                 "x": number_x,
                 "y": y + 5,
-                "text": str(entry.display_order),
+                "text": entry.slot_label,
                 "class": "entry-text",
                 "anchor": number_anchor,
                 "url": "",
             })
-            if _is_unresolved_advancement_entry(entry):
+        if _is_unresolved_advancement_entry(entry):
+            svg["labels"].append({
+                "x": name_x,
+                "y": y + 5,
+                "text": entry.display_name,
+                "class": "entry-text",
+                "anchor": text_anchor,
+                "url": "",
+            })
+        else:
+            for line_index, line in enumerate(
+                    build_entry_display_lines(
+                        entry,
+                        mode=svg["entry_display_mode"])):
                 svg["labels"].append({
                     "x": name_x,
-                    "y": y + 5,
-                    "text": entry.display_name,
-                    "class": "entry-text",
+                    "y": y - 7 + (line_index * 18),
+                    "text": line["text"],
+                    "class": line["class"],
                     "anchor": text_anchor,
                     "url": "",
                 })
-            else:
-                for line_index, line in enumerate(
-                        build_entry_display_lines(
-                            entry,
-                            mode=svg["entry_display_mode"])):
-                    svg["labels"].append({
-                        "x": name_x,
-                        "y": y - 7 + (line_index * 18),
-                        "text": line["text"],
-                        "class": line["class"],
-                        "anchor": text_anchor,
-                        "url": "",
-                    })
 
         if line_start != join_x:
             svg["lines"].append({
@@ -1240,7 +1240,7 @@ def _build_svg_bracket_data(bracket, round_data):
                     svg["labels"].append({
                         "x": center_x,
                         "y": y,
-                        "text": f"{entry.display_order} {entry.display_name}",
+                        "text": entry.display_name,
                         "class": "entry-text",
                         "anchor": "middle",
                         "url": "",
@@ -1253,7 +1253,7 @@ def _build_svg_bracket_data(bracket, round_data):
                         text = line["text"]
 
                         if line_index == 0:
-                            text = f"{entry.display_order} {text}"
+                            text = f"{entry.slot_label} {text}"
 
                         svg["labels"].append({
                             "x": center_x,

@@ -4,6 +4,7 @@ from .models import (
     LeagueEntry,
     Category,
     Group,
+    Participant,
     Tournament,
     TournamentBracket,
     TournamentMatch,
@@ -15,7 +16,20 @@ from .match_keys import normalize_match_key
 
 
 class CSVUploadForm(forms.Form):
-    file = forms.FileField()
+    file = forms.FileField(required=False)
+    reimport_confirm_token = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get("file") and not cleaned_data.get(
+            "reimport_confirm_token"
+        ):
+            self.add_error("file", "CSVファイルを選択してください。")
+
+        return cleaned_data
 
 
 class LeagueEntryChoiceField(forms.ModelChoiceField):
@@ -245,6 +259,19 @@ class LeagueEntryEditForm(forms.ModelForm):
             "retired": "リタイア",
             "retired_reason": "リタイア理由",
         }
+
+    def __init__(self, *args, category=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if category:
+            self.fields["participant"].queryset = (
+                Participant.objects.filter(
+                    category=category,
+                ).order_by(
+                    "display_order",
+                    "entry_code",
+                )
+            )
 
 
 class ScheduleEditForm(forms.ModelForm):

@@ -13,7 +13,7 @@
         <th>選手</th>
         <th>状態</th>
         <th>編集</th>
-        <th>操作</th>
+        <th>棄権</th>
     </tr>
 
     {% for pair in pairs %}
@@ -39,7 +39,7 @@
         </td>
         <td>
             <a href="{% url 'league_entry_action' pair.id %}">
-                操作
+                棄権
             </a>
         </td>
     </tr>

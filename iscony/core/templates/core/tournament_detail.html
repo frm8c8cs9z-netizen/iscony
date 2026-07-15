@@ -142,25 +142,25 @@
         </a>
     </div>
 
+    {% include "core/_admin_quick_links.html" %}
+
     <hr>
 
-    <h2>
-        カテゴリ一覧
-    </h2>
+    <h2>カテゴリ入口</h2>
 
-    <ul>
+    <p class="subtle-text">
+        詳細な結果確認や修正は、各カテゴリのStage進行から進みます。
+    </p>
+
+    <div class="choice-row">
         {% for category in categories %}
-            <li>
-                <a href="{% url 'public_category_results_token' tournament.public_token category.public_token %}">
-                    {{ category.name }}
-                </a>
-            </li>
+            <a href="{% url 'category_stage_overview' category.id %}">
+                {{ category.name }}
+            </a>
         {% empty %}
-            <li>
-                カテゴリがありません
-            </li>
+            <span class="subtle-text">カテゴリがありません</span>
         {% endfor %}
-    </ul>
+    </div>
 {% endif %}
 
 {% endblock %}

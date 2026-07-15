@@ -32,6 +32,8 @@
     </div>
 </div>
 
+{% include "core/_admin_quick_links.html" %}
+
 {% if round_data %}
 
     {% if svg_bracket %}
@@ -264,7 +266,7 @@
                                     <div class="entry-row {% if match.winner == match.pair1 %}winner{% endif %}">
                                         <div class="entry-seed">
                                             {% if match.pair1 %}
-                                                {{ match.pair1.display_order }}
+                                                {{ match.pair1.slot_label }}
                                             {% else %}
                                                 -
                                             {% endif %}
@@ -299,7 +301,7 @@
                                     <div class="entry-row {% if match.winner == match.pair2 %}winner{% endif %}">
                                         <div class="entry-seed">
                                             {% if match.pair2 %}
-                                                {{ match.pair2.display_order }}
+                                                {{ match.pair2.slot_label }}
                                             {% else %}
                                                 -
                                             {% endif %}

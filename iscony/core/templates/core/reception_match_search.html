@@ -14,56 +14,12 @@
 
 <p class="subtle-text">
     この画面は、今は既存の検索入口を並べた結果入力ハブです。
-    将来的にはマッチキーやQRもここへ集約します。
+    マッチキー入力とQR読み取りをまとめた入口です。
 </p>
 
 <div class="choice-row">
-    <a href="#entry-search">カテゴリ + 番号</a>
-    <a href="#schedule-search">コート + 第何試合</a>
     <a href="#key-search">マッチキー</a>
 </div>
-
-<h3 id="entry-search">カテゴリ + 番号で探す</h3>
-
-<form method="get" class="search-box">
-    <input type="hidden" name="search_mode" value="entry">
-    <p>
-        {{ form.category.label_tag }}
-        {{ form.category }}
-        {{ form.entry_number.label_tag }}
-        {{ form.entry_number }}
-        <button type="submit">
-            検索
-        </button>
-    </p>
-    {% if form.category.errors or form.entry_number.errors %}
-        <p style="color:red;">
-            {{ form.category.errors|join:" " }}
-            {{ form.entry_number.errors|join:" " }}
-        </p>
-    {% endif %}
-</form>
-
-<h3 id="schedule-search">コート + 第何試合で探す</h3>
-
-<form method="get" class="search-box">
-    <input type="hidden" name="search_mode" value="schedule">
-    <p>
-        {{ form.court.label_tag }}
-        {{ form.court }}
-        {{ form.order.label_tag }}
-        {{ form.order }}
-        <button type="submit">
-            検索
-        </button>
-    </p>
-    {% if form.court.errors or form.order.errors %}
-        <p style="color:red;">
-            {{ form.court.errors|join:" " }}
-            {{ form.order.errors|join:" " }}
-        </p>
-    {% endif %}
-</form>
 
 <h3 id="key-search">マッチキーで探す</h3>
 

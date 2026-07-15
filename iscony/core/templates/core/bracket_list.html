@@ -7,18 +7,13 @@
 </h2>
 
 <p>
-    <a href="{% url 'add_tournament_bracket' tournament.code %}">
-        トーナメント追加
-    </a>
-</p>
-
-<p>
     トーナメント枠や進行順のCSV取込は、通常は管理メニューの「ステージ枠CSV取込」「統合進行CSV取込」を使います。
-    この画面では、各トーナメント表の表示設定、表示確認、試合メンテナンスを行います。
+    この画面では、まず設定を確認し、そのあとで表示・結果入力・メンテナンスへ進みます。
 </p>
 
-<table border="1">
-
+<div class="table-wrapper sticky-table-wrapper">
+<table border="1" class="sticky-header-table">
+    <thead>
     <tr>
         <th>カテゴリ</th>
         <th>Stage順</th>
@@ -32,7 +27,9 @@
         <th>優勝者表示</th>
         <th>操作</th>
     </tr>
+    </thead>
 
+    <tbody>
     {% for bracket in brackets %}
 
     <tr>
@@ -115,28 +112,20 @@
         </td>
 
         <td>
-            <a href="{% url 'edit_tournament_bracket' tournament.code bracket.id %}">
-                設定
-            </a>
-
-            |
-
-            <a href="{% url 'tournament_bracket_detail' tournament.code bracket.id %}">
-                表示
-            </a>
-
-            |
-
-            <a href="{% url 'tournament_schedule_view' tournament.code bracket.id %}">
-                コート進行
-            </a>
-
-            |
-
-            <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
-                メンテナンス
-            </a>
-
+            <div class="action-row">
+                <a href="{% url 'edit_tournament_bracket' tournament.code bracket.id %}">
+                    設定
+                </a>
+                <a href="{% url 'tournament_bracket_detail' tournament.code bracket.id %}">
+                    表示
+                </a>
+                <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
+                    メンテナンス
+                </a>
+            </div>
+            <div class="subtle-text" style="margin-top: 6px;">
+                コート進行は表示側から確認できます。
+            </div>
         </td>
 
     </tr>
@@ -145,12 +134,13 @@
 
     <tr>
         <td colspan="11">
-            トーナメントがありません。先に「トーナメント追加」から作成してください。
+            トーナメントがありません。先に管理メニューの設定やCSV取込から作成してください。
         </td>
     </tr>
 
     {% endfor %}
-
+</tbody>
 </table>
+</div>
 
 {% endblock %}

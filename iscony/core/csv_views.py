@@ -8,6 +8,9 @@ core.csv_views
 
 import csv
 import io
+import os
+import secrets
+import tempfile
 from itertools import combinations
 
 from django.db import transaction
@@ -41,9 +44,11 @@ STAGE_SLOT_REQUIRED_COLUMNS = {
     "category",
     "stage",
     "stage_type",
-    "slot_code",
+    "slot_label",
     "display_order",
 }
+
+STAGE_REIMPORT_SESSION_KEY = "stage_reimport_pending"
 
 
 CSV_FORMAT_HEADERS = {
@@ -61,7 +66,7 @@ CSV_FORMAT_HEADERS = {
         "stage_type",
         "group",
         "bracket",
-        "slot_code",
+        "slot_label",
         "display_order",
         "entry_code",
         "source_type",
@@ -646,10 +651,11 @@ def _create_advancement_source(row_data, target_entry):
     source.save()
 
 
-def _stage_reimport_protection_errors(stages):
+def _stage_reimport_protection_messages(stages):
     """Stage再取込で失われる運用データが残っていないか確認する。"""
 
     errors = []
+    warnings = []
 
     for stage in stages:
         stage_label = (
@@ -711,9 +717,9 @@ def _stage_reimport_protection_errors(stages):
         ).exists()
 
         if has_schedule:
-            errors.append(
+            warnings.append(
                 f"{stage_label}は試合進行表に登録済みです。"
-                "Stage再取込で進行表から消えるため、取込できません。"
+                "Stage再取込で進行表から消えます。"
             )
 
         league_advancement_applied = LeagueEntry.objects.filter(
@@ -736,7 +742,49 @@ def _stage_reimport_protection_errors(stages):
                 "Stage再取込で貼り付け位置が消えるため、取込できません。"
             )
 
-    return errors
+    return errors, warnings
+
+
+def _stage_reimport_temp_path(request, token):
+    pending = request.session.get(STAGE_REIMPORT_SESSION_KEY, {})
+    if pending.get("token") != token:
+        return ""
+
+    path = pending.get("path", "")
+    if path and os.path.exists(path):
+        return path
+
+    return ""
+
+
+def _store_stage_reimport_upload(request, uploaded_file):
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+    try:
+        for chunk in uploaded_file.chunks():
+            temp_file.write(chunk)
+    finally:
+        temp_file.close()
+
+    token = secrets.token_urlsafe(16)
+    request.session[STAGE_REIMPORT_SESSION_KEY] = {
+        "token": token,
+        "path": temp_file.name,
+        "name": getattr(uploaded_file, "name", ""),
+    }
+    request.session.modified = True
+    return token
+
+
+def _clear_stage_reimport_upload(request):
+    pending = request.session.pop(STAGE_REIMPORT_SESSION_KEY, None)
+    request.session.modified = True
+
+    if not pending:
+        return
+
+    path = pending.get("path")
+    if path and os.path.exists(path):
+        os.unlink(path)
 
 
 def _schedule_flags_from_finished_match(match):
@@ -1034,6 +1082,13 @@ def import_stage_slots(request, tournament_code):
         code=tournament_code
     )
 
+    if request.GET.get("discard_stage_reimport") == "1":
+        _clear_stage_reimport_upload(request)
+        return redirect(
+            "import_stage_slots",
+            tournament_code=tournament.code,
+        )
+
     if request.method == "POST":
 
         form = CSVUploadForm(
@@ -1043,10 +1098,42 @@ def import_stage_slots(request, tournament_code):
 
         if form.is_valid():
 
-            csv_file = request.FILES["file"]
-            reader, rows = _read_csv_rows(
-                csv_file
+            confirm_token = form.cleaned_data.get(
+                "reimport_confirm_token",
+                "",
             )
+            csv_file = None
+
+            if confirm_token:
+                csv_path = _stage_reimport_temp_path(
+                    request,
+                    confirm_token,
+                )
+
+                if not csv_path:
+                    return render(
+                        request,
+                        "core/import_stage_slots.html",
+                        {
+                            "tournament": tournament,
+                            "form": form,
+                            "errors": [
+                                "再取込用の一時データが見つかりません。"
+                            ],
+                        }
+                    )
+
+                csv_file = open(csv_path, "rb")
+            else:
+                csv_file = request.FILES["file"]
+
+            try:
+                reader, rows = _read_csv_rows(
+                    csv_file
+                )
+            finally:
+                if confirm_token and csv_file:
+                    csv_file.close()
             fieldnames = set(reader.fieldnames or [])
             errors = []
 
@@ -1083,7 +1170,7 @@ def import_stage_slots(request, tournament_code):
                 )
                 group_name = _cell(row, "group")
                 bracket_name = _cell(row, "bracket")
-                slot_code = _cell(row, "slot_code")
+                slot_label = _cell(row, "slot_label")
                 entry_code = _cell(row, "entry_code")
                 source_type = _normalize_source_type(
                     _cell(row, "source_type")
@@ -1133,9 +1220,9 @@ def import_stage_slots(request, tournament_code):
                     )
                     continue
 
-                if not slot_code:
+                if not slot_label:
                     errors.append(
-                        f"{row_number}行目: slot_codeが空です。"
+                        f"{row_number}行目: slot_labelが空です。"
                     )
                     continue
 
@@ -1274,20 +1361,20 @@ def import_stage_slots(request, tournament_code):
                     slot_key = (
                         category.id,
                         stage_identity,
-                        slot_code,
+                        slot_label,
                     )
                 else:
                     slot_key = (
                         category.id,
                         stage_identity,
                         container_name,
-                        slot_code,
+                        slot_label,
                     )
 
                 if slot_key in seen_slots:
                     errors.append(
-                        f"{row_number}行目: slot_codeが重複しています。"
-                        f"{category_name} / {stage_name} / {container_name} / {slot_code}"
+                        f"{row_number}行目: slot_labelが重複しています。"
+                        f"{category_name} / {stage_name} / {container_name} / {slot_label}"
                     )
                     continue
 
@@ -1332,7 +1419,7 @@ def import_stage_slots(request, tournament_code):
                     "stage_type": stage_type,
                     "group_name": group_name,
                     "bracket_name": bracket_name,
-                    "slot_code": slot_code,
+                    "slot_label": slot_label,
                     "display_order": display_order,
                     "entry_code": entry_code,
                     "participant": participant,
@@ -1354,6 +1441,7 @@ def import_stage_slots(request, tournament_code):
                 )
 
             planned_source_group_counts = {}
+            protection_warnings = []
 
             for row in validated_rows:
                 if row["stage_type"] != Stage.TYPE_LEAGUE:
@@ -1511,13 +1599,16 @@ def import_stage_slots(request, tournament_code):
                                 "関連するStageも同じCSVに含めてください。"
                             )
 
-                errors.extend(
-                    _stage_reimport_protection_errors(
+                protection_errors, protection_warnings = (
+                    _stage_reimport_protection_messages(
                         existing_target_stages
                     )
                 )
+                errors.extend(protection_errors)
 
             if errors:
+                if confirm_token:
+                    _clear_stage_reimport_upload(request)
                 return render(
                     request,
                     "core/import_stage_slots.html",
@@ -1525,6 +1616,24 @@ def import_stage_slots(request, tournament_code):
                         "tournament": tournament,
                         "form": form,
                         "errors": errors,
+                        "warnings": protection_warnings,
+                    }
+                )
+
+            if protection_warnings and not confirm_token:
+                warning_token = _store_stage_reimport_upload(
+                    request,
+                    request.FILES["file"],
+                )
+                return render(
+                    request,
+                    "core/import_stage_slots.html",
+                    {
+                        "tournament": tournament,
+                        "form": form,
+                        "warnings": protection_warnings,
+                        "warning_token": warning_token,
+                        "warning_file_name": request.FILES["file"].name,
                     }
                 )
 
@@ -1665,12 +1774,12 @@ def import_stage_slots(request, tournament_code):
 
                             participant = row["participant"]
                             entry_defaults = {
-                                "category": category,
-                                "group": group,
-                                "pair_code": row["slot_code"],
-                                "display_order": row["display_order"],
-                                "participant": participant,
-                            }
+                            "category": category,
+                            "group": group,
+                            "pair_code": row["slot_label"],
+                            "display_order": row["display_order"],
+                            "participant": participant,
+                        }
 
                             entry = LeagueEntry.objects.create(
                                 **entry_defaults
@@ -1701,11 +1810,11 @@ def import_stage_slots(request, tournament_code):
 
                             participant = row["participant"]
                             entry_defaults = {
-                                "bracket": bracket,
-                                "pair_code": row["slot_code"],
-                                "display_order": row["display_order"],
-                                "participant": participant,
-                            }
+                            "bracket": bracket,
+                            "pair_code": row["slot_label"],
+                            "display_order": row["display_order"],
+                            "participant": participant,
+                        }
 
                             entry = TournamentEntry.objects.create(
                                 **entry_defaults
@@ -1782,6 +1891,9 @@ def import_stage_slots(request, tournament_code):
                         ],
                     }
                 )
+
+            if confirm_token:
+                _clear_stage_reimport_upload(request)
 
             return redirect(
                 "tournament_detail",

@@ -59,8 +59,8 @@
             <td>Lではgroup、Tではbracketを指定します。</td>
         </tr>
         <tr>
-            <td>slot_code / display_order</td>
-            <td>枠番号と表示順です。</td>
+            <td>slot_label / display_order</td>
+            <td>枠名と表示順です。</td>
         </tr>
         <tr>
             <td>entry_code</td>
@@ -95,17 +95,117 @@
     </ul>
 {% endif %}
 
-<form
-    method="post"
-    enctype="multipart/form-data"
->
-    {% csrf_token %}
+{% if warnings %}
+    <ul style="color:#b26a00;">
+        {% for warning in warnings %}
+            <li>{{ warning }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
 
-    {{ form.as_p }}
+{% if warning_token %}
+    <div class="reimport-warning-overlay">
+        <div class="reimport-warning-panel">
+            <h3>進行表を消して再取込しますか</h3>
+            <p>
+                進行表が使われている Stage が含まれています。
+                そのまま進めると、関連する進行表は消えて作り直されます。
+            </p>
 
-    <button type="submit">
-        アップロード
-    </button>
-</form>
+            <ul>
+                {% for warning in warnings %}
+                    <li>{{ warning }}</li>
+                {% endfor %}
+            </ul>
+
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="reimport_confirm_token" value="{{ warning_token }}">
+                <p>
+                    <label>
+                        <input type="checkbox" id="reimport-confirm-checkbox">
+                        進行表が消えることを理解しました
+                    </label>
+                </p>
+                <button type="submit" id="reimport-confirm-button" disabled>
+                    進行表を消して再取込する
+                </button>
+                <a href="?discard_stage_reimport=1" style="margin-left: 12px;">
+                    やめる
+                </a>
+            </form>
+        </div>
+    </div>
+{% else %}
+    <form
+        method="post"
+        enctype="multipart/form-data"
+    >
+        {% csrf_token %}
+
+        {{ form.as_p }}
+
+        <p class="subtle-text">
+            進行表が使われている Stage を含む場合は、ここで確認を入れてから再取込してください。
+        </p>
+
+        <button type="submit">
+            アップロード
+        </button>
+    </form>
+{% endif %}
+
+<style>
+.reimport-warning-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(20, 30, 45, 0.55);
+    z-index: 100;
+}
+
+.reimport-warning-panel {
+    width: min(720px, 100%);
+    max-height: 90vh;
+    overflow: auto;
+    padding: 20px 22px;
+    background: #fff;
+    border: 2px solid #c77d00;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.reimport-warning-panel h3 {
+    margin-top: 0;
+}
+
+.reimport-warning-panel ul {
+    margin-top: 12px;
+}
+
+.reimport-warning-panel button:disabled {
+    opacity: 0.5;
+}
+</style>
+
+{% if warning_token %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const checkbox = document.getElementById("reimport-confirm-checkbox");
+    const button = document.getElementById("reimport-confirm-button");
+
+    if (!checkbox || !button) {
+        return;
+    }
+
+    checkbox.addEventListener("change", function () {
+        button.disabled = !checkbox.checked;
+    });
+});
+</script>
+{% endif %}
 
 {% endblock %}

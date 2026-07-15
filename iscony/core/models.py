@@ -540,6 +540,12 @@ class LeagueEntry(models.Model):
         return self.pair_code
 
     @property
+    def slot_label(self):
+        if self.pair_code:
+            return self.pair_code
+        return str(self.display_order)
+
+    @property
     def display_name(self):
 
         if self.participant:
@@ -1327,6 +1333,12 @@ class TournamentEntry(models.Model):
     @property
     def code(self):
         return self.pair_code
+
+    @property
+    def slot_label(self):
+        if self.pair_code:
+            return self.pair_code
+        return str(self.display_order)
 
     def __str__(self):
         return (

@@ -162,6 +162,27 @@
         vertical-align: top;
     }
 
+    .sticky-table-wrapper {
+        max-height: calc(100vh - 180px);
+        overflow: auto;
+        margin-bottom: 30px;
+    }
+
+    .sticky-header-table {
+        border-collapse: collapse;
+        min-width: 700px;
+    }
+
+    .sticky-header-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+    }
+
+    .sticky-header-table th {
+        background: #f0f0f0;
+    }
+
     .site-brand {
         position: sticky;
         top: 0;
@@ -483,8 +504,17 @@
         justify-content: flex-end;
     }
 
+    .admin-quick-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-start;
+        margin: 0 0 16px;
+    }
+
     .action-row a,
-    .match-actions a {
+    .match-actions a,
+    .admin-quick-links a {
         display: inline-flex;
         align-items: center;
         min-height: 32px;

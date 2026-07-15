@@ -26,6 +26,7 @@ from .display_helpers import (
     resolve_entry_display_mode,
 )
 from .match_keys import format_match_key_display
+from .csv_views import STAGE_REIMPORT_SESSION_KEY
 from .models import (
     Category,
     AdvancementSource,
@@ -2466,6 +2467,8 @@ class RoundRobinMeetingTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Stage一覧へ戻る")
+        self.assertContains(response, "試合選択")
+        self.assertContains(response, "進行表")
         self.assertContains(
             response,
             reverse(
@@ -3865,12 +3868,18 @@ class ImportStageSlotsCsvTests(TestCase):
             code="STAGECSV",
         )
 
-    def _post_csv(self, content):
+    def _post_csv(self, content, extra_data=None):
         csv_file = SimpleUploadedFile(
             "stage_slots.csv",
             content.encode("utf-8-sig"),
             content_type="text/csv",
         )
+
+        data = {
+            "file": csv_file,
+        }
+        if extra_data:
+            data.update(extra_data)
 
         return self.client.post(
             reverse(
@@ -3879,9 +3888,7 @@ class ImportStageSlotsCsvTests(TestCase):
                     "tournament_code": self.tournament.code,
                 }
             ),
-            {
-                "file": csv_file,
-            },
+            data,
         )
 
     def _create_participant(self, category, entry_code):
@@ -3911,7 +3918,7 @@ class ImportStageSlotsCsvTests(TestCase):
             )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,E001,,,,,\n"
             "男子B,予選リーグ,L,A,,2,2,E002,,,,,\n"
             "男子B,予選リーグ,L,B,,3,1,E003,,,,,\n"
@@ -4027,7 +4034,7 @@ class ImportStageSlotsCsvTests(TestCase):
 
     def test_stage_slots_reject_unavailable_league_rank_source(self):
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,G,,1,1,,,,,,\n"
             "男子B,予選リーグ,L,G,,2,2,,,,,,\n"
             "男子B,予選リーグ,L,G,,3,3,,,,,,\n"
@@ -4059,7 +4066,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,決勝リーグ,L,B,,1,1,,,,,,\n"
             "男子B,決勝リーグ,L,A,,2,1,,,,,,\n"
             "男子B,決勝トーナメント,T,,本戦,1,1,,,,,,\n"
@@ -4112,7 +4119,7 @@ class ImportStageSlotsCsvTests(TestCase):
         original_id = stage.id
 
         response = self._post_csv(
-            "category,stage_code,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_stage_code,source_group,source_rank,source_match,source_result\n"
+            "category,stage_code,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_stage_code,source_group,source_rank,source_match,source_result\n"
             f"男子B,{stage.code},stage1,L,A,,1,1,,,,,,,\n"
         )
 
@@ -4137,7 +4144,7 @@ class ImportStageSlotsCsvTests(TestCase):
         self._create_participant(category, "E002")
 
         import_response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,E001,,,,,\n"
             "男子B,予選リーグ,L,A,,2,2,E002,,,,,\n"
             "男子B,決勝リーグ,L,A,,1,1,,LR,予選リーグ,A,1,,\n"
@@ -4223,7 +4230,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,,,,,,\n"
         )
 
@@ -4271,7 +4278,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,,,,,,\n"
             "男子B,予選リーグ,L,A,,2,2,,,,,,\n"
         )
@@ -4336,7 +4343,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,決勝トーナメント,T,,本戦,1,1,E001,,,,,\n"
             "男子B,決勝トーナメント,T,,本戦,2,2,E002,,,,,\n"
         )
@@ -4393,7 +4400,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,,,,,,\n"
             "男子B,予選リーグ,L,A,,2,2,,,,,,\n"
         )
@@ -4403,7 +4410,92 @@ class ImportStageSlotsCsvTests(TestCase):
             response,
             "カテゴリ「男子B」 Stage「予選リーグ」は試合進行表に登録済みです。",
         )
+        self.assertContains(
+            response,
+            "Stage再取込で進行表から消えます。",
+        )
         self.assertTrue(
+            Schedule.objects.filter(
+                round_robin_match=match,
+            ).exists()
+        )
+
+    def test_reimport_stage_with_schedule_requires_confirmation(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry_1 = self._create_participant(category, "E001")
+        entry_2 = self._create_participant(category, "E002")
+        match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=LeagueEntry.objects.create(
+                category=category,
+                group=group,
+                pair_code="1",
+                display_order=1,
+                participant=entry_1,
+            ),
+            pair2=LeagueEntry.objects.create(
+                category=category,
+                group=group,
+                pair_code="2",
+                display_order=2,
+                participant=entry_2,
+            ),
+        )
+        court = Court.objects.create(
+            tournament=self.tournament,
+            name="1",
+        )
+        Schedule.objects.create(
+            court=court,
+            order=1,
+            round_robin_match=match,
+        )
+
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選リーグ,L,A,,1,1,,,,,,\n"
+            "男子B,予選リーグ,L,A,,2,2,,,,,,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Stage再取込で進行表から消えます。",
+        )
+        self.assertContains(
+            response,
+            "進行表を消して再取込しますか",
+        )
+        self.assertTrue(
+            Schedule.objects.filter(
+                round_robin_match=match,
+            ).exists()
+        )
+
+        pending_token = self.client.session[STAGE_REIMPORT_SESSION_KEY]["token"]
+
+        confirmed_response = self._post_csv(
+            "",
+            {
+                "reimport_confirm_token": pending_token,
+            },
+        )
+
+        self.assertEqual(confirmed_response.status_code, 302)
+        self.assertFalse(
             Schedule.objects.filter(
                 round_robin_match=match,
             ).exists()
@@ -4461,7 +4553,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,E001,,,,,\n"
             "男子B,決勝リーグ,L,A,,A1,1,,LR,予選リーグ,A,1,,\n"
         )
@@ -4486,7 +4578,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,E001,LR,予選リーグ,A,1,,\n"
         )
 
@@ -4504,13 +4596,13 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,予選リーグ,L,A,,1,1,,,,,,\n"
             "男子B,予選リーグ,L,B,,1,1,,,,,,\n"
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "slot_codeが重複しています。")
+        self.assertContains(response, "slot_labelが重複しています。")
         self.assertFalse(
             Stage.objects.filter(
                 category=category,
@@ -4558,7 +4650,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,決勝T,T,,本戦,A1,1,,,,,,,\n"
             "男子B,決勝T,T,,本戦,A2,1,,,,,,,\n"
         )
@@ -4595,7 +4687,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,敗者リーグ,L,A,,1,1,,TR,予選T,,,M1,lose\n"
         )
 
@@ -4637,7 +4729,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_stage_code,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_stage_code,source_group,source_rank,source_match,source_result\n"
             "女子A,２位リーグ,L,2位リーグ１,,C2,1,,LR,,,C,2,,\n"
         )
 
@@ -4687,7 +4779,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_bracket,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_bracket,source_group,source_rank,source_match,source_result\n"
             "男子B,敗者リーグ,L,A,,1,1,,TR,予選T,Bブロック,,,M1,win\n"
         )
 
@@ -4732,7 +4824,7 @@ class ImportStageSlotsCsvTests(TestCase):
             )
 
         response = self._post_csv(
-            "category,stage,stage_type,group,bracket,slot_code,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
             "男子B,敗者リーグ,L,A,,1,1,,TR,予選T,,,M1,win\n"
         )
 
@@ -4762,7 +4854,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         response = self._post_csv(
-            "category\tstage\tstage_type\tgroup\tbracket\tslot_code\tdisplay_order\tentry_code\tsource_type\tsource_stage\tsource_group\tsource_rank\tsource_match\tsource_result\n"
+            "category\tstage\tstage_type\tgroup\tbracket\tslot_label\tdisplay_order\tentry_code\tsource_type\tsource_stage\tsource_group\tsource_rank\tsource_match\tsource_result\n"
             "男子B\t予選リーグ\tL\tA\t\t1\t1\tE001\t\t\t\t\t\t\n"
             "男子B\t予選リーグ\tL\tA\t\t2\t2\tE002\t\t\t\t\t\t\n"
         )
@@ -5232,7 +5324,7 @@ class CsvFormatDownloadTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(
-            "category,stage_code,stage,stage_type,group,bracket,slot_code",
+            "category,stage_code,stage,stage_type,group,bracket,slot_label",
             content,
         )
         self.assertIn(
@@ -6477,6 +6569,8 @@ class MaintenanceMenuTests(TestCase):
         )
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "管理側非公開大会")
+        self.assertContains(detail_response, "試合選択")
+        self.assertContains(detail_response, "管理メニュー")
 
         public_response = self.client.get(
             reverse(
@@ -6726,9 +6820,8 @@ class ReceptionMatchSearchTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "試合受付・結果入力")
-        self.assertContains(response, "試合選択")
-        self.assertContains(response, "カテゴリ + 番号で探す")
-        self.assertContains(response, "コート + 第何試合で探す")
+        self.assertNotContains(response, "カテゴリ + 番号で探す")
+        self.assertNotContains(response, "コート + 第何試合で探す")
         self.assertContains(response, "マッチキーで探す")
         self.assertContains(response, "QRを読み取る")
         self.assertContains(response, "結果入力ハブ")
@@ -6929,14 +7022,12 @@ class ResultInputSelectTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "試合選択")
-        self.assertContains(response, "試合受付・結果入力")
         self.assertContains(response, "進行枠を選ぶ")
         self.assertContains(response, "本日程")
         self.assertContains(response, "1コート")
         self.assertContains(response, "第3試合")
-        self.assertContains(response, "詳細検索")
-        self.assertContains(response, "QRやマッチキーから入る入口")
-        self.assertContains(response, "キー")
+        self.assertContains(response, "QRを読み取る")
+        self.assertContains(response, "マッチキー入力")
 
     def test_result_input_select_redirects_when_unique_match_is_selected(self):
         response = self.client.get(
@@ -7966,7 +8057,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         source_group = Group.objects.create(
             category=self.category,
             stage=source_stage,
-            name="D",
+            name="予選",
         )
         unresolved_entry = create_tournament_entry(
             bracket=self.bracket,
@@ -8006,21 +8097,21 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertRegex(
             content,
             re.compile(
-                r'<text[^>]*x="28"[^>]*y="75"[^>]*>.*?3.*?</text>',
+                r'<text[^>]*x="28"[^>]*y="75"[^>]*>.*?D2.*?</text>',
                 re.S,
             ),
         )
         self.assertRegex(
             content,
             re.compile(
-                r'<text[^>]*x="52"[^>]*y="75"[^>]*>.*?D2.*?</text>',
+                r'<text[^>]*x="52"[^>]*y="75"[^>]*>.*?予選2.*?</text>',
                 re.S,
             ),
         )
         self.assertNotRegex(
             content,
             re.compile(
-                r'<text[^>]*x="52"[^>]*y="63"[^>]*>.*?D2.*?</text>',
+                r'<text[^>]*x="52"[^>]*y="63"[^>]*>.*?予選2.*?</text>',
                 re.S,
             ),
         )
@@ -10187,6 +10278,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "試合選択")
+        self.assertContains(response, "管理メニュー")
         self.assertContains(response, "1 第1試合")
         self.assertContains(response, "1 第2試合")
         self.assertContains(response, "Aリーグ")

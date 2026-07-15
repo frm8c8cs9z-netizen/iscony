@@ -13,8 +13,16 @@
 
 <p class="subtle-text">
     試合選択は、進行枠・コート・試合順で素早く結果入力先を絞る入口です。
-    QRやマッチキーから入る入口も、ここからすぐ開けます。
 </p>
+
+<div class="action-row">
+    <a href="{% url 'reception_match_search' tournament.code %}?autostart=1#key-search">
+        QRを読み取る
+    </a>
+    <a href="{% url 'reception_match_search' tournament.code %}#key-search">
+        マッチキー入力
+    </a>
+</div>
 
 <h3>進行枠を選ぶ</h3>
 

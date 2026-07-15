@@ -1064,7 +1064,8 @@ def edit_pair(request, pair_id):
 
         form = LeagueEntryEditForm(
             request.POST,
-            instance=pair
+            instance=pair,
+            category=pair.category,
         )
 
         if form.is_valid():
@@ -1079,7 +1080,8 @@ def edit_pair(request, pair_id):
     else:
 
         form = LeagueEntryEditForm(
-            instance=pair
+            instance=pair,
+            category=pair.category,
         )
 
     return render(

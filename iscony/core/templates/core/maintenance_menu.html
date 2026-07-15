@@ -33,10 +33,10 @@
             </a>
             ／
             <a href="{% url 'reception_match_search' tournament.code %}">
-                詳細検索
+                結果入力検索
             </a>
         </td>
-        <td>試合選択と、試合受付・結果入力の2つの入口を使い分けます。迷った時は詳細検索を使います。</td>
+        <td>試合選択と、試合受付・結果入力の2つの入口を使い分けます。迷った時は結果入力検索を使います。</td>
     </tr>
     <tr>
         <td>採点票出力</td>
@@ -50,19 +50,6 @@
             </a>
         </td>
         <td>リーグやトーナメントの範囲を選び、印刷可能な採点票PDFを出力します。</td>
-    </tr>
-    <tr>
-        <td>進行状況確認</td>
-        <td>
-            <a href="{% url 'court_status' tournament.code %}">
-                コート状況
-            </a>
-            ／
-            <a href="{% url 'schedule_view' tournament.code %}">
-                試合進行表
-            </a>
-        </td>
-        <td>呼出、試合中、完了の状態を確認します。</td>
     </tr>
     <tr>
         <td>進行調整</td>
@@ -84,7 +71,15 @@
     </tr>
 </table>
 
-<h3>Stage・結果反映</h3>
+<p class="subtle-text">
+    コート状況は補助画面として残しています。通常は試合進行表から確認します。
+</p>
+
+<h3>補助メニュー</h3>
+
+<p class="subtle-text">
+    Stageの進行確認や進出元の整理など、主導線ではない補助操作をまとめています。
+</p>
 
 <table>
     <tr>
@@ -101,32 +96,28 @@
     </tr>
     <tr>
         <td>
-            <a href="{% url 'bracket_list' tournament.code %}">
-                トーナメント一覧
+            <a href="{% url 'tournament_stage_overview_index' tournament.code %}">
+                Stage補助一覧
             </a>
         </td>
-        <td>カテゴリをまたいでトーナメント表へ移動します。</td>
+        <td>カテゴリごとのStage進行への入口だけをまとめた補助一覧です。</td>
     </tr>
 </table>
+
+<h3>リーグ管理</h3>
+
+<p class="subtle-text">
+    リーグの枠調整はこちらから進めます。結果の確認は一般表示側のカテゴリ一覧から見たほうが自然です。
+</p>
 
 <table>
     <tr>
         <th>カテゴリ</th>
-        <th>Stage・結果確認</th>
         <th>枠メンテナンス</th>
     </tr>
     {% for category in categories %}
         <tr>
             <td>{{ category.name }}</td>
-            <td>
-                <a href="{% url 'category_stage_overview' category.id %}">
-                    Stage一覧
-                </a>
-                ／
-                <a href="{% url 'category_detail' category.id %}">
-                    リーグ表
-                </a>
-            </td>
             <td>
                 <a href="{% url 'pair_maintenance' category.id %}">
                     リーグ枠
@@ -135,11 +126,32 @@
         </tr>
     {% empty %}
         <tr>
-            <td colspan="3">
+            <td colspan="2">
                 カテゴリがありません。
             </td>
         </tr>
     {% endfor %}
+</table>
+
+<h3>トーナメント管理</h3>
+
+<p class="subtle-text">
+    トーナメント表の表示設定、結果入力、メンテナンスはここから進めます。
+</p>
+
+<table>
+    <tr>
+        <th>入口</th>
+        <th>用途</th>
+    </tr>
+    <tr>
+        <td>
+            <a href="{% url 'bracket_list' tournament.code %}">
+                トーナメント一覧・個別設定
+            </a>
+        </td>
+        <td>カテゴリをまたいでトーナメント表へ移動し、表示・結果入力・メンテナンスへ進みます。</td>
+    </tr>
 </table>
 
 <h3>大会準備</h3>
@@ -227,15 +239,6 @@
         </td>
     </tr>
     <tr>
-        <td>トーナメント個別設定</td>
-        <td>
-            <a href="{% url 'bracket_list' tournament.code %}">
-                トーナメント一覧・個別設定
-            </a>
-        </td>
-        <td>大会デフォルトと異なる表示方式、スコア表示、優勝者表示を調整します。</td>
-    </tr>
-    <tr>
         <td>表示順</td>
         <td>
             <a href="{% url 'order_maintenance' tournament.code %}">
@@ -274,77 +277,6 @@
         </td>
         <td>CSVなしで大会を作る時の入口候補です。通常は参加者CSV取込を使います。</td>
     </tr>
-    <tr>
-        <td>リーグ枠を調整する</td>
-        <td>
-            {% for category in categories %}
-                <a href="{% url 'pair_maintenance' category.id %}">
-                    {{ category.name }} リーグ枠
-                </a>{% if not forloop.last %} ／ {% endif %}
-            {% empty %}
-                カテゴリがありません
-            {% endfor %}
-        </td>
-        <td>リーグ枠作成、参加者貼り付け、枠修正の土台になる画面です。</td>
-    </tr>
-    <tr>
-        <td>トーナメント枠を作る</td>
-        <td>
-            <a href="{% url 'add_tournament_bracket' tournament.code %}">
-                トーナメント追加
-            </a>
-            ／
-            <a href="{% url 'bracket_list' tournament.code %}">
-                トーナメント一覧・個別設定
-            </a>
-        </td>
-        <td>トーナメント表の作成、表示設定、試合生成・編集へ進む入口です。</td>
-    </tr>
-</table>
-
-<h4>当日事故対応として維持</h4>
-
-<table>
-    <tr>
-        <th>やりたいこと</th>
-        <th>入口</th>
-        <th>用途</th>
-    </tr>
-    <tr>
-        <td>結果・順位・枠を復旧する</td>
-        <td>
-            <a href="{% url 'tournament_snapshot_list' tournament.code %}">
-                大会スナップショット
-            </a>
-            ／
-            <a href="{% url 'advancement_source_list' tournament.code %}">
-                進出元一覧・入れ替え
-            </a>
-        </td>
-        <td>誤入力、誤反映、進出元の入れ替えが必要になった時に使います。</td>
-    </tr>
-    <tr>
-        <td>試合順・コートを直す</td>
-        <td>
-            <a href="{% url 'schedule_maintenance' tournament.code %}">
-                進行メンテナンス
-            </a>
-        </td>
-        <td>未配置トーナメント試合の追加、試合順・コート変更、進行枠の修正を行います。</td>
-    </tr>
-    <tr>
-        <td>リーグの順位やリタイアを直す</td>
-        <td>
-            {% for category in categories %}
-                <a href="{% url 'category_detail' category.id %}">
-                    {{ category.name }} リーグ表
-                </a>{% if not forloop.last %} ／ {% endif %}
-            {% empty %}
-                カテゴリがありません
-            {% endfor %}
-        </td>
-        <td>順位計算、順位手入力、追加対戦、リタイア対応が必要な時に使います。</td>
-    </tr>
 </table>
 
 <h4>互換用として一時維持</h4>
@@ -361,31 +293,6 @@
             </a>
         </td>
         <td>Stage対応前の互換用入口です。通常はStage枠CSV取込を使います。</td>
-    </tr>
-    <tr>
-        <td>
-            <a href="{% url 'bracket_list' tournament.code %}">
-                トーナメント一覧・個別設定
-            </a>
-        </td>
-        <td>トーナメント個別の旧CSV取込や位置調整は、必要な場合だけ各トーナメントのメンテナンスから確認します。</td>
-    </tr>
-</table>
-
-<h4>削除または隠し機能化を検討</h4>
-
-<table>
-    <tr>
-        <th>入口</th>
-        <th>用途</th>
-    </tr>
-    <tr>
-        <td>
-            <a href="{% url 'pair_search' %}">
-                リーグ枠検索
-            </a>
-        </td>
-        <td>大会横断の古い補助検索です。通常は試合受付・結果入力の検索を使います。</td>
     </tr>
 </table>
 

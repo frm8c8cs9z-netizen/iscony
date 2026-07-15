@@ -4,117 +4,472 @@
 
 {% block content %}
 
+<style>
+    .stage-results {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+    }
+
+    .stage-block {
+        padding-top: 10px;
+        border-top: 1px solid #d8e0ea;
+    }
+
+    .stage-block:first-child {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    .stage-block h3 {
+        margin-bottom: 8px;
+    }
+
+    .stage-subtext {
+        color: #55626f;
+        margin-bottom: 10px;
+    }
+
+    .stage-page-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        margin-top: 2px;
+    }
+
+    .stage-page-links a {
+        color: #1565c0;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        font-weight: 600;
+    }
+
+    .stage-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: #eef2ff;
+        color: #314a97;
+        font-weight: 700;
+        font-size: 13px;
+    }
+
+    .stage-status.confirmed {
+        background: #e8f5ec;
+        color: #1d6b36;
+    }
+
+    .stage-status.in_progress {
+        background: #fff4df;
+        color: #835100;
+    }
+
+    .stage-status.waiting {
+        background: #eef2ff;
+        color: #314a97;
+    }
+
+    .stage-status.not_started {
+        background: #f0f3f6;
+        color: #27313a;
+    }
+
+    .stage-summary {
+        margin: 8px 0 14px;
+        color: #4f5a66;
+    }
+
+    .stage-summary ul {
+        margin: 6px 0 0 20px;
+    }
+
+    .round-robin-table {
+        table-layout: fixed;
+        width: fit-content;
+        min-width: 0;
+        display: inline-table;
+    }
+
+    .round-robin-table .rr-code-col {
+        width: 56px;
+    }
+
+    .round-robin-table .rr-name-col {
+        width: 168px;
+    }
+
+    .round-robin-table .rr-score-col,
+    .round-robin-table .rr-stat-col {
+        width: 58px;
+    }
+
+    .round-robin-table .rr-header {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        line-height: 1.15;
+        white-space: normal;
+    }
+
+    .round-robin-table .rr-header-inner {
+        display: block;
+    }
+
+    .svg-bracket-wrap {
+        border: 1px solid #c9c9c9;
+        overflow: auto;
+        padding: 16px;
+        margin-bottom: 16px;
+        background: #fff;
+    }
+
+    .svg-bracket {
+        display: block;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .svg-heading {
+        font-size: 18px;
+        font-weight: 700;
+        fill: #222;
+    }
+
+    .entry-text {
+        font-size: 14px;
+        font-weight: 600;
+        fill: #222;
+    }
+
+    .entry-org-text {
+        font-size: 11px;
+        font-weight: 500;
+        fill: #444;
+    }
+
+    .winner-text {
+        font-size: 14px;
+        font-weight: 800;
+        fill: #e00000;
+    }
+
+    .winner-org-text {
+        font-size: 11px;
+        font-weight: 700;
+        fill: #e00000;
+    }
+
+    .champion-text {
+        font-size: 14px;
+        font-weight: 700;
+        fill: #e00000;
+    }
+
+    .champion-org-text {
+        font-size: 12px;
+        font-weight: 700;
+        fill: #e00000;
+    }
+
+    .champion-vertical-text {
+        font-size: 14px;
+        font-weight: 700;
+        fill: #e00000;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+    }
+
+    .champion-org-vertical-text {
+        font-size: 12px;
+        font-weight: 700;
+        fill: #e00000;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+    }
+
+    .svg-match-code {
+        font-size: 12px;
+        fill: #666;
+    }
+
+    .loser-score {
+        font-size: 13px;
+        font-weight: 700;
+        fill: #222;
+    }
+
+    .normal-line {
+        stroke: #222;
+        stroke-width: 2;
+        fill: none;
+    }
+
+    .winner-line {
+        stroke: #e00000;
+        stroke-width: 4;
+        fill: none;
+    }
+
+</style>
+
 <div class="page-heading">
     <div>
         <h2>{{ category.name }} Stage進行</h2>
         <p class="subtle-text">{{ tournament.name }}</p>
-    </div>
-    <div class="action-row">
-        <a href="{% url 'tournament_snapshot_list' tournament.code %}">大会スナップショット</a>
-        <a href="{% url 'schedule_view' tournament.code %}">試合進行表</a>
-        <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
+        <div class="stage-page-links">
+            <a href="{% url 'tournament_snapshot_list' tournament.code %}">大会スナップショット</a>
+            <a href="{% url 'schedule_view' tournament.code %}">試合進行表</a>
+            <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
+        </div>
     </div>
 </div>
 
-{% for row in stage_rows %}
-    <section class="stage-section" id="stage-{{ row.stage.id }}">
-        <div class="stage-heading">
-            <div>
-                <span class="stage-order">{{ row.stage.display_order }}</span>
-                <h3>{{ row.stage.name }}</h3>
-                <span class="stage-code">{{ row.stage.code }}</span>
-            </div>
-            <div>
-                {{ row.stage.get_stage_type_display }} /
-                {% if row.ready %}
-                    <strong>結果確定</strong>
-                {% else %}
-                    進行中
-                {% endif %}
-            </div>
-        </div>
+{% include "core/_admin_quick_links.html" %}
 
-        {% if row.stage.stage_type == "league" %}
-            <table class="stage-table">
-                <tr>
-                    <th>リーグ</th>
-                    <th>参加枠</th>
-                    <th>試合</th>
-                    <th>順位</th>
-                    <th>操作</th>
-                </tr>
-                {% for data in row.containers %}
-                    <tr>
-                        <td>{{ data.group.name }}リーグ</td>
-                        <td>{{ data.entry_count }}</td>
-                        <td>{{ data.finished_count }} / {{ data.match_count }}</td>
-                        <td>
-                            {% if data.ranking_confirmed %}
-                                確定
-                            {% else %}
-                                {{ data.ranking_count }} / {{ data.entry_count }}
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{% url 'category_detail' category.id %}#group-{{ data.group.id }}">リーグ表</a>
-                            |
-                            <a href="{% url 'edit_group_ranking' data.group.id %}">順位入力</a>
-                        </td>
-                    </tr>
-                {% empty %}
-                    <tr><td colspan="5">リーグがありません。</td></tr>
-                {% endfor %}
-            </table>
-        {% else %}
-            <table class="stage-table">
-                <tr>
-                    <th>トーナメント</th>
-                    <th>参加枠</th>
-                    <th>試合</th>
-                    <th>操作</th>
-                </tr>
-                {% for data in row.containers %}
-                    <tr>
-                        <td>{{ data.bracket.name }}</td>
-                        <td>{{ data.entry_count }}</td>
-                        <td>{{ data.finished_count }} / {{ data.match_count }}</td>
-                        <td>
-                            <a href="{% url 'tournament_bracket_detail' tournament.code data.bracket.id %}">トーナメント表</a>
-                            |
-                            <a href="{% url 'tournament_match_maintenance' tournament.code data.bracket.id %}">結果入力</a>
-                        </td>
-                    </tr>
-                {% empty %}
-                    <tr><td colspan="4">トーナメントがありません。</td></tr>
-                {% endfor %}
-            </table>
-        {% endif %}
+<p class="subtle-text">
+    Stage順に、リーグ表とトーナメント表をそのまま並べて確認できます。
+    個別の修正は各表からそのまま進めます。
+</p>
 
-        {% if row.targets %}
-            <div class="stage-transition">
+<div class="stage-results">
+    {% for row in stage_rows %}
+        <section class="stage-block" id="stage-{{ row.stage.id }}">
+            <div class="page-heading">
                 <div>
-                    <strong>後続Stage</strong>
-                    {% for target in row.targets %}
-                        <span>
-                            {{ target.stage.name }}
-                            （{{ target.filled_count }}/{{ target.slot_count }}枠反映済み）
+                    <h3>
+                        <span class="stage-order">{{ row.stage.display_order }}</span>
+                        {{ row.stage.name }}
+                    </h3>
+                    <p class="stage-subtext">
+                        {{ row.stage.code }}
+                        /
+                        {{ row.stage.get_stage_type_display }}
+                        <span class="stage-status {{ row.status.key }}">
+                            {{ row.status.label }}
                         </span>
-                    {% endfor %}
+                    </p>
                 </div>
-                <form method="post" action="{% url 'apply_stage_results' row.stage.id %}">
-                    {% csrf_token %}
-                    <button
-                        type="submit"
-                        onclick="return confirm('{{ row.stage.name }}の確定結果を後続Stageへ反映しますか？');"
-                    >
-                        後続Stageへ反映
-                    </button>
-                </form>
             </div>
-        {% endif %}
-    </section>
-{% empty %}
-    <p>Stageがありません。</p>
-{% endfor %}
+
+            {% if row.stage.stage_type == "league" %}
+                {% for data in row.display_groups %}
+                    <div class="group-box" id="group-{{ data.group.id }}">
+                        <h4>{{ data.group.name }}リーグ</h4>
+
+                        <div class="table-wrapper">
+                            <table class="round-robin-table">
+                                <tr>
+                                    <th class="rr-code-col"></th>
+                                    <th class="rr-name-col"></th>
+                                    {% for pair in data.pairs %}
+                                        <th class="rr-code-col rr-header {% if pair.retired %}retired-pair{% endif %}">
+                                            <span class="rr-header-inner">{{ pair.pair_code }}</span>
+                                        </th>
+                                    {% endfor %}
+                                    <th class="rr-stat-col rr-header">勝</th>
+                                    <th class="rr-stat-col rr-header">敗</th>
+                                    <th class="rr-stat-col rr-header">順位</th>
+                                </tr>
+
+                                {% for table_row in data.table_rows %}
+                                    <tr>
+                                        <th class="rr-code-col rr-header {% if table_row.pair.retired %}retired-pair{% endif %}">
+                                            <span class="rr-header-inner">{{ table_row.pair.pair_code }}</span>
+                                        </th>
+                                        <th class="rr-name-col rr-header {% if table_row.pair.retired %}retired-pair{% endif %}">
+                                            {% for line in table_row.pair_display_lines %}
+                                                <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
+                                            {% endfor %}
+                                        </th>
+                                        {% for score in table_row.scores %}
+                                            {% if score.type == "self" %}
+                                                <td class="self-cell">-</td>
+                                            {% else %}
+                                                <td class="rr-score-col {% if use_league_score_colors %}{{ score.type }}{% endif %}">
+                                                    {% if score.match %}
+                                                        <a href="{% url 'input_match_score' score.match.id %}?next={% url 'category_stage_overview' category.id %}#group-{{ data.group.id }}">
+                                                            {% if score.retired_self %}
+                                                                R
+                                                            {% elif score.value != None and score.value != "" %}
+                                                                {% if score.type == "win" %}
+                                                                    <span class="score-chip">{{ score.value }}</span>
+                                                                {% else %}
+                                                                    {{ score.value }}
+                                                                {% endif %}
+                                                            {% else %}
+                                                                -
+                                                            {% endif %}
+                                                        </a>
+                                                    {% else %}
+                                                        {% if score.retired_self %}
+                                                            R
+                                                        {% elif score.type == "win" and score.value != None and score.value != "" %}
+                                                            <span class="score-chip">{{ score.value }}</span>
+                                                        {% else %}
+                                                            {{ score.value|default_if_none:"" }}
+                                                        {% endif %}
+                                                    {% endif %}
+                                                </td>
+                                            {% endif %}
+                                        {% endfor %}
+
+                                        {% if table_row.ranking %}
+                                            <td class="rr-stat-col">{{ table_row.ranking.wins }}</td>
+                                            <td class="rr-stat-col">{{ table_row.ranking.losses }}</td>
+                                            <td class="rr-stat-col">{{ table_row.ranking.rank|default_if_none:"" }}</td>
+                                        {% else %}
+                                            <td colspan="3" class="rr-stat-col">未集計</td>
+                                        {% endif %}
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+
+                        {% if data.extra_matches %}
+                            <h5>追加試合</h5>
+                            <table>
+                                <tr>
+                                    <th>対戦</th>
+                                    <th>回数</th>
+                                    <th>結果</th>
+                                    <th>順位計算</th>
+                                    <th>理由</th>
+                                </tr>
+                                {% for extra in data.extra_matches %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'input_match_score' extra.match.id %}?next={% url 'category_stage_overview' category.id %}#group-{{ data.group.id }}">
+                                                {{ extra.match.pair1.pair_code }}
+                                                {% for line in extra.pair1_display_lines %}
+                                                    {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                                                {% endfor %}
+                                                vs
+                                                {{ extra.match.pair2.pair_code }}
+                                                {% for line in extra.pair2_display_lines %}
+                                                    {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                                                {% endfor %}
+                                            </a>
+                                        </td>
+                                        <td>{{ extra.match.meeting_number }}回目</td>
+                                        <td>{{ extra.match.score_display }}</td>
+                                        <td>{% if extra.match.counts_for_ranking %}対象{% else %}対象外{% endif %}</td>
+                                        <td>{{ extra.match.note|default:"-" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <p>リーグがありません。</p>
+                {% endfor %}
+            {% else %}
+                {% for data in row.display_brackets %}
+                    <div class="group-box">
+                        {% if data.svg_bracket %}
+                            <div class="svg-bracket-wrap">
+                                <svg
+                                    class="svg-bracket"
+                                    width="{{ data.svg_bracket.width }}"
+                                    height="{{ data.svg_bracket.height }}"
+                                    viewBox="0 0 {{ data.svg_bracket.width }} {{ data.svg_bracket.height }}"
+                                    role="img"
+                                    aria-label="{{ data.bracket.name }} トーナメント表"
+                                >
+                                    {% for heading in data.svg_bracket.headings %}
+                                        <text
+                                            class="svg-heading"
+                                            x="{{ heading.x }}"
+                                            y="{{ heading.y }}"
+                                            text-anchor="middle"
+                                        >
+                                            {{ heading.text }}
+                                        </text>
+                                    {% endfor %}
+
+                                    {% for line in data.svg_bracket.lines %}
+                                        <line
+                                            class="{{ line.class }}"
+                                            x1="{{ line.x1 }}"
+                                            y1="{{ line.y1 }}"
+                                            x2="{{ line.x2 }}"
+                                            y2="{{ line.y2 }}"
+                                        />
+                                    {% endfor %}
+
+                                    {% for label in data.svg_bracket.labels %}
+                                        {% if label.url %}
+                                            <a href="{{ label.url }}">
+                                                <text
+                                                    class="{{ label.class }}"
+                                                    x="{{ label.x }}"
+                                                    y="{{ label.y }}"
+                                                    text-anchor="{{ label.anchor }}"
+                                                    {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+                                                >
+                                                    {% if label.lines %}
+                                                        {% for line in label.lines %}
+                                                            <tspan
+                                                                x="{{ label.x }}"
+                                                                y="{{ line.y }}"
+                                                                {% if line.class %}class="{{ line.class }}"{% endif %}
+                                                            >{{ line.text }}</tspan>
+                                                        {% endfor %}
+                                                    {% else %}
+                                                        {{ label.text }}
+                                                    {% endif %}
+                                                </text>
+                                            </a>
+                                        {% else %}
+                                            <text
+                                                class="{{ label.class }}"
+                                                x="{{ label.x }}"
+                                                y="{{ label.y }}"
+                                                text-anchor="{{ label.anchor }}"
+                                                {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+                                            >
+                                                {% if label.lines %}
+                                                    {% for line in label.lines %}
+                                                        <tspan
+                                                            x="{{ label.x }}"
+                                                            y="{{ line.y }}"
+                                                            {% if line.class %}class="{{ line.class }}"{% endif %}
+                                                        >{{ line.text }}</tspan>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    {{ label.text }}
+                                                {% endif %}
+                                            </text>
+                                        {% endif %}
+                                    {% endfor %}
+                                </svg>
+                            </div>
+                        {% endif %}
+
+                    </div>
+                {% empty %}
+                    <p>トーナメントがありません。</p>
+                {% endfor %}
+            {% endif %}
+
+            {% if row.targets %}
+                <div class="stage-summary">
+                    <strong>後続Stage</strong>
+                    <ul>
+                        {% for target in row.targets %}
+                            <li>
+                                {{ target.stage.name }}
+                                （{{ target.filled_count }}/{{ target.slot_count }}枠反映済み）
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        </section>
+    {% empty %}
+        <p>Stageがありません。</p>
+    {% endfor %}
+</div>
 
 {% endblock %}

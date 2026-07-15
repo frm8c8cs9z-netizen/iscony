@@ -1,0 +1,19 @@
+{% if shortcut_code %}
+<nav class="admin-quick-links" aria-label="大会ショートカット">
+    <a href="{% url 'result_input_select' shortcut_code %}">
+        試合選択
+    </a>
+    <a href="{% url 'reception_match_search' shortcut_code %}?autostart=1#key-search">
+        結果入力QR
+    </a>
+    <a href="{% url 'schedule_view' shortcut_code %}">
+        進行表
+    </a>
+    <a href="{% url 'tournament_detail' shortcut_code %}">
+        大会詳細
+    </a>
+    <a href="{% url 'maintenance_menu' shortcut_code %}">
+        管理メニュー
+    </a>
+</nav>
+{% endif %}

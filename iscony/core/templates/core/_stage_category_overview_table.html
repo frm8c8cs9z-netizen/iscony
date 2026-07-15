@@ -1,0 +1,22 @@
+<table>
+    <tr>
+        <th>カテゴリ</th>
+        <th>Stage確認</th>
+    </tr>
+    {% for category in categories %}
+        <tr>
+            <td>{{ category.name }}</td>
+            <td>
+                <a href="{% url 'category_stage_overview' category.id %}">
+                    Stage進行
+                </a>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="2">
+                カテゴリがありません。
+            </td>
+        </tr>
+    {% endfor %}
+</table>

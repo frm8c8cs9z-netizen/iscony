@@ -14,6 +14,7 @@ from .models import (
     RoundRobinMatch,
     Schedule,
     Stage,
+    Tournament,
     TournamentBracket,
     TournamentMatch,
 )
@@ -194,73 +195,24 @@ def _advancement_data(stage):
     )
 
 
-def category_stage_overview(request, category_id):
-    """リーグ・トーナメントを区別せずStage順に表示する。"""
+def _build_category_stage_rows(category, *, request=None, include_public_links=False):
+    """カテゴリ内のStageを、リーグ表・トーナメント表込みで描画用に整える。"""
 
-    category = get_object_or_404(
-        Category.objects.select_related("tournament"),
-        id=category_id,
-    )
     stages = Stage.objects.filter(category=category).order_by(
         "display_order",
         "name",
     )
     stage_rows = []
 
-    for stage in stages:
-        if stage.stage_type == Stage.TYPE_LEAGUE:
-            containers = _league_stage_data(stage)
-            ready = bool(containers) and all(
-                row["ranking_confirmed"]
-                for row in containers
-            )
-        else:
-            containers = _tournament_stage_data(stage)
-            ready = bool(containers) and all(
-                row["matches_complete"]
-                for row in containers
-            )
-
-        stage_rows.append({
-            "stage": stage,
-            "containers": containers,
-            "ready": ready,
-            "targets": _advancement_data(stage),
-        })
-
-    return render(
-        request,
-        "core/category_stage_overview.html",
-        {
-            "category": category,
-            "tournament": category.tournament,
-            "stage_rows": stage_rows,
-        },
-    )
-
-
-def _public_schedule_url(tournament):
-    return reverse(
-        "public_schedule_view_token",
-        kwargs={"public_token": tournament.public_token},
-    )
-
-
-def _render_public_category_results(request, category):
     return_schedule_id = None
-    from_schedule = request.GET.get("from_schedule")
-    if from_schedule and from_schedule.isdecimal():
-        if Schedule.objects.filter(
-            id=from_schedule,
-            court__tournament=category.tournament,
-        ).exists():
-            return_schedule_id = from_schedule
-
-    stages = Stage.objects.filter(category=category).order_by(
-        "display_order",
-        "name",
-    )
-    stage_rows = []
+    if request is not None:
+        from_schedule = request.GET.get("from_schedule")
+        if from_schedule and from_schedule.isdecimal():
+            if Schedule.objects.filter(
+                id=from_schedule,
+                court__tournament=category.tournament,
+            ).exists():
+                return_schedule_id = from_schedule
 
     for stage in stages:
         if stage.stage_type == Stage.TYPE_LEAGUE:
@@ -272,7 +224,7 @@ def _render_public_category_results(request, category):
             display_groups, _ = build_category_group_data(
                 category,
                 groups=groups,
-                include_operations=False,
+                include_operations=not include_public_links,
             )
             ready = bool(containers) and all(
                 row["ranking_confirmed"]
@@ -298,14 +250,14 @@ def _render_public_category_results(request, category):
                 )
                 schedule_url_by_match_id = {
                     schedule.tournament_match_id: (
-                        f"{_public_schedule_url(category.tournament)}"
+                        f"{reverse('public_schedule_view_token', kwargs={'public_token': category.tournament.public_token})}"
                         f"#schedule-{schedule.id}"
                     )
                     for schedule in schedules
                 }
 
                 svg_bracket = display_data.get("svg_bracket")
-                if svg_bracket:
+                if svg_bracket and include_public_links:
                     for label in svg_bracket["labels"]:
                         if label.get("label_type") == "match_code":
                             label["public_url"] = schedule_url_by_match_id.get(
@@ -316,6 +268,7 @@ def _render_public_category_results(request, category):
                     "bracket": bracket,
                     **display_data,
                 })
+
             ready = bool(containers) and all(
                 row["matches_complete"]
                 for row in containers
@@ -337,14 +290,85 @@ def _render_public_category_results(request, category):
             "display_brackets": display_brackets,
         })
 
+    return {
+        "stage_rows": stage_rows,
+        "return_schedule_id": return_schedule_id,
+    }
+
+
+def category_stage_overview(request, category_id):
+    """リーグ・トーナメントを区別せずStage順に表示する。"""
+
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        id=category_id,
+    )
+    stage_data = _build_category_stage_rows(
+        category,
+        request=request,
+        include_public_links=False,
+    )
+
+    return render(
+        request,
+        "core/category_stage_overview.html",
+        {
+            "category": category,
+            "tournament": category.tournament,
+            **stage_data,
+            "use_league_score_colors": (
+                category.tournament.default_league_score_color_mode
+                != category.tournament.LEAGUE_SCORE_COLOR_NONE
+            ),
+        },
+    )
+
+
+def tournament_stage_overview_index(request, code):
+    """カテゴリごとのStage進行入口をまとめた補助一覧を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    categories = Category.objects.filter(
+        tournament=tournament,
+    ).order_by(
+        "display_order",
+        "name",
+    )
+
+    return render(
+        request,
+        "core/stage_overview_index.html",
+        {
+            "tournament": tournament,
+            "categories": categories,
+        },
+    )
+
+
+def _public_schedule_url(tournament):
+    return reverse(
+        "public_schedule_view_token",
+        kwargs={"public_token": tournament.public_token},
+    )
+
+
+def _render_public_category_results(request, category):
+    stage_data = _build_category_stage_rows(
+        category,
+        request=request,
+        include_public_links=True,
+    )
+
     return render(
         request,
         "core/public_category_results.html",
         {
             "category": category,
             "tournament": category.tournament,
-            "stage_rows": stage_rows,
-            "return_schedule_id": return_schedule_id,
+            **stage_data,
             "public_schedule_url": _public_schedule_url(
                 category.tournament,
             ),

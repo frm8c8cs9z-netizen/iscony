@@ -12,9 +12,9 @@
         <div class="draw-entry seed-entry">
             <div class="draw-entry-no">
                 {% if match.pair1 %}
-                    {{ match.pair1.display_order }}
+                    {{ match.pair1.slot_label }}
                 {% elif match.pair2 %}
-                    {{ match.pair2.display_order }}
+                    {{ match.pair2.slot_label }}
                 {% else %}
                     &nbsp;
                 {% endif %}
@@ -46,7 +46,7 @@
         <div class="draw-entry {% if match.winner == match.pair1 %}winner{% endif %}">
             <div class="draw-entry-no">
                 {% if match.pair1 and show_entries %}
-                    {{ match.pair1.display_order }}
+                    {{ match.pair1.slot_label }}
                 {% else %}
                     &nbsp;
                 {% endif %}
@@ -75,7 +75,7 @@
         <div class="draw-entry {% if match.winner == match.pair2 %}winner{% endif %}">
             <div class="draw-entry-no">
                 {% if match.pair2 and show_entries %}
-                    {{ match.pair2.display_order }}
+                    {{ match.pair2.slot_label }}
                 {% else %}
                     &nbsp;
                 {% endif %}

@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ tournament.name }} Stage補助一覧{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ tournament.name }} Stage補助一覧</h2>
+        <p class="subtle-text">カテゴリごとのStage進行への入口だけをまとめた補助ページです。</p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'maintenance_menu' tournament.code %}">管理メニューへ戻る</a>
+    </div>
+</div>
+
+{% include "core/_stage_category_overview_table.html" %}
+
+{% endblock %}
