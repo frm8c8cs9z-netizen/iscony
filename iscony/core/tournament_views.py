@@ -839,24 +839,14 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "url": "",
             })
         if is_seed_match and not should_show_entry:
-            if _is_unresolved_advancement_entry(entry):
-                svg["labels"].append({
-                    "x": name_x,
-                    "y": y + 5,
-                    "text": entry.display_name,
-                    "class": "entry-text",
-                    "anchor": text_anchor,
-                    "url": "",
-                })
-            else:
-                svg["labels"].append({
-                    "x": name_x,
-                    "y": y + 5,
-                    "text": entry.slot_label,
-                    "class": "entry-text",
-                    "anchor": text_anchor,
-                    "url": "",
-                })
+            svg["labels"].append({
+                "x": name_x,
+                "y": y + 5,
+                "text": entry.slot_label or "",
+                "class": "entry-text",
+                "anchor": text_anchor,
+                "url": "",
+            })
         elif _is_unresolved_advancement_entry(entry):
             svg["labels"].append({
                 "x": name_x,
