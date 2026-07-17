@@ -756,11 +756,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         line_start = join_x if round_number > 1 else join_x + shoulder
         entry_x = svg["width"] - svg["side_margin"]
         number_x = entry_x
-        name_x = (
-            line_start + 8
-            if round_number > 1
-            else line_start + 8
-        )
+        name_x = svg["width"] - svg["side_margin"] - name_width + 8
         number_anchor = "end"
         text_anchor = "start"
         code_anchor = "start"
@@ -772,11 +768,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         line_start = join_x if round_number > 1 else join_x - shoulder
         entry_x = svg["side_margin"]
         number_x = entry_x
-        name_x = (
-            line_start - 8
-            if round_number > 1
-            else line_start - 8
-        )
+        name_x = svg["side_margin"] + name_width - 8
         number_anchor = "start"
         text_anchor = "end"
         code_anchor = "end"
