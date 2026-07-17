@@ -814,7 +814,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             "x": number_x,
             "y": y + 5,
             "text": entry.slot_label,
-            "class": "entry-text",
+            "class": "seed-code",
             "anchor": number_anchor,
             "url": "",
         })
