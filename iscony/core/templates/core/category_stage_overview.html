@@ -143,19 +143,6 @@
         fill: #222;
     }
 
-    .advancement-source-text {
-        font-size: 13px;
-        font-weight: 500;
-        fill: #b05a00;
-        font-style: italic;
-    }
-
-    .seed-code {
-        font-size: 14px;
-        font-weight: 700;
-        fill: #c40000;
-    }
-
     .entry-org-text {
         font-size: 11px;
         font-weight: 500;
@@ -414,15 +401,13 @@
                                     {% for label in data.svg_bracket.labels %}
                                         {% if label.url %}
                                             <a href="{{ label.url }}">
-                        <text
-                            class="{{ label.class }}"
-                            x="{{ label.x }}"
-                            y="{{ label.y }}"
-                            text-anchor="{{ label.anchor }}"
-                            {% if label.class == 'seed-code' %}fill="#c40000"{% endif %}
-                            {% if label.class == 'advancement-source-text' %}fill="#b05a00"{% endif %}
-                            {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
-                        >
+                                                <text
+                                                    class="{{ label.class }}"
+                                                    x="{{ label.x }}"
+                                                    y="{{ label.y }}"
+                                                    text-anchor="{{ label.anchor }}"
+                                                    {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+                                                >
                                                     {% if label.lines %}
                                                         {% for line in label.lines %}
                                                             <tspan
@@ -437,15 +422,13 @@
                                                 </text>
                                             </a>
                                         {% else %}
-                    <text
-                        class="{{ label.class }}"
-                        x="{{ label.x }}"
-                        y="{{ label.y }}"
-                        text-anchor="{{ label.anchor }}"
-                        {% if label.class == 'seed-code' %}fill="#c40000"{% endif %}
-                        {% if label.class == 'advancement-source-text' %}fill="#b05a00"{% endif %}
-                        {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
-                    >
+                                            <text
+                                                class="{{ label.class }}"
+                                                x="{{ label.x }}"
+                                                y="{{ label.y }}"
+                                                text-anchor="{{ label.anchor }}"
+                                                {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+                                            >
                                                 {% if label.lines %}
                                                     {% for line in label.lines %}
                                                         <tspan
