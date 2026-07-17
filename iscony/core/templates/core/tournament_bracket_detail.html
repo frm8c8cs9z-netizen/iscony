@@ -182,6 +182,7 @@
                                 x="{{ label.x }}"
                                 y="{{ label.y }}"
                                 text-anchor="{{ label.anchor }}"
+                                {% if label.class == 'seed-code' %}fill="#c40000"{% endif %}
                                 {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
                             >
                                 {% if label.lines %}
@@ -203,6 +204,7 @@
                             x="{{ label.x }}"
                             y="{{ label.y }}"
                             text-anchor="{{ label.anchor }}"
+                            {% if label.class == 'seed-code' %}fill="#c40000"{% endif %}
                             {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
                         >
                             {% if label.lines %}
