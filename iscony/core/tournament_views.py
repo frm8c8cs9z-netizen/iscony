@@ -824,7 +824,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "x": name_x,
                 "y": y + 5,
                 "text": entry.display_name,
-                "class": "entry-text",
+                "class": "advancement-source-text",
                 "anchor": text_anchor,
                 "url": "",
             })
@@ -1231,7 +1231,7 @@ def _build_svg_bracket_data(bracket, round_data):
                         "x": center_x,
                         "y": y,
                         "text": entry.display_name,
-                        "class": "entry-text",
+                        "class": "advancement-source-text",
                         "anchor": "middle",
                         "url": "",
                     })
