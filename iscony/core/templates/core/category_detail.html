@@ -105,7 +105,7 @@
                     {% if score.type == "self" %}
 
                         <td class="self-cell">
-                            -
+                            &nbsp;
                         </td>
 
                     {% else %}
@@ -297,7 +297,7 @@
 
                     {% for score in row.scores %}
                         {% if score.type == "self" %}
-                            <td class="rr-score-col self-cell">-</td>
+                            <td class="rr-score-col self-cell">&nbsp;</td>
                         {% else %}
                             <td class="rr-score-col {{ score.type }}">
                                 {% if score.type == "win" and score.value != None and score.value != "" %}
