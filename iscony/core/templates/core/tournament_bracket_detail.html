@@ -263,7 +263,7 @@
                                 </div>
 
                                 {% if match.match_code|slice:":1" != "S" or match.pair1 %}
-                                    <div class="entry-row {% if match.winner == match.pair1 %}winner{% endif %}">
+                                    <div class="entry-row left-side {% if match.winner == match.pair1 %}winner{% endif %}">
                                         <div class="entry-seed">
                                             {% if match.pair1 %}
                                                 {{ match.pair1.slot_label }}
@@ -298,7 +298,7 @@
                                 {% endif %}
 
                                 {% if match.match_code|slice:":1" != "S" or match.pair2 %}
-                                    <div class="entry-row {% if match.winner == match.pair2 %}winner{% endif %}">
+                                    <div class="entry-row right-side {% if match.winner == match.pair2 %}winner{% endif %}">
                                         <div class="entry-seed">
                                             {% if match.pair2 %}
                                                 {{ match.pair2.slot_label }}
