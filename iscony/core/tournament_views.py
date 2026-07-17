@@ -810,15 +810,6 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         )
         line_class = "winner-line" if is_winner else "normal-line"
 
-        svg["labels"].append({
-            "x": number_x,
-            "y": y + 5,
-            "text": entry.slot_label,
-            "class": "seed-code",
-            "anchor": number_anchor,
-            "url": "",
-        })
-
         if _is_unresolved_advancement_entry(entry):
             svg["labels"].append({
                 "x": name_x,
@@ -829,6 +820,14 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "url": "",
             })
         else:
+            svg["labels"].append({
+                "x": number_x,
+                "y": y + 5,
+                "text": entry.slot_label,
+                "class": "seed-code",
+                "anchor": number_anchor,
+                "url": "",
+            })
             for line_index, line in enumerate(
                     build_entry_display_lines(
                         entry,
