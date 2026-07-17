@@ -109,14 +109,11 @@
                         </td>
 
                     {% else %}
- 
-                        <td class="rr-score-col {% if use_league_score_colors %}{{ score.type }}{% endif %} hover-cell">
+
+                        <td class="rr-score-col {% if use_league_score_colors %}{{ score.type }}{% endif %} {% if score.match %}hover-cell{% endif %}">
 
                             {% if score.match %}
-                                <!--x
-                                <a href="{% url 'input_match_score' score.match.id %}" class="score-link">
-                                -->
-                                    <a
+                                <a
                                     href="{% url 'input_match_score' score.match.id %}?next={% url 'category_detail' category.id %}#group-{{ data.group.id }}"
                                     class="score-link"
                                 >
@@ -132,9 +129,7 @@
                                         -
                                     {% endif %}
                                 </a>
-
                             {% else %}
-
                                 {% if score.retired_self %}
                                     R
                                 {% elif score.type == "win" and score.value != None and score.value != "" %}
@@ -142,7 +137,6 @@
                                 {% else %}
                                     {{ score.value|default_if_none:"" }}
                                 {% endif %}
-
                             {% endif %}
 
                         </td>
