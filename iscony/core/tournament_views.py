@@ -784,18 +784,17 @@ def _add_svg_match(svg, match, *, round_number, side, index):
 
     match_url = _tournament_match_score_url(match)
 
-    if not match.match_code.startswith("S"):
-        svg["labels"].append({
-            "x": code_x,
-            "y": center_y,
-            "text": match.match_label or match.match_code,
-            "class": "svg-match-code",
-            "anchor": code_anchor,
-            "baseline": "middle",
-            "url": match_url,
-                "label_type": "match_code",
-                "match_id": match.id,
-        })
+    svg["labels"].append({
+        "x": code_x,
+        "y": center_y,
+        "text": match.match_label or match.match_code,
+        "class": "svg-match-code",
+        "anchor": code_anchor,
+        "baseline": "middle",
+        "url": match_url,
+        "label_type": "match_code",
+        "match_id": match.id,
+    })
     for side_name, y in [("pair1", y1), ("pair2", y2)]:
         entry = getattr(match, side_name)
 
