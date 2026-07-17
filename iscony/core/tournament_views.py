@@ -801,9 +801,10 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             "anchor": code_anchor,
             "baseline": "middle",
             "url": match_url,
-            "label_type": "match_code",
-            "match_id": match.id,
+                "label_type": "match_code",
+                "match_id": match.id,
         })
+    is_seed_match = match.match_code.startswith("S")
 
     for side_name, y in [("pair1", y1), ("pair2", y2)]:
         entry = getattr(match, side_name)
@@ -837,7 +838,26 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "anchor": number_anchor,
                 "url": "",
             })
-        if _is_unresolved_advancement_entry(entry):
+        if is_seed_match and not should_show_entry:
+            if _is_unresolved_advancement_entry(entry):
+                svg["labels"].append({
+                    "x": name_x,
+                    "y": y + 5,
+                    "text": entry.display_name,
+                    "class": "entry-text",
+                    "anchor": text_anchor,
+                    "url": "",
+                })
+            else:
+                svg["labels"].append({
+                    "x": name_x,
+                    "y": y + 5,
+                    "text": entry.slot_label,
+                    "class": "entry-text",
+                    "anchor": text_anchor,
+                    "url": "",
+                })
+        elif _is_unresolved_advancement_entry(entry):
             svg["labels"].append({
                 "x": name_x,
                 "y": y + 5,
