@@ -838,7 +838,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "anchor": number_anchor,
                 "url": "",
             })
-        if is_seed_match and not should_show_entry:
+        elif is_seed_match and not should_show_entry:
             svg["labels"].append({
                 "x": name_x,
                 "y": y + 5,
