@@ -56,13 +56,16 @@ from .views import _schedule_block_tables
 
 from .services import (
     advance_tournament_bye_winners,
+    auto_apply_stage_advancements_if_ready,
     apply_stage_advancements,
     cancel_pair_retirement,
     clone_tournament_without_results,
     create_extra_round_robin_match,
+    consume_stage_advancement_result,
     insert_round_robin_schedule,
     move_schedule,
     delete_tournament_score,
+    save_round_robin_score,
     save_tournament_score,
     save_tournament_retirement,
     swap_advancement_sources,
@@ -704,6 +707,90 @@ class TournamentAdvancementTests(TestCase):
         self.assertEqual(first_match.winner, self.entries[1])
         self.assertEqual(next_match.pair1, self.entries[1])
 
+    def test_tournament_bracket_detail_shows_later_round_score(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entries[0],
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entries[0],
+            pair2=self.entries[2],
+            pair1_games=4,
+            pair2_games=1,
+            winner=self.entries[0],
+        )
+        first_match.next_match = final_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        svg_content = response.content.decode()
+        svg_content = svg_content[
+            svg_content.index("<svg"):
+            svg_content.index("</svg>")
+        ]
+
+        self.assertIn('class="loser-score"', svg_content)
+        self.assertIn("4", svg_content)
+
+    def test_tournament_bracket_detail_marks_reflected_winner_in_source_match(self):
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            winner=self.entries[0],
+        )
+        next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M2",
+            pair1=self.entries[0],
+            pair2=self.entries[2],
+        )
+        first_match.next_match = next_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        svg_content = response.content.decode()
+        svg_content = svg_content[
+            svg_content.index("<svg"):
+            svg_content.index("</svg>")
+        ]
+
+        self.assertEqual(svg_content.count("選手1A・選手1B"), 1)
+
     def test_winner_change_is_blocked_when_next_match_has_score(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,
@@ -1156,6 +1243,77 @@ class AdvancementSourceModelTests(TestCase):
                 source_1,
                 source_2,
             )
+
+    def test_auto_apply_stage_advancements_records_partial_blockers(self):
+        source_entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="S1",
+            display_order=1,
+            organization="源所属",
+            player1_name="源一",
+            player2_name="源二",
+        )
+        blocked_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="B1",
+            display_order=2,
+        )
+        available_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="B2",
+            display_order=3,
+        )
+        blocker_opponent = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="B3",
+            display_order=4,
+        )
+
+        GroupRanking.objects.create(
+            group=self.group,
+            pair=source_entry,
+            rank=1,
+        )
+
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            pair1=blocked_entry,
+            pair2=blocker_opponent,
+            pair1_games=4,
+            pair2_games=2,
+        )
+
+        AdvancementSource.objects.create(
+            target_tournament_entry=blocked_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=available_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+
+        applied_count = auto_apply_stage_advancements_if_ready(self.stage)
+        result = consume_stage_advancement_result()
+
+        blocked_entry.refresh_from_db()
+        available_entry.refresh_from_db()
+
+        self.assertEqual(applied_count, 1)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["applied_count"], 1)
+        self.assertEqual(len(result["blockers"]), 1)
+        self.assertIn("後続枠の試合結果が入力済みのため変更できません", result["blockers"][0])
+        self.assertIsNone(blocked_entry.participant)
+        self.assertEqual(available_entry.participant, source_entry.participant)
 
     def test_target_must_be_either_league_entry_or_tournament_entry(self):
         source = AdvancementSource(
@@ -5626,6 +5784,164 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(self.target.display_organization, "第一クラブ")
         self.assertEqual(self.target.display_player1_name, "一番 A")
 
+    def test_round_robin_score_save_auto_applies_stage_advancement(self):
+        match = RoundRobinMatch.objects.create(
+            group=self.preliminary_group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        error = save_round_robin_score(
+            match,
+            4,
+            1,
+        )
+
+        self.assertIsNone(error)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant, self.participant1)
+
+    def test_round_robin_score_correction_recalculates_ranks(self):
+        match = RoundRobinMatch.objects.create(
+            group=self.preliminary_group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        save_round_robin_score(
+            match,
+            4,
+            1,
+        )
+
+        ranking1 = GroupRanking.objects.get(
+            group=self.preliminary_group,
+            pair=self.entry1,
+        )
+        ranking2 = GroupRanking.objects.get(
+            group=self.preliminary_group,
+            pair=self.entry2,
+        )
+
+        self.assertEqual((ranking1.rank, ranking2.rank), (1, 2))
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant, self.participant1)
+
+        save_round_robin_score(
+            match,
+            1,
+            4,
+        )
+
+        ranking1.refresh_from_db()
+        ranking2.refresh_from_db()
+        self.target.refresh_from_db()
+
+        self.assertEqual((ranking1.rank, ranking2.rank), (2, 1))
+        self.assertEqual(self.target.participant, self.participant2)
+
+    def test_round_robin_score_correction_is_blocked_when_downstream_has_score(self):
+        final_opponent = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.final_group,
+            pair_code="F2",
+            display_order=2,
+        )
+        match = RoundRobinMatch.objects.create(
+            group=self.preliminary_group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        save_round_robin_score(
+            match,
+            4,
+            1,
+        )
+
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant, self.participant1)
+
+        RoundRobinMatch.objects.create(
+            group=self.final_group,
+            pair1=self.target,
+            pair2=final_opponent,
+            pair1_games=3,
+            pair2_games=1,
+            completed=True,
+        )
+
+        error = save_round_robin_score(
+            match,
+            1,
+            4,
+        )
+
+        self.assertIsNone(error)
+
+        match.refresh_from_db()
+        self.target.refresh_from_db()
+        ranking1 = GroupRanking.objects.get(
+            group=self.preliminary_group,
+            pair=self.entry1,
+        )
+        ranking2 = GroupRanking.objects.get(
+            group=self.preliminary_group,
+            pair=self.entry2,
+        )
+
+        self.assertEqual((match.pair1_games, match.pair2_games), (1, 4))
+        self.assertEqual((ranking1.rank, ranking2.rank), (2, 1))
+        self.assertEqual(self.target.participant, self.participant1)
+
+    def test_round_robin_score_correction_updates_other_downstream_entries_when_one_is_blocked(self):
+        other_target = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.final_group,
+            pair_code="F3",
+            display_order=3,
+        )
+        final_opponent = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.final_group,
+            pair_code="F4",
+            display_order=4,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=other_target,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.preliminary_stage,
+            source_group=self.preliminary_group,
+            source_rank=2,
+        )
+        match = RoundRobinMatch.objects.create(
+            group=self.preliminary_group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        RoundRobinMatch.objects.create(
+            group=self.final_group,
+            pair1=other_target,
+            pair2=final_opponent,
+            pair1_games=3,
+            pair2_games=1,
+            completed=True,
+        )
+
+        error = save_round_robin_score(
+            match,
+            4,
+            1,
+        )
+
+        self.assertIsNone(error)
+        self.target.refresh_from_db()
+        other_target.refresh_from_db()
+
+        self.assertEqual(self.target.participant, self.participant1)
+        self.assertIsNone(other_target.participant)
+
     def test_auto_snapshot_is_created_before_stage_advancement(self):
         self._finish_preliminary_group()
 
@@ -5648,6 +5964,32 @@ class ApplyStageAdvancementsTests(TestCase):
         self.assertEqual(auto["type"], "before_stage_advancement")
         self.assertEqual(auto["source_stage_id"], self.preliminary_stage.id)
         self.assertIsNone(target_entry_payload["participant_id"])
+
+    def test_auto_snapshot_list_prefers_source_category_for_restore(self):
+        self._finish_preliminary_group()
+
+        apply_stage_advancements(self.preliminary_stage)
+
+        response = self.client.get(
+            reverse(
+                "tournament_snapshot_list",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        row = next(
+            item
+            for item in response.context["snapshot_rows"]
+            if item["recommendation"]["category_id"] == self.category.id
+        )
+
+        self.assertEqual(
+            row["recommendation"]["label"],
+            "女子A / 予選リーグ 反映前",
+        )
+        self.assertContains(response, "selected")
 
     def test_auto_snapshot_is_not_created_when_stage_advancement_fails(self):
         with self.assertRaises(ValidationError):
@@ -6100,20 +6442,18 @@ class MaintenanceMenuTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "当日運営")
-        self.assertContains(response, "試合選択")
-        self.assertContains(response, "詳細検索")
+        self.assertContains(response, "結果入力")
+        self.assertContains(response, "QR/キー検索")
         self.assertContains(response, "採点票出力")
-        self.assertContains(response, "Stage・結果反映")
+        self.assertContains(response, "補助メニュー")
+        self.assertContains(response, "リーグ管理")
+        self.assertContains(response, "トーナメント管理")
         self.assertContains(response, "大会準備")
         self.assertContains(response, "表示・設定")
-        self.assertContains(response, "高度なメンテナンス")
         self.assertContains(response, "大会デフォルト")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
-        self.assertContains(response, "Stage一覧")
-        self.assertContains(response, "リーグ表")
         self.assertContains(response, "採点票一括出力")
-        self.assertContains(response, "トーナメント一覧・個別設定")
         self.assertContains(response, "進出元一覧・入れ替え")
         self.assertContains(response, "試合進行CSV取込")
         self.assertContains(
@@ -6137,33 +6477,10 @@ class MaintenanceMenuTests(TestCase):
                 kwargs={"code": tournament.code},
             ),
         )
-        self.assertLess(
-            content.index("当日運営"),
-            content.index("Stage・結果反映"),
-        )
-        self.assertLess(
-            content.index("Stage・結果反映"),
-            content.index("大会準備"),
-        )
-        self.assertLess(
-            content.index("大会準備"),
-            content.index("表示・設定"),
-        )
-        self.assertLess(
-            content.index("表示・設定"),
-            content.index("高度なメンテナンス"),
-        )
         self.assertContains(
             response,
             reverse(
                 "schedule_view",
-                kwargs={"tournament_code": tournament.code},
-            ),
-        )
-        self.assertContains(
-            response,
-            reverse(
-                "court_status",
                 kwargs={"tournament_code": tournament.code},
             ),
         )
@@ -6179,27 +6496,6 @@ class MaintenanceMenuTests(TestCase):
             reverse(
                 "clone_tournament",
                 kwargs={"code": tournament.code},
-            ),
-        )
-        self.assertContains(
-            response,
-            reverse(
-                "category_stage_overview",
-                kwargs={"category_id": first_category.id},
-            ),
-        )
-        self.assertContains(
-            response,
-            reverse(
-                "category_detail",
-                kwargs={"category_id": first_category.id},
-            ),
-        )
-        self.assertNotContains(
-            response,
-            reverse(
-                "category_snapshot_list",
-                kwargs={"category_id": first_category.id},
             ),
         )
         self.assertContains(
@@ -6705,12 +7001,12 @@ class ReceptionMatchSearchTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "試合受付・結果入力")
+        self.assertContains(response, "結果入力QR・キー")
         self.assertNotContains(response, "カテゴリ + 番号で探す")
         self.assertNotContains(response, "コート + 第何試合で探す")
         self.assertContains(response, "マッチキーで探す")
         self.assertContains(response, "QRを読み取る")
-        self.assertContains(response, "結果入力ハブ")
+        self.assertContains(response, "試合選択へ")
 
     def test_reception_search_finds_matches_by_category_and_number(self):
         response = self.client.get(
@@ -6912,8 +7208,7 @@ class ResultInputSelectTests(TestCase):
         self.assertContains(response, "本日程")
         self.assertContains(response, "1コート")
         self.assertContains(response, "第3試合")
-        self.assertContains(response, "QRを読み取る")
-        self.assertContains(response, "マッチキー入力")
+        self.assertContains(response, "QR/キーで探す")
 
     def test_result_input_select_redirects_when_unique_match_is_selected(self):
         response = self.client.get(
@@ -7018,6 +7313,9 @@ class CategoryStageOverviewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
+        self.assertContains(response, 'class="stage-notice-bar"')
+        self.assertContains(response, "運営通知")
+        self.assertContains(response, "後続1枠反映待ち")
         self.assertLess(
             content.index(f'id="stage-{league_stage.id}"'),
             content.index(f'id="stage-{tournament_stage.id}"'),
@@ -7026,17 +7324,110 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "本戦")
         self.assertContains(response, "決勝トーナメント")
         self.assertContains(response, "0/1枠反映済み")
-        self.assertContains(response, "後続Stageへ反映")
-        self.assertContains(
-            response,
-            reverse(
-                "tournament_bracket_detail",
-                kwargs={
-                    "code": tournament.code,
-                    "bracket_id": bracket.id,
-                },
-            ),
+        self.assertContains(response, "後続Stage")
+
+    def test_stage_overview_shows_blocked_advance_reasons(self):
+        tournament = Tournament.objects.create(
+            name="Stage通知大会",
+            code="STAGENOTICE",
         )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        target_stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+        )
+        source_entry1 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="予選3",
+            player2_name="予選4",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=source_entry1,
+            pair2=LeagueEntry.objects.get(category=category, group=group, pair_code="A2"),
+            pair1_games=4,
+            pair2_games=2,
+            completed=True,
+        )
+        update_group_ranking(group, reset_rank=True)
+
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=target_stage,
+            name="本戦",
+        )
+        target_entry = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="",
+            player2_name="",
+        )
+        TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=target_entry,
+            pair2=create_tournament_entry(
+                bracket=bracket,
+                pair_code="T2",
+                display_order=2,
+                player1_name="",
+                player2_name="",
+            ),
+            pair1_games=3,
+            pair2_games=1,
+            winner=target_entry,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=group,
+            source_rank=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "反映できないStage")
+        self.assertContains(response, "後続枠の試合結果が入力済みのため変更できません")
+        self.assertContains(response, "Stage通知大会")
+        self.assertContains(response, "予選リーグ")
 
     def test_tournament_detail_links_to_public_category_results(self):
         tournament = Tournament.objects.create(
@@ -7615,7 +8006,7 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, schedule_url)
         self.assertRegex(
             response.content.decode(),
-            rf'href="{re.escape(schedule_url)}"[^>]*>\s*-\s*</a>',
+            rf'href="{re.escape(schedule_url)}"[^>]*>\s*(?:&nbsp;|\s)*</a>',
         )
 
     def test_public_category_results_show_extra_league_matches(self):
@@ -9588,41 +9979,40 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertIn('class="champion-vertical-text"', svg_content)
         self.assertIn("選手1A・選手1B（第一クラブ）", svg_content)
-        self.assertIn(
-            'class="winner-line"\n                        x1="450.0"',
+        self.assertRegex(
             svg_content,
+            re.compile(
+                r'class="winner-line"\s+x1="[\d.]+"\s+y1="282\.0"\s+'
+                r'x2="[\d.]+"\s+y2="282\.0"',
+            ),
         )
-        self.assertIn(
-            'class="winner-line"\n                        x1="390.0"\n'
-            '                        y1="282.0"\n'
-            '                        x2="450.0"\n'
-            '                        y2="282.0"',
+        self.assertNotIn(
+            'class="winner-line"\n                        y1="282.0"\n'
+            '                        x2="380.0"\n',
             svg_content,
         )
         self.assertNotIn(
-            'class="winner-line"\n                        x1="390.0"\n'
-            '                        y1="282.0"\n'
-            '                        x2="510.0"\n'
-            '                        y2="282.0"',
+            'class="winner-line"\n                        y2="282.0"\n'
+            '                        x2="380.0"\n',
             svg_content,
         )
-        self.assertNotIn(
-            'class="winner-line"\n                        x1="708"\n'
-            '                        y1="282.0"\n'
-            '                        x2="510.0"\n'
-            '                        y2="282.0"',
+        self.assertRegex(
             svg_content,
+            re.compile(
+                r'class="loser-score"\s+x="[\d.]+"\s+y="274\.0"',
+            ),
         )
-        self.assertIn(
-            'class="loser-score"\n                            x="700"\n'
-            '                            y="274.0"',
+        self.assertRegex(
             svg_content,
+            re.compile(
+                r'class="svg-match-code"\s+x="[\d.]+"\s+y="304\.0"',
+            ),
         )
-        self.assertIn(
-            'class="svg-match-code"\n                                x="450.0"\n'
-            '                                y="304.0"',
-            svg_content,
+        svg_width = float(
+            svg_content.split('width="', 1)[1].split('"', 1)[0]
         )
+        self.assertLess(svg_width, 640)
+        self.assertGreaterEqual(svg_width, 500)
         champion_label = svg_content.split(
             'class="champion-vertical-text"',
             1,
@@ -9631,6 +10021,98 @@ class TournamentScheduleBehaviorTests(TestCase):
             champion_label.split('y="', 1)[1].split('"', 1)[0]
         )
         self.assertGreaterEqual(champion_y, 220)
+
+    def test_tournament_bracket_detail_does_not_highlight_split_advance_before_final(self):
+        self.use_individual_bracket_settings()
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.save()
+        entries = [self.entry1, self.entry2]
+
+        for number in range(3, 5):
+            entries.append(
+                create_tournament_entry(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        first_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entries[0],
+            pair2=entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=entries[0],
+        )
+        second_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entries[2],
+            pair2=entries[3],
+            pair1_games=4,
+            pair2_games=1,
+            winner=entries[2],
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+            pair1=entries[0],
+            pair2=entries[2],
+        )
+        first_match.next_match = final_match
+        first_match.next_slot = "pair1"
+        first_match.save()
+        second_match.next_match = final_match
+        second_match.next_slot = "pair2"
+        second_match.save()
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        svg_content = content[
+            content.index("<svg"):
+            content.index("</svg>")
+        ]
+
+        self.assertNotIn(
+            'class="winner-line"\n            y1="98.0"\n'
+            '            x2="380.0"\n',
+            svg_content,
+        )
+        self.assertNotIn(
+            'class="winner-line"\n            y2="98.0"\n'
+            '            x2="380.0"\n',
+            svg_content,
+        )
+        self.assertRegex(
+            svg_content,
+            re.compile(
+                r'class="normal-line"\s+x1="[\d.]+"\s+y1="98\.0"\s+'
+                r'x2="[\d.]+"\s+y2="98\.0"',
+            ),
+        )
+        svg_width = float(
+            svg_content.split('width="', 1)[1].split('"', 1)[0]
+        )
+        self.assertLess(svg_width, 640)
+        self.assertGreaterEqual(svg_width, 500)
 
     def test_tournament_bracket_detail_can_show_split_vertical_champion_in_two_columns(self):
         self.use_individual_bracket_settings()

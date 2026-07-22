@@ -37,6 +37,7 @@ from .services import (
     create_extra_round_robin_match,
     delete_round_robin_score,
     insert_round_robin_schedule,
+    consume_stage_advancement_result,
     save_round_robin_score,
     undo_schedule_replacement,
     update_group_ranking,
@@ -48,7 +49,42 @@ from .view_helper import (
 )
 
 
-def build_category_group_data(category, *, groups=None, include_operations=True):
+def _show_stage_advancement_warning(request):
+    """自動反映が一部しか通らなかったときの注意を出す。"""
+
+    result = consume_stage_advancement_result()
+
+    if not result:
+        return
+
+    blockers = result.get("blockers") or []
+
+    if not blockers:
+        return
+
+    applied_count = result.get("applied_count", 0)
+    detail = " / ".join(blockers[:3])
+
+    if len(blockers) > 3:
+        detail = f"{detail} ほか{len(blockers) - 3}件"
+
+    messages.warning(
+        request,
+        (
+            f"後続Stageへ{applied_count}件反映しましたが、"
+            f"{len(blockers)}件は変更できませんでした。"
+            f"{detail}"
+        ),
+    )
+
+
+def build_category_group_data(
+    category,
+    *,
+    groups=None,
+    include_operations=True,
+    score_next_view_name="category_detail",
+):
     """カテゴリ内のリーグ表をテンプレートで描画しやすい形へ整える。"""
 
     if groups is None:
@@ -70,6 +106,12 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
     )
 
     for group in groups:
+        group_score_next_url = reverse(
+            score_next_view_name,
+            kwargs={
+                "category_id": category.id,
+            },
+        )
         pairs = LeagueEntry.objects.filter(
             group=group
         ).order_by(
@@ -151,6 +193,13 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
         table_rows = []
 
         for row_pair in pairs:
+            row_pair_link_url = reverse(
+                "league_entry_action",
+                kwargs={
+                    "pair_id": row_pair.id,
+                },
+            )
+            row_score_next_url = group_score_next_url
 
             row_scores = []
 
@@ -233,6 +282,8 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
                 ),
                 "scores": row_scores,
                 "ranking": ranking,
+                "row_pair_link_url": row_pair_link_url,
+                "row_score_link_next_url": row_score_next_url,
             })
 
         # 同勝数のペアだけを抜き出した順位計算の補助表。
@@ -244,168 +295,17 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
         )
 
         if all_matches_finished:
-
             rankings = GroupRanking.objects.filter(
                 group=group
             ).select_related(
                 "pair"
             )
-            ranking_map = {
-                ranking.pair_id: ranking
-                for ranking in rankings
-            }
-
-            wins_map = {}
-
-            for ranking in rankings:
-                wins_map.setdefault(
-                    ranking.wins,
-                    []
-                ).append(ranking.pair)
-
-            for wins, tied_pairs in wins_map.items():
-
-                if len(tied_pairs) < 2:
-                    continue
-
-                tied_pairs = sorted(
-                    tied_pairs,
-                    key=lambda p: (
-                        p.display_order,
-                        p.pair_code,
-                    )
-                )
-
-                tied_pair_ids = [
-                    pair.id
-                    for pair in tied_pairs
-                ]
-
-                tie_stats = {
-                    pair.id: {
-                        "games_won": 0,
-                        "games_lost": 0,
-                        "game_diff": 0,
-                    }
-                    for pair in tied_pairs
-                }
-
-                related_matches = RoundRobinMatch.objects.filter(
-                    group=group,
-                    pair1__id__in=tied_pair_ids,
-                    pair2__id__in=tied_pair_ids,
-                    counts_for_ranking=True,
-                )
-
-                for match in related_matches:
-
-                    if (
-                        match.pair1_games is None
-                        or match.pair2_games is None
-                    ):
-                        continue
-
-                    tie_stats[match.pair1.id]["games_won"] += (
-                        match.pair1_games
-                    )
-                    tie_stats[match.pair1.id]["games_lost"] += (
-                        match.pair2_games
-                    )
-
-                    tie_stats[match.pair2.id]["games_won"] += (
-                        match.pair2_games
-                    )
-                    tie_stats[match.pair2.id]["games_lost"] += (
-                        match.pair1_games
-                    )
-
-                for pair_id, stat in tie_stats.items():
-                    stat["game_diff"] = (
-                        stat["games_won"]
-                        - stat["games_lost"]
-                    )
-
-                tie_rows = []
-
-                for row_pair in tied_pairs:
-
-                    row_scores = []
-
-                    for col_pair in tied_pairs:
-
-                        if row_pair.id == col_pair.id:
-                            row_scores.append({
-                                "type": "self",
-                                "value": "-",
-                                "retired_match": False,
-                            })
-                            continue
-
-                        match = match_map.get(
-                            (row_pair.id, col_pair.id)
-                        )
-
-                        if not match or (
-                            match.pair1_games is None
-                            or match.pair2_games is None
-                        ):
-                            row_scores.append({
-                                "type": "pending",
-                                "value": "",
-                                "retired_match": False,
-                            })
-                            continue
-
-                        if match.pair1 == row_pair:
-                            my_score = match.pair1_games
-                            opp_score = match.pair2_games
-                        else:
-                            my_score = match.pair2_games
-                            opp_score = match.pair1_games
-
-                        is_retired_match = (
-                            (
-                                match.pair1.retired
-                                or match.pair2.retired
-                            )
-                            and (
-                                my_score == 0
-                                or opp_score == 0
-                            )
-                        )
-
-                        row_scores.append({
-                            "type": "win" if my_score > opp_score else "lose",
-                            "value": my_score,
-                            "opp": opp_score,
-                            "retired_match": is_retired_match,
-                        })
-
-                    tie_rows.append({
-                        "pair": row_pair,
-                        "pair_display_lines": build_entry_display_lines(
-                            row_pair,
-                            mode=entry_display_mode,
-                        ),
-                        "scores": row_scores,
-                        "stat": tie_stats[row_pair.id],
-                        "ranking": ranking_map.get(row_pair.id),
-                    })
-
-                tie_tables.append({
-                    "wins": wins,
-                    "pairs": [
-                        {
-                            "pair": pair,
-                            "display_lines": build_entry_display_lines(
-                                pair,
-                                mode=entry_display_mode,
-                            ),
-                        }
-                        for pair in tied_pairs
-                    ],
-                    "rows": tie_rows,
-                })
+            tie_tables = _build_round_robin_tie_tables(
+                group=group,
+                rankings=rankings,
+                match_map=match_map,
+                entry_display_mode=entry_display_mode,
+            )
 
         group_data.append({
             "group": group,
@@ -414,9 +314,190 @@ def build_category_group_data(category, *, groups=None, include_operations=True)
             "tie_tables": tie_tables,
             "extra_matches": extra_match_rows,
             "replacement_histories": replacement_histories,
+            "group_score_link_next_url": group_score_next_url,
         })
 
     return group_data, entry_display_mode_label
+
+
+def _build_round_robin_tie_row_scores(row_pair, tied_pairs, match_map):
+    """同率補助表の1行分のスコアセルを組み立てる。"""
+
+    row_scores = []
+
+    for col_pair in tied_pairs:
+
+        if row_pair.id == col_pair.id:
+            row_scores.append({
+                "type": "self",
+                "value": "-",
+                "retired_match": False,
+            })
+            continue
+
+        match = match_map.get(
+            (row_pair.id, col_pair.id)
+        )
+
+        if not match or (
+            match.pair1_games is None
+            or match.pair2_games is None
+        ):
+            row_scores.append({
+                "type": "pending",
+                "value": "",
+                "retired_match": False,
+            })
+            continue
+
+        if match.pair1 == row_pair:
+            my_score = match.pair1_games
+            opp_score = match.pair2_games
+        else:
+            my_score = match.pair2_games
+            opp_score = match.pair1_games
+
+        is_retired_match = (
+            (
+                match.pair1.retired
+                or match.pair2.retired
+            )
+            and (
+                my_score == 0
+                or opp_score == 0
+            )
+        )
+
+        row_scores.append({
+            "type": "win" if my_score > opp_score else "lose",
+            "value": my_score,
+            "opp": opp_score,
+            "retired_match": is_retired_match,
+        })
+
+    return row_scores
+
+
+def _build_round_robin_tie_tables(
+    *,
+    group,
+    rankings,
+    match_map,
+    entry_display_mode,
+):
+    """同率順位の補助表をカテゴリ表示用の辞書列へ整える。"""
+
+    ranking_map = {
+        ranking.pair_id: ranking
+        for ranking in rankings
+    }
+
+    wins_map = {}
+
+    for ranking in rankings:
+        wins_map.setdefault(
+            ranking.wins,
+            []
+        ).append(ranking.pair)
+
+    tie_tables = []
+
+    for wins, tied_pairs in wins_map.items():
+
+        if len(tied_pairs) < 2:
+            continue
+
+        tied_pairs = sorted(
+            tied_pairs,
+            key=lambda p: (
+                p.display_order,
+                p.pair_code,
+            )
+        )
+
+        tied_pair_ids = [
+            pair.id
+            for pair in tied_pairs
+        ]
+
+        tie_stats = {
+            pair.id: {
+                "games_won": 0,
+                "games_lost": 0,
+                "game_diff": 0,
+            }
+            for pair in tied_pairs
+        }
+
+        related_matches = RoundRobinMatch.objects.filter(
+            group=group,
+            pair1__id__in=tied_pair_ids,
+            pair2__id__in=tied_pair_ids,
+            counts_for_ranking=True,
+        )
+
+        for match in related_matches:
+
+            if (
+                match.pair1_games is None
+                or match.pair2_games is None
+            ):
+                continue
+
+            tie_stats[match.pair1.id]["games_won"] += (
+                match.pair1_games
+            )
+            tie_stats[match.pair1.id]["games_lost"] += (
+                match.pair2_games
+            )
+
+            tie_stats[match.pair2.id]["games_won"] += (
+                match.pair2_games
+            )
+            tie_stats[match.pair2.id]["games_lost"] += (
+                match.pair1_games
+            )
+
+        for pair_id, stat in tie_stats.items():
+            stat["game_diff"] = (
+                stat["games_won"]
+                - stat["games_lost"]
+            )
+
+        tie_rows = []
+
+        for row_pair in tied_pairs:
+            tie_rows.append({
+                "pair": row_pair,
+                "pair_display_lines": build_entry_display_lines(
+                    row_pair,
+                    mode=entry_display_mode,
+                ),
+                "scores": _build_round_robin_tie_row_scores(
+                    row_pair,
+                    tied_pairs,
+                    match_map,
+                ),
+                "stat": tie_stats[row_pair.id],
+                "ranking": ranking_map.get(row_pair.id),
+            })
+
+        tie_tables.append({
+            "wins": wins,
+            "pairs": [
+                {
+                    "pair": pair,
+                    "display_lines": build_entry_display_lines(
+                        pair,
+                        mode=entry_display_mode,
+                    ),
+                }
+                for pair in tied_pairs
+            ],
+            "rows": tie_rows,
+        })
+
+    return tie_tables
 
 
 def category_detail(request, category_id):
@@ -687,8 +768,14 @@ def input_match_score(request, match_id):
         action = request.POST.get("action")
 
         if action == "delete":
-
-            delete_round_robin_score(match)
+            error = delete_round_robin_score(match)
+            if error:
+                messages.error(request, error)
+                return redirect_next_or_default(
+                    request,
+                    "category_detail",
+                    category_id=match.group.category.id
+                )
 
             return redirect_next_or_default(
                 request,
@@ -749,11 +836,31 @@ def input_match_score(request, match_id):
                 error=error,
             )
 
-        save_round_robin_score(
+        error = save_round_robin_score(
             match,
             pair1_games,
             pair2_games
         )
+
+        if error:
+            return render_score_input(
+                request=request,
+                match=match,
+                winning_games=match.winning_games(),
+                mode="round_robin",
+                back_url=request.GET.get(
+                    "next",
+                    reverse(
+                        "category_detail",
+                        kwargs={
+                            "category_id": match.group.category.id
+                        }
+                    )
+                ),
+                error=error,
+            )
+
+        _show_stage_advancement_warning(request)
 
         return redirect_next_or_default(
             request,
@@ -929,7 +1036,7 @@ def retire_pair(request, pair_id):
 
     update_group_ranking(
         pair.group,
-        reset_rank=False
+        reset_rank=True
     )
 
     return redirect(
@@ -1003,6 +1110,7 @@ def cancel_retire_pair(request, pair_id):
     except ValidationError as error:
         messages.error(request, " ".join(error.messages))
     else:
+        _show_stage_advancement_warning(request)
         messages.success(
             request,
             (

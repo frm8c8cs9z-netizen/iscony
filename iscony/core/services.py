@@ -1,3 +1,5 @@
+from threading import local
+
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Max, Q
@@ -24,6 +26,24 @@ from .models import (
     TournamentMatch,
 )
 from .snapshot_services import create_stage_advancement_snapshot_once
+
+
+_stage_advancement_result_state = local()
+
+
+def _set_stage_advancement_result(applied_count, blockers):
+    _stage_advancement_result_state.value = {
+        "applied_count": applied_count,
+        "blockers": list(blockers or []),
+    }
+
+
+def consume_stage_advancement_result():
+    """直近の自動反映結果を取り出して消費する。"""
+
+    result = getattr(_stage_advancement_result_state, "value", None)
+    _stage_advancement_result_state.value = None
+    return result
 
 
 def clone_tournament_without_results(source, *, name, code):
@@ -404,6 +424,264 @@ def _advancement_target(source):
     )
 
 
+def inspect_stage_advancement_readiness(source_stage):
+    """Stage内の進出元設定がすべて反映可能かを確認する。"""
+
+    if not isinstance(source_stage, Stage):
+        raise ValidationError("確認対象のStageを指定してください。")
+
+    sources = list(
+        AdvancementSource.objects.select_related(
+            "target_league_entry",
+            "target_tournament_entry",
+            "source_group",
+            "source_match",
+            "source_stage",
+        ).filter(
+            source_stage=source_stage,
+        )
+    )
+
+    if not sources:
+        return {
+            "ready": False,
+            "source_count": 0,
+            "blockers": ["このStageを参照する後続枠はありません。"],
+        }
+
+    blockers = []
+
+    for source in sources:
+        target = (
+            source.target_league_entry
+            or source.target_tournament_entry
+        )
+
+        try:
+            source_entry = _resolved_advancement_entry(source)
+        except ValidationError as error:
+            blockers.extend(error.messages)
+            continue
+
+        if not target:
+            blockers.append(
+                f"{source.label}: 進出先枠が見つかりません。"
+            )
+            continue
+
+        current_state = _target_advancement_state(target)
+        desired_state = _desired_advancement_state(source_entry, target)
+
+        if current_state != desired_state and _target_has_score(target):
+            blockers.append(
+                f"{target.code}: 後続枠の試合結果が入力済みのため変更できません。"
+            )
+
+    return {
+        "ready": not blockers,
+        "source_count": len(sources),
+        "blockers": blockers,
+    }
+
+
+def auto_apply_stage_advancements_if_ready(source_stage):
+    """Stage内の進出元を、確定状況に合わせて自動で反映・消し戻しする。"""
+
+    if not AdvancementSource.objects.filter(
+        source_stage=source_stage,
+    ).exists():
+        _set_stage_advancement_result(0, [])
+        return 0
+
+    applied_count, blockers = apply_ready_stage_advancements(source_stage)
+    _set_stage_advancement_result(applied_count, blockers)
+    return applied_count
+
+
+def _lock_stage_advancement_targets(sources):
+    """進出先枠を更新前提でロックし、IDから引けるようにする。"""
+
+    league_target_ids = [
+        source.target_league_entry_id
+        for source in sources
+        if source.target_league_entry_id
+    ]
+    tournament_target_ids = [
+        source.target_tournament_entry_id
+        for source in sources
+        if source.target_tournament_entry_id
+    ]
+
+    league_targets = {}
+    tournament_targets = {}
+
+    if league_target_ids:
+        league_targets = {
+            target.id: target
+            for target in LeagueEntry.objects.select_for_update().filter(
+                id__in=league_target_ids,
+            )
+        }
+
+    if tournament_target_ids:
+        tournament_targets = {
+            target.id: target
+            for target in TournamentEntry.objects.select_for_update().filter(
+                id__in=tournament_target_ids,
+            )
+        }
+
+    return league_targets, tournament_targets
+
+
+def _target_advancement_state(target):
+    """現在の進出先枠の反映状態を比較用の組にする。"""
+
+    if isinstance(target, TournamentEntry):
+        return (target.participant_id, target.source_pair_id)
+
+    return (target.participant_id, None)
+
+
+def _desired_advancement_state(source_entry, target):
+    """進出元から見た、進出先枠に入るべき状態を返す。"""
+
+    if source_entry is None:
+        return (None, None)
+
+    desired_source_pair_id = None
+    if isinstance(target, TournamentEntry) and isinstance(source_entry, LeagueEntry):
+        desired_source_pair_id = source_entry.id
+
+    return (source_entry.participant_id, desired_source_pair_id)
+
+
+def _sync_stage_advancement_targets(
+    source_stage,
+    sources,
+    *,
+    strict=False,
+    allow_partial=False,
+):
+    """進出先枠を、現時点の進出元に合わせて同期する。"""
+
+    league_targets, tournament_targets = _lock_stage_advancement_targets(sources)
+
+    planned = []
+    blockers = []
+
+    for source in sources:
+        if source.target_league_entry_id:
+            target = league_targets.get(source.target_league_entry_id)
+        else:
+            target = tournament_targets.get(source.target_tournament_entry_id)
+
+        if not target:
+            blockers.append(
+                f"{source.label}: 進出先枠が見つかりません。"
+            )
+            continue
+
+        try:
+            source_entry = _resolved_advancement_entry(source)
+        except ValidationError as error:
+            if strict:
+                blockers.extend(error.messages)
+                if not allow_partial:
+                    continue
+            source_entry = None
+
+        current_state = _target_advancement_state(target)
+        desired_state = _desired_advancement_state(source_entry, target)
+
+        if current_state != desired_state and _target_has_score(target):
+            blockers.append(
+                f"{target.code}: 後続枠の試合結果が入力済みのため変更できません。"
+            )
+            if not allow_partial:
+                continue
+            else:
+                continue
+
+        planned.append((target, source_entry, current_state, desired_state))
+
+    if blockers and not allow_partial:
+        return 0, blockers, None
+
+    changed_items = [
+        item
+        for item in planned
+        if item[2] != item[3]
+    ]
+
+    snapshot_info = None
+    if strict or changed_items:
+        if getattr(settings, "ENABLE_AUTO_OPERATION_SNAPSHOT", True):
+            snapshot_info = create_stage_advancement_snapshot_once(source_stage)
+
+    if not changed_items:
+        return (len(planned) if strict else 0), blockers, snapshot_info
+
+    if snapshot_info is None and getattr(settings, "ENABLE_AUTO_OPERATION_SNAPSHOT", True):
+        snapshot_info = create_stage_advancement_snapshot_once(source_stage)
+
+    for target, source_entry, _, _ in changed_items:
+        target.participant = (
+            source_entry.participant
+            if source_entry
+            else None
+        )
+
+        update_fields = [
+            "participant",
+        ]
+
+        if isinstance(target, TournamentEntry):
+            target.source_pair = (
+                source_entry
+                if isinstance(source_entry, LeagueEntry)
+                else None
+            )
+            update_fields.append("source_pair")
+
+        target.save(update_fields=update_fields)
+
+    return (
+        len(planned) if strict else len(changed_items),
+        blockers,
+        snapshot_info,
+    )
+
+
+def apply_ready_stage_advancements(source_stage, *, include_snapshot_info=False):
+    """Stage内の進出元を、確定状況に合わせて自動で同期する。"""
+
+    if not isinstance(source_stage, Stage):
+        raise ValidationError("反映元Stageを指定してください。")
+
+    with transaction.atomic():
+        sources = list(
+            AdvancementSource.objects.select_for_update().filter(
+                source_stage=source_stage,
+            )
+        )
+
+        if not sources:
+            raise ValidationError("このStageを参照する後続枠はありません。")
+
+        applied_count, blockers, snapshot_info = _sync_stage_advancement_targets(
+            source_stage,
+            sources,
+            strict=False,
+            allow_partial=True,
+        )
+
+        if include_snapshot_info:
+            return applied_count, snapshot_info, blockers
+
+        return applied_count, blockers
+
+
 def apply_stage_advancements(source_stage, *, include_snapshot_info=False):
     """確定済みStage結果をAdvancementSourceに従って後続枠へ反映する。"""
 
@@ -420,62 +698,14 @@ def apply_stage_advancements(source_stage, *, include_snapshot_info=False):
         if not sources:
             raise ValidationError("このStageを参照する後続枠はありません。")
 
-        resolved = []
+        applied_count, blockers, snapshot_info = _sync_stage_advancement_targets(
+            source_stage,
+            sources,
+            strict=True,
+        )
 
-        # 先に全件を検査し、途中まで反映されることを防ぐ。
-        for source in sources:
-            source_entry = _resolved_advancement_entry(source)
-
-            if source.target_league_entry_id:
-                target = LeagueEntry.objects.select_for_update().get(
-                    id=source.target_league_entry_id
-                )
-            else:
-                target = TournamentEntry.objects.select_for_update().get(
-                    id=source.target_tournament_entry_id
-                )
-
-            if not source_entry.participant_id:
-                raise ValidationError(
-                    f"{source.label}: 進出元の参加者情報がありません。"
-                )
-
-            if (
-                target.participant_id
-                and target.participant_id != source_entry.participant_id
-                and _target_has_score(target)
-            ):
-                raise ValidationError(
-                    f"{target.code}: 後続枠の試合結果が入力済みのため変更できません。"
-                )
-
-            resolved.append((target, source_entry))
-
-        snapshot_info = None
-
-        if getattr(settings, "ENABLE_AUTO_OPERATION_SNAPSHOT", True):
-            snapshot_info = create_stage_advancement_snapshot_once(source_stage)
-
-        for target, source_entry in resolved:
-            target.participant = source_entry.participant
-
-            update_fields = [
-                "participant",
-            ]
-
-            if isinstance(target, TournamentEntry):
-                target.source_pair = (
-                    source_entry
-                    if isinstance(source_entry, LeagueEntry)
-                    else None
-                )
-                update_fields.extend([
-                    "source_pair",
-                ])
-
-            target.save(update_fields=update_fields)
-
-        applied_count = len(resolved)
+        if blockers:
+            raise ValidationError(blockers)
 
         if include_snapshot_info:
             return applied_count, snapshot_info
@@ -995,36 +1225,50 @@ def update_group_ranking(
 
 def delete_round_robin_score(match):
 
-    # --------------------------------------
-    # スコア・勝敗状態をリセット
-    # --------------------------------------
-    match.pair1_games = None
-    match.pair2_games = None
-    match.completed = False
-    match.result_type = RoundRobinMatch.RESULT_NORMAL
+    with transaction.atomic():
 
-    match.save()
+        match = RoundRobinMatch.objects.select_for_update().get(
+            id=match.id
+        )
 
-    # --------------------------------------
-    # 対応するSchedule状態を未着手へ戻す
-    # --------------------------------------
-    Schedule.objects.filter(
-        round_robin_match=match
-    ).update(
-        called=False,
-        started=False,
-        finished=False,
-    )
+        # --------------------------------------
+        # スコア・勝敗状態をリセット
+        # --------------------------------------
+        match.pair1_games = None
+        match.pair2_games = None
+        match.completed = False
+        match.result_type = RoundRobinMatch.RESULT_NORMAL
 
-    # --------------------------------------
-    # リーグ順位を再計算
-    # reset_rank=False:
-    # 手入力順位は保持
-    # --------------------------------------
-    update_group_ranking(
-        match.group,
-        reset_rank=False
-    )
+        match.save()
+
+        # --------------------------------------
+        # 対応するSchedule状態を未着手へ戻す
+        # --------------------------------------
+        Schedule.objects.filter(
+            round_robin_match=match
+        ).update(
+            called=False,
+            started=False,
+            finished=False,
+        )
+
+        # --------------------------------------
+        # リーグ順位を再計算
+        # reset_rank=True:
+        # 結果修正に合わせて自動順位を作り直す
+        # --------------------------------------
+        update_group_ranking(
+            match.group,
+            reset_rank=True
+        )
+
+        try:
+            auto_apply_stage_advancements_if_ready(
+                match.group.stage
+            )
+        except ValidationError as error:
+            transaction.set_rollback(True)
+            return " ".join(error.messages)
     
     return None
 
@@ -1112,7 +1356,11 @@ def cancel_pair_retirement(pair):
 
         update_group_ranking(
             pair.group,
-            reset_rank=False
+            reset_rank=True
+        )
+
+        auto_apply_stage_advancements_if_ready(
+            pair.group.stage
         )
 
         return reset_count
@@ -1123,25 +1371,38 @@ def save_round_robin_score(
     pair1_games,
     pair2_games
 ):
+    with transaction.atomic():
+        match = RoundRobinMatch.objects.select_for_update().get(
+            id=match.id
+        )
 
-    match.pair1_games = pair1_games
-    match.pair2_games = pair2_games
-    match.completed = True
-    match.result_type = RoundRobinMatch.RESULT_NORMAL
+        match.pair1_games = pair1_games
+        match.pair2_games = pair2_games
+        match.completed = True
+        match.result_type = RoundRobinMatch.RESULT_NORMAL
 
-    match.save()
+        match.save()
 
-    Schedule.objects.filter(
-        round_robin_match=match
-    ).update(
-        called=True,
-        started=True,
-        finished=True,
-    )
+        Schedule.objects.filter(
+            round_robin_match=match
+        ).update(
+            called=True,
+            started=True,
+            finished=True,
+        )
 
-    update_group_ranking(
-        match.group
-    )
+        update_group_ranking(
+            match.group,
+            reset_rank=True
+        )
+
+        try:
+            auto_apply_stage_advancements_if_ready(
+                match.group.stage
+            )
+        except ValidationError as error:
+            transaction.set_rollback(True)
+            return " ".join(error.messages)
     
     return None
 
@@ -1231,6 +1492,14 @@ def delete_tournament_score(match):
             started=False,
             finished=False,
         )
+
+        try:
+            auto_apply_stage_advancements_if_ready(
+                match.bracket.stage
+            )
+        except ValidationError as error:
+            transaction.set_rollback(True)
+            return " ".join(error.messages)
 
     return None
 
@@ -1414,6 +1683,14 @@ def save_tournament_score(
             finished=True,
         )
 
+        try:
+            auto_apply_stage_advancements_if_ready(
+                match.bracket.stage
+            )
+        except ValidationError as error:
+            transaction.set_rollback(True)
+            return " ".join(error.messages)
+
         # --------------------------------------
         # 勝者を次試合へ反映
         # --------------------------------------
@@ -1509,6 +1786,10 @@ def save_tournament_retirement(match, retired_side):
             advance_tournament_single_entry_winners(
                 match.next_match
             )
+
+        auto_apply_stage_advancements_if_ready(
+            match.bracket.stage
+        )
 
     return None
 

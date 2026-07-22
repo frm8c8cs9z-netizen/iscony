@@ -10,6 +10,7 @@ import csv
 import io
 import math
 
+from django.contrib import messages
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -41,6 +42,7 @@ from .models import (
 from .services import (
     advance_tournament_bye_winners,
     delete_tournament_score,
+    consume_stage_advancement_result,
     save_tournament_score,
     save_tournament_retirement,
     validate_tournament_score_change,
@@ -55,6 +57,35 @@ from .view_helper import (
     redirect_next_or_default,
     render_score_input,
 )
+
+
+def _show_stage_advancement_warning(request):
+    """自動反映が一部しか通らなかったときの注意を出す。"""
+
+    result = consume_stage_advancement_result()
+
+    if not result:
+        return
+
+    blockers = result.get("blockers") or []
+
+    if not blockers:
+        return
+
+    applied_count = result.get("applied_count", 0)
+    detail = " / ".join(blockers[:3])
+
+    if len(blockers) > 3:
+        detail = f"{detail} ほか{len(blockers) - 3}件"
+
+    messages.warning(
+        request,
+        (
+            f"後続Stageへ{applied_count}件反映しましたが、"
+            f"{len(blockers)}件は変更できませんでした。"
+            f"{detail}"
+        ),
+    )
 
 
 def _entry_score_text(match, side):
@@ -162,6 +193,14 @@ def _should_highlight_svg_advance(match, svg):
     ):
         return False
 
+    if (
+        svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
+        and next_match
+        and next_match.round_number == svg["round_count"]
+        and not next_match.winner_id
+    ):
+        return False
+
     return True
 
 
@@ -193,11 +232,26 @@ def _is_unresolved_advancement_entry(entry):
     )
 
 
+def _build_svg_first_entry_match_ids(round_data):
+    """各参加枠がSVG内で最初に現れる試合IDを返す。"""
+
+    first_match_ids = {}
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in (match.pair1, match.pair2):
+                if entry and entry.id not in first_match_ids:
+                    first_match_ids[entry.id] = match.id
+
+    return first_match_ids
+
+
 CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
 CHAMPION_ORIENTATION_VERTICAL = "vertical"
 CHAMPION_ORIENTATION_NONE = "none"
 CHAMPION_LINE_HEIGHT = 16
 CHAMPION_VERTICAL_COLUMN_GAP = 18
+CHAMPION_HORIZONTAL_PADDING = 6
 
 
 def _resolve_svg_champion_display_mode(bracket, layout_type):
@@ -378,6 +432,32 @@ def _estimate_svg_name_width(round_data, entry_display_mode):
         max(estimated_width + 16, 120),
         230,
     )
+
+
+def _estimate_svg_row_gap(round_data, entry_display_mode):
+    """表示行数に応じて、試合ごとの縦間隔を決める。"""
+
+    max_lines = 1
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in (match.pair1, match.pair2):
+                if not entry:
+                    continue
+
+                max_lines = max(
+                    max_lines,
+                    len(
+                        build_entry_display_lines(
+                            entry,
+                            mode=entry_display_mode,
+                        )
+                    ),
+                )
+
+    base_row_gap = 56
+    line_height = 18
+    return base_row_gap + ((max_lines - 1) * line_height)
 
 
 def _estimate_svg_vertical_text_height(text):
@@ -809,8 +889,10 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             and _should_highlight_svg_winner(match)
         )
         line_class = "winner-line" if is_winner else "normal-line"
+        first_match_id = svg["first_entry_match_ids"].get(entry.id)
+        show_entry_text = first_match_id == match.id if first_match_id else True
 
-        if _is_unresolved_advancement_entry(entry):
+        if show_entry_text and _is_unresolved_advancement_entry(entry):
             svg["labels"].append({
                 "x": name_x,
                 "y": y + 5,
@@ -819,7 +901,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "anchor": text_anchor,
                 "url": "",
             })
-        else:
+        elif show_entry_text:
             svg["labels"].append({
                 "x": number_x,
                 "y": y + 5,
@@ -922,7 +1004,6 @@ def _build_svg_bracket_data(bracket, round_data):
         return None
 
     round_count = len(round_data)
-    row_gap = 46
     top = 70
     side_margin = 28
     round_gap = 42
@@ -932,6 +1013,7 @@ def _build_svg_bracket_data(bracket, round_data):
         target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
     )
     name_width = _estimate_svg_name_width(round_data, entry_display_mode)
+    row_gap = _estimate_svg_row_gap(round_data, entry_display_mode)
     layout_type = _effective_svg_layout_type(bracket, round_data)
     number_width = 24
     shoulder = 44
@@ -943,6 +1025,7 @@ def _build_svg_bracket_data(bracket, round_data):
         for match in round_item["matches"]
         if match.winner_id
     }
+    first_entry_match_ids = _build_svg_first_entry_match_ids(round_data)
 
     match_positions = {}
 
@@ -1099,12 +1182,40 @@ def _build_svg_bracket_data(bracket, round_data):
     else:
         side_rounds = max(round_count - 1, 1)
         first_join_x = side_margin + name_width + shoulder
-        last_side_join_x = first_join_x + ((side_rounds - 1) * round_gap)
-        center_x = last_side_join_x + line_pad + final_half_width
-        width = max(
-            900,
-            center_x * 2,
+        side_width = (
+            first_join_x
+            + ((side_rounds - 1) * round_gap)
+            + line_pad
+            + side_margin
         )
+        width = side_width * 2
+
+        final_matches = round_data[-1]["matches"]
+
+        if final_matches and final_matches[0].winner:
+            final_match = final_matches[0]
+            champion_lines = _svg_champion_text_lines(
+                final_match.winner,
+                bracket,
+                layout_type,
+            )
+            champion_orientation = _resolve_svg_champion_orientation(
+                bracket,
+                layout_type,
+            )
+
+            if (
+                champion_orientation == CHAMPION_ORIENTATION_HORIZONTAL
+            ):
+                champion_block_width = (
+                    _estimate_svg_champion_width(champion_lines)
+                    + (CHAMPION_HORIZONTAL_PADDING * 2)
+                    + 12
+                )
+                width = max(
+                width,
+                    (side_width * 2) + champion_block_width,
+                )
 
     svg = {
         "width": int(width),
@@ -1123,6 +1234,7 @@ def _build_svg_bracket_data(bracket, round_data):
         "entry_display_mode": entry_display_mode,
         "match_positions": match_positions,
         "advanced_entry_ids": advanced_entry_ids,
+        "first_entry_match_ids": first_entry_match_ids,
         "lines": [],
         "labels": [],
         "headings": [],
@@ -1189,7 +1301,6 @@ def _build_svg_bracket_data(bracket, round_data):
         center_x = width / 2
         final_match = final_matches[0]
         final_y = height / 2 + 52
-
         if (
             layout_type == TournamentBracket.LAYOUT_SPLIT
             and round_count > 1
@@ -1219,10 +1330,8 @@ def _build_svg_bracket_data(bracket, round_data):
             if not entry:
                 continue
 
-            should_show_entry = not _is_advanced_svg_entry(
-                svg,
-                entry,
-                final_match.round_number,
+            should_show_entry = (
+                svg["first_entry_match_ids"].get(entry.id) == final_match.id
             )
             if should_show_entry:
                 if _is_unresolved_advancement_entry(entry):
@@ -1239,15 +1348,14 @@ def _build_svg_bracket_data(bracket, round_data):
                             build_entry_display_lines(
                                 entry,
                                 mode=svg["entry_display_mode"])):
-                        text = line["text"]
-
-                        if line_index == 0:
-                            text = f"{entry.slot_label} {text}"
-
                         svg["labels"].append({
                             "x": center_x,
                             "y": y + (line_index * 18),
-                            "text": text,
+                            "text": (
+                                line["text"]
+                                if line_index
+                                else f"{entry.slot_label} {line['text']}"
+                            ),
                             "class": line["class"],
                             "anchor": "middle",
                             "url": "",
@@ -1515,6 +1623,8 @@ def input_tournament_match_score(request, code, match_id):
                     error=error,
                 )
 
+            _show_stage_advancement_warning(request)
+
             next_url = request.GET.get("next")
 
             if next_url:
@@ -1578,6 +1688,8 @@ def input_tournament_match_score(request, code, match_id):
                     ),
                     error=error,
                 )
+
+            _show_stage_advancement_warning(request)
 
             next_url = request.GET.get("next")
 
@@ -1698,6 +1810,8 @@ def input_tournament_match_score(request, code, match_id):
                 ),
                 error=error,
             )
+
+        _show_stage_advancement_warning(request)
 
         next_url = request.GET.get("next")
 
