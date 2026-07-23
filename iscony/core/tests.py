@@ -7318,6 +7318,12 @@ class CategoryStageOverviewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
+        self.assertContains(response, "カテゴリ作業")
+        self.assertContains(response, "試合選択へ")
+        self.assertContains(response, "QR/キー検索へ")
+        self.assertContains(response, "進行表へ")
+        self.assertContains(response, "大会詳細へ")
+        self.assertContains(response, "管理メニューへ")
         self.assertContains(response, 'class="stage-notice-bar"')
         self.assertContains(response, "運営通知")
         self.assertContains(response, "後続1枠反映待ち")
