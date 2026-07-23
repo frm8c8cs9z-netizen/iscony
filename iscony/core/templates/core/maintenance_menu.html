@@ -26,7 +26,12 @@
     {% include "core/_admin_core_links.html" %}
 </nav>
 
-<h3>当日運営</h3>
+<p class="subtle-text">
+    大会の入口を、運営ハブ / 構成管理 / 危険操作・初期化 の3つにまとめています。
+    まずは運営に必要なものだけを見せ、変更系は下の段に寄せています。
+</p>
+
+<h3>運営ハブ</h3>
 
 <table>
     <tr>
@@ -84,18 +89,20 @@
     コート状況は補助画面として残しています。通常は試合進行表から確認します。
 </p>
 
-<h3>補助メニュー</h3>
+<h3>構成管理</h3>
 
 <p class="subtle-text">
-    Stageの進行確認や進出元の整理など、主導線ではない補助操作をまとめています。
+    Stageの進行確認や進出元の整理、表示順の調整などをまとめています。
 </p>
 
 <table>
     <tr>
+        <th>やりたいこと</th>
         <th>入口</th>
         <th>用途</th>
     </tr>
     <tr>
+        <td>進出元の整理</td>
         <td>
             <a href="{% url 'advancement_source_list' tournament.code %}">
                 進出元一覧・入れ替え
@@ -104,6 +111,7 @@
         <td>後続Stageの枠に入る進出元を確認・入れ替えします。</td>
     </tr>
     <tr>
+        <td>Stageの入口整理</td>
         <td>
             <a href="{% url 'tournament_stage_overview_index' tournament.code %}">
                 Stage補助一覧
@@ -111,49 +119,25 @@
         </td>
         <td>カテゴリごとのStage進行への入口だけをまとめた補助一覧です。</td>
     </tr>
-</table>
-
-<h3>リーグ管理</h3>
-
-<p class="subtle-text">
-    リーグの枠調整はこちらから進めます。結果の確認は一般表示側のカテゴリ一覧から見たほうが自然です。
-</p>
-
-<table>
-    <tr>
-        <th>カテゴリ</th>
-        <th>枠メンテナンス</th>
-    </tr>
     {% for category in categories %}
         <tr>
-            <td>{{ category.name }}</td>
+            <td>リーグ枠調整</td>
             <td>
                 <a href="{% url 'pair_maintenance' category.id %}">
-                    リーグ枠
+                    {{ category.name }} / リーグ枠
                 </a>
             </td>
+            <td>リーグの枠調整を行います。結果確認は一般表示側のカテゴリ一覧から見たほうが自然です。</td>
         </tr>
     {% empty %}
-        <tr>
-            <td colspan="2">
-                カテゴリがありません。
-            </td>
-        </tr>
-    {% endfor %}
-</table>
-
-<h3>トーナメント管理</h3>
-
-<p class="subtle-text">
-    トーナメント表の表示設定、結果入力、メンテナンスはここから進めます。
-</p>
-
-<table>
     <tr>
-        <th>入口</th>
-        <th>用途</th>
+        <td colspan="3">
+            カテゴリがありません。
+        </td>
     </tr>
+    {% endfor %}
     <tr>
+        <td>トーナメント管理</td>
         <td>
             <a href="{% url 'bracket_list' tournament.code %}">
                 トーナメント一覧・個別設定
@@ -161,76 +145,21 @@
         </td>
         <td>カテゴリをまたいでトーナメント表へ移動し、表示・結果入力・メンテナンスへ進みます。</td>
     </tr>
-</table>
-
-<h3>大会準備</h3>
-
-<table>
     <tr>
-        <th>順番</th>
-        <th>入口</th>
-        <th>内容</th>
-    </tr>
-    <tr>
-        <td>1</td>
+        <td>表示順調整</td>
         <td>
-            <a href="{% url 'import_participants' tournament.code %}">
-                参加者CSV取込
-            </a>
-        </td>
-        <td>カテゴリ別の参加者名簿を登録します。</td>
-    </tr>
-    <tr>
-        <td>2</td>
-        <td>
-            <a href="{% url 'import_stage_slots' tournament.code %}">
-                Stage枠CSV取込
+            <a href="{% url 'order_maintenance' tournament.code %}">
+                カテゴリ・リーグ表示順
             </a>
             ／
-            <a href="{% url 'export_stage_slots' tournament.code %}">
-                現在のStage枠CSV
+            <a href="{% url 'court_order_maintenance' tournament.code %}">
+                コート表示順
             </a>
         </td>
-        <td>リーグ枠、トーナメント枠、進出元の参照関係を登録します。</td>
+        <td>画面表示と進行表の並びを整えます。</td>
     </tr>
     <tr>
-        <td>3</td>
-        <td>
-            <a href="{% url 'import_schedule' tournament.code %}">
-                試合進行CSV取込
-            </a>
-            ／
-            <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
-                フォーマット
-            </a>
-        </td>
-        <td>リーグとトーナメントのコート割・試合順を登録します。</td>
-    </tr>
-    <tr>
-        <td>補助</td>
-        <td>
-            <a href="{% url 'clone_tournament' tournament.code %}">
-                大会複製
-            </a>
-            ／
-            <a href="{% url 'add_category' tournament.code %}">
-                カテゴリ追加
-            </a>
-        </td>
-        <td>既存大会からの作成や、CSV取込前のカテゴリ作成に使います。</td>
-    </tr>
-</table>
-
-<h3>表示・設定</h3>
-
-<table>
-    <tr>
-        <th>項目</th>
-        <th>入口</th>
-        <th>現在の設定・用途</th>
-    </tr>
-    <tr>
-        <td>大会デフォルト</td>
+        <td>大会設定</td>
         <td>
             <a href="{% url 'tournament_settings' tournament.code %}">
                 大会設定
@@ -247,53 +176,67 @@
             <strong>{{ tournament.get_default_tournament_layout_type_display }}</strong>
         </td>
     </tr>
-    <tr>
-        <td>表示順</td>
-        <td>
-            <a href="{% url 'order_maintenance' tournament.code %}">
-                カテゴリ・リーグ表示順
-            </a>
-            ／
-            <a href="{% url 'court_order_maintenance' tournament.code %}">
-                コート表示順
-            </a>
-        </td>
-        <td>画面表示と進行表の並びを整えます。</td>
-    </tr>
 </table>
 
-<h3>高度なメンテナンス</h3>
+<h3>危険操作・初期化</h3>
 
-<p>
-    通常の当日運営ではあまり使わない入口です。
-    手入力作成、事故対応、旧形式CSVの扱いは、必要な場合だけここから確認します。
+<p class="subtle-text">
+    進行表や枠を大きく入れ替える操作、CSVの初期投入、複製はここにまとめています。
 </p>
-
-<h4>将来のオンライン作成UIに再利用</h4>
 
 <table>
     <tr>
         <th>やりたいこと</th>
         <th>入口</th>
-        <th>用途</th>
+        <th>内容</th>
     </tr>
     <tr>
-        <td>カテゴリを作る</td>
+        <td>参加者の初期投入</td>
         <td>
+            <a href="{% url 'import_participants' tournament.code %}">
+                参加者CSV取込
+            </a>
+        </td>
+        <td>カテゴリ別の参加者名簿を登録します。</td>
+    </tr>
+    <tr>
+        <td>Stage枠の初期投入</td>
+        <td>
+            <a href="{% url 'import_stage_slots' tournament.code %}">
+                Stage枠CSV取込
+            </a>
+            ／
+            <a href="{% url 'export_stage_slots' tournament.code %}">
+                現在のStage枠CSV
+            </a>
+        </td>
+        <td>リーグ枠、トーナメント枠、進出元の参照関係を登録します。</td>
+    </tr>
+    <tr>
+        <td>試合進行の初期投入</td>
+        <td>
+            <a href="{% url 'import_schedule' tournament.code %}">
+                試合進行CSV取込
+            </a>
+            ／
+            <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
+                フォーマット
+            </a>
+        </td>
+        <td>リーグとトーナメントのコート割・試合順を登録します。</td>
+    </tr>
+    <tr>
+        <td>大会の複製・追加</td>
+        <td>
+            <a href="{% url 'clone_tournament' tournament.code %}">
+                大会複製
+            </a>
+            ／
             <a href="{% url 'add_category' tournament.code %}">
                 カテゴリ追加
             </a>
         </td>
-        <td>CSVなしで大会を作る時の入口候補です。通常は参加者CSV取込を使います。</td>
-    </tr>
-</table>
-
-<h4>互換用として一時維持</h4>
-
-<table>
-    <tr>
-        <th>入口</th>
-        <th>用途</th>
+        <td>既存大会からの作成や、CSV取込前のカテゴリ作成に使います。</td>
     </tr>
 </table>
 

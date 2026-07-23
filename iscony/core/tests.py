@@ -6441,21 +6441,18 @@ class MaintenanceMenuTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "当日運営")
+        self.assertContains(response, "運営ハブ")
         self.assertContains(response, "結果入力")
         self.assertContains(response, "QR/キー検索")
-        self.assertContains(response, "採点票出力")
-        self.assertContains(response, "補助メニュー")
-        self.assertContains(response, "リーグ管理")
-        self.assertContains(response, "トーナメント管理")
-        self.assertContains(response, "大会準備")
-        self.assertContains(response, "表示・設定")
-        self.assertContains(response, "大会デフォルト")
+        self.assertContains(response, "採点票一括出力")
+        self.assertContains(response, "構成管理")
+        self.assertContains(response, "危険操作・初期化")
+        self.assertContains(response, "表示順調整")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
-        self.assertContains(response, "採点票一括出力")
         self.assertContains(response, "進出元一覧・入れ替え")
         self.assertContains(response, "試合進行CSV取込")
+        self.assertContains(response, "Stage枠CSV取込")
         self.assertContains(
             response,
             reverse(
