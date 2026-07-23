@@ -30,6 +30,28 @@ def _snapshot_origin(snapshot):
     return "手動", ""
 
 
+def _snapshot_restore_recommendation(snapshot):
+    """自動Stage反映由来のスナップショットなら、復元の初期候補を返す。"""
+
+    auto = snapshot.snapshot_json.get("auto", {})
+
+    if auto.get("type") == AUTO_TYPE_STAGE_ADVANCEMENT:
+        return {
+            "category_id": auto.get("source_category_id"),
+            "category_name": auto.get("source_category_name", ""),
+            "label": (
+                f"{auto.get('source_category_name', '')} / "
+                f"{auto.get('source_stage_name', '')} 反映前"
+            ).strip(),
+        }
+
+    return {
+        "category_id": None,
+        "category_name": "",
+        "label": "",
+    }
+
+
 def _category_payload_summary(payload):
     """一覧画面で使う、カテゴリ単位ペイロードの件数サマリー。"""
 
@@ -76,6 +98,7 @@ def _snapshot_rows(snapshots, *, scope):
 
     for snapshot in snapshots:
         origin, origin_detail = _snapshot_origin(snapshot)
+        recommendation = _snapshot_restore_recommendation(snapshot)
 
         if scope == OperationSnapshot.SCOPE_TOURNAMENT:
             summary = _tournament_payload_summary(snapshot.snapshot_json)
@@ -86,6 +109,7 @@ def _snapshot_rows(snapshots, *, scope):
             "snapshot": snapshot,
             "origin": origin,
             "origin_detail": origin_detail,
+            "recommendation": recommendation,
             "summary": summary,
         })
 

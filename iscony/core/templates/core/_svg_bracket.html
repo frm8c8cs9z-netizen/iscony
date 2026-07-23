@@ -1,0 +1,77 @@
+<svg
+    class="svg-bracket"
+    width="{{ svg_bracket.width }}"
+    height="{{ svg_bracket.height }}"
+    viewBox="0 0 {{ svg_bracket.width }} {{ svg_bracket.height }}"
+    role="img"
+    aria-label="{{ aria_label|default:'トーナメント表' }}"
+>
+    {% for heading in svg_bracket.headings %}
+        <text
+            class="svg-heading"
+            x="{{ heading.x }}"
+            y="{{ heading.y }}"
+            text-anchor="middle"
+        >
+            {{ heading.text }}
+        </text>
+    {% endfor %}
+
+    {% for line in svg_bracket.lines %}
+        <line
+            class="{{ line.class }}"
+            x1="{{ line.x1 }}"
+            y1="{{ line.y1 }}"
+            x2="{{ line.x2 }}"
+            y2="{{ line.y2 }}"
+        />
+    {% endfor %}
+
+    {% for label in svg_bracket.labels %}
+        {% if label.public_url or label.url %}
+            <a href="{% if label.public_url %}{{ label.public_url }}{% else %}{{ label.url }}{% endif %}">
+                <text
+                    {% if label.match_id %}id="tournament-match-{{ label.match_id }}"{% endif %}
+                    class="{{ label.class }}"
+                    x="{{ label.x }}"
+                    y="{{ label.y }}"
+                    text-anchor="{{ label.anchor }}"
+                    {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+                >
+                    {% if label.lines %}
+                        {% for line in label.lines %}
+                            <tspan
+                                x="{{ label.x }}"
+                                y="{{ line.y }}"
+                                {% if line.class %}class="{{ line.class }}"{% endif %}
+                            >{{ line.text }}</tspan>
+                        {% endfor %}
+                    {% else %}
+                        {{ label.text }}
+                    {% endif %}
+                </text>
+            </a>
+        {% else %}
+            <text
+                {% if label.match_id and label.label_type == "match_code" %}id="tournament-match-{{ label.match_id }}"{% endif %}
+                class="{{ label.class }}"
+                x="{{ label.x }}"
+                y="{{ label.y }}"
+                text-anchor="{{ label.anchor }}"
+                {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
+            >
+                {% if label.lines %}
+                    {% for line in label.lines %}
+                        <tspan
+                            x="{{ label.x }}"
+                            y="{{ line.y }}"
+                            {% if line.class %}class="{{ line.class }}"{% endif %}
+                        >{{ line.text }}</tspan>
+                    {% endfor %}
+                {% else %}
+                    {{ label.text }}
+                {% endif %}
+            </text>
+        {% endif %}
+    {% endfor %}
+</svg>

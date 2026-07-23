@@ -17,6 +17,7 @@ from .models import (
 )
 from .services import (
     apply_stage_advancements,
+    inspect_stage_advancement_readiness,
     swap_advancement_sources,
 )
 
@@ -208,6 +209,19 @@ def advancement_source_list(request, code):
         )
     )
 
+    stage_alerts = []
+    for stage in source_stages:
+        readiness = inspect_stage_advancement_readiness(stage)
+
+        if readiness["ready"]:
+            continue
+
+        stage_alerts.append({
+            "stage": stage,
+            "source_count": readiness["source_count"],
+            "blockers": readiness["blockers"][:3],
+        })
+
     for row in rows:
         target = row["target"]
         target_stage_id = target["stage"].id if target["stage"] else None
@@ -245,6 +259,7 @@ def advancement_source_list(request, code):
             "tournament": tournament,
             "rows": rows,
             "source_stages": source_stages,
+            "stage_alerts": stage_alerts,
         }
     )
 

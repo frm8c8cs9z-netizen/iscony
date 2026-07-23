@@ -1,0 +1,27 @@
+<table class="round-robin-table">
+    <tr>
+        <th class="rr-code-col"></th>
+        <th class="rr-name-col"></th>
+
+        {% for pair in pairs %}
+            <th class="rr-code-col rr-header {% if pair.retired %}retired-pair{% endif %}">
+                <span class="rr-header-inner">{{ pair.pair_code }}</span>
+            </th>
+        {% endfor %}
+
+        {% if table_kind == "tie" %}
+            <th class="rr-stat-col rr-header">得</th>
+            <th class="rr-stat-col rr-header">失</th>
+            <th class="rr-stat-col rr-header">差</th>
+            <th class="rr-stat-col rr-header">順位</th>
+        {% else %}
+            <th class="rr-stat-col rr-header">勝</th>
+            <th class="rr-stat-col rr-header">敗</th>
+            <th class="rr-stat-col rr-header">順位</th>
+        {% endif %}
+    </tr>
+
+    {% for row in rows %}
+        {% include row_template with row=row data=data row_pair_link_url=row.row_pair_link_url row_score_link_kind=row_score_link_kind row_score_link_view_name=row_score_link_view_name row_score_link_next_url=row.row_score_link_next_url public_schedule_url=public_schedule_url use_league_score_colors=use_league_score_colors self_cell_html=self_cell_html score_blank_html=score_blank_html %}
+    {% endfor %}
+</table>

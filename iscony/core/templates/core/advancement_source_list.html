@@ -43,6 +43,28 @@
     {% endfor %}
 {% endif %}
 
+{% if stage_alerts %}
+    <h3>自動反映待ち</h3>
+    <p>
+        まだ後続Stageへ自動反映できていないStageがあります。
+    </p>
+    <ul>
+        {% for alert in stage_alerts %}
+            <li>
+                {{ alert.stage.category.name }} / {{ alert.stage.name }}
+                （{{ alert.source_count }}件）
+                {% if alert.blockers %}
+                    <ul>
+                        {% for blocker in alert.blockers %}
+                            <li>{{ blocker }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% endif %}
+
 {% if rows %}
     <table>
         <tr>

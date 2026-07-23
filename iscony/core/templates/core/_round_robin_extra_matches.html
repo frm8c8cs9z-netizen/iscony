@@ -1,0 +1,51 @@
+{% if extra_matches %}
+    <h4>{{ title|default:"追加試合" }}</h4>
+    <table {% if table_border %}border="1"{% endif %}>
+        <tr>
+            <th>対戦</th>
+            <th>回数</th>
+            <th>結果</th>
+            <th>順位計算</th>
+            <th>理由</th>
+        </tr>
+        {% for extra in extra_matches %}
+            <tr>
+                <td>
+                    {% if link_kind == "input" %}
+                        <a href="{% url input_url_name extra.match.id %}?next={{ next_url }}#group-{{ group_id }}">
+                            {{ extra.match.pair1.pair_code }}
+                            {% for line in extra.pair1_display_lines %}
+                                {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                            {% endfor %}
+                            vs
+                            {{ extra.match.pair2.pair_code }}
+                            {% for line in extra.pair2_display_lines %}
+                                {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                            {% endfor %}
+                        </a>
+                    {% else %}
+                        {{ extra.match.pair1.pair_code }}
+                        {% for line in extra.pair1_display_lines %}
+                            {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                        vs
+                        {{ extra.match.pair2.pair_code }}
+                        {% for line in extra.pair2_display_lines %}
+                            {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </td>
+                <td>{{ extra.match.meeting_number }}回目</td>
+                <td>{{ extra.match.score_display }}</td>
+                <td>
+                    {% if extra.match.counts_for_ranking %}
+                        対象
+                    {% else %}
+                        対象外
+                    {% endif %}
+                </td>
+                <td>{{ extra.match.note|default:"-" }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endif %}

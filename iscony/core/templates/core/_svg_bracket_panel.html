@@ -1,0 +1,9 @@
+<div class="svg-bracket-wrap{% if wrap_class %} {{ wrap_class }}{% endif %}">
+    {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=aria_label %}
+</div>
+
+{% if note %}
+    <p class="{{ note_class|default:'svg-card-note' }}">
+        {{ note }}
+    </p>
+{% endif %}

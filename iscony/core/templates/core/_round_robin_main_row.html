@@ -1,0 +1,89 @@
+<tr>
+    <th class="rr-code-col rr-header {% if row.pair.retired %}retired-pair{% endif %}">
+        {% if row.pair and row.pair.id %}
+            {% if row.pair.retired %}
+                <span class="rr-header-inner" style="color:red;">{{ row.pair.pair_code }}</span>
+            {% else %}
+                <span class="rr-header-inner">{{ row.pair.pair_code }}</span>
+            {% endif %}
+        {% endif %}
+    </th>
+    <th class="rr-name-col rr-header {% if row.pair.retired %}retired-pair{% endif %}">
+        {% if row_pair_link_url %}
+            <a href="{{ row_pair_link_url }}">
+                {% for line in row.pair_display_lines %}
+                    <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
+                {% endfor %}
+            </a>
+        {% else %}
+            {% for line in row.pair_display_lines %}
+                <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
+            {% endfor %}
+        {% endif %}
+    </th>
+
+    {% for score in row.scores %}
+        {% if score.type == "self" %}
+            <td class="self-cell">{{ self_cell_html|default:"&nbsp;"|safe }}</td>
+        {% else %}
+            <td
+                class="rr-score-col {% if use_league_score_colors %}{{ score.type }}{% endif %}{% if score.match and row_score_link_kind == 'input' %} hover-cell{% endif %}{% if score.schedule and row_score_link_kind == 'public' %} public-score-cell-link{% endif %}"
+                {% if score.match and row_score_link_kind == 'public' and score.schedule and score.match.pair1_id == row.pair.id %}
+                    id="round-robin-match-{{ score.match.id }}"
+                {% endif %}
+            >
+                {% if row_score_link_kind == 'input' and score.match %}
+                    <a
+                        href="{% url row_score_link_view_name score.match.id %}?next={{ row_score_link_next_url }}#group-{{ data.group.id }}"
+                        class="score-link"
+                    >
+                        {% if score.retired_self %}
+                            R
+                        {% elif score.value != None and score.value != "" %}
+                            {% if score.type == "win" %}
+                                <span class="score-chip">{{ score.value }}</span>
+                            {% else %}
+                                {{ score.value }}
+                            {% endif %}
+                        {% else %}
+                            {{ score_blank_html|default:"&nbsp;"|safe }}
+                        {% endif %}
+                    </a>
+                {% elif row_score_link_kind == 'public' and score.schedule %}
+                    <a
+                        class="public-schedule-link"
+                        href="{{ public_schedule_url }}#schedule-{{ score.schedule.id }}"
+                    >
+                        {% if score.retired_self %}
+                            R
+                        {% elif score.value != None and score.value != "" %}
+                            {% if score.type == "win" %}
+                                <span class="score-chip">{{ score.value }}</span>
+                            {% else %}
+                                {{ score.value }}
+                            {% endif %}
+                        {% else %}
+                            {{ score_blank_html|default:"&nbsp;"|safe }}
+                        {% endif %}
+                    </a>
+                {% else %}
+                    {% if score.retired_self %}
+                        R
+                    {% elif score.type == "win" and score.value != None and score.value != "" %}
+                        <span class="score-chip">{{ score.value }}</span>
+                    {% else %}
+                        {{ score.value|default_if_none:"" }}
+                    {% endif %}
+                {% endif %}
+            </td>
+        {% endif %}
+    {% endfor %}
+
+    {% if row.ranking %}
+        <td class="rr-stat-col">{{ row.ranking.wins }}</td>
+        <td class="rr-stat-col">{{ row.ranking.losses }}</td>
+        <td class="rr-stat-col">{{ row.ranking.rank|default_if_none:"" }}</td>
+    {% else %}
+        <td colspan="3" class="rr-stat-col">未集計</td>
+    {% endif %}
+</tr>

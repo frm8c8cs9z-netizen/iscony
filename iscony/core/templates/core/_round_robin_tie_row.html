@@ -1,0 +1,34 @@
+<tr>
+    <th class="rr-code-col rr-header">
+        <span class="rr-header-inner">{{ row.pair.pair_code }}</span>
+    </th>
+
+    <th class="rr-name-col rr-header">
+        {% for line in row.pair_display_lines %}
+            <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
+        {% endfor %}
+    </th>
+
+    {% for score in row.scores %}
+        {% if score.type == "self" %}
+            <td class="rr-score-col self-cell">{{ self_cell_html|default:"&nbsp;" }}</td>
+        {% else %}
+            <td class="rr-score-col {% if use_league_score_colors %}{{ score.type }}{% endif %}">
+                {% if score.type == "win" and score.value != None and score.value != "" %}
+                    <span class="score-chip">{{ score.value }}</span>
+                {% else %}
+                    {{ score.value|default_if_none:"" }}
+                {% endif %}
+            </td>
+        {% endif %}
+    {% endfor %}
+
+    <td class="rr-stat-col">{{ row.stat.games_won }}</td>
+    <td class="rr-stat-col">{{ row.stat.games_lost }}</td>
+    <td class="rr-stat-col">{{ row.stat.game_diff }}</td>
+    <td class="rr-stat-col">
+        {% if row.ranking and row.ranking.rank != None %}
+            {{ row.ranking.rank }}
+        {% endif %}
+    </td>
+</tr>

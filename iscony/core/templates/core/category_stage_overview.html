@@ -190,34 +190,9 @@
 
 {% include "core/_admin_quick_links.html" %}
 
-<h3>カテゴリ作業</h3>
-
 <p class="stage-subtext">
-    このカテゴリを触る時は、結果入力・QR検索・進行確認から入れます。
+    このカテゴリを触る時は、上の共通ショートカットから結果入力・QR検索・進行確認へ入れます。
 </p>
-
-<div class="action-row">
-    <a href="{% url 'result_input_select' tournament.code %}">
-        試合選択へ
-    </a>
-    <a href="{% url 'reception_match_search' tournament.code %}#key-search">
-        QR/キー検索へ
-    </a>
-    <a href="{% url 'schedule_view' tournament.code %}">
-        進行表へ
-    </a>
-    <a href="{% url 'tournament_detail' tournament.code %}">
-        大会詳細へ
-    </a>
-    <a href="{% url 'maintenance_menu' tournament.code %}">
-        管理メニューへ
-    </a>
-</div>
-
-<div class="stage-page-links">
-    <a href="{% url 'tournament_snapshot_list' tournament.code %}">大会スナップショット</a>
-    <a href="{% url 'tournament_detail' tournament.code %}">カテゴリ一覧</a>
-</div>
 
 {% if stage_notices %}
     <div class="stage-notice-bar" aria-label="運営通知">

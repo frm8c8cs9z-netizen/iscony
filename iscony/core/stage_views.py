@@ -18,6 +18,7 @@ from .models import (
     TournamentBracket,
     TournamentMatch,
 )
+from .services import inspect_stage_advancement_readiness
 from .tournament_views import build_tournament_bracket_display_data
 
 
@@ -195,6 +196,64 @@ def _advancement_data(stage):
     )
 
 
+def _stage_notices(stage_rows):
+    """横断表示の上部に出す、確認優先度の高い通知をまとめる。"""
+
+    notices = []
+
+    for row in stage_rows:
+        status_key = row["status"]["key"]
+        pending_source_count = row["pending_source_count"]
+
+        if status_key == "confirmed" and not pending_source_count:
+            continue
+
+        if status_key == "not_started" and not pending_source_count:
+            continue
+
+        if pending_source_count:
+            title = f"後続{pending_source_count}枠反映待ち"
+        else:
+            title = row["status"]["label"]
+
+        notices.append({
+            "stage": row["stage"],
+            "title": title,
+            "status": row["status"]["label"],
+            "pending_source_count": pending_source_count,
+            "url": f"#stage-{row['stage'].id}",
+            "tone": (
+                "warning"
+                if status_key in {"waiting", "in_progress"} or pending_source_count
+                else "neutral"
+            ),
+        })
+
+    return notices
+
+
+def _stage_blockers(stage_rows):
+    """反映できずに止まっているStageの理由をまとめる。"""
+
+    blockers = []
+
+    for row in stage_rows:
+        source_count = row["source_readiness"]["source_count"]
+        readiness = row["source_readiness"]["ready"]
+        block_messages = row["source_readiness"]["blockers"]
+
+        if readiness or not source_count or not block_messages:
+            continue
+
+        blockers.append({
+            "stage": row["stage"],
+            "source_count": source_count,
+            "blockers": block_messages[:3],
+        })
+
+    return blockers
+
+
 def _build_category_stage_rows(category, *, request=None, include_public_links=False):
     """カテゴリ内のStageを、リーグ表・トーナメント表込みで描画用に整える。"""
 
@@ -225,6 +284,7 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
                 category,
                 groups=groups,
                 include_operations=not include_public_links,
+                score_next_view_name="category_stage_overview",
             )
             ready = bool(containers) and all(
                 row["ranking_confirmed"]
@@ -255,6 +315,10 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
                     )
                     for schedule in schedules
                 }
+                stage_url = (
+                    f"{reverse('category_stage_overview', kwargs={'category_id': category.id})}"
+                    f"#stage-{stage.id}"
+                )
 
                 svg_bracket = display_data.get("svg_bracket")
                 if svg_bracket and include_public_links:
@@ -262,6 +326,13 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
                         if label.get("label_type") == "match_code":
                             label["public_url"] = schedule_url_by_match_id.get(
                                 label.get("match_id")
+                            )
+                elif svg_bracket:
+                    for label in svg_bracket["labels"]:
+                        if label.get("label_type") == "match_code" and label.get("match_id"):
+                            label["url"] = (
+                                f"{reverse('input_tournament_match_score', kwargs={'code': category.tournament.code, 'match_id': label['match_id']})}"
+                                f"?next={stage_url}"
                             )
 
                 display_brackets.append({
@@ -275,6 +346,8 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
             )
 
         pending_source_count = _pending_advancement_source_count(stage)
+        source_readiness = inspect_stage_advancement_readiness(stage)
+        targets = _advancement_data(stage)
         status = _public_stage_status(
             containers,
             ready,
@@ -286,12 +359,16 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
             "ready": ready,
             "status": status,
             "pending_source_count": pending_source_count,
+            "source_readiness": source_readiness,
             "display_groups": display_groups,
             "display_brackets": display_brackets,
+            "targets": targets,
         })
 
     return {
         "stage_rows": stage_rows,
+        "stage_notices": _stage_notices(stage_rows),
+        "stage_blockers": _stage_blockers(stage_rows),
         "return_schedule_id": return_schedule_id,
     }
 

@@ -16,8 +16,14 @@
     </a>
 </p>
 
+    <p>
+        大会全体の進行・結果・リタイア状態・追加対戦・差し替え履歴を保存します。
+    </p>
+
 <p>
-    大会全体の進行・結果・リタイア状態・追加対戦・差し替え履歴を保存します。
+    自動Stage反映由来のスナップショットは、復元候補として
+    「このStageの後続反映前」を初期表示します。
+    復元対象は必要に応じて変更できます。
 </p>
 
 <h3>
@@ -106,6 +112,11 @@
                         <br>
                         {{ row.origin_detail }}
                     {% endif %}
+                    {% if row.recommendation.category_id %}
+                        <br>
+                        <strong>推奨復元:</strong>
+                        {{ row.recommendation.label }}
+                    {% endif %}
                 </td>
                 <td>
                     {{ row.snapshot.label }}
@@ -147,7 +158,10 @@
                         <select name="category_id" required>
                             <option value="">カテゴリを選択</option>
                             {% for category in categories %}
-                                <option value="{{ category.id }}">
+                                <option
+                                    value="{{ category.id }}"
+                                    {% if row.recommendation.category_id == category.id %}selected{% endif %}
+                                >
                                     {{ category.name }}
                                 </option>
                             {% endfor %}
@@ -169,7 +183,10 @@
                         <select name="category_id" required>
                             <option value="">カテゴリを選択</option>
                             {% for category in categories %}
-                                <option value="{{ category.id }}">
+                                <option
+                                    value="{{ category.id }}"
+                                    {% if row.recommendation.category_id == category.id %}selected{% endif %}
+                                >
                                     {{ category.name }}
                                 </option>
                             {% endfor %}

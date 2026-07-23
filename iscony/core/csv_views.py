@@ -36,7 +36,10 @@ from .models import (
     TournamentEntry,
     TournamentMatch,
 )
-from .services import advance_tournament_bye_winners
+from .services import (
+    advance_tournament_bye_winners,
+    auto_apply_stage_advancements_if_ready,
+)
 from .utils import build_display_bracket_slots, get_bracket_size
 
 
@@ -525,6 +528,7 @@ def _create_tournament_matches_for_bracket(bracket, entries, match_games=7):
         match.save()
 
     advance_tournament_bye_winners(bracket)
+    auto_apply_stage_advancements_if_ready(bracket.stage)
 
 
 def _get_source_group(
