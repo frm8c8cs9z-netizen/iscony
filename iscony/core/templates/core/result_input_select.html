@@ -20,6 +20,18 @@
     スコアシートのキーやQRから探す場合は別の入口を使います。
 </p>
 
+<h3>カテゴリから入る</h3>
+
+<div class="choice-row">
+    {% for category in categories %}
+        <a href="{% url 'category_stage_overview' category.id %}">
+            {{ category.name }}
+        </a>
+    {% empty %}
+        <span class="subtle-text">カテゴリがありません。</span>
+    {% endfor %}
+</div>
+
 <h3>進行枠を選ぶ</h3>
 
 {% if selected_block %}

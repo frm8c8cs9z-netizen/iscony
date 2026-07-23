@@ -7201,11 +7201,19 @@ class ResultInputSelectTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "試合選択")
+        self.assertContains(response, "カテゴリから入る")
         self.assertContains(response, "進行枠を選ぶ")
         self.assertContains(response, "本日程")
         self.assertContains(response, "1コート")
         self.assertContains(response, "第3試合")
         self.assertContains(response, "QR/キー検索")
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": self.category.id},
+            ),
+        )
 
     def test_result_input_select_redirects_when_unique_match_is_selected(self):
         response = self.client.get(

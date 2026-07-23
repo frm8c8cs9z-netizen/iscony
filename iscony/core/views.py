@@ -372,6 +372,12 @@ def result_input_select(request, code):
         "display_order",
         "id",
     )
+    categories = Category.objects.filter(
+        tournament=tournament,
+    ).order_by(
+        "display_order",
+        "name",
+    )
     selected_block_id = request.GET.get("schedule_block")
     selected_block = None
     if selected_block_id:
@@ -464,6 +470,7 @@ def result_input_select(request, code):
         {
             "tournament": tournament,
             "blocks": blocks,
+            "categories": categories,
             "selected_block": selected_block,
             "courts": courts,
             "orders": orders,
