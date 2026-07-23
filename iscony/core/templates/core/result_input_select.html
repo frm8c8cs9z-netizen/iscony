@@ -11,18 +11,14 @@
     </div>
 </div>
 
-<p class="subtle-text">
-    試合選択は、進行枠・コート・試合順で素早く結果入力先を絞る入口です。
-</p>
+<nav class="admin-quick-links" aria-label="運営ショートカット">
+    {% include "core/_admin_core_links.html" %}
+</nav>
 
-<div class="action-row">
-    <a href="{% url 'reception_match_search' tournament.code %}?autostart=1#key-search">
-        QRを読み取る
-    </a>
-    <a href="{% url 'reception_match_search' tournament.code %}#key-search">
-        マッチキー入力
-    </a>
-</div>
+<p class="subtle-text">
+    進行枠・コート・試合順で結果入力先を絞る入口です。
+    スコアシートのキーやQRから探す場合は別の入口を使います。
+</p>
 
 <h3>進行枠を選ぶ</h3>
 

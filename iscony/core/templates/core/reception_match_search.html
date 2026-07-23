@@ -5,21 +5,20 @@
 
 <div class="page-heading">
     <div>
-        <h2>試合受付・結果入力</h2>
+        <h2>結果入力QR・キー</h2>
         <p class="subtle-text">
             {{ tournament.name }}
         </p>
     </div>
 </div>
 
-<p class="subtle-text">
-    この画面は、今は既存の検索入口を並べた結果入力ハブです。
-    マッチキー入力とQR読み取りをまとめた入口です。
-</p>
+<nav class="admin-quick-links" aria-label="運営ショートカット">
+    {% include "core/_admin_core_links.html" %}
+</nav>
 
-<div class="choice-row">
-    <a href="#key-search">マッチキー</a>
-</div>
+<p class="subtle-text">
+    スコアシートのマッチキーを手入力するか、QRから読み取って試合を探します。
+</p>
 
 <h3 id="key-search">マッチキーで探す</h3>
 

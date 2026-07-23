@@ -7006,7 +7006,7 @@ class ReceptionMatchSearchTests(TestCase):
         self.assertNotContains(response, "コート + 第何試合で探す")
         self.assertContains(response, "マッチキーで探す")
         self.assertContains(response, "QRを読み取る")
-        self.assertContains(response, "試合選択へ")
+        self.assertContains(response, "試合選択")
 
     def test_reception_search_finds_matches_by_category_and_number(self):
         response = self.client.get(
@@ -7208,7 +7208,7 @@ class ResultInputSelectTests(TestCase):
         self.assertContains(response, "本日程")
         self.assertContains(response, "1コート")
         self.assertContains(response, "第3試合")
-        self.assertContains(response, "QR/キーで探す")
+        self.assertContains(response, "QR/キー検索")
 
     def test_result_input_select_redirects_when_unique_match_is_selected(self):
         response = self.client.get(
@@ -7466,7 +7466,7 @@ class CategoryStageOverviewTests(TestCase):
                 kwargs={"public_token": tournament.public_token},
             ),
         )
-        self.assertNotContains(
+        self.assertContains(
             response,
             reverse(
                 "category_stage_overview",

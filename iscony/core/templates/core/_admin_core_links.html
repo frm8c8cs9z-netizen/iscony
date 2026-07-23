@@ -1,0 +1,11 @@
+{% if shortcut_code %}
+    <a href="{% url 'result_input_select' shortcut_code %}">
+        試合選択
+    </a>
+    <a href="{% url 'reception_match_search' shortcut_code %}?autostart=1#key-search">
+        QR/キー検索
+    </a>
+    <a href="{% url 'schedule_view' shortcut_code %}">
+        進行表
+    </a>
+{% endif %}

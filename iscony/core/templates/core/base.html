@@ -123,6 +123,130 @@
         display: block;
     }
 
+    .svg-bracket-wrap {
+        border: 1px solid #c9c9c9;
+        overflow: auto;
+        padding: 16px;
+        margin-bottom: 16px;
+        background: #fff;
+    }
+
+    .svg-bracket-wrap--large-gap {
+        margin-bottom: 24px;
+    }
+
+    .svg-bracket {
+        display: block;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .svg-heading {
+        font-size: 18px;
+        font-weight: 700;
+        fill: #222;
+    }
+
+    .entry-text {
+        font-size: 14px;
+        font-weight: 600;
+        fill: #222;
+    }
+
+    .entry-org-text {
+        font-size: 11px;
+        font-weight: 500;
+        fill: #444;
+    }
+
+    .reflected-entry-text {
+        font-size: 14px;
+        font-weight: 700;
+        fill: #222;
+    }
+
+    .reflected-entry-org-text {
+        font-size: 11px;
+        font-weight: 600;
+        fill: #444;
+    }
+
+    .reflected-seed-code {
+        font-size: 14px;
+        font-weight: 700;
+        fill: #222;
+    }
+
+    .winner-text {
+        font-size: 14px;
+        font-weight: 800;
+        fill: #e00000;
+    }
+
+    .winner-org-text {
+        font-size: 11px;
+        font-weight: 700;
+        fill: #e00000;
+    }
+
+    .champion-text {
+        font-size: 14px;
+        font-weight: 700;
+        fill: #e00000;
+    }
+
+    .champion-org-text {
+        font-size: 12px;
+        font-weight: 700;
+        fill: #e00000;
+    }
+
+    .champion-vertical-text {
+        font-size: 14px;
+        font-weight: 700;
+        fill: #e00000;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+    }
+
+    .champion-org-vertical-text {
+        font-size: 12px;
+        font-weight: 700;
+        fill: #e00000;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+    }
+
+    .svg-match-code {
+        font-size: 12px;
+        fill: #666;
+    }
+
+    .loser-score {
+        font-size: 13px;
+        font-weight: 700;
+        fill: #222;
+    }
+
+    .normal-line {
+        stroke: #222;
+        stroke-width: 2;
+        fill: none;
+    }
+
+    .winner-line {
+        stroke: #e00000;
+        stroke-width: 4;
+        fill: none;
+    }
+
+    .svg-card-note {
+        color: #666;
+        margin-top: 24px;
+    }
+
     .schedule-table-wrapper {
         max-height: calc(100vh - 140px);
         margin-bottom: 30px;
@@ -827,15 +951,7 @@
 {% admin_menu_public_token as public_token %}
 {% if shortcut_code %}
     <nav class="site-nav" aria-label="大会メニュー">
-        <a href="{% url 'result_input_select' shortcut_code %}">
-            試合選択
-        </a>
-        <a href="{% url 'reception_match_search' shortcut_code %}?autostart=1#key-search">
-            結果入力QR
-        </a>
-        <a href="{% url 'schedule_view' shortcut_code %}">
-            進行表
-        </a>
+        {% include "core/_admin_core_links.html" %}
         <a href="{% url 'tournament_detail' shortcut_code %}">
             大会詳細
         </a>

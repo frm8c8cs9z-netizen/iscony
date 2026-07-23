@@ -22,6 +22,10 @@
     </div>
 </div>
 
+<nav class="admin-quick-links" aria-label="運営ショートカット">
+    {% include "core/_admin_core_links.html" %}
+</nav>
+
 <h3>当日運営</h3>
 
 <table>
@@ -31,17 +35,17 @@
         <th>用途</th>
     </tr>
     <tr>
-        <td>試合選択</td>
+        <td>結果入力</td>
         <td>
             <a href="{% url 'result_input_select' tournament.code %}">
                 試合選択
             </a>
             ／
             <a href="{% url 'reception_match_search' tournament.code %}">
-                結果入力検索
+                QR/キー検索
             </a>
         </td>
-        <td>試合選択と、試合受付・結果入力の2つの入口を使い分けます。迷った時は結果入力検索を使います。</td>
+        <td>進行枠から絞る場合は試合選択、キーやQRから探す場合はQR/キー検索を使います。</td>
     </tr>
     <tr>
         <td>採点票出力</td>
