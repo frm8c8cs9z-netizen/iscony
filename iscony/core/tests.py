@@ -4884,6 +4884,57 @@ class ImportStageSlotsCsvTests(TestCase):
             ).exists()
         )
 
+    def test_stage_slots_reports_missing_tournament_source_match_details(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選T",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        source_bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=source_stage,
+            name="本戦",
+        )
+        TournamentMatch.objects.create(
+            bracket=source_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+        )
+
+        response = self._post_csv(
+            "category,stage_code,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_stage_code,source_bracket,source_group,source_rank,source_match,source_result,match_games\n"
+            "男子B,,敗者リーグ,L,A,,1,1,,TR,予選T,,本戦,,,M99,win,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "進出元トーナメント試合が見つかりません。",
+        )
+        self.assertContains(
+            response,
+            "source_stage=予選T",
+        )
+        self.assertContains(
+            response,
+            "source_bracket=本戦",
+        )
+        self.assertContains(
+            response,
+            "source_match=M99",
+        )
+        self.assertFalse(
+            LeagueEntry.objects.filter(
+                group__stage__name="敗者リーグ",
+            ).exists()
+        )
+
     def test_tab_delimited_stage_slots_csv_is_accepted(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -7320,9 +7371,9 @@ class CategoryStageOverviewTests(TestCase):
         content = response.content.decode()
         self.assertContains(response, "上の共通ショートカット")
         self.assertContains(response, "大会スナップショット")
-        self.assertContains(response, 'class="stage-notice-bar"')
-        self.assertContains(response, "運営通知")
-        self.assertContains(response, "後続1枠反映待ち")
+        self.assertNotContains(response, 'class="stage-notice-bar"')
+        self.assertNotContains(response, "運営通知")
+        self.assertNotContains(response, "後続1枠反映待ち")
         self.assertLess(
             content.index(f'id="stage-{league_stage.id}"'),
             content.index(f'id="stage-{tournament_stage.id}"'),
@@ -7435,6 +7486,155 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "後続枠の試合結果が入力済みのため変更できません")
         self.assertContains(response, "Stage通知大会")
         self.assertContains(response, "予選リーグ")
+
+    def test_stage_overview_hides_notice_when_everything_is_unstarted(self):
+        tournament = Tournament.objects.create(
+            name="未着手通知抑制大会",
+            code="STAGENONE",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="男子A",
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        target_stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+        )
+        create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="選手1",
+            player2_name="選手2",
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=target_stage,
+            name="本戦",
+        )
+        target_entry = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="",
+            player2_name="",
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=group,
+            source_rank=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "運営通知")
+        self.assertNotContains(response, "後続1枠反映待ち")
+        self.assertNotContains(response, "反映できないStage")
+
+    def test_tournament_notice_waits_until_round_is_complete(self):
+        tournament = Tournament.objects.create(
+            name="トーナメント通知判定大会",
+            code="TOURNOTICE",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="男子A",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        entry1 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="1",
+            display_order=1,
+            player1_name="選手1",
+            player2_name="選手2",
+        )
+        entry2 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="選手3",
+            player2_name="選手4",
+        )
+        entry3 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手5",
+            player2_name="選手6",
+        )
+        entry4 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="4",
+            display_order=4,
+            player1_name="選手7",
+            player2_name="選手8",
+        )
+        TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entry1,
+            pair2=entry2,
+            pair1_games=3,
+            pair2_games=1,
+            winner=entry1,
+        )
+        TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entry3,
+            pair2=entry4,
+            pair1_games=3,
+            pair2_games=2,
+            winner=entry3,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="stage-notice-bar"')
+        self.assertContains(response, "1回戦完了")
+        self.assertContains(response, "後続反映待ち")
 
     def test_tournament_detail_links_to_public_category_results(self):
         tournament = Tournament.objects.create(
@@ -10032,6 +10232,7 @@ class TournamentScheduleBehaviorTests(TestCase):
     def test_tournament_bracket_detail_does_not_highlight_split_advance_before_final(self):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.svg_split_count = 2
         self.bracket.save()
         entries = [self.entry1, self.entry2]
 
@@ -10115,11 +10316,8 @@ class TournamentScheduleBehaviorTests(TestCase):
                 r'x2="[\d.]+"\s+y2="98\.0"',
             ),
         )
-        svg_width = float(
-            svg_content.split('width="', 1)[1].split('"', 1)[0]
-        )
-        self.assertLess(svg_width, 640)
-        self.assertGreaterEqual(svg_width, 500)
+        self.assertIn("上位トーナメント", content)
+        self.assertNotIn("WB1", content)
 
     def test_tournament_bracket_detail_can_show_split_vertical_champion_in_two_columns(self):
         self.use_individual_bracket_settings()

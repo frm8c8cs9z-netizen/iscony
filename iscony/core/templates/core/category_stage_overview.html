@@ -2,6 +2,17 @@
 
 {% block title %}{{ category.name }} Stage進行{% endblock %}
 
+{% block site_chrome_context %}
+<div class="site-chrome-context">
+    <div class="page-heading">
+        <div>
+            <h2>{{ category.name }}</h2>
+            <p class="subtle-text stage-kicker">{{ tournament.name }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 
 <style>
@@ -181,19 +192,6 @@
 
 </style>
 
-<div class="page-heading">
-    <div>
-        <h2>{{ category.name }} Stage進行</h2>
-        <p class="subtle-text">{{ tournament.name }}</p>
-    </div>
-</div>
-
-{% include "core/_admin_quick_links.html" %}
-
-<p class="stage-subtext">
-    このカテゴリを触る時は、上の共通ショートカットから結果入力・QR検索・進行確認へ入れます。
-</p>
-
 {% if stage_notices %}
     <div class="stage-notice-bar" aria-label="運営通知">
         {% for notice in stage_notices %}
@@ -274,13 +272,30 @@
                 {% endfor %}
             {% else %}
                 {% for data in row.display_brackets %}
-                    <div class="group-box">
-                        <h4>{{ data.bracket.name }}</h4>
-                        {% if data.svg_bracket %}
+                    {% if data.svg_brackets %}
+                        {% for svg_bracket in data.svg_brackets %}
+                            <div class="group-box">
+                                <h4>
+                                    {% if svg_bracket.split_role == "winner" %}
+                                        {{ svg_bracket.split_role_label|default:"上位トーナメント" }}
+                                    {% else %}
+                                        {{ data.bracket.name }}{% if data.svg_brackets|length > 1 %}{{ forloop.counter }}{% endif %}
+                                    {% endif %}
+                                </h4>
+                                {% include "core/_svg_bracket_panel.html" with svg_bracket=svg_bracket aria_label=data.bracket.name %}
+                            </div>
+                        {% endfor %}
+                    {% elif data.svg_bracket %}
+                        <div class="group-box">
+                            <h4>{{ data.bracket.name }}</h4>
                             {% include "core/_svg_bracket_panel.html" with svg_bracket=data.svg_bracket aria_label=data.bracket.name %}
-                        {% endif %}
-
-                    </div>
+                        </div>
+                    {% else %}
+                        <div class="group-box">
+                            <h4>{{ data.bracket.name }}</h4>
+                            <p class="subtle-text">トーナメント枠はありますが、まだ試合がありません。</p>
+                        </div>
+                    {% endif %}
                 {% empty %}
                     <p>トーナメントがありません。</p>
                 {% endfor %}

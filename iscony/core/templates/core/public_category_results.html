@@ -304,15 +304,30 @@
                 {% endfor %}
             {% else %}
                 {% for data in row.display_brackets %}
-                    <div class="public-result-block">
-                        <h4>{{ data.bracket.name }}</h4>
-
-                        {% if data.svg_bracket %}
+                    {% if data.svg_brackets %}
+                        {% for svg_bracket in data.svg_brackets %}
+                            <div class="public-result-block">
+                                <h4>
+                                    {% if svg_bracket.split_role == "winner" %}
+                                        {{ svg_bracket.split_role_label|default:"上位トーナメント" }}
+                                    {% else %}
+                                        {{ data.bracket.name }}{% if data.svg_brackets|length > 1 %}{{ forloop.counter }}{% endif %}
+                                    {% endif %}
+                                </h4>
+                                {% include "core/_svg_bracket_panel.html" with svg_bracket=svg_bracket aria_label=data.bracket.name %}
+                            </div>
+                        {% endfor %}
+                    {% elif data.svg_bracket %}
+                        <div class="public-result-block">
+                            <h4>{{ data.bracket.name }}</h4>
                             {% include "core/_svg_bracket_panel.html" with svg_bracket=data.svg_bracket aria_label=data.bracket.name %}
-                        {% else %}
+                        </div>
+                    {% else %}
+                        <div class="public-result-block">
+                            <h4>{{ data.bracket.name }}</h4>
                             <p>トーナメント枠がありません。</p>
-                        {% endif %}
-                    </div>
+                        </div>
+                    {% endif %}
                 {% empty %}
                     <p>トーナメントがありません。</p>
                 {% endfor %}

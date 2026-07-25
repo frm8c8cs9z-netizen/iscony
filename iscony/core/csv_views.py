@@ -559,7 +559,9 @@ def _get_source_match(
     source_stage_name,
     source_stage_code,
     source_bracket_name,
-    source_match_code
+    source_match_code,
+    *,
+    row_number=None,
 ):
     queryset = TournamentMatch.objects.filter(
         bracket__category=category,
@@ -587,13 +589,23 @@ def _get_source_match(
     if len(matches) == 1:
         return matches[0]
 
+    location = (
+        f"category={category.name} / "
+        f"source_stage={source_stage_name or source_stage_code or '-'} / "
+        f"source_bracket={source_bracket_name or '-'} / "
+        f"source_match={source_match_code}"
+    )
+    prefix = f"{row_number}行目: " if row_number is not None else ""
+
     if not matches:
         raise TournamentMatch.DoesNotExist(
-            "進出元トーナメント試合が見つかりません。"
+            f"{prefix}進出元トーナメント試合が見つかりません。"
+            f"{location}"
         )
 
     raise TournamentMatch.MultipleObjectsReturned(
-        "進出元トーナメント試合が複数あります。source_bracket を指定してください。"
+        f"{prefix}進出元トーナメント試合が複数あります。"
+        f"{location} / source_bracket を指定してください。"
     )
 
 
@@ -640,6 +652,7 @@ def _create_advancement_source(row_data, target_entry):
             source_stage_code,
             source_bracket_name,
             row_data["source_match"],
+            row_number=row_data.get("row_number"),
         )
         source.source_result = row_data["source_result"]
 

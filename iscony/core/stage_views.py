@@ -107,6 +107,7 @@ def _tournament_stage_data(stage):
             "finished_count": finished_count,
             "matches_complete": (
                 entry_count > 0
+                and match_count > 0
                 and finished_count == match_count
             ),
         })
@@ -196,6 +197,69 @@ def _advancement_data(stage):
     )
 
 
+def _stage_notice_activity(row):
+    """Noticeを出すほど進んでいるかをStage種別ごとに判定する。"""
+
+    if row["stage"].stage_type == Stage.TYPE_LEAGUE:
+        return any(
+            container.get("ranking_count", 0) > 0
+            for container in row["containers"]
+        )
+
+    return any(
+        _tournament_bracket_notice_label(bracket_row["bracket"]) is not None
+        for bracket_row in row["display_brackets"]
+    )
+
+
+def _tournament_match_is_finished(match):
+    return (
+        match.winner_id is not None
+        or (
+            match.result_type == TournamentMatch.RESULT_RETIREMENT
+            and match.pair1_games == 0
+            and match.pair2_games == 0
+            and match.pair1_id is not None
+            and match.pair2_id is not None
+        )
+    )
+
+
+def _tournament_bracket_notice_label(bracket):
+    matches = TournamentMatch.objects.filter(
+        bracket=bracket,
+    ).exclude(
+        match_code__startswith="S",
+    ).order_by(
+        "round_number",
+        "match_number",
+    )
+
+    rounds = {}
+
+    for match in matches:
+        rounds.setdefault(
+            match.round_number,
+            []
+        ).append(match)
+
+    completed_round_numbers = [
+        round_number
+        for round_number, round_matches in rounds.items()
+        if round_matches
+        and all(
+            _tournament_match_is_finished(match)
+            for match in round_matches
+        )
+    ]
+
+    if not completed_round_numbers:
+        return None
+
+    round_number = max(completed_round_numbers)
+    return f"{bracket.name} {round_number}回戦完了"
+
+
 def _stage_notices(stage_rows):
     """横断表示の上部に出す、確認優先度の高い通知をまとめる。"""
 
@@ -205,14 +269,39 @@ def _stage_notices(stage_rows):
         status_key = row["status"]["key"]
         pending_source_count = row["pending_source_count"]
 
+        if not _stage_notice_activity(row):
+            continue
+
+        if row["stage"].stage_type == Stage.TYPE_TOURNAMENT:
+            bracket_notices = []
+            for bracket_row in row["display_brackets"]:
+                notice_label = _tournament_bracket_notice_label(
+                    bracket_row["bracket"]
+                )
+                if notice_label:
+                    bracket_notices.append(notice_label)
+
+            for notice_label in bracket_notices:
+                notices.append({
+                    "stage": row["stage"],
+                    "title": f"{notice_label} 後続反映待ち",
+                    "status": row["status"]["label"],
+                    "pending_source_count": pending_source_count,
+                    "url": f"#stage-{row['stage'].id}",
+                    "tone": (
+                        "warning"
+                        if status_key in {"waiting", "in_progress"}
+                        or pending_source_count
+                        else "neutral"
+                    ),
+                })
+            continue
+
         if status_key == "confirmed" and not pending_source_count:
             continue
 
-        if status_key == "not_started" and not pending_source_count:
-            continue
-
         if pending_source_count:
-            title = f"後続{pending_source_count}枠反映待ち"
+            title = "後続反映待ち"
         else:
             title = row["status"]["label"]
 
@@ -242,7 +331,12 @@ def _stage_blockers(stage_rows):
         readiness = row["source_readiness"]["ready"]
         block_messages = row["source_readiness"]["blockers"]
 
-        if readiness or not source_count or not block_messages:
+        if (
+            readiness
+            or not source_count
+            or not block_messages
+            or not _stage_notice_activity(row)
+        ):
             continue
 
         blockers.append({
@@ -320,16 +414,23 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
                     f"#stage-{stage.id}"
                 )
 
-                svg_bracket = display_data.get("svg_bracket")
-                if svg_bracket and include_public_links:
+                svg_brackets = display_data.get("svg_brackets") or []
+                if not svg_brackets and display_data.get("svg_bracket"):
+                    svg_brackets = [display_data["svg_bracket"]]
+
+                for svg_bracket in svg_brackets:
+                    if include_public_links:
+                        for label in svg_bracket["labels"]:
+                            if label.get("label_type") == "match_code":
+                                label["public_url"] = schedule_url_by_match_id.get(
+                                    label.get("match_id")
+                                )
+                else:
                     for label in svg_bracket["labels"]:
-                        if label.get("label_type") == "match_code":
-                            label["public_url"] = schedule_url_by_match_id.get(
-                                label.get("match_id")
-                            )
-                elif svg_bracket:
-                    for label in svg_bracket["labels"]:
-                        if label.get("label_type") == "match_code" and label.get("match_id"):
+                        if (
+                            label.get("label_type") == "match_code"
+                            and isinstance(label.get("match_id"), int)
+                        ):
                             label["url"] = (
                                 f"{reverse('input_tournament_match_score', kwargs={'code': category.tournament.code, 'match_id': label['match_id']})}"
                                 f"?next={stage_url}"

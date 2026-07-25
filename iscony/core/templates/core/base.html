@@ -307,17 +307,20 @@
         background: #f0f0f0;
     }
 
-    .site-brand {
+    .site-chrome {
         position: sticky;
         top: 0;
         z-index: 30;
+        background: #fff;
+        border-bottom: 1px solid #d8e0ea;
+    }
+
+    .site-brand {
         display: flex;
         align-items: center;
         width: 100%;
-        margin: 0 0 16px;
+        margin: 0;
         padding: 8px 0 10px;
-        background: #fff;
-        border-bottom: 1px solid #d8e0ea;
     }
 
     .site-brand a {
@@ -332,27 +335,34 @@
     }
 
     .site-nav {
-        position: sticky;
-        top: 62px;
-        z-index: 25;
         display: flex;
+        align-items: center;
         flex-wrap: wrap;
-        gap: 8px;
-        margin: 0 0 16px;
-        padding: 8px 0 10px;
+        gap: 6px;
+        justify-content: flex-start;
+        margin: 0 0 8px;
+        padding: 6px 0 6px;
         background: #fff;
         border-bottom: 1px solid #e2e8f0;
+    }
+
+    .site-nav-main {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
     }
 
     .site-nav a {
         display: inline-flex;
         align-items: center;
-        min-height: 32px;
-        padding: 4px 10px;
+        min-height: 30px;
+        padding: 3px 8px;
         border: 1px solid #b8c7dc;
         border-radius: 4px;
         background: #f7fbff;
         color: #111;
+        font-size: 0.95rem;
         font-weight: 700;
         white-space: nowrap;
     }
@@ -360,6 +370,88 @@
     .site-nav a:hover {
         background: #eef5fc;
         border-color: #8fb0d9;
+    }
+
+    .site-menu {
+        position: relative;
+    }
+
+    .site-menu > summary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        min-height: 30px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #f7fbff;
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .site-menu > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .site-menu > summary:hover {
+        background: #eef5fc;
+        border-color: #8fb0d9;
+    }
+
+    .site-menu-icon {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .site-menu-icon span {
+        width: 16px;
+        height: 2px;
+        border-radius: 999px;
+        background: #243041;
+    }
+
+    .site-menu-panel {
+        position: absolute;
+        left: 0;
+        top: calc(100% + 8px);
+        z-index: 40;
+        display: grid;
+        gap: 6px;
+        min-width: 180px;
+        max-width: calc(100vw - 24px);
+        padding: 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    }
+
+    .site-chrome-context {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px 12px;
+        padding: 0 0 6px;
+    }
+
+    .site-chrome-context .page-heading {
+        margin: 0;
+    }
+
+    .site-chrome-context .page-heading h2 {
+        margin: 0 0 2px;
+    }
+
+    .site-chrome-context .page-heading .subtle-text {
+        margin: 0;
+    }
+
+    .stage-kicker {
+        color: #667085;
+        font-size: 0.8rem;
+        font-weight: 500;
     }
 
     .menu {
@@ -618,6 +710,16 @@
         align-items: flex-start;
         gap: 10px;
         margin-bottom: 18px;
+    }
+
+    .page-heading.is-sticky {
+        position: sticky;
+        top: 114px;
+        z-index: 22;
+        margin-bottom: 14px;
+        padding: 8px 0 10px;
+        background: #fff;
+        border-bottom: 1px solid #d8e0ea;
     }
 
     .page-heading h2 {
@@ -935,6 +1037,10 @@
             display: block;
         }
 
+        .page-heading.is-sticky {
+            top: 106px;
+        }
+
         .action-row {
             justify-content: flex-start;
             margin-top: 10px;
@@ -959,30 +1065,58 @@
 </head>
 <body>
 
-<h1 class="site-brand">
-    <a href="{% url 'tournament_list' %}" aria-label="ソフトテニス大会管理">
-        <img src="{% static 'core/images/iscony_v001.png' %}" alt="ソフトテニス大会管理">
-    </a>
-</h1>
+<div class="site-chrome">
+    <h1 class="site-brand">
+        <a href="{% url 'tournament_list' %}" aria-label="ソフトテニス大会管理">
+            <img src="{% static 'core/images/iscony_v001.png' %}" alt="ソフトテニス大会管理">
+        </a>
+    </h1>
 
-{% admin_menu_code as shortcut_code %}
-{% admin_menu_public_token as public_token %}
-{% if shortcut_code %}
-    <nav class="site-nav" aria-label="大会メニュー">
-        {% include "core/_admin_core_links.html" %}
-        <a href="{% url 'tournament_detail' shortcut_code %}">
-            大会詳細
-        </a>
-        {% if public_token %}
-            <a href="{% url 'public_tournament_detail' public_token %}">
-                公開表示
-            </a>
-        {% endif %}
-        <a href="{% url 'maintenance_menu' shortcut_code %}">
-            管理メニュー
-        </a>
-    </nav>
-{% endif %}
+    {% admin_menu_code as shortcut_code %}
+    {% admin_menu_public_token as public_token %}
+    {% if shortcut_code %}
+        <nav class="site-nav" aria-label="大会メニュー">
+            <details class="site-menu">
+                <summary aria-label="その他メニュー">
+                    <span class="site-menu-icon" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </span>
+                </summary>
+                <div class="site-menu-panel">
+                    {% if public_token %}
+                        <a href="{% url 'public_tournament_detail' public_token %}">
+                            公開表示
+                        </a>
+                    {% endif %}
+                    <a href="{% url 'tournament_snapshot_list' shortcut_code %}">
+                        大会スナップショット
+                    </a>
+                    <a href="{% url 'maintenance_menu' shortcut_code %}">
+                        管理メニュー
+                    </a>
+                </div>
+            </details>
+            <div class="site-nav-main">
+                <a href="{% url 'result_input_select' shortcut_code %}">
+                    試合選択
+                </a>
+                <a href="{% url 'reception_match_search' shortcut_code %}?autostart=1#key-search">
+                    QR/キー検索
+                </a>
+                <a href="{% url 'schedule_view' shortcut_code %}">
+                    進行表
+                </a>
+                <a href="{% url 'tournament_detail' shortcut_code %}">
+                    カテゴリ
+                </a>
+            </div>
+        </nav>
+    {% endif %}
+
+    {% block site_chrome_context %}{% endblock %}
+</div>
 
 {% if messages %}
     <div class="messages">

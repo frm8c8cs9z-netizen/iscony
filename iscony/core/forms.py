@@ -607,6 +607,7 @@ class TournamentBracketForm(forms.ModelForm):
             "entry_display_mode",
             "champion_display_mode",
             "champion_text_layout",
+            "svg_split_count",
             "display_order",
         ]
 
@@ -619,6 +620,7 @@ class TournamentBracketForm(forms.ModelForm):
             "entry_display_mode": "参加者表示",
             "champion_display_mode": "優勝者表示",
             "champion_text_layout": "優勝者文字組み",
+            "svg_split_count": "SVG分割数",
             "display_order": "表示順",
         }
 
@@ -626,6 +628,11 @@ class TournamentBracketForm(forms.ModelForm):
             "use_tournament_defaults": (
                 "ONの場合、このトーナメントの表示設定は大会デフォルトを使用します。"
                 "保存時に下の個別表示設定は大会デフォルトへ戻ります。"
+            ),
+            "svg_split_count": (
+                "1なら分割しません。"
+                "2、4、8のような2のべき乗で指定すると、"
+                "SVGを複数ブロックに分けて表示します。"
             ),
         }
 

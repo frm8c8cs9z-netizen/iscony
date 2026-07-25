@@ -36,7 +36,22 @@
 
 {% if round_data %}
 
-    {% if svg_bracket %}
+    {% if svg_brackets %}
+        {% for svg_bracket in svg_brackets %}
+            <h3>
+                {% if svg_bracket.split_role == "winner" %}
+                    {{ svg_bracket.split_role_label|default:"上位トーナメント" }}
+                {% else %}
+                    {{ bracket.name }}{% if svg_brackets|length > 1 %}{{ forloop.counter }}{% endif %}
+                {% endif %}
+            </h3>
+            {% if forloop.first %}
+                {% include "core/_svg_bracket_panel.html" with svg_bracket=svg_bracket aria_label=bracket.name|add:" トーナメント表" wrap_class="svg-bracket-wrap--large-gap" note="下のカード型表示は、試合状態の確認用として残しています。" %}
+            {% else %}
+                {% include "core/_svg_bracket_panel.html" with svg_bracket=svg_bracket aria_label=bracket.name|add:" トーナメント表" wrap_class="svg-bracket-wrap--large-gap" %}
+            {% endif %}
+        {% endfor %}
+    {% elif svg_bracket %}
         {% include "core/_svg_bracket_panel.html" with svg_bracket=svg_bracket aria_label=bracket.name|add:" トーナメント表" wrap_class="svg-bracket-wrap--large-gap" note="下のカード型表示は、試合状態の確認用として残しています。" %}
     {% endif %}
 

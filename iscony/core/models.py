@@ -20,6 +20,14 @@ from .match_keys import (
 )
 
 
+def validate_power_of_two(value):
+    if value < 1:
+        raise ValidationError("分割数は1以上で指定してください。")
+
+    if value & (value - 1):
+        raise ValidationError("分割数は1または2のべき乗で指定してください。")
+
+
 # =========================================================
 # スコアシート
 # =========================================================
@@ -1065,6 +1073,14 @@ class TournamentBracket(models.Model):
         max_length=30,
         choices=ENTRY_DISPLAY_CHOICES,
         default=ENTRY_DISPLAY_INHERIT
+    )
+
+    svg_split_count = models.PositiveIntegerField(
+        default=1,
+        validators=[
+            MinValueValidator(1),
+            validate_power_of_two,
+        ],
     )
 
     class Meta:
