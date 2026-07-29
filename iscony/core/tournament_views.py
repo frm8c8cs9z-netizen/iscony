@@ -1001,7 +1001,10 @@ def _next_svg_line_start(svg, round_number, side, join_x):
     """次ラウンドの入力線まで、現在ラウンドの出口線を伸ばす。"""
 
     if round_number >= svg["round_count"]:
-        final_line_pad = svg.get("final_line_pad", 2)
+        if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
+            final_line_pad = svg["line_pad"]
+        else:
+            final_line_pad = svg.get("final_line_pad", 2)
         return (
             join_x - final_line_pad
             if side == "right"
