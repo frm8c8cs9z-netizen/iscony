@@ -18,13 +18,29 @@
     {% endfor %}
 
     {% for line in svg_bracket.lines %}
-        <line
-            class="{{ line.class }}"
-            x1="{{ line.x1 }}"
-            y1="{{ line.y1 }}"
-            x2="{{ line.x2 }}"
-            y2="{{ line.y2 }}"
-        />
+        {% if line.class == "normal-line" %}
+            <line
+                class="{{ line.class }}"
+                x1="{{ line.x1 }}"
+                y1="{{ line.y1 }}"
+                x2="{{ line.x2 }}"
+                y2="{{ line.y2 }}"
+                {% if line.style %}style="{{ line.style }}"{% endif %}
+            />
+        {% endif %}
+    {% endfor %}
+
+    {% for line in svg_bracket.lines %}
+        {% if line.class == "winner-line" %}
+            <line
+                class="{{ line.class }}"
+                x1="{{ line.x1 }}"
+                y1="{{ line.y1 }}"
+                x2="{{ line.x2 }}"
+                y2="{{ line.y2 }}"
+                {% if line.style %}style="{{ line.style }}"{% endif %}
+            />
+        {% endif %}
     {% endfor %}
 
     {% for label in svg_bracket.labels %}
@@ -36,6 +52,7 @@
                     x="{{ label.x }}"
                     y="{{ label.y }}"
                     text-anchor="{{ label.anchor }}"
+                    {% if label.style %}style="{{ label.style }}"{% endif %}
                     {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
                 >
                     {% if label.lines %}
@@ -58,6 +75,7 @@
                 x="{{ label.x }}"
                 y="{{ label.y }}"
                 text-anchor="{{ label.anchor }}"
+                {% if label.style %}style="{{ label.style }}"{% endif %}
                 {% if label.baseline %}dominant-baseline="{{ label.baseline }}"{% endif %}
             >
                 {% if label.lines %}

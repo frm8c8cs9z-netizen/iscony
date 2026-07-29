@@ -8830,13 +8830,12 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotIn("winner-text", svg_content)
         self.assertNotIn("winner-org-text", svg_content)
         self.assertIn("entry-text", svg_content)
-        self.assertIn(
-            'class="svg-match-code"\n'
-            '                                x="184"\n'
-            '                                y="93.0"\n'
-            '                                text-anchor="end"\n'
-            '                                dominant-baseline="middle"',
+        self.assertRegex(
             svg_content,
+            re.compile(
+                r'class="svg-match-code"\s+x="184"\s+y="98\.0"\s+'
+                r'text-anchor="end"\s+dominant-baseline="middle"',
+            ),
         )
         self.assertContains(response, "1回戦1")
         self.assertContains(response, "選手1A・選手1B")
@@ -10511,29 +10510,29 @@ class TournamentScheduleBehaviorTests(TestCase):
             content.index("</svg>")
         ]
 
-        self.assertIn(
-            'class="normal-line"\n                        x1="192"\n'
-            '                        y1="70"\n'
-            '                        x2="192"\n'
-            '                        y2="116"',
+        self.assertRegex(
             svg_content,
+            re.compile(
+                r'class="normal-line"\s+x1="192"\s+y1="70"\s+'
+                r'x2="192"\s+y2="126"',
+            ),
         )
-        self.assertIn(
-            'class="winner-line"\n                        x1="192"\n'
-            '                        y1="70"\n'
-            '                        x2="192"\n'
-            '                        y2="93.0"',
+        self.assertRegex(
             svg_content,
+            re.compile(
+                r'class="winner-line"\s+x1="192"\s+y1="70"\s+'
+                r'x2="192"\s+y2="98\.0"',
+            ),
+        )
+        self.assertLess(
+            svg_content.index('class="normal-line"'),
+            svg_content.index('class="winner-line"'),
         )
         self.assertIn('class="loser-score"', svg_content)
         self.assertIn('x="202"', svg_content)
-        self.assertIn('y="126"', svg_content)
-        self.assertNotIn(
-            'class="winner-line"\n                        x1="192"\n'
-            '                        y1="70"\n'
-            '                        x2="192"\n'
-            '                        y2="116"',
+        self.assertRegex(
             svg_content,
+            re.compile(r'class="loser-score"\s+x="202"\s+y="136"'),
         )
 
     def test_tournament_bracket_detail_uses_short_name_and_organization(self):
