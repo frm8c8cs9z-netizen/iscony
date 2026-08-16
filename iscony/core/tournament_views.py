@@ -313,6 +313,7 @@ ENTRY_CODE_TEXT_GAP = 12
 ENTRY_TEXT_LINE_GAP = 12
 MATCH_CODE_LABEL_OFFSET_X = 0
 MATCH_CODE_LABEL_OFFSET_Y = 0
+FINAL_MATCH_CODE_LABEL_OFFSET_X = 0
 FINAL_MATCH_CODE_LABEL_OFFSET_Y = 22
 MATCH_SCORE_LABEL_OFFSET_X = 0
 MATCH_SCORE_LABEL_OFFSET_Y = 0
@@ -1027,7 +1028,30 @@ def _append_svg_match_code_label(
         block_anchor="middle-center"):
     """マッチラベルをSVGテキストブロックとして追加する。"""
 
-    spec = _svg_text_block_spec(
+    spec = _svg_match_code_label_spec(
+        match=match,
+        base_x=base_x,
+        base_y=base_y,
+        offset_x=offset_x,
+        offset_y=offset_y,
+        block_anchor=block_anchor,
+    )
+    _append_svg_text_block_label(svg, spec)
+    svg["labels"][-1]["label_type"] = "match_code"
+    svg["labels"][-1]["match_id"] = match.id
+
+
+def _svg_match_code_label_spec(
+        *,
+        match,
+        base_x,
+        base_y,
+        offset_x=MATCH_CODE_LABEL_OFFSET_X,
+        offset_y=MATCH_CODE_LABEL_OFFSET_Y,
+        block_anchor="middle-center"):
+    """マッチラベル用のSVGテキストブロック仕様を返す。"""
+
+    return _svg_text_block_spec(
         lines=_svg_single_text_line(
             match.match_label or match.match_code,
             "svg-match-code",
@@ -1041,9 +1065,6 @@ def _append_svg_match_code_label(
         css_class="svg-match-code",
         url=_tournament_match_score_url(match),
     )
-    _append_svg_text_block_label(svg, spec)
-    svg["labels"][-1]["label_type"] = "match_code"
-    svg["labels"][-1]["match_id"] = match.id
 
 
 def _append_svg_score_label(
@@ -2380,6 +2401,7 @@ def _build_svg_bracket_data(
             match=final_match,
             base_x=center_x,
             base_y=final_y,
+            offset_x=FINAL_MATCH_CODE_LABEL_OFFSET_X,
             offset_y=FINAL_MATCH_CODE_LABEL_OFFSET_Y,
         )
 

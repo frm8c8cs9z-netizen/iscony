@@ -10956,15 +10956,15 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertRegex(
             svg_content,
             re.compile(
-                r'class="normal-line"\s+x1="192"\s+y1="70"\s+'
-                r'x2="192"\s+y2="126"',
+                r'class="normal-line"\s+x1="213"\s+y1="70"\s+'
+                r'x2="213"\s+y2="144"',
             ),
         )
         self.assertRegex(
             svg_content,
             re.compile(
-                r'class="winner-line"\s+x1="192"\s+y1="70"\s+'
-                r'x2="192"\s+y2="98\.0"',
+                r'class="winner-line"\s+x1="213"\s+y1="70"\s+'
+                r'x2="213"\s+y2="107\.0"',
             ),
         )
         self.assertLess(
@@ -10972,10 +10972,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             svg_content.index('class="winner-line"'),
         )
         self.assertIn('class="loser-score"', svg_content)
-        self.assertIn('x="202"', svg_content)
+        self.assertIn('x="223"', svg_content)
         self.assertRegex(
             svg_content,
-            re.compile(r'class="loser-score"\s+x="202"\s+y="136"'),
+            re.compile(r'class="loser-score"\s+x="223"\s+y="154"'),
         )
 
     def test_tournament_bracket_detail_uses_short_name_and_organization(self):
