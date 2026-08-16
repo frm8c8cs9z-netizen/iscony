@@ -84,6 +84,7 @@ class TournamentAdmin(admin.ModelAdmin):
         "default_split_champion_display_mode",
         "default_split_champion_text_layout",
         "default_tournament_score_display_mode",
+        "default_tournament_score_color",
     )
 
     list_filter = (
@@ -93,6 +94,7 @@ class TournamentAdmin(admin.ModelAdmin):
         "default_champion_display_mode",
         "default_champion_text_layout",
         "default_tournament_score_display_mode",
+        "default_tournament_score_color",
         "is_public",
     )
 
@@ -101,12 +103,6 @@ class TournamentAdmin(admin.ModelAdmin):
         "code",
         "public_token",
     )
-
-    list_filter = (
-        "is_public",
-        "start_date",
-    )
-
 
 # =========================================================
 # Category

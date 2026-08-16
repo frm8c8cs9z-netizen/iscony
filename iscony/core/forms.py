@@ -15,6 +15,18 @@ from .models import (
 from .match_keys import normalize_match_key
 
 
+TOURNAMENT_SCORE_COLOR_PRESETS = [
+    {"name": "赤", "value": "#D32F2F"},
+    {"name": "青", "value": "#1B5FBF"},
+    {"name": "緑", "value": "#2E7D32"},
+    {"name": "オレンジ", "value": "#EF6C00"},
+    {"name": "紫", "value": "#6A1B9A"},
+    {"name": "黒", "value": "#222222"},
+]
+
+TOURNAMENT_SCORE_COLOR_DEFAULT = "#D32F2F"
+
+
 class CSVUploadForm(forms.Form):
     file = forms.FileField(required=False)
     reimport_confirm_token = forms.CharField(
@@ -465,6 +477,7 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_split_champion_display_mode",
             "default_split_champion_text_layout",
             "default_tournament_score_display_mode",
+            "default_tournament_score_color",
         ]
 
         labels = {
@@ -478,6 +491,50 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_split_champion_text_layout": "左右表示時の優勝者文字組み",
             "default_tournament_score_display_mode": "トーナメントスコア表示",
         }
+
+        help_texts = {
+            "default_league_entry_display_mode": (
+                "リーグ表、進行表、補助表などでリーグ枠を表示するときの標準形式です。"
+            ),
+            "default_league_score_color_mode": (
+                "リーグ表の勝敗セルに色を付けるかどうかを指定します。"
+            ),
+            "default_tournament_entry_display_mode": (
+                "トーナメント表に参加者名を表示するときの標準形式です。"
+            ),
+            "default_tournament_layout_type": (
+                "新規トーナメントや大会デフォルト使用中のトーナメントに適用されます。"
+            ),
+            "default_single_champion_display_mode": (
+                "片側表示のトーナメントで優勝者を表示するときの標準形式です。"
+            ),
+            "default_single_champion_text_layout": (
+                "片側表示のトーナメントで優勝者名と所属をどう組むかを指定します。"
+            ),
+            "default_split_champion_display_mode": (
+                "左右表示のトーナメントで優勝者を表示するときの標準形式です。"
+            ),
+            "default_split_champion_text_layout": (
+                "左右表示のトーナメントで優勝者名と所属をどう組むかを指定します。"
+            ),
+            "default_tournament_score_display_mode": (
+                "トーナメント表に勝敗ゲーム数を表示する範囲を指定します。"
+            ),
+            "default_tournament_score_color": (
+                "色をクリックして選ぶか、カスタム色を使ってください。"
+            ),
+        }
+
+        widgets = {
+            "default_tournament_score_color": forms.HiddenInput(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.score_color_presets = TOURNAMENT_SCORE_COLOR_PRESETS
+        self.score_color_value = (
+            self.instance.default_tournament_score_color or TOURNAMENT_SCORE_COLOR_DEFAULT
+        )
 
 
 class ScheduleBlockSettingsForm(forms.ModelForm):
@@ -531,36 +588,6 @@ class ScheduleBlockSettingsForm(forms.ModelForm):
             )
 
         return cleaned_data
-
-        help_texts = {
-            "default_league_entry_display_mode": (
-                "リーグ表、進行表、補助表などでリーグ枠を表示するときの標準形式です。"
-            ),
-            "default_league_score_color_mode": (
-                "リーグ表の勝敗セルに色を付けるかどうかを指定します。"
-            ),
-            "default_tournament_entry_display_mode": (
-                "トーナメント表に参加者名を表示するときの標準形式です。"
-            ),
-            "default_tournament_layout_type": (
-                "新規トーナメントや大会デフォルト使用中のトーナメントに適用されます。"
-            ),
-            "default_single_champion_display_mode": (
-                "片側表示のトーナメントで優勝者を表示するときの標準形式です。"
-            ),
-            "default_single_champion_text_layout": (
-                "片側表示のトーナメントで優勝者名と所属をどう組むかを指定します。"
-            ),
-            "default_split_champion_display_mode": (
-                "左右表示のトーナメントで優勝者を表示するときの標準形式です。"
-            ),
-            "default_split_champion_text_layout": (
-                "左右表示のトーナメントで優勝者名と所属をどう組むかを指定します。"
-            ),
-            "default_tournament_score_display_mode": (
-                "トーナメント表に勝敗ゲーム数を表示する範囲を指定します。"
-            ),
-        }
 
 
 class TournamentCloneForm(forms.Form):

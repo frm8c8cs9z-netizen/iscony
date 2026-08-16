@@ -99,6 +99,84 @@
     .muted-text {
         color: #666;
     }
+
+    .score-color-picker {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(3, 28px);
+    }
+
+    .score-color-control {
+        display: inline-block;
+        position: relative;
+    }
+
+    .score-color-open {
+        background: #fff;
+        border: 1px solid #b8c3cf;
+        border-radius: 6px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 38px;
+        padding: 4px;
+        width: 38px;
+    }
+
+    .score-color-open-swatch {
+        border-radius: 4px;
+        display: block;
+        height: 26px;
+        width: 26px;
+    }
+
+    .score-color-panel {
+        background: #fff;
+        border: 1px solid #c9d3df;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        left: 0;
+        margin-top: 6px;
+        padding: 10px;
+        position: absolute;
+        top: 100%;
+        width: 140px;
+        z-index: 20;
+    }
+
+    .score-color-swatch {
+        border: 1px solid #b8c3cf;
+        border-radius: 4px;
+        cursor: pointer;
+        height: 28px;
+        min-width: 28px;
+        padding: 0;
+        width: 28px;
+    }
+
+    .score-color-custom-toggle {
+        background: #fff;
+        border: 1px solid #b8c3cf;
+        border-radius: 4px;
+        cursor: pointer;
+        grid-column: 1 / -1;
+        padding: 5px 10px;
+        width: 100%;
+    }
+
+    .score-color-custom-panel[hidden] {
+        display: none;
+    }
+
+    .score-color-panel[hidden] {
+        display: none;
+    }
+
+    .score-color-open.is-open {
+        outline: 2px solid #1b5fbf;
+        outline-offset: 2px;
+    }
 </style>
 
 <h2>{{ tournament.name }} 大会設定</h2>
@@ -368,6 +446,62 @@
             <td>{{ form.default_tournament_score_display_mode }}</td>
             <td>{{ form.default_tournament_score_display_mode.help_text }}</td>
         </tr>
+        <tr>
+            <td>{{ form.default_tournament_score_color.label_tag }}</td>
+            <td>
+                {{ form.default_tournament_score_color }}
+                <div class="score-color-control" data-score-color-control>
+                    <button
+                        type="button"
+                        class="score-color-open"
+                        data-score-color-current
+                        aria-label="現在の選択色"
+                        title="現在の選択色"
+                    >
+                        <span
+                            class="score-color-open-swatch"
+                            data-score-color-current-swatch
+                        ></span>
+                    </button>
+                    <div class="score-color-panel" data-score-color-panel hidden>
+                        <div class="score-color-picker" data-score-color-picker>
+                            {% for preset in form.score_color_presets %}
+                                <button
+                                    type="button"
+                                    class="score-color-swatch"
+                                    data-score-color-swatch
+                                    data-color="{{ preset.value }}"
+                                    title="{{ preset.name }}"
+                                    aria-label="{{ preset.name }}"
+                                    style="background: {{ preset.value }};"
+                                ></button>
+                            {% endfor %}
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <button
+                                type="button"
+                                class="score-color-custom-toggle"
+                                data-score-color-custom-toggle
+                            >
+                                カスタム
+                            </button>
+                            <span
+                                class="score-color-custom-panel"
+                                data-score-color-custom-panel
+                                hidden
+                            >
+                                <input
+                                    type="color"
+                                    value="{{ form.score_color_value }}"
+                                    data-score-color-custom-input
+                                >
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </td>
+            <td>{{ form.default_tournament_score_color.help_text }}</td>
+        </tr>
     </table>
 
     <h4>トーナメント表示サンプル</h4>
@@ -510,5 +644,77 @@
         管理メニューへ戻る
     </a>
 </p>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const root = document.querySelector("[data-score-color-control]");
+    if (!root) {
+        return;
+    }
+
+    const hiddenInput = root.parentElement.querySelector(
+        'input[name="default_tournament_score_color"]'
+    );
+    const currentButton = root.querySelector("[data-score-color-current]");
+    const currentSwatch = root.querySelector(
+        "[data-score-color-current-swatch]"
+    );
+    const panel = root.querySelector("[data-score-color-panel]");
+    const customPanel = root.querySelector("[data-score-color-custom-panel]");
+    const customToggle = root.querySelector("[data-score-color-custom-toggle]");
+    const customInput = root.querySelector("[data-score-color-custom-input]");
+    const swatches = Array.from(root.querySelectorAll("[data-score-color-swatch]"));
+
+    const applyColor = (value) => {
+        const normalized = (value || "#D32F2F").toUpperCase();
+        hiddenInput.value = normalized;
+        currentButton.style.backgroundColor = normalized;
+        currentSwatch.style.backgroundColor = normalized;
+        customInput.value = normalized;
+    };
+
+    const closePanel = () => {
+        panel.hidden = true;
+        customPanel.hidden = true;
+        currentButton.classList.remove("is-open");
+    };
+
+    currentButton.addEventListener("click", () => {
+        panel.hidden = !panel.hidden;
+        customPanel.hidden = true;
+        currentButton.classList.toggle("is-open", !panel.hidden);
+    });
+
+    swatches.forEach((swatch) => {
+        swatch.addEventListener("click", () => {
+            applyColor(swatch.dataset.color || "#D32F2F");
+            closePanel();
+        });
+    });
+
+    customToggle.addEventListener("click", () => {
+        customPanel.hidden = false;
+        customInput.click();
+    });
+
+    customInput.addEventListener("input", () => {
+        applyColor(customInput.value || "#D32F2F");
+    });
+
+    customInput.addEventListener("change", () => {
+        applyColor(customInput.value || "#D32F2F");
+        closePanel();
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!root.contains(event.target)) {
+            closePanel();
+        }
+    });
+
+    const currentValue = (hiddenInput.value || "#D32F2F").toUpperCase();
+    applyColor(currentValue);
+});
+</script>
 
 {% endblock %}

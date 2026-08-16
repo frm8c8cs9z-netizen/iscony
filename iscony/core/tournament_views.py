@@ -229,6 +229,15 @@ def _tournament_match_score_url(match):
     )
 
 
+def _tournament_stage_overview_url(match):
+    """トーナメント試合から戻るStage進行URLを返す。"""
+
+    return (
+        f"{reverse('category_stage_overview', kwargs={'category_id': match.bracket.category.id})}"
+        f"#stage-{match.bracket.stage.id}"
+    )
+
+
 def _svg_entry_with_org(entry):
     """SVG内に表示する短い名前＋所属名を返す。"""
 
@@ -240,7 +249,7 @@ def _is_unresolved_advancement_entry(entry):
 
     return (
         entry
-        and not entry.participant_id
+        and not getattr(entry, "participant_id", None)
         and hasattr(entry, "advancement_source")
     )
 
@@ -276,11 +285,13 @@ def _make_svg_winner_placeholder(label, placeholder_id):
 
     return SimpleNamespace(
         id=placeholder_id,
+        participant_id=None,
         display_name=label,
         short_name=label,
         display_organization="",
         slot_label=label,
         svg_label_mode="winner-placeholder",
+        advancement_source=None,
     )
 
 
@@ -289,7 +300,159 @@ CHAMPION_ORIENTATION_VERTICAL = "vertical"
 CHAMPION_ORIENTATION_NONE = "none"
 CHAMPION_LINE_HEIGHT = 16
 CHAMPION_VERTICAL_COLUMN_GAP = 18
+CHAMPION_VERTICAL_TOP_PADDING = 0
+CHAMPION_VERTICAL_BOTTOM_PADDING = 6
+CHAMPION_SPLIT_VERTICAL_BOTTOM_PADDING = 10
+CHAMPION_SPLIT_VERTICAL_OFFSET = 30
 CHAMPION_HORIZONTAL_PADDING = 6
+CHAMPION_SINGLE_HORIZONTAL_OFFSET_X = 4
+CHAMPION_SINGLE_VERTICAL_OFFSET_X = 16
+ENTRY_LINE_HEIGHT = 18
+ENTRY_BLOCK_MIN_HEIGHT = ENTRY_LINE_HEIGHT
+ENTRY_CODE_TEXT_GAP = 12
+ENTRY_TEXT_LINE_GAP = 12
+MATCH_CODE_LABEL_OFFSET_X = 0
+MATCH_CODE_LABEL_OFFSET_Y = 0
+FINAL_MATCH_CODE_LABEL_OFFSET_Y = 22
+MATCH_SCORE_LABEL_OFFSET_X = 0
+MATCH_SCORE_LABEL_OFFSET_Y = 0
+
+
+def _svg_text_block_dimensions(
+        lines,
+        *,
+        line_height=CHAMPION_LINE_HEIGHT,
+        padding_x=0,
+        padding_y=0):
+    """SVG上の複数行テキストのブロック寸法を返す。"""
+
+    width = _estimate_svg_champion_width(lines)
+    height = max(0, (len(lines) - 1) * line_height)
+
+    return (
+        width + (padding_x * 2),
+        height + (padding_y * 2),
+    )
+
+
+def _svg_vertical_text_block_dimensions(
+        lines,
+        *,
+        padding_top=CHAMPION_VERTICAL_TOP_PADDING,
+        padding_bottom=CHAMPION_VERTICAL_BOTTOM_PADDING):
+    """縦書きSVGテキストのブロック寸法を返す。"""
+
+    block_width = (
+        (len(lines) - 1) * CHAMPION_VERTICAL_COLUMN_GAP
+    ) if len(lines) > 1 else 0
+    text_height = max(
+        [
+            _estimate_svg_vertical_text_height(line["text"])
+            for line in lines
+        ],
+        default=0,
+    )
+
+    return (
+        block_width,
+        text_height + padding_top + padding_bottom,
+        text_height,
+    )
+
+
+def _svg_vertical_block_bounds(
+        *,
+        x,
+        y,
+        lines,
+        block_anchor,
+        padding_top=CHAMPION_VERTICAL_TOP_PADDING,
+        padding_bottom=CHAMPION_VERTICAL_BOTTOM_PADDING):
+    """縦書きテキストブロックの配置範囲を返す。"""
+
+    block_width, block_height, text_height = (
+        _svg_vertical_text_block_dimensions(
+            lines,
+            padding_top=padding_top,
+            padding_bottom=padding_bottom,
+        )
+    )
+    horizontal_span = _svg_vertical_block_horizontal_span(lines)
+    left, top = _svg_block_anchor_origin(
+        x,
+        y,
+        block_width,
+        block_height,
+        block_anchor,
+    )
+
+    return {
+        "x": x,
+        "y": y,
+        "left": left,
+        "top": top,
+        "right": left + horizontal_span,
+        "bottom": top + block_height,
+        "width": block_width,
+        "height": block_height,
+        "text_height": text_height,
+    }
+
+
+def _svg_vertical_block_horizontal_span(
+        lines,
+        *,
+        column_gap=CHAMPION_VERTICAL_COLUMN_GAP):
+    """縦書きテキストブロックの横方向占有幅を返す。"""
+
+    if not lines:
+        return 0
+
+    column_width = max(
+        [
+            _estimate_svg_vertical_column_width(line["text"])
+            for line in lines
+        ],
+        default=0,
+    )
+
+    return ((len(lines) - 1) * column_gap) + column_width
+
+
+def _svg_vertical_block_lines(
+        lines,
+        x,
+        y,
+        *,
+        block_anchor,
+        padding_top=CHAMPION_VERTICAL_TOP_PADDING,
+        padding_bottom=CHAMPION_VERTICAL_BOTTOM_PADDING,
+        column_gap=CHAMPION_VERTICAL_COLUMN_GAP):
+    """縦書きテキストブロックの各列座標を返す。"""
+
+    if not lines:
+        return []
+
+    bounds = _svg_vertical_block_bounds(
+        x=x,
+        y=y,
+        lines=lines,
+        block_anchor=block_anchor,
+        padding_top=padding_top,
+        padding_bottom=padding_bottom,
+    )
+    base_y = bounds["top"] + padding_top + bounds["text_height"]
+    start_x = bounds["left"] + bounds["width"]
+
+    return [
+        {
+            "text": line["text"],
+            "class": line["class"],
+            "x": start_x - (index * column_gap),
+            "y": base_y,
+        }
+        for index, line in enumerate(lines)
+    ]
 
 
 def _resolve_svg_champion_display_mode(bracket, layout_type):
@@ -359,63 +522,688 @@ def _svg_champion_text_lines(entry, bracket, layout_type=None):
     ]
 
 
+def _single_layout_champion_anchor_point(svg, final_match):
+    """片山表示の優勝者ラベル基準位置を返す。"""
+
+    position = svg["match_positions"].get(("left", final_match.id))
+
+    if not position:
+        return None
+
+    join_x = (
+        svg["side_margin"]
+        + svg["number_width"]
+        + svg["entry_gap"]
+        + svg["name_width"]
+        + ENTRY_TEXT_LINE_GAP
+        + svg["shoulder"]
+        + ((final_match.round_number - 1) * svg["round_gap"])
+    )
+    advance_x = _next_svg_line_start(
+        svg,
+        final_match.round_number,
+        "left",
+        join_x,
+    )
+
+    return {
+        "advance_x": advance_x,
+        "center_y": position["center_y"],
+    }
+
+
+def _single_layout_champion_bounds(
+        svg,
+        final_match,
+        lines,
+        champion_orientation):
+    """片山表示の優勝者ブロックの配置と占有範囲を返す。"""
+
+    anchor_point = _single_layout_champion_anchor_point(
+        svg,
+        final_match,
+    )
+
+    if not anchor_point:
+        return None
+
+    if champion_orientation == CHAMPION_ORIENTATION_HORIZONTAL:
+        spec = _svg_text_block_spec(
+            lines=lines,
+            orientation=champion_orientation,
+            base_x=anchor_point["advance_x"],
+            base_y=anchor_point["center_y"],
+            offset_x=CHAMPION_SINGLE_HORIZONTAL_OFFSET_X,
+            block_anchor="middle-left",
+            line_height=CHAMPION_LINE_HEIGHT,
+            padding_x=CHAMPION_HORIZONTAL_PADDING,
+        )
+    else:
+        spec = _svg_text_block_spec(
+            lines=lines,
+            orientation=champion_orientation,
+            base_x=anchor_point["advance_x"],
+            base_y=anchor_point["center_y"],
+            offset_x=CHAMPION_SINGLE_VERTICAL_OFFSET_X,
+            block_anchor="middle-center",
+        )
+
+    return spec["bounds"]
+
+
+def _svg_champion_block_spec(
+        *,
+        svg,
+        bracket,
+        final_match,
+        final_y=None,
+        center_x=None):
+    """優勝者表示ブロックの描画仕様を返す。"""
+
+    winner = final_match.winner
+
+    if not winner:
+        return None
+
+    lines = _svg_champion_text_lines(
+        winner,
+        bracket,
+        svg["layout_type"],
+    )
+
+    if not _svg_champion_line_text(lines):
+        return None
+
+    champion_orientation = _resolve_svg_champion_orientation(
+        bracket,
+        svg["layout_type"],
+    )
+
+    if champion_orientation == CHAMPION_ORIENTATION_NONE:
+        return None
+
+    if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
+        bounds = _single_layout_champion_bounds(
+            svg,
+            final_match,
+            lines,
+            champion_orientation,
+        )
+
+        if not bounds:
+            return None
+
+        return {
+            "lines": lines,
+            "orientation": champion_orientation,
+            "bounds": bounds,
+            "block_anchor": (
+                "middle-center"
+                if champion_orientation == CHAMPION_ORIENTATION_VERTICAL
+                else "middle-left"
+            ),
+            "line_height": CHAMPION_LINE_HEIGHT,
+            "minimum_height": 0,
+            "padding_top": CHAMPION_VERTICAL_TOP_PADDING,
+            "padding_bottom": CHAMPION_VERTICAL_BOTTOM_PADDING,
+            "css_class": (
+                ""
+                if champion_orientation == CHAMPION_ORIENTATION_VERTICAL
+                else "champion-text"
+            ),
+            "class_map": {
+                "": "champion-vertical-text",
+                "champion-org-text": "champion-org-vertical-text",
+            },
+            "anchor": "middle",
+            "baseline": "middle",
+            "url": "",
+            "style": None,
+            "line": None,
+        }
+
+    if final_y is None or center_x is None:
+        return None
+
+    line_top = final_y - 34
+    line = {
+        "x1": center_x,
+        "y1": final_y,
+        "x2": center_x,
+        "y2": line_top,
+        "class": "winner-line",
+    }
+
+    if champion_orientation == CHAMPION_ORIENTATION_VERTICAL:
+        block_anchor = "bottom-center"
+        block_spec = _svg_text_block_spec(
+            lines=lines,
+            orientation=champion_orientation,
+            base_x=center_x,
+            base_y=line_top,
+            offset_y=-CHAMPION_SPLIT_VERTICAL_OFFSET,
+            block_anchor=block_anchor,
+            padding_bottom=CHAMPION_SPLIT_VERTICAL_BOTTOM_PADDING,
+            class_map={
+                "": "champion-vertical-text",
+                "champion-org-text": "champion-org-vertical-text",
+            },
+            anchor="middle",
+            baseline=None,
+        )
+    else:
+        block_anchor = "bottom-center"
+        block_spec = _svg_text_block_spec(
+            lines=lines,
+            orientation=champion_orientation,
+            base_x=center_x,
+            base_y=line_top,
+            offset_y=-12,
+            block_anchor=block_anchor,
+            line_height=CHAMPION_LINE_HEIGHT,
+            css_class="champion-text",
+        )
+
+    block_spec["line"] = line
+
+    return block_spec
+
+
 def _svg_champion_line_text(lines):
     """複数行指定から1行表示用の文字列を返す。"""
 
     return lines[0]["text"] if lines else ""
 
 
-def _svg_champion_multiline_label(lines, x, center_y):
-    """複数行テキストを中央基準のSVGラベルへ変換する。"""
+def _svg_entry_text_lines(entry, entry_display_mode, *, include_slot_label=False):
+    """参加者表示用のテキスト行を返す。"""
+
+    lines = _svg_display_lines(
+        entry,
+        mode=entry_display_mode,
+    )
+
+    if include_slot_label and lines:
+        lines = copy.deepcopy(lines)
+        lines[0]["text"] = f"{entry.slot_label} {lines[0]['text']}"
+
+    return lines
+
+
+def _svg_entry_block_lines(entry, entry_display_mode):
+    """参加者表示のブロック行データを返す。"""
+
+    if _is_unresolved_advancement_entry(entry):
+        return _svg_single_text_line(
+            entry.display_name,
+            "advancement-source-text",
+        )
+
+    return _svg_entry_text_lines(
+        entry,
+        entry_display_mode,
+    )
+
+
+def _svg_entry_block_dimensions(entry, entry_display_mode):
+    """参加者表示ブロックの寸法を返す。"""
+
+    return _svg_horizontal_text_block_dimensions(
+        _svg_entry_block_lines(entry, entry_display_mode),
+        line_height=ENTRY_LINE_HEIGHT,
+        minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
+    )
+
+
+def _svg_entry_block_anchor_y(entry, base_y):
+    """参加者表示ブロックのY基準を返す。"""
+
+    if _is_unresolved_advancement_entry(entry):
+        return base_y + 14
+
+    return base_y + 2
+
+
+def _svg_entry_block_spec(
+        *,
+        entry,
+        entry_display_mode,
+        side,
+        x,
+        base_y):
+    """参加者表示ブロックの描画仕様を返す。"""
+
+    lines = _svg_entry_block_lines(
+        entry,
+        entry_display_mode,
+    )
+    return _svg_text_block_spec(
+        lines=lines,
+        orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+        base_x=x,
+        base_y=base_y,
+        offset_y=_svg_entry_block_anchor_y(entry, 0),
+        block_anchor=_svg_side_block_anchor(side),
+        line_height=ENTRY_LINE_HEIGHT,
+        minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
+        css_class=(
+            "advancement-source-text"
+            if _is_unresolved_advancement_entry(entry)
+            else ""
+        ),
+    )
+
+
+def _append_svg_entry_block_label(
+        svg,
+        *,
+        entry,
+        entry_display_mode,
+        side,
+        x,
+        base_y):
+    """参加者表示ブロックをSVGへ追加する。"""
+
+    spec = _svg_entry_block_spec(
+        entry=entry,
+        entry_display_mode=entry_display_mode,
+        side=side,
+        x=x,
+        base_y=base_y,
+    )
+
+    _append_svg_text_block_label(svg, spec)
+
+
+def _svg_single_text_line(text, css_class=""):
+    """単一テキストをブロック表示用の行データへ変換する。"""
+
+    return [{
+        "text": text,
+        "class": css_class,
+    }]
+
+
+def _svg_block_anchor_origin(x, y, width, height, anchor):
+    """ブロックの基準点を左上座標へ変換する。"""
+
+    if anchor == "top-left":
+        return x, y
+    if anchor == "top-center":
+        return x - (width / 2), y
+    if anchor == "top-right":
+        return x - width, y
+    if anchor == "middle-left":
+        return x, y - (height / 2)
+    if anchor == "middle-center":
+        return x - (width / 2), y - (height / 2)
+    if anchor == "middle-right":
+        return x - width, y - (height / 2)
+    if anchor == "bottom-left":
+        return x, y - height
+    if anchor == "bottom-center":
+        return x - (width / 2), y - height
+    if anchor == "bottom-right":
+        return x - width, y - height
+
+    return x, y
+
+
+def _svg_horizontal_text_block_dimensions(
+        lines,
+        *,
+        line_height,
+        minimum_height=0,
+        padding_x=0,
+        padding_y=0):
+    """横書きテキストブロックの寸法を返す。"""
+
+    width = max(
+        [_estimate_svg_text_width(line["text"]) for line in lines],
+        default=0,
+    )
+    height = max(
+        minimum_height,
+        (len(lines) - 1) * line_height,
+    )
+
+    return (
+        width + (padding_x * 2),
+        height + (padding_y * 2),
+    )
+
+
+def _svg_horizontal_block_bounds(
+        *,
+        x,
+        y,
+        lines,
+        block_anchor,
+        line_height,
+        minimum_height=0,
+        padding_x=0,
+        padding_y=0):
+    """横書きテキストブロックの配置範囲を返す。"""
+
+    width, height = _svg_horizontal_text_block_dimensions(
+        lines,
+        line_height=line_height,
+        minimum_height=minimum_height,
+        padding_x=padding_x,
+        padding_y=padding_y,
+    )
+    left, top = _svg_block_anchor_origin(
+        x,
+        y,
+        width,
+        height,
+        block_anchor,
+    )
+
+    return {
+        "x": x,
+        "y": y,
+        "left": left,
+        "top": top,
+        "right": left + width,
+        "bottom": top + height,
+        "width": width,
+        "height": height,
+    }
+
+
+def _svg_text_block_spec(
+        *,
+        lines,
+        orientation,
+        base_x,
+        base_y,
+        block_anchor,
+        offset_x=0,
+        offset_y=0,
+        line_height=CHAMPION_LINE_HEIGHT,
+        minimum_height=0,
+        padding_x=0,
+        padding_y=0,
+        padding_top=CHAMPION_VERTICAL_TOP_PADDING,
+        padding_bottom=CHAMPION_VERTICAL_BOTTOM_PADDING,
+        css_class="",
+        class_map=None,
+        anchor=None,
+        baseline="middle",
+        url="",
+        style=None):
+    """基準点・アンカー・オフセットからSVGテキストブロック仕様を作る。
+
+    base_x/base_y はトーナメント線の始点・終点・交点などの基準位置。
+    offset_x/offset_y は、その基準位置から表示ブロックのアンカーを
+    どれだけずらして置くかを表す。参加者、優勝者、マッチラベル、
+    得失ゲーム数などのブロック種別ごとの微調整値として使う。
+    """
+
+    x = base_x + offset_x
+    y = base_y + offset_y
+
+    if orientation == CHAMPION_ORIENTATION_VERTICAL:
+        bounds = _svg_vertical_block_bounds(
+            x=x,
+            y=y,
+            lines=lines,
+            block_anchor=block_anchor,
+            padding_top=padding_top,
+            padding_bottom=padding_bottom,
+        )
+    else:
+        bounds = _svg_horizontal_block_bounds(
+            x=x,
+            y=y,
+            lines=lines,
+            block_anchor=block_anchor,
+            line_height=line_height,
+            minimum_height=minimum_height,
+            padding_x=padding_x,
+            padding_y=padding_y,
+        )
+
+    return {
+        "lines": lines,
+        "orientation": orientation,
+        "bounds": bounds,
+        "block_anchor": block_anchor,
+        "line_height": line_height,
+        "minimum_height": minimum_height,
+        "padding_top": padding_top,
+        "padding_bottom": padding_bottom,
+        "css_class": css_class,
+        "class_map": class_map or {},
+        "anchor": anchor,
+        "baseline": baseline,
+        "url": url,
+        "style": style,
+    }
+
+
+def _append_svg_text_block_label(svg, spec):
+    """テキストブロック仕様に従ってSVGラベルを追加する。"""
+
+    if spec["orientation"] == CHAMPION_ORIENTATION_VERTICAL:
+        _append_svg_vertical_block_label(
+            svg,
+            x=spec["bounds"]["x"],
+            y=spec["bounds"]["y"],
+            lines=spec["lines"],
+            block_anchor=spec["block_anchor"],
+            anchor=spec["anchor"] or "middle",
+            baseline=spec["baseline"],
+            padding_top=spec["padding_top"],
+            padding_bottom=spec["padding_bottom"],
+            class_map=spec["class_map"],
+        )
+        return
+
+    _append_svg_horizontal_block_label(
+        svg,
+        x=spec["bounds"]["x"],
+        y=spec["bounds"]["y"],
+        lines=spec["lines"],
+        block_anchor=spec["block_anchor"],
+        css_class=spec["css_class"],
+        url=spec["url"],
+        style=spec["style"],
+        baseline=spec["baseline"],
+        line_height=spec["line_height"],
+        minimum_height=spec["minimum_height"],
+    )
+
+
+def _append_svg_match_code_label(
+        svg,
+        *,
+        match,
+        base_x,
+        base_y,
+        offset_x=0,
+        offset_y=0,
+        block_anchor="middle-center"):
+    """マッチラベルをSVGテキストブロックとして追加する。"""
+
+    spec = _svg_text_block_spec(
+        lines=_svg_single_text_line(
+            match.match_label or match.match_code,
+            "svg-match-code",
+        ),
+        orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+        base_x=base_x,
+        base_y=base_y,
+        offset_x=offset_x,
+        offset_y=offset_y,
+        block_anchor=block_anchor,
+        css_class="svg-match-code",
+        url=_tournament_match_score_url(match),
+    )
+    _append_svg_text_block_label(svg, spec)
+    svg["labels"][-1]["label_type"] = "match_code"
+    svg["labels"][-1]["match_id"] = match.id
+
+
+def _append_svg_score_label(
+        svg,
+        *,
+        match,
+        text,
+        base_x,
+        base_y,
+        offset_x=MATCH_SCORE_LABEL_OFFSET_X,
+        offset_y=MATCH_SCORE_LABEL_OFFSET_Y,
+        block_anchor="middle-center"):
+    """得失ゲーム数をSVGテキストブロックとして追加する。"""
+
+    spec = _svg_text_block_spec(
+        lines=_svg_single_text_line(text, "loser-score"),
+        orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+        base_x=base_x,
+        base_y=base_y,
+        offset_x=offset_x,
+        offset_y=offset_y,
+        block_anchor=block_anchor,
+        css_class="loser-score",
+        style=_resolve_svg_score_text_style(match.bracket),
+        baseline=None,
+    )
+    _append_svg_text_block_label(svg, spec)
+
+
+def _svg_text_anchor_for_block_anchor(block_anchor):
+    """ブロックアンカーから SVG の text-anchor を決める。"""
+
+    if block_anchor.endswith("left"):
+        return "start"
+    if block_anchor.endswith("right"):
+        return "end"
+
+    return "middle"
+
+
+def _svg_side_block_anchor(side):
+    """トーナメント左右の参加者ブロックアンカーを返す。"""
+
+    return "middle-left" if side == "right" else "middle-right"
+
+
+def _svg_side_text_anchor(side):
+    """トーナメント左右の text-anchor を返す。"""
+
+    return "start" if side == "right" else "end"
+
+
+def _svg_multiline_block_lines(
+        lines,
+        x,
+        anchor_y,
+        *,
+        block_anchor,
+        line_height,
+        minimum_height=0,
+        padding_x=0,
+        padding_y=0):
+    """横書きテキストブロックの各行座標を返す。"""
 
     if len(lines) <= 1:
         return []
 
-    start_y = center_y - (((len(lines) - 1) * CHAMPION_LINE_HEIGHT) / 2)
+    _, start_y = _svg_block_anchor_origin(
+        x,
+        anchor_y,
+        *_svg_horizontal_text_block_dimensions(
+            lines,
+            line_height=line_height,
+            minimum_height=minimum_height,
+            padding_x=padding_x,
+            padding_y=padding_y,
+        ),
+        block_anchor,
+    )
 
     return [
         {
             "text": line["text"],
             "class": line["class"],
-            "y": start_y + (index * CHAMPION_LINE_HEIGHT),
+            "y": start_y + (index * line_height),
         }
         for index, line in enumerate(lines)
     ]
 
 
-def _add_svg_champion_vertical_labels(
+def _append_svg_horizontal_block_label(
         svg,
+        *,
+        x,
+        y,
+        lines,
+        block_anchor,
+        css_class="",
+        url="",
+        style=None,
+        baseline="middle",
+        line_height=CHAMPION_LINE_HEIGHT,
+        minimum_height=0):
+    """横書きテキストブロックを1つの SVG ラベルとして追加する。"""
+
+    svg["labels"].append({
+        "x": x,
+        "y": y,
+        "text": lines[0]["text"] if lines else "",
+        "lines": _svg_multiline_block_lines(
+            lines,
+            x,
+            y,
+            block_anchor=block_anchor,
+            line_height=line_height,
+            minimum_height=minimum_height,
+        ),
+        "class": css_class or (lines[0]["class"] if lines else ""),
+        "anchor": _svg_text_anchor_for_block_anchor(block_anchor),
+        "baseline": baseline,
+        "url": url,
+        "style": style,
+    })
+
+
+def _append_svg_vertical_block_label(
+        svg,
+        *,
+        x,
+        y,
+        lines,
+        block_anchor,
+        anchor="middle",
+        baseline=None,
+        padding_top=CHAMPION_VERTICAL_TOP_PADDING,
+        padding_bottom=CHAMPION_VERTICAL_BOTTOM_PADDING,
+        class_map=None):
+    """縦書きテキストブロックを SVG ラベル群として追加する。"""
+
+    block_lines = _svg_vertical_block_lines(
         lines,
         x,
         y,
-        anchor,
-        baseline=None):
-    """縦書き優勝者表示を必要に応じて複数列で追加する。"""
+        block_anchor=block_anchor,
+        padding_top=padding_top,
+        padding_bottom=padding_bottom,
+    )
 
-    if len(lines) <= 1:
+    if baseline == "middle" and block_anchor == "middle-center":
+        for line in block_lines:
+            line["y"] = y - padding_bottom
+
+    class_map = class_map or {}
+
+    for line in block_lines:
         svg["labels"].append({
-            "x": x,
-            "y": y,
-            "text": _svg_champion_line_text(lines),
-            "class": "champion-vertical-text",
-            "anchor": anchor,
-            "baseline": baseline,
-            "url": "",
-        })
-        return
-
-    start_x = x + (((len(lines) - 1) * CHAMPION_VERTICAL_COLUMN_GAP) / 2)
-
-    for index, line in enumerate(lines):
-        svg["labels"].append({
-            "x": start_x - (index * CHAMPION_VERTICAL_COLUMN_GAP),
-            "y": y,
+            "x": line["x"],
+            "y": line["y"],
             "text": line["text"],
-            "class": (
-                "champion-org-vertical-text"
-                if line["class"] == "champion-org-text"
-                else "champion-vertical-text"
-            ),
+            "class": class_map.get(line["class"], line["class"]),
             "anchor": anchor,
             "baseline": baseline,
             "url": "",
@@ -442,10 +1230,22 @@ def _estimate_svg_text_width(text):
     return width
 
 
-def _estimate_svg_name_width(round_data, entry_display_mode):
-    """番号列を除いた選手名表示幅をトーナメント内の文字から概算する。"""
+def _estimate_svg_vertical_column_width(text):
+    """縦書き1列の横方向占有幅を概算する。"""
 
-    texts = []
+    if not text:
+        return 0
+
+    return max(
+        [_estimate_svg_text_width(char) for char in text],
+        default=0,
+    )
+
+
+def _estimate_svg_name_width(round_data, entry_display_mode):
+    """参加者表示ブロックの最大幅を返す。"""
+
+    widths = []
 
     for round_item in round_data:
         for match in round_item["matches"]:
@@ -456,22 +1256,44 @@ def _estimate_svg_name_width(round_data, entry_display_mode):
                 if not entry:
                     continue
 
-                for line in build_entry_display_lines(
-                        entry,
-                        mode=entry_display_mode):
-                    texts.append(line["text"])
+                block_width, _ = _svg_entry_block_dimensions(
+                    entry,
+                    entry_display_mode,
+                )
+                widths.append(block_width)
 
-    if not texts:
+    if not widths:
         return 160
 
+    return max(widths)
+
+
+def _estimate_svg_number_width(round_data):
+    """エントリーコード表示幅をトーナメント内の文字から概算する。"""
+
+    labels = []
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in (
+                _svg_match_display_entry(match, "pair1"),
+                _svg_match_display_entry(match, "pair2"),
+            ):
+                if not entry or not getattr(entry, "slot_label", ""):
+                    continue
+                labels.append(str(entry.slot_label))
+
+    if not labels:
+        return 24
+
     estimated_width = max(
-        _estimate_svg_text_width(text)
-        for text in texts
+        _estimate_svg_text_width(label)
+        for label in labels
     )
 
     return min(
-        max(estimated_width + 16, 120),
-        230,
+        max(estimated_width + 8, 24),
+        56,
     )
 
 
@@ -492,7 +1314,7 @@ def _estimate_svg_row_gap(round_data, entry_display_mode):
                 max_lines = max(
                     max_lines,
                     len(
-                        build_entry_display_lines(
+                        _svg_display_lines(
                             entry,
                             mode=entry_display_mode,
                         )
@@ -645,20 +1467,6 @@ def _svg_display_lines(entry, *, mode):
     return lines
 
 
-def _svg_line_positions(center_y, line_count, line_gap=18):
-    """行数に応じて、ブロック中心からの文字行位置を返す。"""
-
-    if line_count <= 0:
-        return []
-
-    start_y = center_y - (((line_count - 1) * line_gap) / 2)
-
-    return [
-        start_y + (index * line_gap)
-        for index in range(line_count)
-    ]
-
-
 def _build_split_winner_round_data(round_data, split_count, bracket_name):
     """分割後半の上位トーナメント用の回戦データを作る。"""
 
@@ -731,119 +1539,21 @@ def _build_split_winner_round_data(round_data, split_count, bracket_name):
 def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
     """決勝入力後に優勝者名をSVGへ追加する。"""
 
-    winner = final_match.winner
-
-    if not winner:
-        return
-
-    text_lines = _svg_champion_text_lines(
-        winner,
-        bracket,
-        svg["layout_type"],
-    )
-    text = _svg_champion_line_text(text_lines)
-
-    if not text:
-        return
-
-    champion_orientation = _resolve_svg_champion_orientation(
-        bracket,
-        svg["layout_type"],
+    spec = _svg_champion_block_spec(
+        svg=svg,
+        bracket=bracket,
+        final_match=final_match,
+        final_y=final_y,
+        center_x=center_x,
     )
 
-    if champion_orientation == CHAMPION_ORIENTATION_NONE:
+    if not spec:
         return
 
-    position = svg["match_positions"].get(("left", final_match.id))
-    join_x = (
-        svg["side_margin"]
-        + svg["name_width"]
-        + svg["shoulder"]
-        + ((final_match.round_number - 1) * svg["round_gap"])
-    )
-    advance_x = _next_svg_line_start(
-        svg,
-        final_match.round_number,
-        "left",
-        join_x,
-    )
+    if spec["line"]:
+        svg["lines"].append(spec["line"])
 
-    if champion_orientation == CHAMPION_ORIENTATION_VERTICAL:
-        if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
-            _add_svg_champion_vertical_labels(
-                svg,
-                text_lines,
-                advance_x + 10,
-                final_y,
-                "middle",
-                baseline="middle",
-            )
-            return
-
-        line_x = center_x
-        line_top = final_y - 34
-        svg["lines"].append({
-            "x1": line_x,
-            "y1": final_y,
-            "x2": line_x,
-            "y2": line_top,
-            "class": "winner-line",
-        })
-        _add_svg_champion_vertical_labels(
-            svg,
-            text_lines,
-            line_x,
-            line_top - 24,
-            "middle",
-        )
-        return
-
-    if svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT:
-        line_top = final_y - 34
-        label_center_y = (
-            line_top
-            - 8
-            - (((len(text_lines) - 1) * CHAMPION_LINE_HEIGHT) / 2)
-        )
-        svg["lines"].append({
-            "x1": center_x,
-            "y1": final_y,
-            "x2": center_x,
-            "y2": line_top,
-            "class": "winner-line",
-        })
-        svg["labels"].append({
-            "x": center_x,
-            "y": label_center_y,
-            "text": text,
-            "lines": _svg_champion_multiline_label(
-                text_lines,
-                center_x,
-                label_center_y,
-            ),
-            "class": "champion-text",
-            "anchor": "middle",
-            "baseline": "middle",
-            "url": "",
-        })
-        return
-
-    if not position:
-        return
-    svg["labels"].append({
-        "x": advance_x + 10,
-        "y": position["center_y"],
-        "text": text,
-        "lines": _svg_champion_multiline_label(
-            text_lines,
-            advance_x + 10,
-            position["center_y"],
-        ),
-        "class": "champion-text",
-        "anchor": "start",
-        "baseline": "middle",
-        "url": "",
-    })
+    _append_svg_text_block_label(svg, spec)
 
 
 def _svg_match_y_positions(round_number, index, row_gap, top):
@@ -874,16 +1584,19 @@ def _build_svg_match_positions(round_items, row_gap, top):
         return positions
 
     for match in round_items[0]["matches"]:
-        if match.pair1 and match.pair2:
+        display_pair1 = _svg_match_display_entry(match, "pair1")
+        display_pair2 = _svg_match_display_entry(match, "pair2")
+
+        if display_pair1 and display_pair2:
             y1 = top + (row_index * row_gap)
             row_index += 1
             y2 = top + (row_index * row_gap)
             row_index += 1
-        elif match.pair1:
+        elif display_pair1:
             y1 = top + (row_index * row_gap)
             y2 = y1
             row_index += 1
-        elif match.pair2:
+        elif display_pair2:
             y2 = top + (row_index * row_gap)
             y1 = y2
             row_index += 1
@@ -1015,15 +1728,30 @@ def _next_svg_line_start(svg, round_number, side, join_x):
         svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
         and round_number == svg["round_count"] - 1
     ):
-        # 両山表示では、最終ラウンドの一つ前に出る中央向きの短い横線を
-        # 一旦描画しないようにして、原因切り分けをしやすくする。
+        # 両山表示の「最終ラウンドの一つ前」は、片山表示の準決勝で使う
+        # 左右それぞれの立ち上がり横線に相当する。
+        #
+        # ただし現在の SVG では、両山表示の中央には決勝用の横線を別に描いており、
+        # このラウンドの出口線まで描くと、中央に不要な短い横線
+        # （join_x から次ラウンド join_x までの stub）が残って見た目が崩れる。
+        #
+        # そのため両山表示では、このラウンドの出口線は「長さ 0」として扱い、
+        # ここでは join_x をそのまま返す。
+        #
+        # 注意:
+        # - 片山表示ではこの線は必要なので消してはいけない
+        # - 両山表示でも、もっと前のラウンドの横線は必要
+        # - この条件を広げると、準決勝より前の接続や上位トーナメントの足が壊れやすい
         return join_x
 
     if side == "right":
         next_join_x = (
             svg["width"]
             - svg["side_margin"]
+            - svg["number_width"]
+            - svg["entry_gap"]
             - svg["name_width"]
+            - ENTRY_TEXT_LINE_GAP
             - svg["shoulder"]
             - (round_number * svg["round_gap"])
         )
@@ -1031,7 +1759,10 @@ def _next_svg_line_start(svg, round_number, side, join_x):
 
     next_join_x = (
         svg["side_margin"]
+        + svg["number_width"]
+        + svg["entry_gap"]
         + svg["name_width"]
+        + ENTRY_TEXT_LINE_GAP
         + svg["shoulder"]
         + (round_number * svg["round_gap"])
     )
@@ -1068,6 +1799,7 @@ def _add_svg_match(svg, match, *, round_number, side, index):
     round_gap = svg["round_gap"]
     name_width = svg["name_width"]
     number_width = svg["number_width"]
+    entry_gap = svg["entry_gap"]
     shoulder = svg["shoulder"]
     line_pad = svg["line_pad"]
 
@@ -1089,29 +1821,48 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         first_join_x = (
             svg["width"]
             - svg["side_margin"]
+            - number_width
+            - entry_gap
             - name_width
+            - ENTRY_TEXT_LINE_GAP
             - shoulder
         )
         join_x = first_join_x - ((round_number - 1) * round_gap)
         line_start = join_x if round_number > 1 else join_x + shoulder
-        entry_x = svg["width"] - svg["side_margin"]
-        number_x = entry_x
-        name_x = svg["width"] - svg["side_margin"] - name_width + 8
-        number_anchor = "end"
-        text_anchor = "start"
-        code_anchor = "start"
+        number_x = svg["width"] - svg["side_margin"] - number_width
+        text_x = (
+            svg["width"]
+            - svg["side_margin"]
+            - number_width
+            - entry_gap
+            - name_width
+        )
+        number_anchor = _svg_side_text_anchor(side)
+        text_anchor = _svg_side_text_anchor(side)
+        code_anchor = _svg_side_text_anchor(side)
         code_x = join_x + 8
         score_x = join_x - 10
     else:
-        first_join_x = svg["side_margin"] + name_width + shoulder
+        first_join_x = (
+            svg["side_margin"]
+            + number_width
+            + entry_gap
+            + name_width
+            + ENTRY_TEXT_LINE_GAP
+            + shoulder
+        )
         join_x = first_join_x + ((round_number - 1) * round_gap)
         line_start = join_x if round_number > 1 else join_x - shoulder
-        entry_x = svg["side_margin"]
-        number_x = entry_x
-        name_x = svg["side_margin"] + name_width - 8
-        number_anchor = "start"
-        text_anchor = "end"
-        code_anchor = "end"
+        number_x = svg["side_margin"] + number_width
+        text_x = (
+            svg["side_margin"]
+            + number_width
+            + entry_gap
+            + name_width
+        )
+        number_anchor = _svg_side_text_anchor(side)
+        text_anchor = _svg_side_text_anchor(side)
+        code_anchor = _svg_side_text_anchor(side)
         code_x = join_x - 8
         score_x = join_x + 10
 
@@ -1122,22 +1873,27 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         join_x,
     )
 
-    match_url = _tournament_match_score_url(match)
+    display_pair1 = _svg_match_display_entry(match, "pair1")
+    display_pair2 = _svg_match_display_entry(match, "pair2")
 
     if not match.match_code.startswith("S"):
-        svg["labels"].append({
-            "x": code_x,
-            "y": center_y,
-            "text": match.match_label or match.match_code,
-            "class": "svg-match-code",
-            "anchor": code_anchor,
-            "baseline": "middle",
-            "url": match_url,
-            "label_type": "match_code",
-            "match_id": match.id,
-        })
-    for side_name, y in [("pair1", y1), ("pair2", y2)]:
-        entry = getattr(match, side_name)
+        _append_svg_match_code_label(
+            svg,
+            match=match,
+            base_x=code_x,
+            base_y=center_y,
+            offset_x=MATCH_CODE_LABEL_OFFSET_X,
+            offset_y=MATCH_CODE_LABEL_OFFSET_Y,
+            block_anchor=(
+                "middle-right"
+                if code_anchor == "end"
+                else "middle-left"
+            ),
+        )
+    for side_name, y, entry in [
+        ("pair1", y1, display_pair1),
+        ("pair2", y2, display_pair2),
+    ]:
 
         if not entry:
             continue
@@ -1152,36 +1908,33 @@ def _add_svg_match(svg, match, *, round_number, side, index):
         first_match_id = svg["first_entry_match_ids"].get(entry.id)
         show_entry_text = first_match_id == match.id if first_match_id else True
 
-        if show_entry_text and _is_unresolved_advancement_entry(entry):
-            svg["labels"].append({
-                "x": name_x,
-                "y": y + 5,
-                "text": entry.display_name,
-                "class": "advancement-source-text",
-                "anchor": text_anchor,
-                "url": "",
-            })
-        elif show_entry_text:
-            svg["labels"].append({
-                "x": number_x,
-                "y": y + 5,
-                "text": entry.slot_label,
-                "class": "seed-code",
-                "anchor": number_anchor,
-                "url": "",
-            })
-            for line_index, line in enumerate(
-                    build_entry_display_lines(
-                        entry,
-                        mode=svg["entry_display_mode"])):
+        if show_entry_text:
+            if _is_unresolved_advancement_entry(entry):
+                _append_svg_entry_block_label(
+                    svg,
+                    entry=entry,
+                    entry_display_mode=svg["entry_display_mode"],
+                    side=side,
+                    x=text_x,
+                    base_y=y,
+                )
+            else:
                 svg["labels"].append({
-                    "x": name_x,
-                    "y": y - 7 + (line_index * 18),
-                    "text": line["text"],
-                    "class": line["class"],
-                    "anchor": text_anchor,
+                    "x": number_x,
+                    "y": y + 5,
+                    "text": entry.slot_label,
+                    "class": "seed-code",
+                    "anchor": number_anchor,
                     "url": "",
                 })
+                _append_svg_entry_block_label(
+                    svg,
+                    entry=entry,
+                    entry_display_mode=svg["entry_display_mode"],
+                    side=side,
+                    x=text_x,
+                    base_y=y,
+                )
 
         if line_start != join_x:
             svg["lines"].append({
@@ -1200,21 +1953,19 @@ def _add_svg_match(svg, match, *, round_number, side, index):
 
         if score:
             score_y = y - 4 if y <= center_y else y + 10
-            svg["labels"].append({
-                "x": score_x,
-                "y": score_y,
-                "text": score,
-                "class": "loser-score",
-                "style": _resolve_svg_score_text_style(match.bracket),
-                "anchor": "middle",
-                "url": "",
-            })
+            _append_svg_score_label(
+                svg,
+                match=match,
+                text=score,
+                base_x=score_x,
+                base_y=score_y,
+            )
 
     should_draw_vertical = (
         y1 != y2
         and (
             round_number > 1
-            or (match.pair1 and match.pair2)
+            or (display_pair1 and display_pair2)
         )
     )
 
@@ -1240,22 +1991,25 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                 "class": "winner-line",
             })
 
-    svg["lines"].append({
-        "x1": join_x,
-        "y1": center_y,
-        "x2": advance_x,
-        "y2": center_y,
-        "class": "normal-line",
-    })
+    should_draw_advance_line = abs(advance_x - join_x) > 0.01
 
-    if _should_highlight_svg_advance(match, svg):
+    if should_draw_advance_line:
         svg["lines"].append({
             "x1": join_x,
             "y1": center_y,
             "x2": advance_x,
             "y2": center_y,
-            "class": "winner-line",
+            "class": "normal-line",
         })
+
+        if _should_highlight_svg_advance(match, svg):
+            svg["lines"].append({
+                "x1": join_x,
+                "y1": center_y,
+                "x2": advance_x,
+                "y2": center_y,
+                "class": "winner-line",
+            })
 
 
 def _build_svg_bracket_data(
@@ -1286,7 +2040,8 @@ def _build_svg_bracket_data(
         if forced_layout_type is not None
         else _effective_svg_layout_type(bracket, round_data)
     )
-    number_width = 24
+    number_width = _estimate_svg_number_width(round_data)
+    entry_gap = ENTRY_CODE_TEXT_GAP
     shoulder = 44
     line_pad = 30
     final_half_width = 60
@@ -1415,7 +2170,14 @@ def _build_svg_bracket_data(
     height = max(220, int(max_position_y + top))
 
     if layout_type == TournamentBracket.LAYOUT_SINGLE:
-        first_join_x = side_margin + name_width + shoulder
+        first_join_x = (
+            side_margin
+            + number_width
+            + entry_gap
+            + name_width
+            + ENTRY_TEXT_LINE_GAP
+            + shoulder
+        )
         width = (
             first_join_x
             + ((round_count - 1) * round_gap)
@@ -1427,33 +2189,38 @@ def _build_svg_bracket_data(
 
         if final_matches and final_matches[0].winner and show_champion_label:
             final_match = final_matches[0]
-            champion_lines = _svg_champion_text_lines(
-                final_match.winner,
-                bracket,
-            )
-            champion_orientation = _resolve_svg_champion_orientation(
-                bracket,
-                layout_type,
-            )
-            champion_x = (
-                first_join_x
-                + ((final_match.round_number - 1) * round_gap)
-                + line_pad
-                + 10
+            champion_spec = _svg_champion_block_spec(
+                svg={
+                    "side_margin": side_margin,
+                    "number_width": number_width,
+                    "entry_gap": entry_gap,
+                    "name_width": name_width,
+                    "shoulder": shoulder,
+                    "round_gap": round_gap,
+                    "round_count": round_count,
+                    "layout_type": layout_type,
+                    "line_pad": line_pad,
+                    "match_positions": match_positions,
+                },
+                bracket=bracket,
+                final_match=final_match,
             )
 
-            if (
-                champion_orientation == CHAMPION_ORIENTATION_HORIZONTAL
-            ):
+            if champion_spec:
                 width = max(
                     width,
-                    champion_x
-                    + _estimate_svg_champion_width(champion_lines)
-                    + side_margin,
+                    champion_spec["bounds"]["right"] + side_margin,
                 )
     else:
         side_rounds = max(round_count - 1, 1)
-        first_join_x = side_margin + name_width + shoulder
+        first_join_x = (
+            side_margin
+            + number_width
+            + entry_gap
+            + name_width
+            + ENTRY_TEXT_LINE_GAP
+            + shoulder
+        )
         side_width = (
             first_join_x
             + ((side_rounds - 1) * round_gap)
@@ -1479,25 +2246,25 @@ def _build_svg_bracket_data(
             if (
                 champion_orientation == CHAMPION_ORIENTATION_HORIZONTAL
             ):
-                champion_block_width = (
-                    _estimate_svg_champion_width(champion_lines)
-                    + (CHAMPION_HORIZONTAL_PADDING * 2)
-                    + 12
+                champion_block_width, _ = _svg_text_block_dimensions(
+                    champion_lines,
+                    padding_x=CHAMPION_HORIZONTAL_PADDING,
                 )
                 width = max(
-                width,
+                    width,
                     (side_width * 2) + champion_block_width,
                 )
 
     svg = {
-        "width": int(width),
-        "height": int(height),
+        "width": math.ceil(width),
+        "height": math.ceil(height),
         "top": top,
         "row_gap": row_gap,
         "round_gap": round_gap,
         "side_margin": side_margin,
         "name_width": name_width,
         "number_width": number_width,
+        "entry_gap": entry_gap,
         "shoulder": shoulder,
         "line_pad": line_pad,
         "final_half_width": final_half_width,
@@ -1528,7 +2295,7 @@ def _build_svg_bracket_data(
 
         final_matches = round_data[-1]["matches"]
 
-        if final_matches:
+        if final_matches and show_champion_label:
             final_match = final_matches[0]
             final_position = match_positions.get(("left", final_match.id))
 
@@ -1590,29 +2357,31 @@ def _build_svg_bracket_data(
         )
         left_pre_final_join_x = (
             svg["side_margin"]
+            + svg["number_width"]
+            + svg["entry_gap"]
             + svg["name_width"]
+            + ENTRY_TEXT_LINE_GAP
             + svg["shoulder"]
             + (pre_final_round_index * svg["round_gap"])
         )
         right_pre_final_join_x = (
             svg["width"]
             - svg["side_margin"]
+            - svg["number_width"]
+            - svg["entry_gap"]
             - svg["name_width"]
+            - ENTRY_TEXT_LINE_GAP
             - svg["shoulder"]
             - (pre_final_round_index * svg["round_gap"])
         )
 
-        svg["labels"].append({
-            "x": center_x,
-            "y": final_y + 22,
-            "text": final_match.match_label or final_match.match_code,
-            "class": "svg-match-code",
-            "anchor": "middle",
-            "baseline": "middle",
-            "url": _tournament_match_score_url(final_match),
-            "label_type": "match_code",
-            "match_id": final_match.id,
-        })
+        _append_svg_match_code_label(
+            svg,
+            match=final_match,
+            base_x=center_x,
+            base_y=final_y,
+            offset_y=FINAL_MATCH_CODE_LABEL_OFFSET_Y,
+        )
 
         for entry, y, side_name in [
             (final_match.pair1, final_y - 6, "pair1"),
@@ -1626,31 +2395,44 @@ def _build_svg_bracket_data(
             )
             if should_show_entry:
                 if _is_unresolved_advancement_entry(entry):
+                    unresolved_lines = _svg_single_text_line(
+                        entry.display_name,
+                        "advancement-source-text",
+                    )
+                    unresolved_anchor_y = y + 9
+                    _append_svg_horizontal_block_label(
+                        svg,
+                        x=center_x,
+                        y=unresolved_anchor_y,
+                        lines=unresolved_lines,
+                        block_anchor="middle-center",
+                        css_class="advancement-source-text",
+                        line_height=ENTRY_LINE_HEIGHT,
+                        minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
+                    )
+                else:
                     svg["labels"].append({
                         "x": center_x,
-                        "y": y,
-                        "text": entry.display_name,
-                        "class": "advancement-source-text",
+                        "y": y + 1,
+                        "text": entry.slot_label,
+                        "class": "seed-code",
                         "anchor": "middle",
                         "url": "",
                     })
-                else:
-                    for line_index, line in enumerate(
-                            build_entry_display_lines(
-                                entry,
-                                mode=svg["entry_display_mode"])):
-                        svg["labels"].append({
-                            "x": center_x,
-                            "y": y + (line_index * 18),
-                            "text": (
-                                line["text"]
-                                if line_index
-                                else f"{entry.slot_label} {line['text']}"
-                            ),
-                            "class": line["class"],
-                            "anchor": "middle",
-                            "url": "",
-                        })
+                    entry_lines = _svg_entry_text_lines(
+                        entry,
+                        svg["entry_display_mode"],
+                    )
+                    entry_anchor_y = y + 9
+                    _append_svg_horizontal_block_label(
+                        svg,
+                        x=center_x,
+                        y=entry_anchor_y,
+                        lines=entry_lines,
+                        block_anchor="middle-center",
+                        line_height=ENTRY_LINE_HEIGHT,
+                        minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
+                    )
 
             score = (
                 _entry_score_text(final_match, side_name)
@@ -1664,15 +2446,13 @@ def _build_svg_bracket_data(
                     if side_name == "pair1"
                     else right_pre_final_join_x - 8
                 )
-                svg["labels"].append({
-                    "x": score_x,
-                    "y": final_y - 8,
-                    "text": score,
-                    "class": "loser-score",
-                    "style": _resolve_svg_score_text_style(final_match.bracket),
-                    "anchor": "middle",
-                    "url": "",
-                })
+                _append_svg_score_label(
+                    svg,
+                    match=final_match,
+                    text=score,
+                    base_x=score_x,
+                    base_y=final_y - 8,
+                )
 
         if layout_type == TournamentBracket.LAYOUT_SPLIT:
             _add_svg_champion_label(
@@ -1686,12 +2466,25 @@ def _build_svg_bracket_data(
         normal_line_half_width = 1
         winner_line_half_width = 2
 
-        left_final_x = (
-            left_pre_final_join_x - normal_line_half_width
-        )
-        right_final_x = (
-            right_pre_final_join_x + normal_line_half_width
-        )
+        if layout_type == TournamentBracket.LAYOUT_SPLIT:
+            # 両山表示の中央決勝線は、この線そのものが最終ラウンドの接続になる。
+            #
+            # 片山表示の準決勝で使う「立ち上がり横線」に相当する見え方は、
+            # 両山表示では不要で、端点を外側へはみ出させると中央に短い stub
+            # が残ってしまう。ここは交点ちょうどで止める。
+            #
+            # 注意:
+            # - 片山表示では別の線として必要なので、この条件を広げない
+            # - 両山表示で毎回問題になるのは、この中央決勝線の端点側
+            left_final_x = left_pre_final_join_x
+            right_final_x = right_pre_final_join_x
+        else:
+            left_final_x = (
+                left_pre_final_join_x - normal_line_half_width
+            )
+            right_final_x = (
+                right_pre_final_join_x + normal_line_half_width
+            )
         svg["lines"].append({
             "x1": left_final_x,
             "y1": final_y,
@@ -1703,20 +2496,40 @@ def _build_svg_bracket_data(
 
         if final_match.winner_id:
             if final_match.winner_id == final_match.pair1_id:
+                winner_x1 = (
+                    left_pre_final_join_x
+                    if layout_type == TournamentBracket.LAYOUT_SPLIT
+                    else left_pre_final_join_x - winner_line_half_width
+                )
+                winner_x2 = (
+                    center_x
+                    if layout_type == TournamentBracket.LAYOUT_SPLIT
+                    else center_x + winner_line_half_width
+                )
                 svg["lines"].append({
-                    "x1": left_pre_final_join_x - winner_line_half_width,
+                    "x1": winner_x1,
                     "y1": final_y,
-                    "x2": center_x + winner_line_half_width,
+                    "x2": winner_x2,
                     "y2": final_y,
                     "class": "winner-line",
                     "style": "stroke-linecap: butt;",
                 })
 
             if final_match.winner_id == final_match.pair2_id:
+                winner_x1 = (
+                    center_x
+                    if layout_type == TournamentBracket.LAYOUT_SPLIT
+                    else center_x - winner_line_half_width
+                )
+                winner_x2 = (
+                    right_pre_final_join_x
+                    if layout_type == TournamentBracket.LAYOUT_SPLIT
+                    else right_pre_final_join_x + winner_line_half_width
+                )
                 svg["lines"].append({
-                    "x1": center_x - winner_line_half_width,
+                    "x1": winner_x1,
                     "y1": final_y,
-                    "x2": right_pre_final_join_x + winner_line_half_width,
+                    "x2": winner_x2,
                     "y2": final_y,
                     "class": "winner-line",
                     "style": "stroke-linecap: butt;",
@@ -1818,7 +2631,7 @@ def build_tournament_bracket_display_data(bracket):
             svg_bracket = _build_svg_bracket_data(
                 bracket,
                 block_round_data,
-                show_champion_label=False,
+                show_champion_label=True,
             )
 
             if not svg_bracket:
@@ -1833,7 +2646,7 @@ def build_tournament_bracket_display_data(bracket):
             winner_layout_type = (
                 TournamentBracket.LAYOUT_SINGLE
                 if len(split_round_data) == 2
-                else None
+                else TournamentBracket.LAYOUT_SPLIT
             )
             winner_svg_bracket = _build_svg_bracket_data(
                 bracket,
@@ -1939,6 +2752,11 @@ def input_tournament_match_score(request, code, match_id):
         match.match_games // 2
     ) + 1
 
+    back_url = request.GET.get(
+        "next",
+        _tournament_stage_overview_url(match),
+    )
+
     if request.method == "POST":
 
         action = request.POST.get("action")
@@ -1954,16 +2772,7 @@ def input_tournament_match_score(request, code, match_id):
                     match=match,
                     winning_games=winning_games,
                     mode="tournament",
-                    back_url=request.GET.get(
-                        "next",
-                        reverse(
-                            "tournament_bracket_detail",
-                            kwargs={
-                                "code": tournament.code,
-                                "bracket_id": match.bracket.id,
-                            }
-                        )
-                    ),
+                    back_url=back_url,
                     error=error,
                 )
 
@@ -1976,9 +2785,8 @@ def input_tournament_match_score(request, code, match_id):
 
             return redirect_next_or_default(
                 request,
-                "tournament_bracket_detail",
-                code=tournament.code,
-                bracket_id=match.bracket.id
+                "category_stage_overview",
+                category_id=match.bracket.category.id,
             )
 
         if not match.pair1_id or not match.pair2_id:
@@ -1988,16 +2796,7 @@ def input_tournament_match_score(request, code, match_id):
                 match=match,
                 winning_games=winning_games,
                 mode="tournament",
-                back_url=request.GET.get(
-                    "next",
-                    reverse(
-                        "tournament_bracket_detail",
-                        kwargs={
-                            "code": tournament.code,
-                            "bracket_id": match.bracket.id,
-                        }
-                    )
-                ),
+                back_url=back_url,
                 error="対戦相手が確定していないため、この試合の結果は入力できません。",
             )
 
@@ -2020,16 +2819,7 @@ def input_tournament_match_score(request, code, match_id):
                     match=match,
                     winning_games=winning_games,
                     mode="tournament",
-                    back_url=request.GET.get(
-                        "next",
-                        reverse(
-                            "tournament_bracket_detail",
-                            kwargs={
-                                "code": tournament.code,
-                                "bracket_id": match.bracket.id,
-                            }
-                        )
-                    ),
+                    back_url=back_url,
                     error=error,
                 )
 
@@ -2041,9 +2831,8 @@ def input_tournament_match_score(request, code, match_id):
                 return redirect(next_url)
 
             return redirect(
-                "tournament_bracket_detail",
-                code=tournament.code,
-                bracket_id=match.bracket.id,
+                "category_stage_overview",
+                category_id=match.bracket.category.id,
             )
 
         try:
@@ -2069,16 +2858,7 @@ def input_tournament_match_score(request, code, match_id):
                     match=match,
                     winning_games=winning_games,
                     mode="tournament",
-                    back_url=request.GET.get(
-                        "next",
-                        reverse(
-                            "tournament_bracket_detail",
-                            kwargs={
-                                "code": tournament.code,
-                                "bracket_id": match.bracket.id,
-                            }
-                        )
-                    ),
+                    back_url=back_url,
                     error=error,
                 )
 
@@ -2090,16 +2870,7 @@ def input_tournament_match_score(request, code, match_id):
                 match=match,
                 winning_games=winning_games,
                 mode="tournament",
-                back_url=request.GET.get(
-                    "next",
-                    reverse(
-                        "tournament_bracket_detail",
-                        kwargs={
-                            "code": tournament.code,
-                            "bracket_id": match.bracket.id,
-                        }
-                    )
-                ),
+                back_url=back_url,
                 error="ゲーム数を入力してください。",
             )
 
@@ -2116,16 +2887,7 @@ def input_tournament_match_score(request, code, match_id):
                 match=match,
                 winning_games=winning_games,
                 mode="tournament",
-                back_url=request.GET.get(
-                    "next",
-                    reverse(
-                        "tournament_bracket_detail",
-                        kwargs={
-                            "code": tournament.code,
-                            "bracket_id": match.bracket.id,
-                        }
-                    )
-                ),
+                back_url=back_url,
                 error=error,
             )
 
@@ -2142,16 +2904,7 @@ def input_tournament_match_score(request, code, match_id):
                 match=match,
                 winning_games=winning_games,
                 mode="tournament",
-                back_url=request.GET.get(
-                    "next",
-                    reverse(
-                        "tournament_bracket_detail",
-                        kwargs={
-                            "code": tournament.code,
-                            "bracket_id": match.bracket.id,
-                        }
-                    )
-                ),
+                back_url=back_url,
                 error=error,
             )
 
@@ -2163,9 +2916,8 @@ def input_tournament_match_score(request, code, match_id):
             return redirect(next_url)
 
         return redirect(
-            "tournament_bracket_detail",
-            code=tournament.code,
-            bracket_id=match.bracket.id
+            "category_stage_overview",
+            category_id=match.bracket.category.id,
         )
 
     return render_score_input(
@@ -2174,16 +2926,7 @@ def input_tournament_match_score(request, code, match_id):
         match=match,
         winning_games=winning_games,
         mode="tournament",
-        back_url=request.GET.get(
-            "next",
-            reverse(
-                "tournament_bracket_detail",
-                kwargs={
-                    "code": tournament.code,
-                    "bracket_id": match.bracket.id,
-                }
-            )
-        )
+        back_url=back_url,
     )
 
 

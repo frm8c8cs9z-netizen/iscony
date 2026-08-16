@@ -94,6 +94,7 @@ def clone_tournament_without_results(source, *, name, code):
             default_single_champion_display_mode=source.default_single_champion_display_mode,
             default_split_champion_display_mode=source.default_split_champion_display_mode,
             default_tournament_score_display_mode=source.default_tournament_score_display_mode,
+            default_tournament_score_color=source.default_tournament_score_color,
             default_champion_text_layout=source.default_champion_text_layout,
             default_single_champion_text_layout=source.default_single_champion_text_layout,
             default_split_champion_text_layout=source.default_split_champion_text_layout,
@@ -288,6 +289,11 @@ def clone_tournament_without_results(source, *, name, code):
                 TournamentMatch.objects.filter(
                     id=new_next.id,
                 ).update(**update)
+
+        for bracket in TournamentBracket.objects.filter(
+            category__tournament=clone,
+        ):
+            advance_tournament_bye_winners(bracket)
 
         sources = AdvancementSource.objects.filter(
             Q(target_league_entry__category__tournament=source)

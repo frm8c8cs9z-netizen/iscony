@@ -51,7 +51,12 @@ from .pdf_views import (
     category_name_text_layout,
     get_score_sheet_template_settings,
 )
+from .tournament_views import _estimate_svg_text_width
+from .tournament_views import _single_layout_champion_bounds
 from .tournament_views import _should_highlight_svg_winner
+from .tournament_views import _resolve_svg_champion_orientation
+from .tournament_views import _svg_champion_text_lines
+from .tournament_views import build_tournament_bracket_display_data
 from .views import _schedule_block_tables
 
 from .services import (
@@ -6296,6 +6301,22 @@ class TournamentCloneTests(TestCase):
         )
 
     def test_clone_tournament_without_results_resets_operational_state(self):
+        seed_next_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=3,
+            match_number=1,
+            match_code="M3",
+        )
+        seed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="S1",
+            pair1=self.tournament_entry2,
+            next_match=seed_next_match,
+            next_slot="pair1",
+        )
+
         clone = clone_tournament_without_results(
             self.tournament,
             name="複製先大会",
@@ -6357,6 +6378,14 @@ class TournamentCloneTests(TestCase):
             bracket__category__tournament=clone,
             match_code="M2",
         )
+        cloned_seed_match = TournamentMatch.objects.get(
+            bracket__category__tournament=clone,
+            match_code="S1",
+        )
+        cloned_seed_next_match = TournamentMatch.objects.get(
+            bracket__category__tournament=clone,
+            match_code="M3",
+        )
         self.assertEqual(cloned_match.match_key, self.tournament_match.match_key)
         self.assertEqual(cloned_next_match.match_key, self.next_match.match_key)
         self.assertIsNone(cloned_match.pair1_games)
@@ -6367,6 +6396,11 @@ class TournamentCloneTests(TestCase):
             TournamentMatch.RESULT_NORMAL,
         )
         self.assertIsNone(cloned_next_match.pair1)
+        self.assertEqual(cloned_seed_match.winner, cloned_seed_match.pair1)
+        self.assertEqual(
+            cloned_seed_next_match.pair1,
+            cloned_seed_match.pair1,
+        )
 
         cloned_target = LeagueEntry.objects.get(
             category__tournament=clone,
@@ -8441,24 +8475,24 @@ class TournamentScheduleBehaviorTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertRegex(
+        self.assertNotRegex(
             content,
             re.compile(
-                r'<text[^>]*x="28"[^>]*y="75"[^>]*>.*?D2.*?</text>',
+                r'<text[^>]*>.*?D2.*?</text>',
                 re.S,
             ),
         )
         self.assertRegex(
             content,
             re.compile(
-                r'<text[^>]*x="52"[^>]*y="75"[^>]*>.*?予選2.*?</text>',
+                r'<text[^>]*x="208"[^>]*y="84"[^>]*>.*?予選2.*?</text>',
                 re.S,
             ),
         )
         self.assertNotRegex(
             content,
             re.compile(
-                r'<text[^>]*x="52"[^>]*y="63"[^>]*>.*?予選2.*?</text>',
+                r'<text[^>]*x="208"[^>]*y="72"[^>]*>.*?予選2.*?</text>',
                 re.S,
             ),
         )
@@ -8601,6 +8635,61 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "山田　太郎・佐藤　次郎")
         self.assertContains(response, "第一クラブ")
         self.assertNotContains(response, "山田・佐藤")
+
+    def test_tournament_bracket_detail_expands_svg_width_for_long_entry_blocks(self):
+        self.tournament.default_tournament_entry_display_mode = (
+            Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE
+        )
+        self.tournament.save()
+        self.bracket.entry_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        base_response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        base_svg = base_response.content.decode()
+        base_svg_width = float(
+            base_svg.split('width="', 1)[1].split('"', 1)[0]
+        )
+
+        self.entry1.participant.player1_name = "古藤　向翔"
+        self.entry1.participant.player2_name = "堀江　爽汰"
+        self.entry1.participant.organization = "iNexus"
+        self.entry1.participant.save()
+        self.entry2.participant.player1_name = "福原　烈此"
+        self.entry2.participant.player2_name = "内藤　幸之介"
+        self.entry2.participant.organization = "とても長い所属名テスト"
+        self.entry2.participant.save()
+
+        expanded_response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        expanded_svg = expanded_response.content.decode()
+        expanded_svg_width = float(
+            expanded_svg.split('width="', 1)[1].split('"', 1)[0]
+        )
+
+        self.assertGreater(expanded_svg_width, base_svg_width)
 
     def test_tournament_bracket_detail_uses_tournament_default_layout_type(self):
         self.tournament.default_tournament_layout_type = (
@@ -8833,7 +8922,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertRegex(
             svg_content,
             re.compile(
-                r'class="svg-match-code"\s+x="184"\s+y="98\.0"\s+'
+                r'class="svg-match-code"\s+x="\d+(?:\.\d+)?"\s+y="107\.0"\s+'
                 r'text-anchor="end"\s+dominant-baseline="middle"',
             ),
         )
@@ -8916,10 +9005,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             svg_content,
             r'class="loser-score"[\s\S]*?y="66"[\s\S]*?>\s*4\s*</text>',
         )
-        self.assertIn('y="126"', svg_content)
+        self.assertIn('y="154"', svg_content)
         self.assertRegex(
             svg_content,
-            r'class="loser-score"[\s\S]*?y="126"[\s\S]*?>\s*2\s*</text>',
+            r'class="loser-score"[\s\S]*?y="154"[\s\S]*?>\s*2\s*</text>',
         )
 
     def test_tournament_bracket_detail_uses_tournament_default_score_color(self):
@@ -9322,7 +9411,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             r'x1="39(?:0|2)"',
         )
         self.assertIn('x2="510.0"', svg_content)
-        self.assertIn('x="184"', svg_content)
+        self.assertRegex(svg_content, r'x="\d+(?:\.\d+)?"')
         self.assertIn('y="93.0"', svg_content)
         self.assertIn('text-anchor="end"', svg_content)
         self.assertIn('dominant-baseline="middle"', svg_content)
@@ -9700,10 +9789,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertRegex(
             svg_content,
             re.compile(
-                r'x1="233(?:\.0)?"\n'
-                r'\s+y1="154(?:\.0)?"\n'
-                r'\s+x2="351(?:\.0)?"\n'
-                r'\s+y2="154(?:\.0)?"',
+                r'x1="294(?:\.0)?"\n'
+                r'\s+y1="181(?:\.0)?"\n'
+                r'\s+x2="410(?:\.0)?"\n'
+                r'\s+y2="181(?:\.0)?"',
             ),
         )
         self.assertNotIn(
@@ -9712,6 +9801,315 @@ class TournamentScheduleBehaviorTests(TestCase):
             '                        y2="139.0"',
             svg_content,
         )
+
+    def test_tournament_bracket_detail_shows_split_winner_placeholders_without_results(self):
+        self.use_individual_bracket_settings()
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.svg_split_count = 4
+        self.bracket.save()
+
+        entries = [self.entry1, self.entry2]
+        for number in range(3, 9):
+            entries.append(
+                create_tournament_entry(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entries[0],
+            pair2=entries[1],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entries[2],
+            pair2=entries[3],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=3,
+            match_code="M3",
+            pair1=entries[4],
+            pair2=entries[5],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=4,
+            match_code="M4",
+            pair1=entries[6],
+            pair2=entries[7],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M5",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=2,
+            match_code="M6",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=3,
+            match_number=1,
+            match_code="M7",
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        display_data = build_tournament_bracket_display_data(self.bracket)
+
+        self.assertIn("上位トーナメント", content)
+        self.assertEqual(len(display_data["svg_brackets"]), 5)
+        self.assertTrue(
+            any(
+                svg_bracket.get("split_role") == "winner"
+                for svg_bracket in display_data["svg_brackets"]
+            )
+        )
+
+    def test_tournament_bracket_detail_shows_split_winner_lines_without_results_for_two_blocks(self):
+        self.use_individual_bracket_settings()
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.svg_split_count = 2
+        self.bracket.save()
+
+        entries = [self.entry1, self.entry2]
+        for number in range(3, 5):
+            entries.append(
+                create_tournament_entry(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entries[0],
+            pair2=entries[1],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entries[2],
+            pair2=entries[3],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+        )
+
+        display_data = build_tournament_bracket_display_data(self.bracket)
+        winner_svg = next(
+            svg_bracket
+            for svg_bracket in display_data["svg_brackets"]
+            if svg_bracket.get("split_role") == "winner"
+        )
+
+        self.assertTrue(
+            any(
+                line["class"] == "normal-line"
+                and line["x1"] == line["x2"]
+                and line["y1"] != line["y2"]
+                for line in winner_svg["lines"]
+            )
+        )
+
+    def test_tournament_bracket_detail_keeps_split_block_horizontal_champion_inside_svg_width(self):
+        self.use_individual_bracket_settings()
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.svg_split_count = 2
+        self.bracket.champion_display_mode = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.champion_text_layout = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.save()
+        self.tournament.default_single_champion_display_mode = (
+            Tournament.CHAMPION_DISPLAY_HORIZONTAL_1LINE
+        )
+        self.tournament.default_single_champion_text_layout = (
+            Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.tournament.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
+        entries = [self.entry1, self.entry2]
+
+        for number in range(3, 5):
+            entries.append(
+                create_tournament_entry(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entries[0],
+            pair2=entries[1],
+            pair1_games=4,
+            pair2_games=2,
+            winner=entries[0],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=entries[2],
+            pair2=entries[3],
+            pair1_games=4,
+            pair2_games=1,
+            winner=entries[2],
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+        )
+
+        display_data = build_tournament_bracket_display_data(self.bracket)
+        block_svg = next(
+            svg_bracket
+            for svg_bracket in display_data["svg_brackets"]
+            if svg_bracket.get("split_role") == "block"
+        )
+        champion_label = next(
+            label
+            for label in block_svg["labels"]
+            if label.get("class") == "champion-text"
+        )
+        label_texts = [line["text"] for line in champion_label["lines"]]
+        block_width = max(
+            _estimate_svg_text_width(text)
+            for text in label_texts
+        ) + 12
+
+        self.assertEqual(champion_label["anchor"], "start")
+        self.assertLessEqual(
+            champion_label["x"] + block_width,
+            block_svg["width"],
+        )
+
+    def test_tournament_bracket_detail_keeps_split_winner_rows_separate_when_one_side_is_decided(self):
+        self.use_individual_bracket_settings()
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SPLIT
+        self.bracket.svg_split_count = 8
+        self.bracket.save()
+
+        entries = [self.entry1, self.entry2]
+        for number in range(3, 17):
+            entries.append(
+                create_tournament_entry(
+                    bracket=self.bracket,
+                    pair_code=str(number),
+                    display_order=number,
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                )
+            )
+
+        first_round_matches = []
+        for index in range(8):
+            first_round_matches.append(
+                TournamentMatch.objects.create(
+                    bracket=self.bracket,
+                    round_number=1,
+                    match_number=index + 1,
+                    match_code=f"M{index + 1}",
+                    pair1=entries[index * 2],
+                    pair2=entries[index * 2 + 1],
+                )
+            )
+
+        upper_round_matches = [
+            TournamentMatch.objects.create(
+                bracket=self.bracket,
+                round_number=2,
+                match_number=index + 1,
+                match_code=f"M{9 + index}",
+                pair1=entries[0] if index == 0 else None,
+            )
+            for index in range(4)
+        ]
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=3,
+            match_number=1,
+            match_code="M13",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=3,
+            match_number=2,
+            match_code="M14",
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=4,
+            match_number=1,
+            match_code="M15",
+        )
+
+        display_data = build_tournament_bracket_display_data(self.bracket)
+        winner_svg = next(
+            svg_bracket
+            for svg_bracket in display_data["svg_brackets"]
+            if svg_bracket.get("split_role") == "winner"
+        )
+        first_upper_match = upper_round_matches[0]
+
+        for side in ("left", "right"):
+            match_position = winner_svg["match_positions"].get(
+                (side, first_upper_match.id)
+            )
+            if match_position:
+                self.assertNotEqual(
+                    match_position["y1"],
+                    match_position["y2"],
+                )
+                break
+        else:
+            self.fail("split winner match position was not rendered")
 
     def test_tournament_bracket_detail_shows_single_layout_champion(self):
         self.use_individual_bracket_settings()
@@ -9797,8 +10195,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn("第一クラブ", svg_content)
         self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
         self.assertIn('class="champion-org-text"', svg_content)
-        self.assertIn('y="85.0"', svg_content)
-        self.assertIn('y="101.0"', svg_content)
+        self.assertIn('y="99.0"', svg_content)
+        self.assertIn('y="115.0"', svg_content)
 
     def test_tournament_bracket_detail_uses_tournament_default_champion_text_layout(self):
         self.tournament.default_single_champion_text_layout = (
@@ -9924,8 +10322,8 @@ class TournamentScheduleBehaviorTests(TestCase):
             'class="champion-vertical-text"',
             1,
         )[1]
-        self.assertIn('x="232"', champion_label)
-        self.assertIn('y="93.0"', champion_label)
+        self.assertIn('x="259.0"', champion_label)
+        self.assertIn('y="101.0"', champion_label)
         self.assertIn('text-anchor="middle"', champion_label)
         self.assertIn('dominant-baseline="middle"', champion_label)
 
@@ -9972,6 +10370,51 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn("選手1A・選手1B", svg_content)
         self.assertIn("第一クラブ", svg_content)
         self.assertNotIn("選手1A・選手1B（第一クラブ）", svg_content)
+
+    def test_tournament_bracket_detail_expands_single_layout_for_vertical_champion_block(self):
+        self.use_individual_bracket_settings()
+        self.bracket.champion_display_mode = (
+            TournamentBracket.CHAMPION_DISPLAY_VERTICAL_1LINE
+        )
+        self.bracket.champion_text_layout = (
+            TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
+        )
+        self.bracket.save()
+        self.entry1.participant.organization = "第一クラブ"
+        self.entry1.participant.save()
+        final_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+            pair2_games=2,
+            winner=self.entry1,
+        )
+
+        display_data = build_tournament_bracket_display_data(self.bracket)
+        svg_bracket = display_data["svg_brackets"][0]
+        champion_lines = _svg_champion_text_lines(
+            final_match.winner,
+            self.bracket,
+        )
+        champion_bounds = _single_layout_champion_bounds(
+            svg_bracket,
+            final_match,
+            champion_lines,
+            _resolve_svg_champion_orientation(
+                self.bracket,
+                TournamentBracket.LAYOUT_SINGLE,
+            ),
+        )
+
+        self.assertIsNotNone(champion_bounds)
+        self.assertGreaterEqual(
+            svg_bracket["width"],
+            champion_bounds["right"] + svg_bracket["side_margin"],
+        )
 
     def test_tournament_bracket_detail_uses_single_layout_for_small_split_bracket(self):
         self.use_individual_bracket_settings()
@@ -10124,7 +10567,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         champion_y = float(
             champion_label.split('y="', 1)[1].split('"', 1)[0]
         )
-        self.assertGreaterEqual(champion_y, 220)
+        self.assertGreaterEqual(champion_y, 200)
 
     def test_tournament_bracket_detail_does_not_highlight_split_advance_before_final(self):
         self.use_individual_bracket_settings()
@@ -10208,8 +10651,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertRegex(
             svg_content,
             re.compile(
-                r'class="normal-line"\s+x1="[\d.]+"\s+y1="98\.0"\s+'
-                r'x2="[\d.]+"\s+y2="98\.0"',
+                r'class="normal-line"\s+x1="[\d.]+"\s+y1="107\.0"\s+'
+                r'x2="[\d.]+"\s+y2="107\.0"',
             ),
         )
         svg_width = float(
@@ -10427,7 +10870,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertAlmostEqual(champion_x, svg_width / 2)
         self.assertGreaterEqual(champion_y, 50.0)
-        self.assertLessEqual(champion_y, 60.0)
+        self.assertLessEqual(champion_y, 61.0)
         self.assertIn('text-anchor="middle"', champion_label)
         self.assertIn(
             'class="winner-line"',

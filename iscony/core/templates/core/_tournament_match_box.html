@@ -105,7 +105,7 @@
 
     <div class="draw-actions">
         {% if match.pair1 and match.pair2 %}
-            <a href="{% url 'input_tournament_match_score' tournament.code match.id %}">
+            <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
                 結果
             </a>
             <a

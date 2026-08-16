@@ -5,6 +5,7 @@ import secrets
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
+from django.core.validators import RegexValidator
 
 from .display_helpers import (
     ENTRY_DISPLAY_INHERIT as DISPLAY_INHERIT,
@@ -189,6 +190,17 @@ class Tournament(models.Model):
         max_length=20,
         choices=SCORE_DISPLAY_CHOICES,
         default=SCORE_DISPLAY_LOSER
+    )
+
+    default_tournament_score_color = models.CharField(
+        max_length=7,
+        default="#D32F2F",
+        validators=[
+            RegexValidator(
+                regex=r"^#[0-9A-Fa-f]{6}$",
+                message="色は #RRGGBB 形式で指定してください。",
+            )
+        ],
     )
 
     default_league_score_color_mode = models.CharField(
