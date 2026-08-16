@@ -10,6 +10,7 @@ import csv
 import io
 import math
 import copy
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 from django.contrib import messages
@@ -319,6 +320,74 @@ MATCH_SCORE_LABEL_OFFSET_X = 0
 MATCH_SCORE_LABEL_OFFSET_Y = 0
 
 
+@dataclass(frozen=True)
+class SvgTextBlockLayout:
+    """SVGテキストブロックの内部レイアウト設定。
+
+    offset_x/offset_y は、トーナメント線の始点・終点・交点などの
+    基準座標から、テキストブロックのアンカー位置をどれだけ動かすか。
+    将来的に大会設定から調整可能にする前段として、用途別に集約する。
+    """
+
+    orientation: str = CHAMPION_ORIENTATION_HORIZONTAL
+    block_anchor: str = "middle-center"
+    offset_x: int = 0
+    offset_y: int = 0
+    line_height: int = CHAMPION_LINE_HEIGHT
+    minimum_height: int = 0
+    padding_x: int = 0
+    padding_y: int = 0
+    padding_top: int = CHAMPION_VERTICAL_TOP_PADDING
+    padding_bottom: int = CHAMPION_VERTICAL_BOTTOM_PADDING
+    anchor: str | None = None
+    baseline: str | None = "middle"
+
+
+ENTRY_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    line_height=ENTRY_LINE_HEIGHT,
+    minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
+)
+MATCH_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    offset_x=MATCH_CODE_LABEL_OFFSET_X,
+    offset_y=MATCH_CODE_LABEL_OFFSET_Y,
+)
+FINAL_MATCH_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    offset_x=FINAL_MATCH_CODE_LABEL_OFFSET_X,
+    offset_y=FINAL_MATCH_CODE_LABEL_OFFSET_Y,
+)
+MATCH_SCORE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    offset_x=MATCH_SCORE_LABEL_OFFSET_X,
+    offset_y=MATCH_SCORE_LABEL_OFFSET_Y,
+    baseline=None,
+)
+CHAMPION_SINGLE_HORIZONTAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+    block_anchor="middle-left",
+    offset_x=CHAMPION_SINGLE_HORIZONTAL_OFFSET_X,
+    line_height=CHAMPION_LINE_HEIGHT,
+    padding_x=CHAMPION_HORIZONTAL_PADDING,
+)
+CHAMPION_SINGLE_VERTICAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    orientation=CHAMPION_ORIENTATION_VERTICAL,
+    block_anchor="middle-center",
+    offset_x=CHAMPION_SINGLE_VERTICAL_OFFSET_X,
+)
+CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+    block_anchor="bottom-center",
+    offset_y=-12,
+    line_height=CHAMPION_LINE_HEIGHT,
+)
+CHAMPION_SPLIT_VERTICAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    orientation=CHAMPION_ORIENTATION_VERTICAL,
+    block_anchor="bottom-center",
+    offset_y=-CHAMPION_SPLIT_VERTICAL_OFFSET,
+    padding_bottom=CHAMPION_SPLIT_VERTICAL_BOTTOM_PADDING,
+    anchor="middle",
+    baseline=None,
+)
+
+
 def _svg_text_block_dimensions(
         lines,
         *,
@@ -569,24 +638,30 @@ def _single_layout_champion_bounds(
         return None
 
     if champion_orientation == CHAMPION_ORIENTATION_HORIZONTAL:
+        layout = CHAMPION_SINGLE_HORIZONTAL_TEXT_BLOCK_LAYOUT
         spec = _svg_text_block_spec(
             lines=lines,
-            orientation=champion_orientation,
+            orientation=layout.orientation,
             base_x=anchor_point["advance_x"],
             base_y=anchor_point["center_y"],
-            offset_x=CHAMPION_SINGLE_HORIZONTAL_OFFSET_X,
-            block_anchor="middle-left",
-            line_height=CHAMPION_LINE_HEIGHT,
-            padding_x=CHAMPION_HORIZONTAL_PADDING,
+            offset_x=layout.offset_x,
+            offset_y=layout.offset_y,
+            block_anchor=layout.block_anchor,
+            line_height=layout.line_height,
+            padding_x=layout.padding_x,
         )
     else:
+        layout = CHAMPION_SINGLE_VERTICAL_TEXT_BLOCK_LAYOUT
         spec = _svg_text_block_spec(
             lines=lines,
-            orientation=champion_orientation,
+            orientation=layout.orientation,
             base_x=anchor_point["advance_x"],
             base_y=anchor_point["center_y"],
-            offset_x=CHAMPION_SINGLE_VERTICAL_OFFSET_X,
-            block_anchor="middle-center",
+            offset_x=layout.offset_x,
+            offset_y=layout.offset_y,
+            block_anchor=layout.block_anchor,
+            padding_top=layout.padding_top,
+            padding_bottom=layout.padding_bottom,
         )
 
     return spec["bounds"]
@@ -676,32 +751,36 @@ def _svg_champion_block_spec(
     }
 
     if champion_orientation == CHAMPION_ORIENTATION_VERTICAL:
-        block_anchor = "bottom-center"
+        layout = CHAMPION_SPLIT_VERTICAL_TEXT_BLOCK_LAYOUT
         block_spec = _svg_text_block_spec(
             lines=lines,
-            orientation=champion_orientation,
+            orientation=layout.orientation,
             base_x=center_x,
             base_y=line_top,
-            offset_y=-CHAMPION_SPLIT_VERTICAL_OFFSET,
-            block_anchor=block_anchor,
-            padding_bottom=CHAMPION_SPLIT_VERTICAL_BOTTOM_PADDING,
+            offset_x=layout.offset_x,
+            offset_y=layout.offset_y,
+            block_anchor=layout.block_anchor,
+            padding_top=layout.padding_top,
+            padding_bottom=layout.padding_bottom,
             class_map={
                 "": "champion-vertical-text",
                 "champion-org-text": "champion-org-vertical-text",
             },
-            anchor="middle",
-            baseline=None,
+            anchor=layout.anchor,
+            baseline=layout.baseline,
         )
     else:
-        block_anchor = "bottom-center"
+        layout = CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT
         block_spec = _svg_text_block_spec(
             lines=lines,
-            orientation=champion_orientation,
+            orientation=layout.orientation,
             base_x=center_x,
             base_y=line_top,
-            offset_y=-12,
-            block_anchor=block_anchor,
-            line_height=CHAMPION_LINE_HEIGHT,
+            offset_x=layout.offset_x,
+            offset_y=layout.offset_y,
+            block_anchor=layout.block_anchor,
+            line_height=layout.line_height,
+            padding_x=layout.padding_x,
             css_class="champion-text",
         )
 
@@ -778,15 +857,19 @@ def _svg_entry_block_spec(
         entry,
         entry_display_mode,
     )
+    layout = ENTRY_TEXT_BLOCK_LAYOUT
     return _svg_text_block_spec(
         lines=lines,
-        orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+        orientation=layout.orientation,
         base_x=x,
         base_y=base_y,
-        offset_y=_svg_entry_block_anchor_y(entry, 0),
+        offset_x=layout.offset_x,
+        offset_y=layout.offset_y + _svg_entry_block_anchor_y(entry, 0),
         block_anchor=_svg_side_block_anchor(side),
-        line_height=ENTRY_LINE_HEIGHT,
-        minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
+        line_height=layout.line_height,
+        minimum_height=layout.minimum_height,
+        padding_x=layout.padding_x,
+        padding_y=layout.padding_y,
         css_class=(
             "advancement-source-text"
             if _is_unresolved_advancement_entry(entry)
@@ -1023,8 +1106,8 @@ def _append_svg_match_code_label(
         match,
         base_x,
         base_y,
-        offset_x=0,
-        offset_y=0,
+        offset_x=None,
+        offset_y=None,
         block_anchor="middle-center"):
     """マッチラベルをSVGテキストブロックとして追加する。"""
 
@@ -1046,22 +1129,31 @@ def _svg_match_code_label_spec(
         match,
         base_x,
         base_y,
-        offset_x=MATCH_CODE_LABEL_OFFSET_X,
-        offset_y=MATCH_CODE_LABEL_OFFSET_Y,
+        offset_x=None,
+        offset_y=None,
         block_anchor="middle-center"):
     """マッチラベル用のSVGテキストブロック仕様を返す。"""
+
+    layout = MATCH_CODE_TEXT_BLOCK_LAYOUT
+    actual_offset_x = layout.offset_x if offset_x is None else offset_x
+    actual_offset_y = layout.offset_y if offset_y is None else offset_y
 
     return _svg_text_block_spec(
         lines=_svg_single_text_line(
             match.match_label or match.match_code,
             "svg-match-code",
         ),
-        orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+        orientation=layout.orientation,
         base_x=base_x,
         base_y=base_y,
-        offset_x=offset_x,
-        offset_y=offset_y,
+        offset_x=actual_offset_x,
+        offset_y=actual_offset_y,
         block_anchor=block_anchor,
+        line_height=layout.line_height,
+        minimum_height=layout.minimum_height,
+        padding_x=layout.padding_x,
+        padding_y=layout.padding_y,
+        baseline=layout.baseline,
         css_class="svg-match-code",
         url=_tournament_match_score_url(match),
     )
@@ -1074,22 +1166,30 @@ def _append_svg_score_label(
         text,
         base_x,
         base_y,
-        offset_x=MATCH_SCORE_LABEL_OFFSET_X,
-        offset_y=MATCH_SCORE_LABEL_OFFSET_Y,
+        offset_x=None,
+        offset_y=None,
         block_anchor="middle-center"):
     """得失ゲーム数をSVGテキストブロックとして追加する。"""
 
+    layout = MATCH_SCORE_TEXT_BLOCK_LAYOUT
+    actual_offset_x = layout.offset_x if offset_x is None else offset_x
+    actual_offset_y = layout.offset_y if offset_y is None else offset_y
+
     spec = _svg_text_block_spec(
         lines=_svg_single_text_line(text, "loser-score"),
-        orientation=CHAMPION_ORIENTATION_HORIZONTAL,
+        orientation=layout.orientation,
         base_x=base_x,
         base_y=base_y,
-        offset_x=offset_x,
-        offset_y=offset_y,
+        offset_x=actual_offset_x,
+        offset_y=actual_offset_y,
         block_anchor=block_anchor,
+        line_height=layout.line_height,
+        minimum_height=layout.minimum_height,
+        padding_x=layout.padding_x,
+        padding_y=layout.padding_y,
         css_class="loser-score",
         style=_resolve_svg_score_text_style(match.bracket),
-        baseline=None,
+        baseline=layout.baseline,
     )
     _append_svg_text_block_label(svg, spec)
 
@@ -1898,13 +1998,14 @@ def _add_svg_match(svg, match, *, round_number, side, index):
     display_pair2 = _svg_match_display_entry(match, "pair2")
 
     if not match.match_code.startswith("S"):
+        layout = MATCH_CODE_TEXT_BLOCK_LAYOUT
         _append_svg_match_code_label(
             svg,
             match=match,
             base_x=code_x,
             base_y=center_y,
-            offset_x=MATCH_CODE_LABEL_OFFSET_X,
-            offset_y=MATCH_CODE_LABEL_OFFSET_Y,
+            offset_x=layout.offset_x,
+            offset_y=layout.offset_y,
             block_anchor=(
                 "middle-right"
                 if code_anchor == "end"
@@ -2396,13 +2497,15 @@ def _build_svg_bracket_data(
             - (pre_final_round_index * svg["round_gap"])
         )
 
+        layout = FINAL_MATCH_CODE_TEXT_BLOCK_LAYOUT
         _append_svg_match_code_label(
             svg,
             match=final_match,
             base_x=center_x,
             base_y=final_y,
-            offset_x=FINAL_MATCH_CODE_LABEL_OFFSET_X,
-            offset_y=FINAL_MATCH_CODE_LABEL_OFFSET_Y,
+            offset_x=layout.offset_x,
+            offset_y=layout.offset_y,
+            block_anchor=layout.block_anchor,
         )
 
         for entry, y, side_name in [
