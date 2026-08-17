@@ -2,6 +2,69 @@
 
 {% block content %}
 
+<style>
+    .match-edit-note {
+        max-width: 900px;
+        color: #555;
+        line-height: 1.7;
+    }
+
+    .entry-edit-link {
+        display: inline-block;
+        margin-top: 6px;
+        font-weight: 700;
+    }
+
+    .advanced-match-edit {
+        max-width: 900px;
+        margin-top: 24px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 12px 16px;
+        background: #fafafa;
+    }
+
+    .advanced-match-edit summary {
+        cursor: pointer;
+        font-weight: 700;
+    }
+
+    .advanced-match-edit .warning-text {
+        margin: 12px 0;
+        color: #7a4a00;
+        line-height: 1.7;
+    }
+
+    .match-edit-form-row {
+        display: grid;
+        grid-template-columns: 140px minmax(260px, 1fr);
+        gap: 8px 12px;
+        align-items: start;
+        margin: 12px 0;
+    }
+
+    .match-edit-form-row label {
+        font-weight: 700;
+    }
+
+    .match-edit-form-row select,
+    .match-edit-form-row input {
+        max-width: 100%;
+    }
+
+    .field-help {
+        margin-top: 4px;
+        color: #666;
+        font-size: 0.9em;
+    }
+
+    .field-error {
+        margin-top: 4px;
+        color: #b00020;
+        font-weight: 700;
+    }
+</style>
+
 <h2>
     トーナメント試合編集
 </h2>
@@ -12,9 +75,9 @@
     {{ match.bracket.name }}
 </p>
 
-<p class="helptext">
-    この画面の対戦枠編集は、試合が参照するトーナメント枠を差し替えます。
-    後続Stageの枠そのものに参加者を入れる操作とは異なります。
+<p class="match-edit-note">
+    通常の参加者差し替えは、下の表にある「この枠の参加者を編集」から行います。
+    試合が参照する枠そのものを変更する場合だけ、高度な編集を使います。
 </p>
 
 <table border="1">
@@ -41,7 +104,7 @@
                 {{ match.pair1.code }}
                 {{ match.pair1.display_name }}
                 <br>
-                <a href="{% url 'edit_tournament_entry' tournament.code match.pair1.id %}?next={{ current_path|urlencode }}">
+                <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair1.id %}?next={{ current_path|urlencode }}">
                     この枠の参加者を編集
                 </a>
             {% else %}
@@ -56,7 +119,7 @@
                 {{ match.pair2.code }}
                 {{ match.pair2.display_name }}
                 <br>
-                <a href="{% url 'edit_tournament_entry' tournament.code match.pair2.id %}?next={{ current_path|urlencode }}">
+                <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair2.id %}?next={{ current_path|urlencode }}">
                     この枠の参加者を編集
                 </a>
             {% else %}
@@ -82,17 +145,94 @@
     </tr>
 </table>
 
-<form method="post">
+<details class="advanced-match-edit" {% if form.errors %}open{% endif %}>
+    <summary>
+        高度な編集（試合の参照枠・表示名・勝者を直接変更）
+    </summary>
 
-    {% csrf_token %}
+    <p class="warning-text">
+        この操作は、試合が参照するトーナメント枠を直接差し替えます。
+        枠番号や勝ち上がり元を維持したまま参加者だけを変える場合は、
+        上の「この枠の参加者を編集」を使ってください。
+    </p>
 
-    {{ form.as_p }}
+    <form method="post">
 
-    <button type="submit">
-        保存
-    </button>
+        {% csrf_token %}
 
-</form>
+        {{ form.non_field_errors }}
+
+        <div class="match-edit-form-row">
+            {{ form.match_label.label_tag }}
+            <div>
+                {{ form.match_label }}
+                {% if form.match_label.help_text %}
+                    <div class="field-help">{{ form.match_label.help_text }}</div>
+                {% endif %}
+                {% for error in form.match_label.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="match-edit-form-row">
+            {{ form.pair1.label_tag }}
+            <div>
+                {{ form.pair1 }}
+                {% if form.pair1.help_text %}
+                    <div class="field-help">{{ form.pair1.help_text }}</div>
+                {% endif %}
+                {% for error in form.pair1.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="match-edit-form-row">
+            {{ form.pair2.label_tag }}
+            <div>
+                {{ form.pair2 }}
+                {% if form.pair2.help_text %}
+                    <div class="field-help">{{ form.pair2.help_text }}</div>
+                {% endif %}
+                {% for error in form.pair2.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="match-edit-form-row">
+            {{ form.match_games.label_tag }}
+            <div>
+                {{ form.match_games }}
+                {% if form.match_games.help_text %}
+                    <div class="field-help">{{ form.match_games.help_text }}</div>
+                {% endif %}
+                {% for error in form.match_games.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="match-edit-form-row">
+            {{ form.winner.label_tag }}
+            <div>
+                {{ form.winner }}
+                {% if form.winner.help_text %}
+                    <div class="field-help">{{ form.winner.help_text }}</div>
+                {% endif %}
+                {% for error in form.winner.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <button type="submit">
+            高度な編集を保存
+        </button>
+
+    </form>
+</details>
 
 <p>
     <a href="{% url 'tournament_match_maintenance' tournament.code match.bracket.id %}">

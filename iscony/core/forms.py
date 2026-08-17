@@ -413,6 +413,14 @@ class TournamentMatchEditForm(forms.ModelForm):
             "match_games",
             "winner",
         ]
+        labels = {
+            "match_label": "表示名",
+            "match_games": "ゲーム数",
+        }
+        help_texts = {
+            "match_label": "トーナメント表や管理画面に表示する試合名です。",
+            "match_games": "この試合のゲーム数です。",
+        }
 
     def __init__(self, *args, category=None, **kwargs):
         super().__init__(*args, **kwargs)

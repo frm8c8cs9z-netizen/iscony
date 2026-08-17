@@ -11227,6 +11227,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             response,
             "試合が参照するトーナメント枠を差し替えます。",
         )
+        self.assertContains(response, "高度な編集")
 
     def test_tournament_match_edit_replaces_match_entry_reference(self):
         replacement_entry = create_tournament_entry(
@@ -11420,6 +11421,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             "winner",
             "勝者はpair1またはpair2から選択してください。",
         )
+        self.assertContains(response, 'class="advanced-match-edit" open')
 
     def test_schedule_can_hold_tournament_match(self):
         match = TournamentMatch.objects.create(
