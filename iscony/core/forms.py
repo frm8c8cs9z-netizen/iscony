@@ -51,6 +51,21 @@ class LeagueEntryChoiceField(forms.ModelChoiceField):
         return f"{obj.pair_code} {obj.display_name}"
 
 
+class TournamentEntryChoiceField(forms.ModelChoiceField):
+
+    def label_from_instance(self, obj):
+        code_parts = [obj.slot_label]
+        participant = getattr(obj, "participant", None)
+
+        if participant and participant.entry_code != obj.slot_label:
+            code_parts.append(participant.entry_code)
+
+        return (
+            f"{' / '.join(code_parts)} "
+            f"{obj.display_name}"
+        )
+
+
 class ExtraRoundRobinMatchForm(forms.Form):
 
     pair1 = LeagueEntryChoiceField(
@@ -336,6 +351,25 @@ class GroupOrderForm(forms.ModelForm):
 
 
 class TournamentMatchEditForm(forms.ModelForm):
+
+    pair1 = TournamentEntryChoiceField(
+        queryset=TournamentEntry.objects.none(),
+        required=False,
+        label="対戦枠1",
+        help_text="この試合が参照するトーナメント枠を差し替えます。",
+    )
+    pair2 = TournamentEntryChoiceField(
+        queryset=TournamentEntry.objects.none(),
+        required=False,
+        label="対戦枠2",
+        help_text="この試合が参照するトーナメント枠を差し替えます。",
+    )
+    winner = TournamentEntryChoiceField(
+        queryset=TournamentEntry.objects.none(),
+        required=False,
+        label="勝者",
+        help_text="勝者は対戦枠1または対戦枠2から選択してください。",
+    )
 
     class Meta:
 

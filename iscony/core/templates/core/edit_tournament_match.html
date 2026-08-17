@@ -12,6 +12,11 @@
     {{ match.bracket.name }}
 </p>
 
+<p class="helptext">
+    この画面の対戦枠編集は、試合が参照するトーナメント枠を差し替えます。
+    後続Stageの枠そのものに参加者を入れる操作とは異なります。
+</p>
+
 <table border="1">
     <tr>
         <th>固定ID</th>
@@ -30,7 +35,7 @@
         <td>{{ match.match_number }}</td>
     </tr>
     <tr>
-        <th>pair1</th>
+        <th>対戦枠1</th>
         <td>
             {% if match.pair1 %}
                 {{ match.pair1.code }}
@@ -41,7 +46,7 @@
         </td>
     </tr>
     <tr>
-        <th>pair2</th>
+        <th>対戦枠2</th>
         <td>
             {% if match.pair2 %}
                 {{ match.pair2.code }}
