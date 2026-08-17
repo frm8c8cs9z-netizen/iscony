@@ -33,6 +33,7 @@ from .forms import (
     TournamentMatchEditForm,
 )
 from .models import (
+    AdvancementSource,
     Court,
     LeagueEntry,
     Participant,
@@ -347,6 +348,9 @@ ENTRY_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
     offset_y=2,
     line_height=ENTRY_LINE_HEIGHT,
     minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
+)
+ENTRY_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    baseline=None,
 )
 MATCH_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
     offset_x=MATCH_CODE_LABEL_OFFSET_X,
@@ -1090,6 +1094,74 @@ def _append_svg_text_block_label(svg, spec):
         line_height=spec["line_height"],
         minimum_height=spec["minimum_height"],
     )
+
+
+def _svg_entry_code_block_anchor(text_anchor):
+    """既存の左右寄せを保つため、entry code の text-anchor をブロック基準へ変換する。"""
+
+    if text_anchor == "start":
+        return "middle-left"
+    if text_anchor == "end":
+        return "middle-right"
+
+    return "middle-center"
+
+
+def _append_svg_entry_code_label(
+        svg,
+        *,
+        text,
+        base_x,
+        base_y,
+        text_anchor="middle",
+        offset_x=None,
+        offset_y=None):
+    """entry code/slot_label をSVGテキストブロックとして追加する。"""
+
+    layout = ENTRY_CODE_TEXT_BLOCK_LAYOUT
+    spec = _svg_text_block_spec(
+        lines=_svg_single_text_line(text, "seed-code"),
+        orientation=layout.orientation,
+        base_x=base_x,
+        base_y=base_y,
+        offset_x=layout.offset_x if offset_x is None else offset_x,
+        offset_y=layout.offset_y if offset_y is None else offset_y,
+        block_anchor=_svg_entry_code_block_anchor(text_anchor),
+        line_height=layout.line_height,
+        minimum_height=layout.minimum_height,
+        padding_x=layout.padding_x,
+        padding_y=layout.padding_y,
+        css_class="seed-code",
+        baseline=layout.baseline,
+    )
+    _append_svg_text_block_label(svg, spec)
+
+
+def _has_svg_advancement_source(entry):
+    """後続Stageからの進出元設定を持つ枠かどうかを返す。"""
+
+    if getattr(entry, "source_pair_id", None):
+        return True
+
+    try:
+        return bool(entry.advancement_source)
+    except (AttributeError, AdvancementSource.DoesNotExist):
+        return False
+
+
+def _svg_entry_code_text(entry, reflected_entry_code_mode):
+    """SVGのentry code領域に表示する文字列を返す。"""
+
+    participant = getattr(entry, "participant", None)
+    if (
+        reflected_entry_code_mode == Tournament.REFLECTED_ENTRY_CODE_ENTRY_CODE
+        and participant
+        and participant.entry_code
+        and _has_svg_advancement_source(entry)
+    ):
+        return participant.entry_code
+
+    return entry.slot_label
 
 
 def _append_svg_match_code_label(
@@ -2033,14 +2105,16 @@ def _add_svg_match(svg, match, *, round_number, side, index):
                     base_y=y,
                 )
             else:
-                svg["labels"].append({
-                    "x": number_x,
-                    "y": y + 5,
-                    "text": entry.slot_label,
-                    "class": "seed-code",
-                    "anchor": number_anchor,
-                    "url": "",
-                })
+                _append_svg_entry_code_label(
+                    svg,
+                    text=_svg_entry_code_text(
+                        entry,
+                        svg["reflected_entry_code_mode"],
+                    ),
+                    base_x=number_x,
+                    base_y=y + 5,
+                    text_anchor=number_anchor,
+                )
                 _append_svg_entry_block_label(
                     svg,
                     entry=entry,
@@ -2386,6 +2460,9 @@ def _build_svg_bracket_data(
         "round_count": round_count,
         "layout_type": layout_type,
         "entry_display_mode": entry_display_mode,
+        "reflected_entry_code_mode": (
+            bracket.category.tournament.default_tournament_reflected_entry_code_mode
+        ),
         "match_positions": match_positions,
         "advanced_entry_ids": advanced_entry_ids,
         "first_entry_match_ids": first_entry_match_ids,
@@ -2528,14 +2605,15 @@ def _build_svg_bracket_data(
                         minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
                     )
                 else:
-                    svg["labels"].append({
-                        "x": center_x,
-                        "y": y + 1,
-                        "text": entry.slot_label,
-                        "class": "seed-code",
-                        "anchor": "middle",
-                        "url": "",
-                    })
+                    _append_svg_entry_code_label(
+                        svg,
+                        text=_svg_entry_code_text(
+                            entry,
+                            svg["reflected_entry_code_mode"],
+                        ),
+                        base_x=center_x,
+                        base_y=y + 1,
+                    )
                     entry_lines = _svg_entry_text_lines(
                         entry,
                         svg["entry_display_mode"],

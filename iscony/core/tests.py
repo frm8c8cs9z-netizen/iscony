@@ -6562,6 +6562,9 @@ class MaintenanceMenuTests(TestCase):
                 "default_tournament_entry_display_mode": (
                     Tournament.ENTRY_DISPLAY_ONE_LINE
                 ),
+                "default_tournament_reflected_entry_code_mode": (
+                    Tournament.REFLECTED_ENTRY_CODE_SLOT_LABEL
+                ),
                 "default_tournament_layout_type": (
                     Tournament.TOURNAMENT_LAYOUT_SPLIT
                 ),
@@ -6605,6 +6608,10 @@ class MaintenanceMenuTests(TestCase):
         self.assertEqual(
             tournament.default_tournament_entry_display_mode,
             Tournament.ENTRY_DISPLAY_ONE_LINE,
+        )
+        self.assertEqual(
+            tournament.default_tournament_reflected_entry_code_mode,
+            Tournament.REFLECTED_ENTRY_CODE_SLOT_LABEL,
         )
         self.assertEqual(
             tournament.default_tournament_layout_type,
@@ -6655,6 +6662,9 @@ class MaintenanceMenuTests(TestCase):
                 ),
                 "default_tournament_entry_display_mode": (
                     Tournament.ENTRY_DISPLAY_ONE_LINE
+                ),
+                "default_tournament_reflected_entry_code_mode": (
+                    Tournament.REFLECTED_ENTRY_CODE_ENTRY_CODE
                 ),
                 "default_tournament_layout_type": (
                     Tournament.TOURNAMENT_LAYOUT_SPLIT
@@ -6709,6 +6719,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "トーナメント表")
         self.assertContains(response, "優勝者表示")
         self.assertContains(response, "リーグ表の色分け")
+        self.assertContains(response, "後続反映済みコード表示")
         self.assertContains(response, "片側表示")
         self.assertContains(response, "左右表示")
         self.assertContains(response, "リーグ表とトーナメント表")
@@ -8635,6 +8646,108 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "山田　太郎・佐藤　次郎")
         self.assertContains(response, "第一クラブ")
         self.assertNotContains(response, "山田・佐藤")
+
+    def test_tournament_bracket_detail_shows_reflected_entry_code_by_default(self):
+        source_stage = Stage.objects.create(
+            category=self.category,
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group = Group.objects.create(
+            category=self.category,
+            stage=source_stage,
+            name="A",
+        )
+        reflected_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="NEXT1",
+            display_order=3,
+            participant=self.entry1.participant,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=reflected_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=1,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=reflected_entry,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.entry1.participant.entry_code, content)
+        self.assertNotIn(">NEXT1<", content)
+
+    def test_tournament_bracket_detail_can_show_reflected_slot_label(self):
+        self.tournament.default_tournament_reflected_entry_code_mode = (
+            Tournament.REFLECTED_ENTRY_CODE_SLOT_LABEL
+        )
+        self.tournament.save()
+        source_stage = Stage.objects.create(
+            category=self.category,
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group = Group.objects.create(
+            category=self.category,
+            stage=source_stage,
+            name="A",
+        )
+        reflected_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="NEXT1",
+            display_order=3,
+            participant=self.entry1.participant,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=reflected_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=1,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=reflected_entry,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("NEXT1", content)
+        self.assertNotIn(self.entry1.participant.entry_code, content)
 
     def test_tournament_bracket_detail_expands_svg_width_for_long_entry_blocks(self):
         self.tournament.default_tournament_entry_display_mode = (

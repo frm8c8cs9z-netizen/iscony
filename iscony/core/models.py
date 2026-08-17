@@ -78,6 +78,8 @@ class Tournament(models.Model):
     SCORE_DISPLAY_NONE = "none"
     LEAGUE_SCORE_COLOR_COLORED = "colored"
     LEAGUE_SCORE_COLOR_NONE = "none"
+    REFLECTED_ENTRY_CODE_ENTRY_CODE = "entry_code"
+    REFLECTED_ENTRY_CODE_SLOT_LABEL = "slot_label"
 
     ENTRY_DISPLAY_CHOICES = [
         (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
@@ -106,6 +108,11 @@ class Tournament(models.Model):
     LEAGUE_SCORE_COLOR_CHOICES = [
         (LEAGUE_SCORE_COLOR_COLORED, "あり"),
         (LEAGUE_SCORE_COLOR_NONE, "なし"),
+    ]
+
+    REFLECTED_ENTRY_CODE_CHOICES = [
+        (REFLECTED_ENTRY_CODE_ENTRY_CODE, "参加者entry_code"),
+        (REFLECTED_ENTRY_CODE_SLOT_LABEL, "後続枠slot_label"),
     ]
 
     CHAMPION_TEXT_CHOICES = [
@@ -160,6 +167,12 @@ class Tournament(models.Model):
         max_length=30,
         choices=ENTRY_DISPLAY_CHOICES,
         default=ENTRY_DISPLAY_SHORT_ORG_2LINE
+    )
+
+    default_tournament_reflected_entry_code_mode = models.CharField(
+        max_length=20,
+        choices=REFLECTED_ENTRY_CODE_CHOICES,
+        default=REFLECTED_ENTRY_CODE_ENTRY_CODE
     )
 
     default_tournament_layout_type = models.CharField(
