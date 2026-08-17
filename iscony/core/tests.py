@@ -11027,6 +11027,124 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
+    def test_tournament_match_edit_limits_pair_choices_to_category_entries(self):
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        other_bracket = TournamentBracket.objects.create(
+            category=other_category,
+            name="女子本戦",
+        )
+        other_entry = create_tournament_entry(
+            bracket=other_bracket,
+            pair_code="99",
+            display_order=99,
+            player1_name="別カテゴリ1",
+            player2_name="別カテゴリ2",
+        )
+        other_tournament = Tournament.objects.create(
+            name="別大会",
+            code="OTHER-T",
+        )
+        other_tournament_category = Category.objects.create(
+            tournament=other_tournament,
+            name="男子A",
+        )
+        other_tournament_bracket = TournamentBracket.objects.create(
+            category=other_tournament_category,
+            name="本戦",
+        )
+        other_tournament_entry = create_tournament_entry(
+            bracket=other_tournament_bracket,
+            pair_code="100",
+            display_order=100,
+            player1_name="別大会1",
+            player2_name="別大会2",
+        )
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_tournament_match",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": match.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertIn(
+            self.entry1,
+            list(form.fields["pair1"].queryset),
+        )
+        self.assertIn(
+            self.entry2,
+            list(form.fields["pair2"].queryset),
+        )
+        self.assertNotIn(
+            other_entry,
+            list(form.fields["pair1"].queryset),
+        )
+        self.assertNotIn(
+            other_tournament_entry,
+            list(form.fields["pair2"].queryset),
+        )
+        self.assertEqual(
+            list(form.fields["winner"].queryset),
+            [self.entry1, self.entry2],
+        )
+
+    def test_tournament_match_edit_rejects_winner_outside_selected_pairs(self):
+        other_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="3",
+            display_order=3,
+            player1_name="選手3A",
+            player2_name="選手3B",
+        )
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_tournament_match",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": match.id,
+                },
+            ),
+            {
+                "match_label": "M1",
+                "pair1": self.entry1.id,
+                "pair2": self.entry2.id,
+                "match_games": 7,
+                "winner": other_entry.id,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["form"],
+            "winner",
+            "勝者はpair1またはpair2から選択してください。",
+        )
+
     def test_schedule_can_hold_tournament_match(self):
         match = TournamentMatch.objects.create(
             bracket=self.bracket,

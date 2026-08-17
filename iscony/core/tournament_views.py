@@ -344,6 +344,7 @@ class SvgTextBlockLayout:
 
 
 ENTRY_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
+    offset_y=2,
     line_height=ENTRY_LINE_HEIGHT,
     minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
 )
@@ -835,15 +836,6 @@ def _svg_entry_block_dimensions(entry, entry_display_mode):
     )
 
 
-def _svg_entry_block_anchor_y(entry, base_y):
-    """参加者表示ブロックのY基準を返す。"""
-
-    if _is_unresolved_advancement_entry(entry):
-        return base_y + 14
-
-    return base_y + 2
-
-
 def _svg_entry_block_spec(
         *,
         entry,
@@ -864,7 +856,7 @@ def _svg_entry_block_spec(
         base_x=x,
         base_y=base_y,
         offset_x=layout.offset_x,
-        offset_y=layout.offset_y + _svg_entry_block_anchor_y(entry, 0),
+        offset_y=layout.offset_y,
         block_anchor=_svg_side_block_anchor(side),
         line_height=layout.line_height,
         minimum_height=layout.minimum_height,
@@ -3113,7 +3105,8 @@ def edit_tournament_match(request, code, match_id):
 
         form = TournamentMatchEditForm(
             request.POST,
-            instance=match
+            instance=match,
+            category=match.bracket.category,
         )
 
         if form.is_valid():
@@ -3128,7 +3121,8 @@ def edit_tournament_match(request, code, match_id):
     else:
 
         form = TournamentMatchEditForm(
-            instance=match
+            instance=match,
+            category=match.bracket.category,
         )
 
     return render(

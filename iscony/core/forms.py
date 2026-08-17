@@ -7,6 +7,7 @@ from .models import (
     Participant,
     Tournament,
     TournamentBracket,
+    TournamentEntry,
     TournamentMatch,
     Schedule,
     ScheduleBlock,
@@ -347,6 +348,68 @@ class TournamentMatchEditForm(forms.ModelForm):
             "match_games",
             "winner",
         ]
+
+    def __init__(self, *args, category=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        entries = None
+        if category:
+            entries = TournamentEntry.objects.filter(
+                bracket__category=category,
+            ).select_related(
+                "participant",
+                "source_pair",
+            ).order_by(
+                "bracket__display_order",
+                "bracket__name",
+                "display_order",
+                "pair_code",
+            )
+            self.fields["pair1"].queryset = entries
+            self.fields["pair2"].queryset = entries
+
+        self.fields["winner"].queryset = self._winner_queryset(
+            entries=entries
+        )
+
+    def _winner_queryset(self, *, entries=None):
+        pair_ids = [
+            pair_id
+            for pair_id in [
+                self.instance.pair1_id,
+                self.instance.pair2_id,
+            ]
+            if pair_id
+        ]
+
+        if self.is_bound:
+            for field_name in ["pair1", "pair2", "winner"]:
+                pair_id = self.data.get(self.add_prefix(field_name))
+                if pair_id:
+                    pair_ids.append(pair_id)
+
+        queryset = entries or TournamentEntry.objects.all()
+
+        return queryset.filter(
+            id__in=pair_ids,
+        ).order_by(
+            "display_order",
+            "pair_code",
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        pair1 = cleaned_data.get("pair1")
+        pair2 = cleaned_data.get("pair2")
+        winner = cleaned_data.get("winner")
+
+        if winner and winner not in [pair1, pair2]:
+            self.add_error(
+                "winner",
+                "勝者はpair1またはpair2から選択してください。",
+            )
+
+        return cleaned_data
 
 
 class BracketGenerateForm(forms.Form):
