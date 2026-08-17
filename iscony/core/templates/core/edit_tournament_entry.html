@@ -1,0 +1,65 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>トーナメント枠編集</h2>
+
+<p>
+    {{ entry.bracket.category.name }}
+    /
+    {{ entry.bracket.name }}
+</p>
+
+<p class="helptext">
+    この画面では、トーナメント枠はそのままにして参加者だけを差し替えます。
+    試合が参照する枠そのものを差し替える場合は、トーナメント試合編集を使います。
+</p>
+
+<table border="1">
+    <tr>
+        <th>枠番号</th>
+        <td>{{ entry.slot_label }}</td>
+    </tr>
+    <tr>
+        <th>表示順</th>
+        <td>{{ entry.display_order }}</td>
+    </tr>
+    <tr>
+        <th>現在の表示</th>
+        <td>{{ entry.display_name }}</td>
+    </tr>
+    <tr>
+        <th>所属</th>
+        <td>{{ entry.display_organization|default:"-" }}</td>
+    </tr>
+</table>
+
+<form method="post">
+
+    {% csrf_token %}
+
+    {% if next_url %}
+        <input type="hidden" name="next" value="{{ next_url }}">
+    {% endif %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        保存
+    </button>
+
+</form>
+
+<p>
+    {% if next_url %}
+        <a href="{{ next_url }}">
+            戻る
+        </a>
+    {% else %}
+        <a href="{% url 'tournament_match_maintenance' tournament.code entry.bracket.id %}">
+            戻る
+        </a>
+    {% endif %}
+</p>
+
+{% endblock %}

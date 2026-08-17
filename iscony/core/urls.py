@@ -339,6 +339,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/entry/<int:entry_id>/edit/",
+        tournament_views.edit_tournament_entry,
+        name="edit_tournament_entry",
+    ),
+
+    path(
         "schedule/<int:schedule_id>/edit/",
         views.edit_schedule,
         name="edit_schedule",

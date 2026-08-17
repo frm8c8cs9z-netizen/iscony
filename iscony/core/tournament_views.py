@@ -30,6 +30,7 @@ from .forms import (
     CSVUploadForm,
     ScheduleCreateForm,
     TournamentBracketForm,
+    TournamentEntryEditForm,
     TournamentMatchEditForm,
 )
 from .models import (
@@ -3210,7 +3211,69 @@ def edit_tournament_match(request, code, match_id):
             "tournament": tournament,
             "match": match,
             "form": form,
+            "current_path": request.get_full_path(),
         }
+    )
+
+
+def edit_tournament_entry(request, code, entry_id):
+    """
+    トーナメント枠（TournamentEntry）の参加者だけを手動で差し替える。
+
+    edit_tournament_match() は試合が参照する枠自体を差し替える操作で、
+    この view は枠を維持したまま中身の参加者だけを差し替える操作。
+    """
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    entry = get_object_or_404(
+        TournamentEntry.objects.select_related(
+            "bracket",
+            "bracket__category",
+            "participant",
+            "source_pair",
+        ),
+        id=entry_id,
+        bracket__category__tournament=tournament,
+    )
+    next_url = request.GET.get("next") or request.POST.get("next") or ""
+
+    if request.method == "POST":
+        form = TournamentEntryEditForm(
+            request.POST,
+            instance=entry,
+            category=entry.bracket.category,
+        )
+
+        if form.is_valid():
+            form.save()
+
+            if next_url.startswith("/"):
+                return redirect(next_url)
+
+            return redirect(
+                "tournament_match_maintenance",
+                code=tournament.code,
+                bracket_id=entry.bracket.id,
+            )
+
+    else:
+        form = TournamentEntryEditForm(
+            instance=entry,
+            category=entry.bracket.category,
+        )
+
+    return render(
+        request,
+        "core/edit_tournament_entry.html",
+        {
+            "tournament": tournament,
+            "entry": entry,
+            "form": form,
+            "next_url": next_url,
+        },
     )
 
 

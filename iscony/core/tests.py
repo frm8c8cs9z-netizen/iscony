@@ -11269,6 +11269,117 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(match.pair2, self.entry2)
         self.assertEqual(match.winner, replacement_entry)
 
+    def test_tournament_match_edit_links_to_entry_participant_edit(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_tournament_match",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": match.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "この枠の参加者を編集")
+        self.assertContains(
+            response,
+            reverse(
+                "edit_tournament_entry",
+                kwargs={
+                    "code": self.tournament.code,
+                    "entry_id": self.entry1.id,
+                },
+            ),
+        )
+
+    def test_tournament_entry_edit_limits_participants_to_category(self):
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+        )
+        other_participant = Participant.objects.create(
+            category=other_category,
+            entry_code="OTHER1",
+            organization="別カテゴリ",
+            player1_name="別1",
+            player2_name="別2",
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_tournament_entry",
+                kwargs={
+                    "code": self.tournament.code,
+                    "entry_id": self.entry1.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertIn(
+            self.entry1.participant,
+            list(form.fields["participant"].queryset),
+        )
+        self.assertIn(
+            self.entry2.participant,
+            list(form.fields["participant"].queryset),
+        )
+        self.assertNotIn(
+            other_participant,
+            list(form.fields["participant"].queryset),
+        )
+
+    def test_tournament_entry_edit_replaces_participant_without_changing_match_reference(self):
+        replacement = Participant.objects.create(
+            category=self.category,
+            entry_code="R1",
+            organization="差替所属",
+            player1_name="差替1",
+            player2_name="差替2",
+            display_order=3,
+        )
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_tournament_entry",
+                kwargs={
+                    "code": self.tournament.code,
+                    "entry_id": self.entry1.id,
+                },
+            ),
+            {
+                "participant": replacement.id,
+            },
+        )
+
+        self.entry1.refresh_from_db()
+        match.refresh_from_db()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.entry1.participant, replacement)
+        self.assertEqual(self.entry1.pair_code, "1")
+        self.assertEqual(self.entry1.display_order, 1)
+        self.assertEqual(match.pair1, self.entry1)
+
     def test_tournament_match_edit_rejects_winner_outside_selected_pairs(self):
         other_entry = create_tournament_entry(
             bracket=self.bracket,

@@ -302,6 +302,37 @@ class LeagueEntryEditForm(forms.ModelForm):
             )
 
 
+class TournamentEntryEditForm(forms.ModelForm):
+
+    class Meta:
+        model = TournamentEntry
+        fields = [
+            "participant",
+        ]
+        labels = {
+            "participant": "参加者",
+        }
+        help_texts = {
+            "participant": (
+                "このトーナメント枠に入れる参加者を選びます。"
+                "枠番号や表示順は変更しません。"
+            ),
+        }
+
+    def __init__(self, *args, category=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if category:
+            self.fields["participant"].queryset = (
+                Participant.objects.filter(
+                    category=category,
+                ).order_by(
+                    "display_order",
+                    "entry_code",
+                )
+            )
+
+
 class ScheduleEditForm(forms.ModelForm):
 
     class Meta:

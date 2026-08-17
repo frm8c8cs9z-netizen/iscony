@@ -40,6 +40,10 @@
             {% if match.pair1 %}
                 {{ match.pair1.code }}
                 {{ match.pair1.display_name }}
+                <br>
+                <a href="{% url 'edit_tournament_entry' tournament.code match.pair1.id %}?next={{ current_path|urlencode }}">
+                    この枠の参加者を編集
+                </a>
             {% else %}
                 未定
             {% endif %}
@@ -51,6 +55,10 @@
             {% if match.pair2 %}
                 {{ match.pair2.code }}
                 {{ match.pair2.display_name }}
+                <br>
+                <a href="{% url 'edit_tournament_entry' tournament.code match.pair2.id %}?next={{ current_path|urlencode }}">
+                    この枠の参加者を編集
+                </a>
             {% else %}
                 未定
             {% endif %}
