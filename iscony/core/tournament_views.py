@@ -235,10 +235,17 @@ def _tournament_match_score_url(match):
 def _tournament_stage_overview_url(match):
     """トーナメント試合から戻るStage進行URLを返す。"""
 
-    return (
-        f"{reverse('category_stage_overview', kwargs={'category_id': match.bracket.category.id})}"
-        f"#stage-{match.bracket.stage.id}"
+    url = reverse(
+        "category_stage_overview",
+        kwargs={
+            "category_id": match.bracket.category.id,
+        },
     )
+
+    if match.bracket.stage_id:
+        return f"{url}#stage-{match.bracket.stage.id}"
+
+    return url
 
 
 def _svg_entry_with_org(entry):

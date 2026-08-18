@@ -3,25 +3,83 @@
 {% block content %}
 
 <style>
+    .match-edit-page {
+        max-width: 980px;
+    }
+
     .match-edit-note {
         max-width: 900px;
         color: #555;
         line-height: 1.7;
     }
 
-    .entry-edit-link {
-        display: inline-block;
-        margin-top: 6px;
+    .match-edit-summary {
+        width: 100%;
+        max-width: 900px;
+        min-width: 0;
+        border-collapse: collapse;
+        margin: 18px 0 0;
+    }
+
+    .match-edit-summary th {
+        width: 150px;
+        background: #f5f7fa;
+        color: #243041;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .match-edit-summary td {
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .match-edit-summary th,
+    .match-edit-summary td {
+        border: 1px solid #c7ced8;
+        padding: 10px 12px;
+    }
+
+    .entry-slot {
+        display: grid;
+        gap: 7px;
+    }
+
+    .entry-slot-current {
         font-weight: 700;
+    }
+
+    .entry-slot-meta {
+        color: #56616f;
+        font-size: 0.92em;
+    }
+
+    .entry-edit-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        min-height: 30px;
+        padding: 3px 10px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #f7fbff;
+        color: #111;
+        font-weight: 700;
+    }
+
+    .entry-edit-link:hover {
+        background: #eef5fc;
+        color: #111;
     }
 
     .advanced-match-edit {
         max-width: 900px;
         margin-top: 24px;
-        border: 1px solid #ccc;
+        border: 1px solid #d3b36b;
         border-radius: 4px;
         padding: 12px 16px;
-        background: #fafafa;
+        background: #fffaf0;
     }
 
     .advanced-match-edit summary {
@@ -52,6 +110,22 @@
         max-width: 100%;
     }
 
+    .match-edit-actions {
+        margin-top: 20px;
+    }
+
+    .match-edit-actions a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 4px 10px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #f7fbff;
+        color: #111;
+        font-weight: 700;
+    }
+
     .field-help {
         margin-top: 4px;
         color: #666;
@@ -65,9 +139,9 @@
     }
 </style>
 
-<h2>
-    トーナメント試合編集
-</h2>
+<div class="match-edit-page">
+
+<h2>トーナメント試合編集</h2>
 
 <p>
     {{ match.bracket.category.name }}
@@ -80,7 +154,7 @@
     試合が参照する枠そのものを変更する場合だけ、高度な編集を使います。
 </p>
 
-<table border="1">
+<table class="match-edit-summary">
     <tr>
         <th>固定ID</th>
         <td>{{ match.match_code }}</td>
@@ -101,12 +175,18 @@
         <th>対戦枠1</th>
         <td>
             {% if match.pair1 %}
-                {{ match.pair1.code }}
-                {{ match.pair1.display_name }}
-                <br>
-                <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair1.id %}?next={{ current_path|urlencode }}">
-                    この枠の参加者を編集
-                </a>
+                <div class="entry-slot">
+                    <div class="entry-slot-current">
+                        {{ match.pair1.code }}
+                        {{ match.pair1.display_name }}
+                    </div>
+                    <div class="entry-slot-meta">
+                        通常操作: 枠は維持して、参加者だけを差し替えます。
+                    </div>
+                    <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair1.id %}?next={{ current_path|urlencode }}">
+                        この枠の参加者を編集
+                    </a>
+                </div>
             {% else %}
                 未定
             {% endif %}
@@ -116,12 +196,18 @@
         <th>対戦枠2</th>
         <td>
             {% if match.pair2 %}
-                {{ match.pair2.code }}
-                {{ match.pair2.display_name }}
-                <br>
-                <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair2.id %}?next={{ current_path|urlencode }}">
-                    この枠の参加者を編集
-                </a>
+                <div class="entry-slot">
+                    <div class="entry-slot-current">
+                        {{ match.pair2.code }}
+                        {{ match.pair2.display_name }}
+                    </div>
+                    <div class="entry-slot-meta">
+                        通常操作: 枠は維持して、参加者だけを差し替えます。
+                    </div>
+                    <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair2.id %}?next={{ current_path|urlencode }}">
+                        この枠の参加者を編集
+                    </a>
+                </div>
             {% else %}
                 未定
             {% endif %}
@@ -147,7 +233,7 @@
 
 <details class="advanced-match-edit" {% if form.errors %}open{% endif %}>
     <summary>
-        高度な編集（試合の参照枠・表示名・勝者を直接変更）
+        高度な編集: 試合の参照枠・表示名・勝者を直接変更
     </summary>
 
     <p class="warning-text">
@@ -234,10 +320,12 @@
     </form>
 </details>
 
-<p>
+<p class="match-edit-actions">
     <a href="{% url 'tournament_match_maintenance' tournament.code match.bracket.id %}">
         戻る
     </a>
 </p>
+
+</div>
 
 {% endblock %}

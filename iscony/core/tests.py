@@ -7426,11 +7426,11 @@ class CategoryStageOverviewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertContains(response, "上の共通ショートカット")
         self.assertContains(response, "大会スナップショット")
-        self.assertContains(response, 'class="stage-notice-bar"')
-        self.assertContains(response, "運営通知")
-        self.assertContains(response, "後続1枠反映待ち")
+        self.assertNotContains(response, 'class="stage-notice-bar"')
+        self.assertNotContains(response, "運営通知")
+        self.assertNotContains(response, "後続1枠反映待ち")
+        self.assertNotContains(response, "反映できないStage")
         self.assertLess(
             content.index(f'id="stage-{league_stage.id}"'),
             content.index(f'id="stage-{tournament_stage.id}"'),
@@ -7440,6 +7440,100 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "決勝トーナメント")
         self.assertContains(response, "0/1枠反映済み")
         self.assertContains(response, "後続Stage")
+
+    def test_stage_overview_notice_waits_until_league_rank_is_known(self):
+        tournament = Tournament.objects.create(
+            name="Stage通知大会",
+            code="STAGENOTICERANK",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        target_stage = Stage.objects.create(
+            category=category,
+            name="順位決定リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+        )
+        entry1 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        entry2 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="予選3",
+            player2_name="予選4",
+        )
+        target_group = Group.objects.create(
+            category=category,
+            stage=target_stage,
+            name="決定A",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="T1",
+            display_order=1,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=group,
+            source_rank=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'class="stage-notice-bar"')
+        self.assertNotContains(response, "後続1枠反映待ち")
+
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+            pair1_games=4,
+            pair2_games=2,
+            completed=True,
+        )
+        update_group_ranking(group, reset_rank=True)
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="stage-notice-bar"')
+        self.assertContains(response, "運営通知")
+        self.assertContains(response, "後続1枠反映待ち")
 
     def test_stage_overview_shows_blocked_advance_reasons(self):
         tournament = Tournament.objects.create(
@@ -8532,6 +8626,17 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(
             response,
             "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        self.assertContains(
+            response,
+            "この画面では試合結果だけを入力します。",
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": self.category.id},
+            ),
         )
         self.assertContains(response, "未確定")
         self.assertContains(response, "disabled")
@@ -11292,6 +11397,11 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "この枠の参加者を編集")
+        self.assertContains(response, "通常操作: 枠は維持して、参加者だけを差し替えます。")
+        self.assertContains(
+            response,
+            "高度な編集: 試合の参照枠・表示名・勝者を直接変更",
+        )
         self.assertContains(
             response,
             reverse(

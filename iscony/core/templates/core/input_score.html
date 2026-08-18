@@ -6,24 +6,40 @@
     試合結果入力
 </h2>
 
-<p>
-    {% if mode == "round_robin" %}
-        {{ match.group.category.name }}
-        /
-        {{ match.group.name }}リーグ
-    {% elif mode == "tournament" %}
-        {{ match.bracket.category.name }}
-        /
-        {{ match.bracket.name }}
-        /
-        {{ match.match_label }}
-    {% endif %}
-</p>
+<div class="score-input-header">
+    <div>
+        <p class="score-input-context">
+            {% if mode == "round_robin" %}
+                {{ match.group.category.name }}
+                /
+                {{ match.group.stage.name }}
+                /
+                {{ match.group.name }}リーグ
+            {% elif mode == "tournament" %}
+                {{ match.bracket.category.name }}
+                /
+                {{ match.bracket.stage.name }}
+                /
+                {{ match.bracket.name }}
+                /
+                {{ match.match_label }}
+            {% endif %}
+        </p>
 
-<p>
-    {{ match.match_games }}ゲームマッチ
-    （{{ winning_games }}ゲーム先取）
-</p>
+        <p class="score-input-games">
+            {{ match.match_games }}ゲームマッチ
+            （{{ winning_games }}ゲーム先取）
+        </p>
+    </div>
+
+    <a class="secondary-button" href="{{ back_url }}">
+        戻る
+    </a>
+</div>
+
+<div class="score-input-safety-note">
+    この画面では試合結果だけを入力します。参加者や組み合わせが違う場合は保存せず、構成管理担当へ確認してください。
+</div>
 
 {% if error %}
     <p style="color:red;">
@@ -181,7 +197,43 @@
     </p>
 </form>
 
+<p>
+    <a class="secondary-button" href="{{ back_url }}">
+        戻る
+    </a>
+</p>
+
 <style>
+.score-input-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.score-input-context {
+    margin: 0 0 6px;
+    color: #344054;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.score-input-games {
+    margin: 0;
+    color: #475467;
+}
+
+.score-input-safety-note {
+    max-width: 820px;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border-left: 4px solid #d0a100;
+    background: #fff8db;
+    color: #4d3b00;
+    line-height: 1.5;
+}
+
 .score-input {
     width: 80px;
     font-size: 28px;
@@ -204,6 +256,16 @@
 .primary-button {
     font-size: 18px;
     padding: 8px 24px;
+}
+
+.secondary-button {
+    display: inline-block;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 7px 14px;
+    color: #111827;
+    font-weight: 700;
+    background: #f8fafc;
 }
 
 .danger-button {

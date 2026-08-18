@@ -127,6 +127,31 @@ def _pending_advancement_source_count(stage):
     ).count()
 
 
+def _has_started_incoming_source_resolution(stage):
+    """未入力の初期状態では通知せず、進出元の結果が判定対象になってから通知する。"""
+
+    incoming_sources = AdvancementSource.objects.filter(
+        Q(
+            target_league_entry__group__stage=stage,
+            target_league_entry__participant__isnull=True,
+        )
+        | Q(
+            target_tournament_entry__bracket__stage=stage,
+            target_tournament_entry__participant__isnull=True,
+        )
+    )
+
+    league_group_ids = incoming_sources.filter(
+        source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+        source_group__isnull=False,
+    ).values_list("source_group_id", flat=True)
+
+    return GroupRanking.objects.filter(
+        group_id__in=league_group_ids,
+        rank__isnull=False,
+    ).exists()
+
+
 def _public_stage_status(containers, ready, pending_source_count):
     if ready:
         return {
@@ -207,17 +232,20 @@ def _stage_notices(stage_rows):
 
         status_key = row["status"]["key"]
         pending_source_count = row["pending_source_count"]
+        has_started_source_resolution = _has_started_incoming_source_resolution(
+            row["stage"],
+        )
 
         if status_key == "confirmed" and not pending_source_count:
             continue
 
-        if status_key == "not_started" and not pending_source_count:
+        if not pending_source_count:
             continue
 
-        if pending_source_count:
-            title = f"後続{pending_source_count}枠反映待ち"
-        else:
-            title = row["status"]["label"]
+        if not has_started_source_resolution:
+            continue
+
+        title = f"後続{pending_source_count}枠反映待ち"
 
         notices.append({
             "stage": row["stage"],
@@ -225,14 +253,19 @@ def _stage_notices(stage_rows):
             "status": row["status"]["label"],
             "pending_source_count": pending_source_count,
             "url": f"#stage-{row['stage'].id}",
-            "tone": (
-                "warning"
-                if status_key in {"waiting", "in_progress"} or pending_source_count
-                else "neutral"
-            ),
+            "tone": "warning",
         })
 
     return notices
+
+
+def _has_started_stage_ranking(row):
+    """リーグ順位が1件も出ていないStageは、まだ反映警告の対象にしない。"""
+
+    return any(
+        container.get("ranking_count", 0) > 0
+        for container in row["containers"]
+    )
 
 
 def _stage_blockers(stage_rows):
@@ -249,6 +282,9 @@ def _stage_blockers(stage_rows):
         block_messages = row["source_readiness"]["blockers"]
 
         if readiness or not source_count or not block_messages:
+            continue
+
+        if not _has_started_stage_ranking(row):
             continue
 
         blockers.append({
