@@ -386,14 +386,20 @@ class TournamentMatchEditForm(forms.ModelForm):
     pair1 = TournamentEntryChoiceField(
         queryset=TournamentEntry.objects.none(),
         required=False,
-        label="対戦枠1",
-        help_text="この試合が参照するトーナメント枠を差し替えます。",
+        label="参照枠1",
+        help_text=(
+            "この試合が参照する既存のトーナメント枠を選び替えます。"
+            "勝者/敗者などの進出元条件そのものは変更できません。"
+        ),
     )
     pair2 = TournamentEntryChoiceField(
         queryset=TournamentEntry.objects.none(),
         required=False,
-        label="対戦枠2",
-        help_text="この試合が参照するトーナメント枠を差し替えます。",
+        label="参照枠2",
+        help_text=(
+            "この試合が参照する既存のトーナメント枠を選び替えます。"
+            "勝者/敗者などの進出元条件そのものは変更できません。"
+        ),
     )
     winner = TournamentEntryChoiceField(
         queryset=TournamentEntry.objects.none(),
@@ -604,6 +610,7 @@ class TournamentSettingsForm(forms.ModelForm):
         model = Tournament
 
         fields = [
+            "score_sheet_template",
             "default_league_entry_display_mode",
             "default_league_score_color_mode",
             "default_tournament_entry_display_mode",
@@ -618,6 +625,7 @@ class TournamentSettingsForm(forms.ModelForm):
         ]
 
         labels = {
+            "score_sheet_template": "採点票テンプレート",
             "default_league_entry_display_mode": "リーグ参加者表示",
             "default_league_score_color_mode": "リーグ表の色分け",
             "default_tournament_entry_display_mode": "トーナメント参加者表示",
@@ -631,6 +639,9 @@ class TournamentSettingsForm(forms.ModelForm):
         }
 
         help_texts = {
+            "score_sheet_template": (
+                "採点票PDFに使うテンプレートです。未選択の場合は標準テンプレートを使います。"
+            ),
             "default_league_entry_display_mode": (
                 "リーグ表、進行表、補助表などでリーグ枠を表示するときの標準形式です。"
             ),

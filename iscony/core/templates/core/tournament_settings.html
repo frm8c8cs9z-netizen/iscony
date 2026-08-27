@@ -406,6 +406,25 @@
         </tr>
     </table>
 
+    <h3>採点票PDF</h3>
+
+    <p>
+        採点票PDFに使うテンプレートを大会ごとに指定します。
+    </p>
+
+    <table border="1">
+        <tr>
+            <th>項目</th>
+            <th>設定</th>
+            <th>説明</th>
+        </tr>
+        <tr>
+            <td>{{ form.score_sheet_template.label_tag }}</td>
+            <td>{{ form.score_sheet_template }}</td>
+            <td>{{ form.score_sheet_template.help_text }}</td>
+        </tr>
+    </table>
+
     <h4>参加者表示サンプル</h4>
 
     <table border="1">

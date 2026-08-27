@@ -48,6 +48,7 @@ from .services import (
 
 from .view_helper import(
     redirect_next_or_default,
+    url_with_next,
 )
 
 # =========================================================
@@ -462,7 +463,12 @@ def result_input_select(request, code):
         )
 
         if len(results) == 1 and results[0]["can_input"]:
-            return redirect(results[0]["input_url"])
+            return redirect(
+                url_with_next(
+                    results[0]["input_url"],
+                    request.get_full_path(),
+                )
+            )
 
     return render(
         request,
@@ -861,7 +867,12 @@ def reception_match_search(request, code):
                 form.cleaned_data["match_key"],
             )
             if len(results) == 1:
-                return redirect(results[0]["input_url"])
+                return redirect(
+                    url_with_next(
+                        results[0]["input_url"],
+                        request.get_full_path(),
+                    )
+                )
 
     return render(
         request,

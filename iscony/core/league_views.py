@@ -44,9 +44,19 @@ from .services import (
 )
 from .validators import validate_game_score
 from .view_helper import (
-    redirect_next_or_default,
+    redirect_next_or_url,
     render_score_input,
+    safe_next_url,
 )
+
+
+def _round_robin_stage_overview_url(match):
+    """リーグ試合から戻るStage進行URLを返す。"""
+
+    return (
+        f"{reverse('category_stage_overview', kwargs={'category_id': match.group.category.id})}"
+        f"#group-{match.group.id}"
+    )
 
 
 def _show_stage_advancement_warning(request):
@@ -762,6 +772,7 @@ def input_match_score(request, match_id):
         RoundRobinMatch,
         id=match_id
     )
+    back_url = safe_next_url(request) or _round_robin_stage_overview_url(match)
 
     if request.method == "POST":
 
@@ -771,17 +782,9 @@ def input_match_score(request, match_id):
             error = delete_round_robin_score(match)
             if error:
                 messages.error(request, error)
-                return redirect_next_or_default(
-                    request,
-                    "category_detail",
-                    category_id=match.group.category.id
-                )
+                return redirect_next_or_url(request, back_url)
 
-            return redirect_next_or_default(
-                request,
-                "category_detail",
-                category_id=match.group.category.id
-            )
+            return redirect_next_or_url(request, back_url)
 
         try:
             pair1_games = int(
@@ -799,15 +802,7 @@ def input_match_score(request, match_id):
                 match=match,
                 winning_games=match.winning_games(),
                 mode="round_robin",
-                back_url=request.GET.get(
-                    "next",
-                    reverse(
-                        "category_detail",
-                        kwargs={
-                            "category_id": match.group.category.id
-                        }
-                    )
-                ),
+                back_url=back_url,
                 error="ゲーム数を入力してください。",
             )
 
@@ -824,15 +819,7 @@ def input_match_score(request, match_id):
                 match=match,
                 winning_games=match.winning_games(),
                 mode="round_robin",
-                back_url=request.GET.get(
-                    "next",
-                    reverse(
-                        "category_detail",
-                        kwargs={
-                            "category_id": match.group.category.id
-                        }
-                    )
-                ),
+                back_url=back_url,
                 error=error,
             )
 
@@ -848,40 +835,20 @@ def input_match_score(request, match_id):
                 match=match,
                 winning_games=match.winning_games(),
                 mode="round_robin",
-                back_url=request.GET.get(
-                    "next",
-                    reverse(
-                        "category_detail",
-                        kwargs={
-                            "category_id": match.group.category.id
-                        }
-                    )
-                ),
+                back_url=back_url,
                 error=error,
             )
 
         _show_stage_advancement_warning(request)
 
-        return redirect_next_or_default(
-            request,
-            "category_detail",
-            category_id=match.group.category.id
-        )
+        return redirect_next_or_url(request, back_url)
 
     return render_score_input(
         request=request,
         match=match,
         winning_games=match.winning_games(),
         mode="round_robin",
-        back_url=request.GET.get(
-            "next",
-            reverse(
-                "category_detail",
-                kwargs={
-                    "category_id": match.group.category.id
-                }
-            )
-        ),
+        back_url=back_url,
     )
 
 

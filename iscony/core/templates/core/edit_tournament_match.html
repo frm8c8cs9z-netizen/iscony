@@ -13,6 +13,11 @@
         line-height: 1.7;
     }
 
+    .match-edit-section-title {
+        margin: 22px 0 8px;
+        font-size: 1.1em;
+    }
+
     .match-edit-summary {
         width: 100%;
         max-width: 900px;
@@ -49,7 +54,8 @@
         font-weight: 700;
     }
 
-    .entry-slot-meta {
+    .entry-slot-meta,
+    .advanced-scope {
         color: #56616f;
         font-size: 0.92em;
     }
@@ -141,7 +147,7 @@
 
 <div class="match-edit-page">
 
-<h2>トーナメント試合編集</h2>
+<h2>トーナメント試合の確認・修正</h2>
 
 <p>
     {{ match.bracket.category.name }}
@@ -150,9 +156,12 @@
 </p>
 
 <p class="match-edit-note">
-    通常の参加者差し替えは、下の表にある「この枠の参加者を編集」から行います。
-    試合が参照する枠そのものを変更する場合だけ、高度な編集を使います。
+    通常の参加者差し替えは、「この枠の参加者を修正」から行います。
+    組み合わせ構造そのものを変更する場合だけ、高度な編集を使います。
+    勝者/敗者などの進出元条件そのものを直す操作は、今後の構成編集機能で整理します。
 </p>
+
+<h3 class="match-edit-section-title">通常操作</h3>
 
 <table class="match-edit-summary">
     <tr>
@@ -184,7 +193,7 @@
                         通常操作: 枠は維持して、参加者だけを差し替えます。
                     </div>
                     <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair1.id %}?next={{ current_path|urlencode }}">
-                        この枠の参加者を編集
+                        この枠の参加者を修正
                     </a>
                 </div>
             {% else %}
@@ -205,7 +214,7 @@
                         通常操作: 枠は維持して、参加者だけを差し替えます。
                     </div>
                     <a class="entry-edit-link" href="{% url 'edit_tournament_entry' tournament.code match.pair2.id %}?next={{ current_path|urlencode }}">
-                        この枠の参加者を編集
+                        この枠の参加者を修正
                     </a>
                 </div>
             {% else %}
@@ -233,13 +242,20 @@
 
 <details class="advanced-match-edit" {% if form.errors %}open{% endif %}>
     <summary>
-        高度な編集: 試合の参照枠・表示名・勝者を直接変更
+        高度な編集: 組み合わせ構造を修正
     </summary>
 
     <p class="warning-text">
-        この操作は、試合が参照するトーナメント枠を直接差し替えます。
+        この操作は、試合が参照する既存のトーナメント枠を直接差し替えます。
         枠番号や勝ち上がり元を維持したまま参加者だけを変える場合は、
-        上の「この枠の参加者を編集」を使ってください。
+        上の「この枠の参加者を修正」を使ってください。
+        「1-10勝者」を「1-10敗者」に変えるような進出元条件の修正は、
+        参加者・Stage・進行の作成編集導線で扱う予定です。
+    </p>
+
+    <p class="advanced-scope">
+        この画面でできること: 参照する既存枠の選び替え、表示名、ゲーム数、勝者の直接修正。
+        この画面でできないこと: 勝者/敗者/順位など、進出元条件そのものの作り替え。
     </p>
 
     <form method="post">
@@ -314,7 +330,7 @@
         </div>
 
         <button type="submit">
-            高度な編集を保存
+            組み合わせ構造を保存
         </button>
 
     </form>

@@ -147,7 +147,7 @@
                         <td>{{ row.status }}</td>
                         <td>{{ row.score }}</td>
                         <td>
-                            <a href="{{ row.input_url }}">
+                            <a href="{{ row.input_url }}?next={{ request.get_full_path|urlencode }}">
                                 {% if row.can_input %}
                                     結果入力
                                 {% else %}

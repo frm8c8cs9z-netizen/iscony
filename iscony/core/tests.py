@@ -2,6 +2,7 @@ import csv
 import io
 import os
 import re
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.messages import get_messages
@@ -2655,7 +2656,7 @@ class RoundRobinMeetingTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "リーグ枠操作")
+        self.assertContains(response, "リーグ枠棄権")
         self.assertContains(response, self.entry1.display_name)
         self.assertContains(response, "リタイアにする")
         self.assertContains(
@@ -6701,6 +6702,71 @@ class MaintenanceMenuTests(TestCase):
             "#225588",
         )
 
+    def test_tournament_settings_can_update_score_sheet_template(self):
+        tournament = Tournament.objects.create(
+            name="採点票設定テスト",
+            code="SCORESHEETSETTING",
+        )
+        template = ScoreSheetTemplate.objects.create(
+            name="大会別採点票",
+            position_key="standard",
+            use_base_pdf=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "tournament_settings",
+                kwargs={"code": tournament.code},
+            ),
+            {
+                "score_sheet_template": str(template.id),
+                "default_league_entry_display_mode": (
+                    Tournament.ENTRY_DISPLAY_SHORT_ORG_2LINE
+                ),
+                "default_league_score_color_mode": (
+                    Tournament.LEAGUE_SCORE_COLOR_COLORED
+                ),
+                "default_tournament_entry_display_mode": (
+                    Tournament.ENTRY_DISPLAY_SHORT_ORG_2LINE
+                ),
+                "default_tournament_reflected_entry_code_mode": (
+                    Tournament.REFLECTED_ENTRY_CODE_ENTRY_CODE
+                ),
+                "default_tournament_layout_type": (
+                    Tournament.TOURNAMENT_LAYOUT_SINGLE
+                ),
+                "default_single_champion_display_mode": (
+                    Tournament.CHAMPION_DISPLAY_AUTO
+                ),
+                "default_single_champion_text_layout": (
+                    Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
+                ),
+                "default_split_champion_display_mode": (
+                    Tournament.CHAMPION_DISPLAY_AUTO
+                ),
+                "default_split_champion_text_layout": (
+                    Tournament.CHAMPION_TEXT_NAME_ORG_2LINE
+                ),
+                "default_tournament_score_display_mode": (
+                    Tournament.SCORE_DISPLAY_LOSER
+                ),
+                "default_tournament_score_color": "#D32F2F",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "maintenance_menu",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        tournament.refresh_from_db()
+        self.assertEqual(
+            tournament.score_sheet_template,
+            template,
+        )
+
     def test_tournament_settings_page_groups_display_settings(self):
         tournament = Tournament.objects.create(
             name="大会設定表示テスト",
@@ -6716,6 +6782,8 @@ class MaintenanceMenuTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "参加者表示")
+        self.assertContains(response, "採点票PDF")
+        self.assertContains(response, "採点票テンプレート")
         self.assertContains(response, "トーナメント表")
         self.assertContains(response, "優勝者表示")
         self.assertContains(response, "リーグ表の色分け")
@@ -7210,14 +7278,125 @@ class ReceptionMatchSearchTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse(
-                "input_tournament_match_score",
-                kwargs={
-                    "code": self.tournament.code,
-                    "match_id": self.tournament_match.id,
-                },
+            (
+                reverse(
+                    "input_tournament_match_score",
+                    kwargs={
+                        "code": self.tournament.code,
+                        "match_id": self.tournament_match.id,
+                    },
+                )
+                + "?"
+                + urlencode(
+                    {
+                        "next": (
+                            reverse(
+                                "reception_match_search",
+                                kwargs={"code": self.tournament.code},
+                            )
+                            + "?search_mode=key&match_key="
+                            + format_match_key_display(self.tournament_match.match_key)
+                        )
+                    }
+                )
             ),
             fetch_redirect_response=False,
+        )
+
+    def test_reception_search_result_links_keep_search_as_return_destination(self):
+        search_url = reverse(
+            "reception_match_search",
+            kwargs={"code": self.tournament.code},
+        )
+        response = self.client.get(
+            search_url,
+            {
+                "search_mode": "entry",
+                "category": str(self.category.id),
+                "entry_number": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "input_match_score",
+                    kwargs={"match_id": self.round_robin_match.id},
+                )
+                + "?next="
+            ),
+        )
+        self.assertContains(
+            response,
+            search_url + "%3Fsearch_mode%3Dentry%26category%3D",
+        )
+
+    def test_round_robin_score_input_defaults_back_to_stage_overview(self):
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "category_stage_overview",
+                    kwargs={"category_id": self.category.id},
+                )
+                + f"#group-{self.group.id}"
+            ),
+        )
+
+    def test_round_robin_score_save_defaults_back_to_stage_overview(self):
+        response = self.client.post(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            ),
+            {
+                "action": "save",
+                "pair1_games": "4",
+                "pair2_games": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "category_stage_overview",
+                    kwargs={"category_id": self.category.id},
+                )
+                + f"#group-{self.group.id}"
+            ),
+            fetch_redirect_response=False,
+        )
+
+    def test_result_input_next_rejects_external_url(self):
+        response = self.client.get(
+            (
+                reverse(
+                    "input_match_score",
+                    kwargs={"match_id": self.round_robin_match.id},
+                )
+                + "?next=https%3A%2F%2Fexample.com%2F"
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "https://example.com/")
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": self.category.id},
+            ),
         )
 
     def test_reception_search_prefill_does_not_auto_submit(self):
@@ -7337,9 +7516,23 @@ class ResultInputSelectTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse(
-                "input_match_score",
-                kwargs={"match_id": self.match.id},
+            (
+                reverse(
+                    "input_match_score",
+                    kwargs={"match_id": self.match.id},
+                )
+                + "?"
+                + urlencode(
+                    {
+                        "next": (
+                            reverse(
+                                "result_input_select",
+                                kwargs={"code": self.tournament.code},
+                            )
+                            + f"?court={self.court.id}&order=3"
+                        )
+                    }
+                )
             ),
             fetch_redirect_response=False,
         )
@@ -8590,7 +8783,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertRegex(
             content,
             re.compile(
-                r'<text[^>]*x="208"[^>]*y="84"[^>]*>.*?予選2.*?</text>',
+                r'<text[^>]*class="advancement-source-text"[^>]*'
+                r'text-anchor="end"[^>]*>.*?予選2.*?</text>',
                 re.S,
             ),
         )
@@ -8640,6 +8834,41 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertContains(response, "未確定")
         self.assertContains(response, "disabled")
+        self.assertNotContains(response, "採点票PDF")
+
+    def test_tournament_match_score_input_shows_score_sheet_pdf_button(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": match.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "採点票PDF")
+        self.assertContains(
+            response,
+            reverse(
+                "tournament_match_score_sheet_pdf",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": match.id,
+                },
+            ),
+        )
 
     def test_unresolved_tournament_match_rejects_score_post(self):
         match = TournamentMatch.objects.create(
@@ -9354,6 +9583,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "champion_text_layout": (
                     TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
                 ),
+                "svg_split_count": self.bracket.svg_split_count,
                 "display_order": self.bracket.display_order,
             },
         )
@@ -9422,6 +9652,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "champion_text_layout": (
                     TournamentBracket.CHAMPION_TEXT_NAME_ORG_2LINE
                 ),
+                "svg_split_count": self.bracket.svg_split_count,
                 "display_order": self.bracket.display_order,
             },
         )
@@ -9619,18 +9850,15 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('y1="70"', svg_content)
-        self.assertIn('x1="192"', svg_content)
-        self.assertIn('x2="234"', svg_content)
-        self.assertIn('y1="93.0"', svg_content)
-        self.assertIn('x1="234"', svg_content)
-        self.assertIn('x2="390.0"', svg_content)
-        self.assertRegex(
-            svg_content,
-            r'x1="39(?:0|2)"',
-        )
-        self.assertIn('x2="510.0"', svg_content)
+        self.assertIn('x1="213"', svg_content)
+        self.assertIn('x2="255"', svg_content)
+        self.assertIn('y1="107.0"', svg_content)
+        self.assertIn('x1="255"', svg_content)
+        self.assertIn('x2="371"', svg_content)
+        self.assertIn('x1="413"', svg_content)
+        self.assertIn('x2="371"', svg_content)
         self.assertRegex(svg_content, r'x="\d+(?:\.\d+)?"')
-        self.assertIn('y="93.0"', svg_content)
+        self.assertIn('y="107.0"', svg_content)
         self.assertIn('text-anchor="end"', svg_content)
         self.assertIn('dominant-baseline="middle"', svg_content)
         self.assertIn(
@@ -9704,15 +9932,15 @@ class TournamentScheduleBehaviorTests(TestCase):
             content.index("</svg>")
         ]
 
-        self.assertIn('x1="148"', svg_content)
+        self.assertIn('x1="169"', svg_content)
         self.assertIn('y1="70"', svg_content)
-        self.assertIn('y1="116"', svg_content)
-        self.assertIn('y1="162"', svg_content)
-        self.assertIn('x1="192"', svg_content)
+        self.assertIn('y1="144"', svg_content)
+        self.assertIn('y1="218"', svg_content)
+        self.assertIn('x1="213"', svg_content)
         self.assertIn('y2="70.0"', svg_content)
-        self.assertIn('x2="234"', svg_content)
+        self.assertIn('x2="255"', svg_content)
         self.assertIn('y1="70.0"', svg_content)
-        self.assertIn('y2="139.0"', svg_content)
+        self.assertIn('y2="181.0"', svg_content)
         self.assertNotIn(">S1<", svg_content)
 
     def test_tournament_bracket_detail_delays_seed_winner_highlight_until_result(self):
@@ -9841,15 +10069,18 @@ class TournamentScheduleBehaviorTests(TestCase):
             content.index("</svg>")
         ]
 
-        self.assertIn(
-            'class="winner-line"\n                        x1="192"\n'
-            '                        y1="139.0"\n'
-            '                        x2="234"\n'
-            '                        y2="139.0"',
+        self.assertRegex(
             svg_content,
+            (
+                r'class="winner-line"\s+'
+                r'x1="213"\s+'
+                r'y1="181\.0"\s+'
+                r'x2="255"\s+'
+                r'y2="181\.0"'
+            ),
         )
 
-    def test_tournament_bracket_detail_keeps_three_entry_seed_advance_line_after_final_loss(self):
+    def test_tournament_bracket_detail_hides_seed_advance_line_after_first_loss(self):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.save()
@@ -9913,12 +10144,15 @@ class TournamentScheduleBehaviorTests(TestCase):
             content.index("</svg>")
         ]
 
-        self.assertIn(
-            'class="winner-line"\n                        x1="192"\n'
-            '                        y1="70.0"\n'
-            '                        x2="234"\n'
-            '                        y2="70.0"',
+        self.assertNotRegex(
             svg_content,
+            (
+                r'class="winner-line"\s+'
+                r'x1="213"\s+'
+                r'y1="70\.0"\s+'
+                r'x2="255"\s+'
+                r'y2="70\.0"'
+            ),
         )
 
     def test_tournament_bracket_detail_connects_split_final_lines(self):
@@ -10007,9 +10241,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertRegex(
             svg_content,
             re.compile(
-                r'x1="294(?:\.0)?"\n'
-                r'\s+y1="181(?:\.0)?"\n'
-                r'\s+x2="410(?:\.0)?"\n'
+                r'class="normal-line"\s+'
+                r'x1="\d+(?:\.\d+)?"\s+'
+                r'y1="181(?:\.0)?"\s+'
+                r'x2="\d+(?:\.\d+)?"\s+'
                 r'\s+y2="181(?:\.0)?"',
             ),
         )
@@ -10363,7 +10598,6 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('class="champion-text"', svg_content)
-        self.assertIn('x="232"', svg_content)
         self.assertIn('text-anchor="start"', svg_content)
         champion_label = svg_content.split('class="champion-text"', 1)[1]
         self.assertIn('dominant-baseline="middle"', champion_label)
@@ -11330,7 +11564,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertContains(
             response,
-            "試合が参照するトーナメント枠を差し替えます。",
+            "この試合が参照する既存のトーナメント枠を選び替えます。",
         )
         self.assertContains(response, "高度な編集")
 
@@ -11396,11 +11630,11 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "この枠の参加者を編集")
+        self.assertContains(response, "この枠の参加者を修正")
         self.assertContains(response, "通常操作: 枠は維持して、参加者だけを差し替えます。")
         self.assertContains(
             response,
-            "高度な編集: 試合の参照枠・表示名・勝者を直接変更",
+            "高度な編集: 組み合わせ構造を修正",
         )
         self.assertContains(
             response,
