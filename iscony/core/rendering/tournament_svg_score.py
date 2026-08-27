@@ -67,3 +67,46 @@ def should_show_svg_score(match, side):
         return True
 
     return match.winner_id != entry.id
+
+
+def should_highlight_svg_winner(match):
+    """勝ち上がり線を赤で表示してよい状態かを判定する。"""
+
+    if not match.winner_id:
+        return False
+
+    if not match.match_code.startswith("S"):
+        return True
+
+    if not match.next_match:
+        return False
+
+    return match.next_match.winner_id == match.winner_id
+
+
+def should_highlight_svg_advance(match, svg):
+    """次ラウンドへ伸びる横線を赤で表示してよいか判定する。"""
+
+    if not should_highlight_svg_winner(match):
+        return False
+
+    next_match = match.next_match
+
+    if (
+        svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
+        and next_match
+        and next_match.round_number == svg["round_count"]
+        and next_match.winner_id
+        and next_match.winner_id != match.winner_id
+    ):
+        return False
+
+    if (
+        svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
+        and next_match
+        and next_match.round_number == svg["round_count"]
+        and not next_match.winner_id
+    ):
+        return False
+
+    return True

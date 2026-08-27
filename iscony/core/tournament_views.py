@@ -87,6 +87,8 @@ from .rendering.tournament_svg_score import (
     entry_score_text as _entry_score_text,
     resolve_svg_score_display_mode as _resolve_svg_score_display_mode,
     resolve_svg_score_text_style as _resolve_svg_score_text_style,
+    should_highlight_svg_advance as _should_highlight_svg_advance,
+    should_highlight_svg_winner as _should_highlight_svg_winner,
     should_show_svg_score as _should_show_svg_score,
 )
 from .rendering.tournament_svg_split import (
@@ -142,59 +144,6 @@ def _show_stage_advancement_warning(request):
             f"{detail}"
         ),
     )
-
-
-def _is_advanced_svg_entry(svg, entry, round_number):
-    """前ラウンドから勝ち上がってきた枠かを判定する。"""
-
-    return (
-        round_number > 1
-        and entry
-        and entry.id in svg["advanced_entry_ids"]
-    )
-
-
-def _should_highlight_svg_winner(match):
-    """勝ち上がり線を赤で表示してよい状態かを判定する。"""
-
-    if not match.winner_id:
-        return False
-
-    if not match.match_code.startswith("S"):
-        return True
-
-    if not match.next_match:
-        return False
-
-    return match.next_match.winner_id == match.winner_id
-
-
-def _should_highlight_svg_advance(match, svg):
-    """次ラウンドへ伸びる横線を赤で表示してよいか判定する。"""
-
-    if not _should_highlight_svg_winner(match):
-        return False
-
-    next_match = match.next_match
-
-    if (
-        svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
-        and next_match
-        and next_match.round_number == svg["round_count"]
-        and next_match.winner_id
-        and next_match.winner_id != match.winner_id
-    ):
-        return False
-
-    if (
-        svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
-        and next_match
-        and next_match.round_number == svg["round_count"]
-        and not next_match.winner_id
-    ):
-        return False
-
-    return True
 
 
 def _tournament_match_score_url(match):
