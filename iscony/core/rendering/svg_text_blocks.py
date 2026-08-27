@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from ..display_helpers import build_entry_display_lines
+
 
 CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
 CHAMPION_ORIENTATION_VERTICAL = "vertical"
@@ -104,6 +106,29 @@ def _svg_single_text_line(text, css_class=""):
         "text": text,
         "class": css_class,
     }]
+
+
+def _svg_display_lines(entry, *, mode):
+    """SVGで使う表示行を返す。所属がない1行表示でも高さを揃える。"""
+
+    lines = build_entry_display_lines(
+        entry,
+        mode=mode,
+    )
+
+    if getattr(entry, "svg_label_mode", "") == "winner-placeholder":
+        return lines
+
+    if (
+        len(lines) == 1
+        and not getattr(entry, "display_organization", "")
+    ):
+        lines.append({
+            "text": "",
+            "class": "entry-org-text",
+        })
+
+    return lines
 
 
 def _svg_side_block_anchor(side):

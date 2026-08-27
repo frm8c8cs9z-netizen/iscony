@@ -18,7 +18,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .display_helpers import (
-    build_entry_display_lines,
     ENTRY_DISPLAY_TARGET_TOURNAMENT,
     format_entry_one_line,
     resolve_entry_display_mode,
@@ -69,6 +68,7 @@ from .rendering.svg_text_blocks import (
     _estimate_svg_vertical_text_height,
     _svg_horizontal_text_block_dimensions,
     _svg_entry_code_block_anchor,
+    _svg_display_lines,
     _svg_single_text_line,
     _svg_side_block_anchor,
     _svg_side_text_anchor,
@@ -945,29 +945,6 @@ def _effective_svg_layout_type(bracket, round_data):
         return TournamentBracket.LAYOUT_SINGLE
 
     return layout_type
-
-
-def _svg_display_lines(entry, *, mode):
-    """SVGで使う表示行を返す。所属がない1行表示でも高さを揃える。"""
-
-    lines = build_entry_display_lines(
-        entry,
-        mode=mode,
-    )
-
-    if getattr(entry, "svg_label_mode", "") == "winner-placeholder":
-        return lines
-
-    if (
-        len(lines) == 1
-        and not getattr(entry, "display_organization", "")
-    ):
-        lines.append({
-            "text": "",
-            "class": "entry-org-text",
-        })
-
-    return lines
 
 
 def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
