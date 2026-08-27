@@ -83,6 +83,7 @@ from .rendering.tournament_svg_geometry import (
     trim_svg_line_segment as _trim_svg_line_segment,
 )
 from .rendering.tournament_svg_split import (
+    build_side_round_display_data,
     build_split_winner_round_data as _build_split_winner_round_data,
     split_svg_round_data as _split_svg_round_data,
     svg_match_display_entry as _svg_match_display_entry,
@@ -1957,32 +1958,7 @@ def build_tournament_bracket_display_data(bracket):
 
     svg_bracket = svg_brackets[0] if svg_brackets else None
 
-    # 決勝だけ中央に置き、それ以外を左右に分けられる形へ整える。
-    side_round_data = []
-    final_round = None
-
-    for round_item in round_data:
-
-        matches_in_round = round_item["matches"]
-
-        if len(matches_in_round) == 1:
-            final_round = {
-                "number": round_item["number"],
-                "label": round_item["label"],
-                "match": matches_in_round[0],
-            }
-            continue
-
-        half_count = (
-            len(matches_in_round) + 1
-        ) // 2
-
-        side_round_data.append({
-            "number": round_item["number"],
-            "label": round_item["label"],
-            "left_matches": matches_in_round[:half_count],
-            "right_matches": matches_in_round[half_count:],
-        })
+    side_round_data, final_round = build_side_round_display_data(round_data)
 
     return {
         "round_data": round_data,

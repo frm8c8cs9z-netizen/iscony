@@ -180,3 +180,34 @@ def build_split_winner_round_data(round_data, split_count, bracket_name):
         winner_round_data,
         split_count,
     )
+
+
+def build_side_round_display_data(round_data):
+    """カード表示用に決勝と左右の山を分けた回戦データを返す。"""
+
+    side_round_data = []
+    final_round = None
+
+    for round_item in round_data:
+        matches_in_round = round_item["matches"]
+
+        if len(matches_in_round) == 1:
+            final_round = {
+                "number": round_item["number"],
+                "label": round_item["label"],
+                "match": matches_in_round[0],
+            }
+            continue
+
+        half_count = (
+            len(matches_in_round) + 1
+        ) // 2
+
+        side_round_data.append({
+            "number": round_item["number"],
+            "label": round_item["label"],
+            "left_matches": matches_in_round[:half_count],
+            "right_matches": matches_in_round[half_count:],
+        })
+
+    return side_round_data, final_round
