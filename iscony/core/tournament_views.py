@@ -83,6 +83,12 @@ from .rendering.tournament_svg_geometry import (
     svg_match_y_positions as _svg_match_y_positions,
     trim_svg_line_segment as _trim_svg_line_segment,
 )
+from .rendering.tournament_svg_score import (
+    entry_score_text as _entry_score_text,
+    resolve_svg_score_display_mode as _resolve_svg_score_display_mode,
+    resolve_svg_score_text_style as _resolve_svg_score_text_style,
+    should_show_svg_score as _should_show_svg_score,
+)
 from .rendering.tournament_svg_split import (
     build_side_round_display_data,
     build_split_winner_round_data as _build_split_winner_round_data,
@@ -136,74 +142,6 @@ def _show_stage_advancement_warning(request):
             f"{detail}"
         ),
     )
-
-
-def _entry_score_text(match, side):
-    """指定した側に表示するゲーム数またはRを返す。"""
-
-    entry = getattr(match, side)
-
-    if not entry:
-        return ""
-
-    if match.is_double_retirement_result or match.retired_entry == entry:
-        return "R"
-
-    if not match.winner_id:
-        return ""
-
-    games = (
-        match.pair1_games
-        if side == "pair1"
-        else match.pair2_games
-    )
-
-    if games is None:
-        return ""
-
-    return str(games)
-
-
-def _should_show_svg_score(match, side):
-    """トーナメント表上で指定した側のスコアを表示するか判定する。"""
-
-    score_display_mode = _resolve_svg_score_display_mode(match.bracket)
-
-    if score_display_mode == TournamentBracket.SCORE_DISPLAY_NONE:
-        return False
-
-    entry = getattr(match, side)
-
-    if not entry:
-        return False
-
-    if match.is_double_retirement_result:
-        return True
-
-    if not match.winner_id:
-        return False
-
-    if score_display_mode == TournamentBracket.SCORE_DISPLAY_BOTH:
-        return True
-
-    return match.winner_id != entry.id
-
-
-def _resolve_svg_score_display_mode(bracket):
-    """スコア表示モードを大会デフォルト込みで決める。"""
-
-    return bracket.effective_score_display_mode
-
-
-def _resolve_svg_score_text_style(bracket):
-    """トーナメントスコアの文字色スタイルを返す。"""
-
-    color = bracket.category.tournament.default_tournament_score_color
-
-    if color and color.upper() != "#000000":
-        return f"fill: {color};"
-
-    return ""
 
 
 def _is_advanced_svg_entry(svg, entry, round_number):
