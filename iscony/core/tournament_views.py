@@ -44,28 +44,26 @@ from .models import (
     TournamentMatch,
 )
 from .rendering.svg_text_blocks import (
+    CHAMPION_SINGLE_HORIZONTAL_TEXT_BLOCK_LAYOUT,
     CHAMPION_HORIZONTAL_PADDING,
     CHAMPION_LINE_HEIGHT,
     CHAMPION_ORIENTATION_HORIZONTAL,
     CHAMPION_ORIENTATION_NONE,
     CHAMPION_ORIENTATION_VERTICAL,
-    CHAMPION_SINGLE_HORIZONTAL_OFFSET_X,
-    CHAMPION_SINGLE_VERTICAL_OFFSET_X,
-    CHAMPION_SPLIT_VERTICAL_BOTTOM_PADDING,
-    CHAMPION_SPLIT_VERTICAL_OFFSET,
+    CHAMPION_SINGLE_VERTICAL_TEXT_BLOCK_LAYOUT,
+    CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT,
+    CHAMPION_SPLIT_VERTICAL_TEXT_BLOCK_LAYOUT,
     CHAMPION_VERTICAL_BOTTOM_PADDING,
     CHAMPION_VERTICAL_TOP_PADDING,
+    ENTRY_CODE_TEXT_BLOCK_LAYOUT,
     ENTRY_BLOCK_MIN_HEIGHT,
     ENTRY_CODE_TEXT_GAP,
     ENTRY_LINE_HEIGHT,
+    ENTRY_TEXT_BLOCK_LAYOUT,
     ENTRY_TEXT_LINE_GAP,
-    FINAL_MATCH_CODE_LABEL_OFFSET_X,
-    FINAL_MATCH_CODE_LABEL_OFFSET_Y,
-    MATCH_CODE_LABEL_OFFSET_X,
-    MATCH_CODE_LABEL_OFFSET_Y,
-    MATCH_SCORE_LABEL_OFFSET_X,
-    MATCH_SCORE_LABEL_OFFSET_Y,
-    SvgTextBlockLayout,
+    FINAL_MATCH_CODE_TEXT_BLOCK_LAYOUT,
+    MATCH_CODE_TEXT_BLOCK_LAYOUT,
+    MATCH_SCORE_TEXT_BLOCK_LAYOUT,
     _append_svg_horizontal_block_label,
     _append_svg_text_block_label,
     _estimate_svg_text_width,
@@ -328,55 +326,6 @@ def _make_svg_winner_placeholder(label, placeholder_id):
         svg_label_mode="winner-placeholder",
         advancement_source=None,
     )
-
-
-ENTRY_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    offset_y=2,
-    line_height=ENTRY_LINE_HEIGHT,
-    minimum_height=ENTRY_BLOCK_MIN_HEIGHT,
-)
-ENTRY_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    baseline=None,
-)
-MATCH_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    offset_x=MATCH_CODE_LABEL_OFFSET_X,
-    offset_y=MATCH_CODE_LABEL_OFFSET_Y,
-)
-FINAL_MATCH_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    offset_x=FINAL_MATCH_CODE_LABEL_OFFSET_X,
-    offset_y=FINAL_MATCH_CODE_LABEL_OFFSET_Y,
-)
-MATCH_SCORE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    offset_x=MATCH_SCORE_LABEL_OFFSET_X,
-    offset_y=MATCH_SCORE_LABEL_OFFSET_Y,
-    baseline=None,
-)
-CHAMPION_SINGLE_HORIZONTAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    orientation=CHAMPION_ORIENTATION_HORIZONTAL,
-    block_anchor="middle-left",
-    offset_x=CHAMPION_SINGLE_HORIZONTAL_OFFSET_X,
-    line_height=CHAMPION_LINE_HEIGHT,
-    padding_x=CHAMPION_HORIZONTAL_PADDING,
-)
-CHAMPION_SINGLE_VERTICAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    orientation=CHAMPION_ORIENTATION_VERTICAL,
-    block_anchor="middle-center",
-    offset_x=CHAMPION_SINGLE_VERTICAL_OFFSET_X,
-)
-CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    orientation=CHAMPION_ORIENTATION_HORIZONTAL,
-    block_anchor="bottom-center",
-    offset_y=-12,
-    line_height=CHAMPION_LINE_HEIGHT,
-)
-CHAMPION_SPLIT_VERTICAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
-    orientation=CHAMPION_ORIENTATION_VERTICAL,
-    block_anchor="bottom-center",
-    offset_y=-CHAMPION_SPLIT_VERTICAL_OFFSET,
-    padding_bottom=CHAMPION_SPLIT_VERTICAL_BOTTOM_PADDING,
-    anchor="middle",
-    baseline=None,
-)
 
 
 def _resolve_svg_champion_display_mode(bracket, layout_type):
