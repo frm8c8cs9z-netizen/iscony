@@ -69,7 +69,10 @@ from .rendering.svg_text_blocks import (
     _estimate_svg_text_width,
     _estimate_svg_vertical_text_height,
     _svg_horizontal_text_block_dimensions,
+    _svg_entry_code_block_anchor,
     _svg_single_text_line,
+    _svg_side_block_anchor,
+    _svg_side_text_anchor,
     _svg_text_block_dimensions,
     _svg_text_block_spec,
 )
@@ -693,17 +696,6 @@ def _append_svg_entry_block_label(
     _append_svg_text_block_label(svg, spec)
 
 
-def _svg_entry_code_block_anchor(text_anchor):
-    """既存の左右寄せを保つため、entry code の text-anchor をブロック基準へ変換する。"""
-
-    if text_anchor == "start":
-        return "middle-left"
-    if text_anchor == "end":
-        return "middle-right"
-
-    return "middle-center"
-
-
 def _append_svg_entry_code_label(
         svg,
         *,
@@ -853,18 +845,6 @@ def _append_svg_score_label(
         baseline=layout.baseline,
     )
     _append_svg_text_block_label(svg, spec)
-
-
-def _svg_side_block_anchor(side):
-    """トーナメント左右の参加者ブロックアンカーを返す。"""
-
-    return "middle-left" if side == "right" else "middle-right"
-
-
-def _svg_side_text_anchor(side):
-    """トーナメント左右の text-anchor を返す。"""
-
-    return "start" if side == "right" else "end"
 
 
 def _estimate_svg_name_width(round_data, entry_display_mode):

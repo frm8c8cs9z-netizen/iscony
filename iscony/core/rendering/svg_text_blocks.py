@@ -106,6 +106,29 @@ def _svg_single_text_line(text, css_class=""):
     }]
 
 
+def _svg_side_block_anchor(side):
+    """トーナメント左右の参加者ブロックアンカーを返す。"""
+
+    return "middle-left" if side == "right" else "middle-right"
+
+
+def _svg_side_text_anchor(side):
+    """トーナメント左右の text-anchor を返す。"""
+
+    return "start" if side == "right" else "end"
+
+
+def _svg_entry_code_block_anchor(text_anchor):
+    """左右寄せの text-anchor を entry code のブロック基準へ変換する。"""
+
+    if text_anchor == "start":
+        return "middle-left"
+    if text_anchor == "end":
+        return "middle-right"
+
+    return "middle-center"
+
+
 def _estimate_svg_text_width(text):
     """SVG上の文字幅を概算する。"""
 
