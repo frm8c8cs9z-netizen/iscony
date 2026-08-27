@@ -14,6 +14,23 @@ def svg_match_display_entry(match, side_name):
     )
 
 
+def build_svg_first_entry_match_ids(round_data):
+    """各参加枠がSVG内で最初に現れる試合IDを返す。"""
+
+    first_match_ids = {}
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in (
+                svg_match_display_entry(match, "pair1"),
+                svg_match_display_entry(match, "pair2"),
+            ):
+                if entry and entry.id not in first_match_ids:
+                    first_match_ids[entry.id] = match.id
+
+    return first_match_ids
+
+
 def make_svg_winner_placeholder(label, placeholder_id):
     """SVG上だけで使う勝者プレースホルダを作る。"""
 

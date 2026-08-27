@@ -96,6 +96,7 @@ from .rendering.tournament_svg_score import (
     should_show_svg_score as _should_show_svg_score,
 )
 from .rendering.tournament_svg_split import (
+    build_svg_first_entry_match_ids as _build_svg_first_entry_match_ids,
     build_side_round_display_data,
     build_split_winner_round_data as _build_split_winner_round_data,
     split_svg_round_data as _split_svg_round_data,
@@ -186,23 +187,6 @@ def _is_unresolved_advancement_entry(entry):
         and not getattr(entry, "participant_id", None)
         and hasattr(entry, "advancement_source")
     )
-
-
-def _build_svg_first_entry_match_ids(round_data):
-    """各参加枠がSVG内で最初に現れる試合IDを返す。"""
-
-    first_match_ids = {}
-
-    for round_item in round_data:
-        for match in round_item["matches"]:
-            for entry in (
-                _svg_match_display_entry(match, "pair1"),
-                _svg_match_display_entry(match, "pair2"),
-            ):
-                if entry and entry.id not in first_match_ids:
-                    first_match_ids[entry.id] = match.id
-
-    return first_match_ids
 
 
 def _single_layout_champion_anchor_point(svg, final_match):
