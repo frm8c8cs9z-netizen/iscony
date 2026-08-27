@@ -1,3 +1,6 @@
+from .tournament_svg_split import svg_match_display_entry
+
+
 def svg_match_y_positions(round_number, index, row_gap, top):
     """指定ラウンドの上下入力線と中心線のY座標を返す。"""
 
@@ -14,6 +17,86 @@ def svg_match_y_positions(round_number, index, row_gap, top):
         y2 = y1 + span
 
     return y1, y2, (y1 + y2) / 2
+
+
+def build_svg_match_positions(round_items, row_gap, top):
+    """表示対象の実在枠だけを詰めて、各試合の上下入力線Y座標を作る。"""
+
+    positions = {}
+    row_index = 0
+
+    if not round_items:
+        return positions
+
+    for match in round_items[0]["matches"]:
+        display_pair1 = svg_match_display_entry(match, "pair1")
+        display_pair2 = svg_match_display_entry(match, "pair2")
+
+        if display_pair1 and display_pair2:
+            y1 = top + (row_index * row_gap)
+            row_index += 1
+            y2 = top + (row_index * row_gap)
+            row_index += 1
+        elif display_pair1:
+            y1 = top + (row_index * row_gap)
+            y2 = y1
+            row_index += 1
+        elif display_pair2:
+            y2 = top + (row_index * row_gap)
+            y1 = y2
+            row_index += 1
+        else:
+            y1 = top + (row_index * row_gap)
+            row_index += 1
+            y2 = top + (row_index * row_gap)
+            row_index += 1
+
+        positions[match.id] = {
+            "y1": y1,
+            "y2": y2,
+            "center_y": (y1 + y2) / 2,
+        }
+
+    previous_positions = positions.copy()
+
+    for round_index, round_item in enumerate(round_items[1:], start=1):
+        current_positions = {}
+        previous_matches = round_items[round_index - 1]["matches"]
+
+        for index, match in enumerate(round_item["matches"]):
+            first_child_index = index * 2
+            child_centers = []
+
+            for child_match in previous_matches[
+                first_child_index:first_child_index + 2
+            ]:
+                child_position = previous_positions.get(child_match.id)
+
+                if child_position:
+                    child_centers.append(child_position["center_y"])
+
+            if len(child_centers) == 2:
+                y1, y2 = child_centers
+            elif len(child_centers) == 1:
+                y1 = y2 = child_centers[0]
+            else:
+                y1, y2, _ = svg_match_y_positions(
+                    match.round_number,
+                    index,
+                    row_gap,
+                    top,
+                )
+
+            current_positions[match.id] = {
+                "y1": y1,
+                "y2": y2,
+                "center_y": (y1 + y2) / 2,
+            }
+
+        positions.update(current_positions)
+        previous_positions = current_positions
+
+    return positions
 
 
 def shift_svg_match_positions(positions, y_offset):
