@@ -1,5 +1,5 @@
 """
-core.views
+core.views.dashboard
 
 大会の基本画面と、コート進行・メンテナンス系のビューを置く。
 リーグ戦、トーナメント、CSV取込、PDF出力は専用ビューへ分離済み。
@@ -17,7 +17,7 @@ from django.shortcuts import (
     redirect,
 )
 
-from .models import (
+from ..models import (
     Tournament,
     Category,
     Group,
@@ -28,7 +28,7 @@ from .models import (
     Schedule,
 )
 
-from .forms import (
+from ..forms import (
     ScheduleEditForm,
     ScheduleMoveForm,
     CategoryForm,
@@ -37,16 +37,16 @@ from .forms import (
     TournamentCloneForm,
     TournamentSettingsForm,
 )
-from .match_keys import (
+from ..match_keys import (
     format_match_key_display,
 )
 
-from .services import (
+from ..services import (
     clone_tournament_without_results,
     move_schedule,
 )
 
-from .view_helper import(
+from ..view_helper import(
     redirect_next_or_default,
     url_with_next,
 )

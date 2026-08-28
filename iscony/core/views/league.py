@@ -1,5 +1,5 @@
 """
-core.league_views
+core.views.league
 
 リーグ戦（ラウンドロビン）に関する画面をまとめる。
 LeagueEntry モデルは当面「リーグ枠/LeagueEntry」として扱っているため、
@@ -15,13 +15,13 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from .display_helpers import (
+from ..display_helpers import (
     build_entry_display_lines,
     ENTRY_DISPLAY_TARGET_LEAGUE,
     resolve_entry_display_mode,
 )
-from .forms import ExtraRoundRobinMatchForm, LeagueEntryEditForm
-from .models import (
+from ..forms import ExtraRoundRobinMatchForm, LeagueEntryEditForm
+from ..models import (
     Category,
     Group,
     GroupRanking,
@@ -32,7 +32,7 @@ from .models import (
     ScheduleReplacementHistory,
     Tournament,
 )
-from .services import (
+from ..services import (
     cancel_pair_retirement,
     create_extra_round_robin_match,
     delete_round_robin_score,
@@ -42,8 +42,8 @@ from .services import (
     undo_schedule_replacement,
     update_group_ranking,
 )
-from .validators import validate_game_score
-from .view_helper import (
+from ..validators import validate_game_score
+from ..view_helper import (
     redirect_next_or_url,
     render_score_input,
     safe_next_url,

@@ -27,7 +27,7 @@ from .display_helpers import (
     resolve_entry_display_mode,
 )
 from .match_keys import format_match_key_display
-from .csv_views import STAGE_REIMPORT_SESSION_KEY
+from .views.csv import STAGE_REIMPORT_SESSION_KEY
 from .models import (
     Category,
     AdvancementSource,
@@ -48,17 +48,17 @@ from .models import (
     Participant,
     ScoreSheetTemplate,
 )
-from .pdf_views import (
+from .views.pdf import (
     category_name_text_layout,
     get_score_sheet_template_settings,
 )
-from .tournament_views import _estimate_svg_text_width
-from .tournament_views import _single_layout_champion_bounds
-from .tournament_views import _should_highlight_svg_winner
-from .tournament_views import _resolve_svg_champion_orientation
-from .tournament_views import _svg_champion_text_lines
-from .tournament_views import build_tournament_bracket_display_data
-from .views import _schedule_block_tables
+from .views.dashboard import _schedule_block_tables
+from .views.tournament import _estimate_svg_text_width
+from .views.tournament import _single_layout_champion_bounds
+from .views.tournament import _should_highlight_svg_winner
+from .views.tournament import _resolve_svg_champion_orientation
+from .views.tournament import _svg_champion_text_lines
+from .views.tournament import build_tournament_bracket_display_data
 
 from .services import (
     advance_tournament_bye_winners,

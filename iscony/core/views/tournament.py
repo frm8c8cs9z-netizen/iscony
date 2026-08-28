@@ -1,5 +1,5 @@
 """
-core.tournament_views
+core.views.tournament
 
 トーナメント表、勝ち上がり、トーナメントCSV取込、トーナメント進行表を扱う。
 表示方式は今後SVG化や左右/片側表示の設定追加が想定されるため、
@@ -15,7 +15,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from .forms import (
+from ..forms import (
     BracketGenerateForm,
     CSVUploadForm,
     ScheduleCreateForm,
@@ -23,7 +23,7 @@ from .forms import (
     TournamentEntryEditForm,
     TournamentMatchEditForm,
 )
-from .models import (
+from ..models import (
     Court,
     LeagueEntry,
     Participant,
@@ -33,22 +33,22 @@ from .models import (
     TournamentEntry,
     TournamentMatch,
 )
-from .rendering.svg_text_blocks import (
+from ..rendering.svg_text_blocks import (
     _estimate_svg_text_width,
 )
-from .rendering.tournament_svg_champion import (
+from ..rendering.tournament_svg_champion import (
     resolve_svg_champion_orientation as _resolve_svg_champion_orientation,
     single_layout_champion_bounds as _single_layout_champion_bounds,
     svg_champion_text_lines as _svg_champion_text_lines,
 )
-from .rendering.tournament_svg_score import (
+from ..rendering.tournament_svg_score import (
     should_highlight_svg_winner as _should_highlight_svg_winner,
 )
-from .rendering.tournament_svg_builder import (
+from ..rendering.tournament_svg_builder import (
     build_svg_bracket_data as _build_svg_bracket_data,
     build_tournament_bracket_display_data,
 )
-from .services import (
+from ..services import (
     advance_tournament_bye_winners,
     delete_tournament_score,
     consume_stage_advancement_result,
@@ -56,12 +56,12 @@ from .services import (
     save_tournament_retirement,
     validate_tournament_score_change,
 )
-from .utils import (
+from ..utils import (
     build_display_bracket_slots,
     get_bracket_size,
 )
-from .validators import validate_game_score
-from .view_helper import (
+from ..validators import validate_game_score
+from ..view_helper import (
     redirect_next_or_default,
     render_score_input,
 )

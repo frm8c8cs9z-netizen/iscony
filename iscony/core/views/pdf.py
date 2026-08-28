@@ -1,5 +1,5 @@
 """
-core.pdf_views
+core.views.pdf
 
 採点票PDFの生成をまとめる。
 リーグ戦・トーナメントのどちらからも呼ばれるため、
@@ -27,9 +27,9 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
-from .constants import SCORE_SHEET_POSITION_PATTERNS
-from .match_keys import format_match_key_display, normalize_match_key
-from .models import (
+from ..constants import SCORE_SHEET_POSITION_PATTERNS
+from ..match_keys import format_match_key_display, normalize_match_key
+from ..models import (
     Court,
     Group,
     RoundRobinMatch,
@@ -40,7 +40,7 @@ from .models import (
     TournamentBracket,
     TournamentMatch,
 )
-from .utils import get_round_label
+from ..utils import get_round_label
 
 
 SCORE_SHEET_BASE_FONT = "NotoSansJP"

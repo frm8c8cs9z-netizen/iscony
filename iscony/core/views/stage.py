@@ -4,8 +4,8 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from .league_views import build_category_group_data
-from .models import (
+from .league import build_category_group_data
+from ..models import (
     AdvancementSource,
     Category,
     Group,
@@ -18,8 +18,8 @@ from .models import (
     TournamentBracket,
     TournamentMatch,
 )
-from .services import inspect_stage_advancement_readiness
-from .tournament_views import build_tournament_bracket_display_data
+from ..services import inspect_stage_advancement_readiness
+from .tournament import build_tournament_bracket_display_data
 
 
 def _target_stage(source):

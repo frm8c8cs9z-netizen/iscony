@@ -1,5 +1,5 @@
 """
-core.advancement_views
+core.views.advancement
 
 後続ステージの枠が、どの前ステージ結果から埋まる予定かを
 確認する画面を扱う。
@@ -10,12 +10,12 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .models import (
+from ..models import (
     AdvancementSource,
     Stage,
     Tournament,
 )
-from .services import (
+from ..services import (
     apply_stage_advancements,
     inspect_stage_advancement_readiness,
     swap_advancement_sources,

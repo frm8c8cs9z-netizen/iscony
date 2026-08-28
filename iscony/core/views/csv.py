@@ -1,5 +1,5 @@
 """
-core.csv_views
+core.views.csv
 
 大会データをCSVから取り込むビューをまとめる。
 既存データを削除して再生成する取込もあるため、各ビューの
@@ -18,8 +18,8 @@ from django.db.models import Max, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .forms import CSVUploadForm
-from .models import (
+from ..forms import CSVUploadForm
+from ..models import (
     AdvancementSource,
     Category,
     Court,
@@ -36,11 +36,11 @@ from .models import (
     TournamentEntry,
     TournamentMatch,
 )
-from .services import (
+from ..services import (
     advance_tournament_bye_winners,
     auto_apply_stage_advancements_if_ready,
 )
-from .utils import build_display_bracket_slots, get_bracket_size
+from ..utils import build_display_bracket_slots, get_bracket_size
 
 
 STAGE_SLOT_REQUIRED_COLUMNS = {
