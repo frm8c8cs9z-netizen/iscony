@@ -1,3 +1,4 @@
+from .svg_text_blocks import ENTRY_TEXT_LINE_GAP
 from .tournament_svg_split import svg_match_display_entry
 
 
@@ -97,6 +98,69 @@ def build_svg_match_positions(round_items, row_gap, top):
         previous_positions = current_positions
 
     return positions
+
+
+def svg_match_x_positions(svg, round_number, side):
+    """指定ラウンド・左右山の主要X座標を返す。"""
+
+    name_width = svg["name_width"]
+    number_width = svg["number_width"]
+    entry_gap = svg["entry_gap"]
+    shoulder = svg["shoulder"]
+    round_gap = svg["round_gap"]
+
+    if side == "right":
+        first_join_x = (
+            svg["width"]
+            - svg["side_margin"]
+            - number_width
+            - entry_gap
+            - name_width
+            - ENTRY_TEXT_LINE_GAP
+            - shoulder
+        )
+        join_x = first_join_x - ((round_number - 1) * round_gap)
+
+        return {
+            "first_join_x": first_join_x,
+            "join_x": join_x,
+            "line_start": join_x if round_number > 1 else join_x + shoulder,
+            "number_x": svg["width"] - svg["side_margin"] - number_width,
+            "text_x": (
+                svg["width"]
+                - svg["side_margin"]
+                - number_width
+                - entry_gap
+                - name_width
+            ),
+            "code_x": join_x + 8,
+            "score_x": join_x - 10,
+        }
+
+    first_join_x = (
+        svg["side_margin"]
+        + number_width
+        + entry_gap
+        + name_width
+        + ENTRY_TEXT_LINE_GAP
+        + shoulder
+    )
+    join_x = first_join_x + ((round_number - 1) * round_gap)
+
+    return {
+        "first_join_x": first_join_x,
+        "join_x": join_x,
+        "line_start": join_x if round_number > 1 else join_x - shoulder,
+        "number_x": svg["side_margin"] + number_width,
+        "text_x": (
+            svg["side_margin"]
+            + number_width
+            + entry_gap
+            + name_width
+        ),
+        "code_x": join_x - 8,
+        "score_x": join_x + 10,
+    }
 
 
 def shift_svg_match_positions(positions, y_offset):

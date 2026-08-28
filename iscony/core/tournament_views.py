@@ -79,6 +79,7 @@ from .rendering.tournament_svg_geometry import (
     last_svg_center as _last_svg_center,
     shift_svg_match_positions as _shift_svg_match_positions,
     split_svg_final_y as _split_svg_final_y,
+    svg_match_x_positions as _svg_match_x_positions,
     svg_match_y_positions as _svg_match_y_positions,
     trim_svg_line_segment as _trim_svg_line_segment,
 )
@@ -834,12 +835,6 @@ def _add_svg_match(svg, match, *, round_number, side, index):
 
     row_gap = svg["row_gap"]
     top = svg["top"]
-    round_gap = svg["round_gap"]
-    name_width = svg["name_width"]
-    number_width = svg["number_width"]
-    entry_gap = svg["entry_gap"]
-    shoulder = svg["shoulder"]
-    line_pad = svg["line_pad"]
 
     match_position = svg["match_positions"].get((side, match.id))
 
@@ -855,54 +850,16 @@ def _add_svg_match(svg, match, *, round_number, side, index):
             top,
         )
 
-    if side == "right":
-        first_join_x = (
-            svg["width"]
-            - svg["side_margin"]
-            - number_width
-            - entry_gap
-            - name_width
-            - ENTRY_TEXT_LINE_GAP
-            - shoulder
-        )
-        join_x = first_join_x - ((round_number - 1) * round_gap)
-        line_start = join_x if round_number > 1 else join_x + shoulder
-        number_x = svg["width"] - svg["side_margin"] - number_width
-        text_x = (
-            svg["width"]
-            - svg["side_margin"]
-            - number_width
-            - entry_gap
-            - name_width
-        )
-        number_anchor = _svg_side_text_anchor(side)
-        text_anchor = _svg_side_text_anchor(side)
-        code_anchor = _svg_side_text_anchor(side)
-        code_x = join_x + 8
-        score_x = join_x - 10
-    else:
-        first_join_x = (
-            svg["side_margin"]
-            + number_width
-            + entry_gap
-            + name_width
-            + ENTRY_TEXT_LINE_GAP
-            + shoulder
-        )
-        join_x = first_join_x + ((round_number - 1) * round_gap)
-        line_start = join_x if round_number > 1 else join_x - shoulder
-        number_x = svg["side_margin"] + number_width
-        text_x = (
-            svg["side_margin"]
-            + number_width
-            + entry_gap
-            + name_width
-        )
-        number_anchor = _svg_side_text_anchor(side)
-        text_anchor = _svg_side_text_anchor(side)
-        code_anchor = _svg_side_text_anchor(side)
-        code_x = join_x - 8
-        score_x = join_x + 10
+    x_positions = _svg_match_x_positions(svg, round_number, side)
+    join_x = x_positions["join_x"]
+    line_start = x_positions["line_start"]
+    number_x = x_positions["number_x"]
+    text_x = x_positions["text_x"]
+    code_x = x_positions["code_x"]
+    score_x = x_positions["score_x"]
+    number_anchor = _svg_side_text_anchor(side)
+    text_anchor = _svg_side_text_anchor(side)
+    code_anchor = _svg_side_text_anchor(side)
 
     advance_x = _next_svg_line_start(
         svg,
