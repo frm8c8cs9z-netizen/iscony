@@ -2,7 +2,21 @@
 
 大会・カテゴリ・進行枠単位で、結果や進行状態を戻せるようにJSON化して保存し、
 必要に応じて復元する処理をまとめる。
-自動後続反映前の保険や、運用中の事故対応を支えるためのサービス層。
+
+スナップショットは、運用中に「ここまでは戻して問題ない」と判断できる地点を残すための
+保険として使う。特に、後続Stageへの自動反映前や、進行表を再取込する前など、
+複数のモデルにまたがる変更の直前に重要になる。
+
+主な保存対象:
+- LeagueEntry / TournamentEntry の枠状態
+- RoundRobinMatch / TournamentMatch の結果
+- GroupRanking の順位情報
+- Schedule と ScheduleReplacementHistory の進行情報
+- AdvancementSource の反映元情報
+
+ここでは、試合結果の妥当性判定や順位計算そのものは行わない。
+復元対象範囲の選び方はUI側で決め、ここでは指定された範囲を一貫した状態へ戻すことに集中する。
+将来的にUndo機能を強化する場合も、この層を起点に履歴・復元単位を整理する。
 """
 
 from django.core.exceptions import ValidationError
