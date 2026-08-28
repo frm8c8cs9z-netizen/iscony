@@ -77,6 +77,7 @@ from .rendering.svg_text_blocks import (
 from .rendering.tournament_svg_geometry import (
     build_svg_match_positions as _build_svg_match_positions,
     last_svg_center as _last_svg_center,
+    next_svg_line_start as _next_svg_line_start,
     shift_svg_match_positions as _shift_svg_match_positions,
     split_svg_final_y as _split_svg_final_y,
     svg_match_x_positions as _svg_match_x_positions,
@@ -769,65 +770,6 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         svg["lines"].append(spec["line"])
 
     _append_svg_text_block_label(svg, spec)
-
-
-def _next_svg_line_start(svg, round_number, side, join_x):
-    """次ラウンドの入力線まで、現在ラウンドの出口線を伸ばす。"""
-
-    if round_number >= svg["round_count"]:
-        if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
-            final_line_pad = svg["line_pad"]
-        else:
-            final_line_pad = svg.get("final_line_pad", 2)
-        return (
-            join_x - final_line_pad
-            if side == "right"
-            else join_x + final_line_pad
-        )
-
-    if (
-        svg["layout_type"] == TournamentBracket.LAYOUT_SPLIT
-        and round_number == svg["round_count"] - 1
-    ):
-        # 両山表示の「最終ラウンドの一つ前」は、片山表示の準決勝で使う
-        # 左右それぞれの立ち上がり横線に相当する。
-        #
-        # ただし現在の SVG では、両山表示の中央には決勝用の横線を別に描いており、
-        # このラウンドの出口線まで描くと、中央に不要な短い横線
-        # （join_x から次ラウンド join_x までの stub）が残って見た目が崩れる。
-        #
-        # そのため両山表示では、このラウンドの出口線は「長さ 0」として扱い、
-        # ここでは join_x をそのまま返す。
-        #
-        # 注意:
-        # - 片山表示ではこの線は必要なので消してはいけない
-        # - 両山表示でも、もっと前のラウンドの横線は必要
-        # - この条件を広げると、準決勝より前の接続や上位トーナメントの足が壊れやすい
-        return join_x
-
-    if side == "right":
-        next_join_x = (
-            svg["width"]
-            - svg["side_margin"]
-            - svg["number_width"]
-            - svg["entry_gap"]
-            - svg["name_width"]
-            - ENTRY_TEXT_LINE_GAP
-            - svg["shoulder"]
-            - (round_number * svg["round_gap"])
-        )
-        return next_join_x
-
-    next_join_x = (
-        svg["side_margin"]
-        + svg["number_width"]
-        + svg["entry_gap"]
-        + svg["name_width"]
-        + ENTRY_TEXT_LINE_GAP
-        + svg["shoulder"]
-        + (round_number * svg["round_gap"])
-    )
-    return next_join_x
 
 
 def _add_svg_match(svg, match, *, round_number, side, index):
