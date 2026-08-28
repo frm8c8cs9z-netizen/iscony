@@ -39,34 +39,23 @@ from .models import (
     TournamentMatch,
 )
 from .rendering.svg_text_blocks import (
-    CHAMPION_SINGLE_HORIZONTAL_TEXT_BLOCK_LAYOUT,
     CHAMPION_HORIZONTAL_PADDING,
-    CHAMPION_LINE_HEIGHT,
     CHAMPION_ORIENTATION_HORIZONTAL,
-    CHAMPION_ORIENTATION_NONE,
     CHAMPION_ORIENTATION_VERTICAL,
-    CHAMPION_SINGLE_VERTICAL_TEXT_BLOCK_LAYOUT,
-    CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT,
-    CHAMPION_SPLIT_VERTICAL_TEXT_BLOCK_LAYOUT,
-    CHAMPION_VERTICAL_BOTTOM_PADDING,
-    CHAMPION_VERTICAL_TOP_PADDING,
     ENTRY_BLOCK_MIN_HEIGHT,
     ENTRY_CODE_TEXT_GAP,
     ENTRY_LINE_HEIGHT,
     ENTRY_TEXT_LINE_GAP,
     FINAL_MATCH_CODE_TEXT_BLOCK_LAYOUT,
     _append_svg_horizontal_block_label,
-    _append_svg_text_block_label,
     _estimate_svg_text_width,
     _estimate_svg_vertical_text_height,
     _svg_single_text_line,
     _svg_text_block_dimensions,
-    _svg_text_block_spec,
 )
 from .rendering.tournament_svg_geometry import (
     build_svg_match_positions as _build_svg_match_positions,
     last_svg_center as _last_svg_center,
-    next_svg_line_start as _next_svg_line_start,
     shift_svg_match_positions as _shift_svg_match_positions,
     split_svg_final_y as _split_svg_final_y,
     trim_svg_line_segment as _trim_svg_line_segment,
@@ -84,7 +73,10 @@ from .rendering.tournament_svg_labels import (
     svg_entry_text_lines as _svg_entry_text_lines,
 )
 from .rendering.tournament_svg_champion import (
+    add_svg_champion_label as _add_svg_champion_label,
     resolve_svg_champion_orientation as _resolve_svg_champion_orientation,
+    single_layout_champion_bounds as _single_layout_champion_bounds,
+    svg_champion_block_spec as _svg_champion_block_spec,
     svg_champion_text_lines as _svg_champion_text_lines,
     svg_entry_with_org as _svg_entry_with_org,
 )
@@ -163,229 +155,6 @@ def _tournament_stage_overview_url(match):
         return f"{url}#stage-{match.bracket.stage.id}"
 
     return url
-
-
-def _single_layout_champion_anchor_point(svg, final_match):
-    """片山表示の優勝者ラベル基準位置を返す。"""
-
-    position = svg["match_positions"].get(("left", final_match.id))
-
-    if not position:
-        return None
-
-    join_x = (
-        svg["side_margin"]
-        + svg["number_width"]
-        + svg["entry_gap"]
-        + svg["name_width"]
-        + ENTRY_TEXT_LINE_GAP
-        + svg["shoulder"]
-        + ((final_match.round_number - 1) * svg["round_gap"])
-    )
-    advance_x = _next_svg_line_start(
-        svg,
-        final_match.round_number,
-        "left",
-        join_x,
-    )
-
-    return {
-        "advance_x": advance_x,
-        "center_y": position["center_y"],
-    }
-
-
-def _single_layout_champion_bounds(
-        svg,
-        final_match,
-        lines,
-        champion_orientation):
-    """片山表示の優勝者ブロックの配置と占有範囲を返す。"""
-
-    anchor_point = _single_layout_champion_anchor_point(
-        svg,
-        final_match,
-    )
-
-    if not anchor_point:
-        return None
-
-    if champion_orientation == CHAMPION_ORIENTATION_HORIZONTAL:
-        layout = CHAMPION_SINGLE_HORIZONTAL_TEXT_BLOCK_LAYOUT
-        spec = _svg_text_block_spec(
-            lines=lines,
-            orientation=layout.orientation,
-            base_x=anchor_point["advance_x"],
-            base_y=anchor_point["center_y"],
-            offset_x=layout.offset_x,
-            offset_y=layout.offset_y,
-            block_anchor=layout.block_anchor,
-            line_height=layout.line_height,
-            padding_x=layout.padding_x,
-        )
-    else:
-        layout = CHAMPION_SINGLE_VERTICAL_TEXT_BLOCK_LAYOUT
-        spec = _svg_text_block_spec(
-            lines=lines,
-            orientation=layout.orientation,
-            base_x=anchor_point["advance_x"],
-            base_y=anchor_point["center_y"],
-            offset_x=layout.offset_x,
-            offset_y=layout.offset_y,
-            block_anchor=layout.block_anchor,
-            padding_top=layout.padding_top,
-            padding_bottom=layout.padding_bottom,
-        )
-
-    return spec["bounds"]
-
-
-def _svg_champion_block_spec(
-        *,
-        svg,
-        bracket,
-        final_match,
-        final_y=None,
-        center_x=None):
-    """優勝者表示ブロックの描画仕様を返す。"""
-
-    winner = final_match.winner
-
-    if not winner:
-        return None
-
-    lines = _svg_champion_text_lines(
-        winner,
-        bracket,
-        svg["layout_type"],
-    )
-
-    if not _svg_champion_line_text(lines):
-        return None
-
-    champion_orientation = _resolve_svg_champion_orientation(
-        bracket,
-        svg["layout_type"],
-    )
-
-    if champion_orientation == CHAMPION_ORIENTATION_NONE:
-        return None
-
-    if svg["layout_type"] == TournamentBracket.LAYOUT_SINGLE:
-        bounds = _single_layout_champion_bounds(
-            svg,
-            final_match,
-            lines,
-            champion_orientation,
-        )
-
-        if not bounds:
-            return None
-
-        return {
-            "lines": lines,
-            "orientation": champion_orientation,
-            "bounds": bounds,
-            "block_anchor": (
-                "middle-center"
-                if champion_orientation == CHAMPION_ORIENTATION_VERTICAL
-                else "middle-left"
-            ),
-            "line_height": CHAMPION_LINE_HEIGHT,
-            "minimum_height": 0,
-            "padding_top": CHAMPION_VERTICAL_TOP_PADDING,
-            "padding_bottom": CHAMPION_VERTICAL_BOTTOM_PADDING,
-            "css_class": (
-                ""
-                if champion_orientation == CHAMPION_ORIENTATION_VERTICAL
-                else "champion-text"
-            ),
-            "class_map": {
-                "": "champion-vertical-text",
-                "champion-org-text": "champion-org-vertical-text",
-            },
-            "anchor": "middle",
-            "baseline": "middle",
-            "url": "",
-            "style": None,
-            "line": None,
-        }
-
-    if final_y is None or center_x is None:
-        return None
-
-    line_top = final_y - 34
-    line = {
-        "x1": center_x,
-        "y1": final_y,
-        "x2": center_x,
-        "y2": line_top,
-        "class": "winner-line",
-    }
-
-    if champion_orientation == CHAMPION_ORIENTATION_VERTICAL:
-        layout = CHAMPION_SPLIT_VERTICAL_TEXT_BLOCK_LAYOUT
-        block_spec = _svg_text_block_spec(
-            lines=lines,
-            orientation=layout.orientation,
-            base_x=center_x,
-            base_y=line_top,
-            offset_x=layout.offset_x,
-            offset_y=layout.offset_y,
-            block_anchor=layout.block_anchor,
-            padding_top=layout.padding_top,
-            padding_bottom=layout.padding_bottom,
-            class_map={
-                "": "champion-vertical-text",
-                "champion-org-text": "champion-org-vertical-text",
-            },
-            anchor=layout.anchor,
-            baseline=layout.baseline,
-        )
-    else:
-        layout = CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT
-        block_spec = _svg_text_block_spec(
-            lines=lines,
-            orientation=layout.orientation,
-            base_x=center_x,
-            base_y=line_top,
-            offset_x=layout.offset_x,
-            offset_y=layout.offset_y,
-            block_anchor=layout.block_anchor,
-            line_height=layout.line_height,
-            padding_x=layout.padding_x,
-            css_class="champion-text",
-        )
-
-    block_spec["line"] = line
-
-    return block_spec
-
-
-def _svg_champion_line_text(lines):
-    """複数行指定から1行表示用の文字列を返す。"""
-
-    return lines[0]["text"] if lines else ""
-
-
-def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
-    """決勝入力後に優勝者名をSVGへ追加する。"""
-
-    spec = _svg_champion_block_spec(
-        svg=svg,
-        bracket=bracket,
-        final_match=final_match,
-        final_y=final_y,
-        center_x=center_x,
-    )
-
-    if not spec:
-        return
-
-    if spec["line"]:
-        svg["lines"].append(spec["line"])
-
-    _append_svg_text_block_label(svg, spec)
 
 
 def _build_svg_bracket_data(
