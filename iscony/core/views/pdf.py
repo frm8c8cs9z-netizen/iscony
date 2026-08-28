@@ -40,7 +40,7 @@ from ..models import (
     TournamentBracket,
     TournamentMatch,
 )
-from ..utils import get_round_label
+from ..helpers.brackets import get_round_label
 
 
 SCORE_SHEET_BASE_FONT = "NotoSansJP"

@@ -4,7 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from ..models import Category, OperationSnapshot, ScheduleBlock, Tournament
-from ..snapshot_services import (
+from ..services.snapshots import (
     AUTO_TYPE_STAGE_ADVANCEMENT,
     create_tournament_snapshot,
     restore_category_schedule_block_from_tournament_snapshot,

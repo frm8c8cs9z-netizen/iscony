@@ -1,8 +1,19 @@
+"""大きなトーナメント表の分割表示と上位トーナメント用データを作る。
+
+実体としては1つのTournamentBracketを、1回戦の並びを基準に2分割・4分割・8分割などへ
+便宜上分けて表示する。各分割ブロックの勝者を集めた上位トーナメントも、可能な限り
+通常のトーナメント描画部品へ渡せる round_data として整形する。
+
+分割は表示上の都合であり、match_code は元の大きなトーナメントのものを使う。
+まだ勝者が決まっていない分割ブロックはプレースホルダを置き、描画側から見れば
+「未確定の参加枠が入った普通のトーナメント」に近い形になるようにする。
+"""
+
 import copy
 import math
 from types import SimpleNamespace
 
-from ..utils import get_round_label
+from ..helpers.brackets import get_round_label
 
 
 def svg_match_display_entry(match, side_name):

@@ -1,6 +1,18 @@
+"""トーナメントSVG表示データを組み立てる入口。
+
+views 層から呼ばれる中心的なビルダーで、DBから取得済みの round_data と
+TournamentBracket 設定を受け取り、テンプレートが描画できる svg 辞書へ変換する。
+片山/両山表示、分割表示、上位トーナメント表示、参加者ブロック幅、SVG全体幅など、
+複数モジュールの計算結果をここで束ねる。
+
+このファイルは「全体の配置を決める司令塔」であり、個々の線や文字の細かい描画は
+tournament_svg_matches / tournament_svg_final / tournament_svg_champion などへ委譲する。
+挙動変更時は、ここで直接描画ルールを増やすより、専用モジュール側に責務を寄せる。
+"""
+
 import math
 
-from ..display_helpers import (
+from ..helpers.display import (
     ENTRY_DISPLAY_TARGET_TOURNAMENT,
     resolve_entry_display_mode,
 )

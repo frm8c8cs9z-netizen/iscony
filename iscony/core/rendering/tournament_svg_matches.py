@@ -1,3 +1,14 @@
+"""通常ラウンドの1試合分をSVG要素へ変換する。
+
+各 TournamentMatch について、参加者表示、エントリーコード、試合ラベル、
+得失ゲーム数、入力線、勝ち上がり線を svg 辞書へ追加する。
+片山/両山の左右差は geometry から受け取った座標と side 値で吸収し、
+文字配置は labels / text_blocks、勝敗表示の判定は score に委譲する。
+
+ここは多くの見た目問題が表面化する場所だが、座標の基礎計算や文字ブロック寸法を
+直接重複実装しない。必要な場合は tournament_svg_geometry や svg_text_blocks に戻す。
+"""
+
 from .svg_text_blocks import _svg_side_text_anchor
 from .tournament_svg_geometry import (
     next_svg_line_start,

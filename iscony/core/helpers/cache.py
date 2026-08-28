@@ -1,3 +1,10 @@
+"""Cache helpers for core views.
+
+公開画面など、読み取り専用ビューへ短時間キャッシュを付けるための補助関数を置く。
+キャッシュ対象の判定やURL設計は呼び出し側で行い、ここではDjangoのcache_pageを
+設定値に沿って適用する薄いラッパーに留める。
+"""
+
 from functools import wraps
 
 from django.conf import settings

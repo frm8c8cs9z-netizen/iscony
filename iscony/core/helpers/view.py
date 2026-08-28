@@ -1,3 +1,11 @@
+"""View helpers shared by multiple core screens.
+
+結果入力後の戻り先処理、next URLの安全確認、共通テンプレートへの描画など、
+複数のビューで使う小さな画面補助を集める。
+業務データの更新判断は services に置き、ここではHTTPリクエスト/レスポンスに近い
+補助処理だけを扱う。
+"""
+
 from urllib.parse import urlencode
 
 from django.shortcuts import render, redirect

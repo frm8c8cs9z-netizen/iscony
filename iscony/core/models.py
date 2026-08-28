@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.core.validators import RegexValidator
 
-from .display_helpers import (
+from .helpers.display import (
     ENTRY_DISPLAY_INHERIT as DISPLAY_INHERIT,
     ENTRY_DISPLAY_NAME_ORG_2LINE as DISPLAY_NAME_ORG_2LINE,
     ENTRY_DISPLAY_ONE_LINE as DISPLAY_ONE_LINE,

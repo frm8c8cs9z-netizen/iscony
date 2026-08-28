@@ -1,3 +1,14 @@
+"""トーナメントSVGの座標計算を集約する。
+
+このファイルは、試合ごとのY座標、ラウンドごとのX座標、次ラウンドへ伸びる線の
+開始位置、分割表示時の位置補正など、幾何計算だけを担当する。
+文字列の内容や勝敗判定は扱わず、描画部品が参照する基準座標を返す。
+
+注意点として、両山表示では最終ラウンド直前の短い横線が通常の片山表示とは違う
+意味を持つ。両山表示で不要な短線を出すと決勝ライン付近に見た目上のはみ出しや
+重なりが出るため、next_svg_line_start 付近の分岐は不用意に片山表示へ共通化しない。
+"""
+
 from ..models import TournamentBracket
 from .svg_text_blocks import ENTRY_TEXT_LINE_GAP
 from .tournament_svg_split import svg_match_display_entry

@@ -1,3 +1,11 @@
+"""Core business operations.
+
+リーグ結果入力、トーナメント結果入力、後続Stageへの反映、進行表の差し替えなど、
+DBの状態を変える業務処理を集約する。
+ビューは入力値の受け取りと遷移を担当し、結果に応じて何を更新・再計算・警告するかは
+できるだけこの層へ寄せる。
+"""
+
 from threading import local
 
 from django.conf import settings
@@ -7,7 +15,7 @@ from django.db.models import Max, Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .models import (
+from ..models import (
     AdvancementSource,
     Category,
     Court,
@@ -25,7 +33,7 @@ from .models import (
     TournamentEntry,
     TournamentMatch,
 )
-from .snapshot_services import create_stage_advancement_snapshot_once
+from .snapshots import create_stage_advancement_snapshot_once
 
 
 _stage_advancement_result_state = local()

@@ -15,7 +15,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from ..display_helpers import (
+from ..helpers.display import (
     build_entry_display_lines,
     ENTRY_DISPLAY_TARGET_LEAGUE,
     resolve_entry_display_mode,
@@ -43,7 +43,7 @@ from ..services import (
     update_group_ranking,
 )
 from ..validators import validate_game_score
-from ..view_helper import (
+from ..helpers.view import (
     redirect_next_or_url,
     render_score_input,
     safe_next_url,

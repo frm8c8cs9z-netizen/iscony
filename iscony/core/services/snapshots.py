@@ -1,10 +1,17 @@
+"""Operation snapshot services.
+
+大会・カテゴリ・進行枠単位で、結果や進行状態を戻せるようにJSON化して保存し、
+必要に応じて復元する処理をまとめる。
+自動後続反映前の保険や、運用中の事故対応を支えるためのサービス層。
+"""
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import (
+from ..models import (
     AdvancementSource,
     Category,
     GroupRanking,

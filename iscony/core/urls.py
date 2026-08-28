@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .cache_utils import public_view_cache
+from .helpers.cache import public_view_cache
 from .views import (
     advancement,
     csv,

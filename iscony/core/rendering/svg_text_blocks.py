@@ -1,6 +1,18 @@
+"""SVG内に置く文字列を「テキストブロック」として扱う共通部品。
+
+トーナメント表では、参加者名、エントリーコード、試合ラベル、得失ゲーム数、
+優勝者表示など、複数種類の文字を線の始点・終点・交点の近くに配置する。
+このファイルは、それらを単なる text 要素の集合ではなく、幅・高さ・アンカー・
+オフセットを持つブロックとして計算する責務を持つ。
+
+offset_x/offset_y は「基準座標からブロックのアンカー位置をどれだけ動かすか」
+を表す。将来的に大会設定画面で表示位置を調整可能にする場合も、まずここに
+集約したレイアウト値を使う方針。
+"""
+
 from dataclasses import dataclass
 
-from ..display_helpers import build_entry_display_lines
+from ..helpers.display import build_entry_display_lines
 
 
 CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"

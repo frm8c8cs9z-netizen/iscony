@@ -1,4 +1,15 @@
-from ..display_helpers import format_entry_one_line
+"""優勝者ラベルと勝者表示ブロックを扱う。
+
+トーナメントの最終勝者や、分割トーナメントごとの勝者表示を、横書き/縦書きの
+テキストブロックとして配置する。ブロックの幅・高さ・アンカーは svg_text_blocks の
+共通計算を利用し、片山/両山の違いは「どの基準座標にどのアンカーで置くか」に寄せる。
+
+優勝者表示は、線の上に乗せる・線の先に置く・分割上位トーナメントへ渡すなど
+見た目上の影響が大きい。数値補正を足す場合は、表示方向と layout_type のどちらに
+効く値かを明確にして、参加者表示との共通化を崩さない。
+"""
+
+from ..helpers.display import format_entry_one_line
 from ..models import TournamentBracket
 from .svg_text_blocks import (
     CHAMPION_LINE_HEIGHT,

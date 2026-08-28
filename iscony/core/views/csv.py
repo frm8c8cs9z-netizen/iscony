@@ -40,7 +40,7 @@ from ..services import (
     advance_tournament_bye_winners,
     auto_apply_stage_advancements_if_ready,
 )
-from ..utils import build_display_bracket_slots, get_bracket_size
+from ..helpers.brackets import build_display_bracket_slots, get_bracket_size
 
 
 STAGE_SLOT_REQUIRED_COLUMNS = {

@@ -1,5 +1,5 @@
 from ..models import TournamentMatch
-from ..utils import get_round_label
+from ..helpers.brackets import get_round_label
 
 
 def build_tournament_round_data(bracket):

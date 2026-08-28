@@ -46,7 +46,7 @@ from ..services import (
     move_schedule,
 )
 
-from ..view_helper import(
+from ..helpers.view import(
     redirect_next_or_default,
     url_with_next,
 )

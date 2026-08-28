@@ -17,7 +17,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from pypdf import PdfReader
 
-from .display_helpers import (
+from .helpers.display import (
     ENTRY_DISPLAY_TARGET_LEAGUE,
     ENTRY_DISPLAY_TARGET_TOURNAMENT,
     ENTRY_DISPLAY_NAME_ORG_2LINE,
@@ -79,7 +79,7 @@ from .services import (
     update_group_ranking,
     validate_tournament_score_change,
 )
-from .snapshot_services import (
+from .services.snapshots import (
     create_tournament_snapshot,
     restore_category_schedule_block_from_tournament_snapshot,
     restore_category_from_tournament_snapshot,

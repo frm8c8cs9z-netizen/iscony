@@ -56,12 +56,12 @@ from ..services import (
     save_tournament_retirement,
     validate_tournament_score_change,
 )
-from ..utils import (
+from ..helpers.brackets import (
     build_display_bracket_slots,
     get_bracket_size,
 )
 from ..validators import validate_game_score
-from ..view_helper import (
+from ..helpers.view import (
     redirect_next_or_default,
     render_score_input,
 )
