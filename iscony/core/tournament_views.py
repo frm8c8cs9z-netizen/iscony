@@ -55,13 +55,11 @@ from .rendering.svg_text_blocks import (
     ENTRY_LINE_HEIGHT,
     ENTRY_TEXT_LINE_GAP,
     FINAL_MATCH_CODE_TEXT_BLOCK_LAYOUT,
-    MATCH_CODE_TEXT_BLOCK_LAYOUT,
     _append_svg_horizontal_block_label,
     _append_svg_text_block_label,
     _estimate_svg_text_width,
     _estimate_svg_vertical_text_height,
     _svg_single_text_line,
-    _svg_side_text_anchor,
     _svg_text_block_dimensions,
     _svg_text_block_spec,
 )
@@ -71,12 +69,9 @@ from .rendering.tournament_svg_geometry import (
     next_svg_line_start as _next_svg_line_start,
     shift_svg_match_positions as _shift_svg_match_positions,
     split_svg_final_y as _split_svg_final_y,
-    svg_match_x_positions as _svg_match_x_positions,
-    svg_match_y_positions as _svg_match_y_positions,
     trim_svg_line_segment as _trim_svg_line_segment,
 )
 from .rendering.tournament_svg_labels import (
-    append_svg_entry_block_label as _append_svg_entry_block_label,
     append_svg_entry_code_label as _append_svg_entry_code_label,
     append_svg_match_code_label as _append_svg_match_code_label,
     append_svg_score_label as _append_svg_score_label,
@@ -84,6 +79,7 @@ from .rendering.tournament_svg_labels import (
     estimate_svg_name_width as _estimate_svg_name_width,
     estimate_svg_number_width as _estimate_svg_number_width,
     estimate_svg_row_gap as _estimate_svg_row_gap,
+    is_unresolved_advancement_entry as _is_unresolved_advancement_entry,
     svg_entry_code_text as _svg_entry_code_text,
     svg_entry_text_lines as _svg_entry_text_lines,
 )
@@ -94,16 +90,15 @@ from .rendering.tournament_svg_champion import (
 )
 from .rendering.tournament_svg_score import (
     entry_score_text as _entry_score_text,
-    should_highlight_svg_advance as _should_highlight_svg_advance,
     should_highlight_svg_winner as _should_highlight_svg_winner,
     should_show_svg_score as _should_show_svg_score,
 )
+from .rendering.tournament_svg_matches import add_svg_match as _add_svg_match
 from .rendering.tournament_svg_split import (
     build_svg_first_entry_match_ids as _build_svg_first_entry_match_ids,
     build_side_round_display_data,
     build_split_winner_round_data as _build_split_winner_round_data,
     split_svg_round_data as _split_svg_round_data,
-    svg_match_display_entry as _svg_match_display_entry,
 )
 from .selectors.tournament_brackets import build_tournament_round_data
 from .services import (
@@ -168,16 +163,6 @@ def _tournament_stage_overview_url(match):
         return f"{url}#stage-{match.bracket.stage.id}"
 
     return url
-
-
-def _is_unresolved_advancement_entry(entry):
-    """実ペア未確定の進出元枠かどうかを返す。"""
-
-    return (
-        entry
-        and not getattr(entry, "participant_id", None)
-        and hasattr(entry, "advancement_source")
-    )
 
 
 def _single_layout_champion_anchor_point(svg, final_match):
@@ -401,186 +386,6 @@ def _add_svg_champion_label(svg, bracket, final_match, final_y, center_x):
         svg["lines"].append(spec["line"])
 
     _append_svg_text_block_label(svg, spec)
-
-
-def _add_svg_match(svg, match, *, round_number, side, index):
-    """1試合分の線・文字をSVGデータへ追加する。"""
-
-    row_gap = svg["row_gap"]
-    top = svg["top"]
-
-    match_position = svg["match_positions"].get((side, match.id))
-
-    if match_position:
-        y1 = match_position["y1"]
-        y2 = match_position["y2"]
-        center_y = match_position["center_y"]
-    else:
-        y1, y2, center_y = _svg_match_y_positions(
-            round_number,
-            index,
-            row_gap,
-            top,
-        )
-
-    x_positions = _svg_match_x_positions(svg, round_number, side)
-    join_x = x_positions["join_x"]
-    line_start = x_positions["line_start"]
-    number_x = x_positions["number_x"]
-    text_x = x_positions["text_x"]
-    code_x = x_positions["code_x"]
-    score_x = x_positions["score_x"]
-    number_anchor = _svg_side_text_anchor(side)
-    text_anchor = _svg_side_text_anchor(side)
-    code_anchor = _svg_side_text_anchor(side)
-
-    advance_x = _next_svg_line_start(
-        svg,
-        round_number,
-        side,
-        join_x,
-    )
-
-    display_pair1 = _svg_match_display_entry(match, "pair1")
-    display_pair2 = _svg_match_display_entry(match, "pair2")
-
-    if not match.match_code.startswith("S"):
-        layout = MATCH_CODE_TEXT_BLOCK_LAYOUT
-        _append_svg_match_code_label(
-            svg,
-            match=match,
-            base_x=code_x,
-            base_y=center_y,
-            offset_x=layout.offset_x,
-            offset_y=layout.offset_y,
-            block_anchor=(
-                "middle-right"
-                if code_anchor == "end"
-                else "middle-left"
-            ),
-        )
-    for side_name, y, entry in [
-        ("pair1", y1, display_pair1),
-        ("pair2", y2, display_pair2),
-    ]:
-
-        if not entry:
-            continue
-
-        is_winner = (
-            match.winner_id
-            and entry
-            and match.winner_id == entry.id
-            and _should_highlight_svg_winner(match)
-        )
-        line_class = "winner-line" if is_winner else "normal-line"
-        first_match_id = svg["first_entry_match_ids"].get(entry.id)
-        show_entry_text = first_match_id == match.id if first_match_id else True
-
-        if show_entry_text:
-            if _is_unresolved_advancement_entry(entry):
-                _append_svg_entry_block_label(
-                    svg,
-                    entry=entry,
-                    entry_display_mode=svg["entry_display_mode"],
-                    side=side,
-                    x=text_x,
-                    base_y=y,
-                )
-            else:
-                _append_svg_entry_code_label(
-                    svg,
-                    text=_svg_entry_code_text(
-                        entry,
-                        svg["reflected_entry_code_mode"],
-                    ),
-                    base_x=number_x,
-                    base_y=y + 5,
-                    text_anchor=number_anchor,
-                )
-                _append_svg_entry_block_label(
-                    svg,
-                    entry=entry,
-                    entry_display_mode=svg["entry_display_mode"],
-                    side=side,
-                    x=text_x,
-                    base_y=y,
-                )
-
-        if line_start != join_x:
-            svg["lines"].append({
-                "x1": line_start,
-                "y1": y,
-                "x2": join_x,
-                "y2": y,
-                "class": line_class,
-            })
-
-        score = (
-            _entry_score_text(match, side_name)
-            if _should_show_svg_score(match, side_name)
-            else ""
-        )
-
-        if score:
-            score_y = y - 4 if y <= center_y else y + 10
-            _append_svg_score_label(
-                svg,
-                match=match,
-                text=score,
-                base_x=score_x,
-                base_y=score_y,
-            )
-
-    should_draw_vertical = (
-        y1 != y2
-        and (
-            round_number > 1
-            or (display_pair1 and display_pair2)
-        )
-    )
-
-    if should_draw_vertical:
-        vertical_y1 = y1
-        vertical_y2 = y2
-
-        svg["lines"].append({
-            "x1": join_x,
-            "y1": vertical_y1,
-            "x2": join_x,
-            "y2": vertical_y2,
-            "class": "normal-line",
-        })
-
-        if _should_highlight_svg_winner(match):
-            winner_y = y1 if match.winner_id == match.pair1_id else y2
-            svg["lines"].append({
-                "x1": join_x,
-                "y1": winner_y,
-                "x2": join_x,
-                "y2": center_y,
-                "class": "winner-line",
-            })
-
-    should_draw_advance_line = abs(advance_x - join_x) > 0.01
-
-    if should_draw_advance_line:
-        svg["lines"].append({
-            "x1": join_x,
-            "y1": center_y,
-            "x2": advance_x,
-            "y2": center_y,
-            "class": "normal-line",
-        })
-
-        if _should_highlight_svg_advance(match, svg):
-            svg["lines"].append({
-                "x1": join_x,
-                "y1": center_y,
-                "x2": advance_x,
-                "y2": center_y,
-                "class": "winner-line",
-            })
 
 
 def _build_svg_bracket_data(
