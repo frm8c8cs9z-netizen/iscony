@@ -37,6 +37,7 @@ from ..models import (
     LeagueEntry,
     GroupRanking,
     Participant,
+    ParticipantOrganizationValue,
     RoundRobinMatch,
     Schedule,
     ScheduleBlock,
@@ -44,6 +45,7 @@ from ..models import (
     Stage,
     Tournament,
     TournamentBracket,
+    TournamentOrganizationField,
     TournamentEntry,
     TournamentMatch,
 )
@@ -98,6 +100,8 @@ def clone_tournament_without_results(source, *, name, code):
     court_map = {}
     bracket_map = {}
     tournament_entry_map = {}
+    organization_field_map = {}
+    clone_organization_fields_by_code = {}
     round_robin_match_map = {}
     tournament_match_map = {}
 
@@ -131,6 +135,19 @@ def clone_tournament_without_results(source, *, name, code):
                 display_order=old.display_order,
             )
 
+        for old in TournamentOrganizationField.objects.filter(
+            tournament=source,
+        ).order_by("display_order", "code"):
+            new_field = TournamentOrganizationField.objects.create(
+                tournament=clone,
+                code=old.code,
+                label=old.label,
+                display_order=old.display_order,
+                is_active=old.is_active,
+            )
+            organization_field_map[old.id] = new_field
+            clone_organization_fields_by_code[new_field.code] = new_field
+
         for old in Stage.objects.filter(
             category__tournament=source,
         ).order_by("id"):
@@ -151,8 +168,94 @@ def clone_tournament_without_results(source, *, name, code):
                 organization=old.organization,
                 player1_name=old.player1_name,
                 player2_name=old.player2_name,
+                original_player1_name=(
+                    old.original_player1_name
+                    or old.player1_name
+                ),
+                original_player1_short_name=(
+                    old.original_player1_short_name
+                    or ""
+                ),
+                original_player2_name=(
+                    old.original_player2_name
+                    or old.player2_name
+                ),
+                original_player2_short_name=(
+                    old.original_player2_short_name
+                    or ""
+                ),
+                current_player1_name=None,
+                current_player1_short_name=None,
+                current_player2_name=None,
+                current_player2_short_name=None,
+                has_day_player_change=False,
                 display_order=old.display_order,
             )
+
+        def clone_org_field_for_code(code):
+            field = clone_organization_fields_by_code.get(code)
+            if field:
+                return field
+
+            number = int(code.removeprefix("org"))
+            field = TournamentOrganizationField.objects.create(
+                tournament=clone,
+                code=code,
+                label=f"所属{number}",
+                display_order=number,
+                is_active=True,
+            )
+            clone_organization_fields_by_code[code] = field
+            return field
+
+        for old in ParticipantOrganizationValue.objects.filter(
+            participant__category__tournament=source,
+        ).select_related("field").order_by("id"):
+            new_participant = participant_map.get(old.participant_id)
+            new_field = organization_field_map.get(old.field_id)
+
+            if not new_participant:
+                continue
+
+            if not new_field:
+                new_field = clone_org_field_for_code(old.field.code)
+
+            ParticipantOrganizationValue.objects.create(
+                participant=new_participant,
+                player_no=old.player_no,
+                field=new_field,
+                original_value=old.original_value,
+            )
+
+        org1_field = None
+
+        for old_id, new_participant in participant_map.items():
+            old = Participant.objects.get(id=old_id)
+
+            if not old.organization:
+                continue
+
+            has_values = ParticipantOrganizationValue.objects.filter(
+                participant=new_participant,
+            ).exists()
+
+            if has_values:
+                continue
+
+            if org1_field is None:
+                org1_field = clone_org_field_for_code("org1")
+
+            player_numbers = [1]
+            if (old.player2_name or "").strip():
+                player_numbers.append(2)
+
+            for player_no in player_numbers:
+                ParticipantOrganizationValue.objects.create(
+                    participant=new_participant,
+                    player_no=player_no,
+                    field=org1_field,
+                    original_value=old.organization,
+                )
 
         for old in Group.objects.filter(
             category__tournament=source,

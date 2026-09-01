@@ -19,10 +19,11 @@ from .models import (
     TournamentEntry,
     AdvancementSource,
     OperationSnapshot,
+    ParticipantOrganizationValue,
     ScoreSheetTemplate,
     Schedule,
     ScheduleReplacementHistory,
-    
+    TournamentOrganizationField,
 )
 
 
@@ -291,6 +292,56 @@ class GroupRankingAdmin(admin.ModelAdmin):
 
     search_fields = (
         "pair__pair_code",
+    )
+
+
+@admin.register(TournamentOrganizationField)
+class TournamentOrganizationFieldAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "tournament",
+        "code",
+        "label",
+        "display_order",
+        "is_active",
+    )
+
+    list_filter = (
+        "tournament",
+        "is_active",
+    )
+
+    search_fields = (
+        "code",
+        "label",
+        "tournament__name",
+        "tournament__code",
+    )
+
+
+@admin.register(ParticipantOrganizationValue)
+class ParticipantOrganizationValueAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "participant",
+        "player_no",
+        "field",
+        "original_value",
+    )
+
+    list_filter = (
+        "field__tournament",
+        "field",
+        "player_no",
+    )
+
+    search_fields = (
+        "participant__entry_code",
+        "participant__player1_name",
+        "participant__player2_name",
+        "field__code",
+        "field__label",
+        "original_value",
     )
 
 

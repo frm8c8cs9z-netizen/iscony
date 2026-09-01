@@ -46,7 +46,9 @@ from .models import (
     TournamentEntry,
     TournamentMatch,
     Participant,
+    ParticipantOrganizationValue,
     ScoreSheetTemplate,
+    TournamentOrganizationField,
 )
 from .views.pdf import (
     category_name_text_layout,
@@ -3895,6 +3897,87 @@ class ImportParticipantsCsvTests(TestCase):
         self.assertEqual(participant.organization, "テスト所属")
         self.assertEqual(participant.player1_name, "参加者1A")
         self.assertEqual(participant.player2_name, "参加者1B")
+        self.assertEqual(participant.original_player1_name, "参加者1A")
+        self.assertEqual(participant.original_player2_name, "参加者1B")
+        self.assertFalse(participant.has_day_player_change)
+
+        field = TournamentOrganizationField.objects.get(
+            tournament=self.tournament,
+            code="org1",
+        )
+        values = {
+            value.player_no: value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=participant,
+                field=field,
+            )
+        }
+        self.assertEqual(
+            values,
+            {
+                1: "テスト所属",
+                2: "テスト所属",
+            },
+        )
+
+    def test_player_organization_columns_are_imported(self):
+        response = self._post_csv(
+            "category,entry_code,player1_name,player2_name,"
+            "player1_org1,player1_org2,player2_org1,player2_org2\n"
+            "男子A,E001,参加者1A,参加者1B,"
+            "所属A1,県A,所属B1,県B\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        participant = Participant.objects.get(entry_code="E001")
+        org_values = {
+            (
+                value.player_no,
+                value.field.code,
+            ): value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=participant,
+            ).select_related("field")
+        }
+        self.assertEqual(
+            org_values,
+            {
+                (1, "org1"): "所属A1",
+                (1, "org2"): "県A",
+                (2, "org1"): "所属B1",
+                (2, "org2"): "県B",
+            },
+        )
+
+    def test_player2_organization_defaults_to_player1_value(self):
+        response = self._post_csv(
+            "category,entry_code,player1_name,player2_name,"
+            "player1_org1,player1_org2\n"
+            "男子A,E001,参加者1A,参加者1B,共通所属,共通県\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        participant = Participant.objects.get(entry_code="E001")
+        org_values = {
+            (
+                value.player_no,
+                value.field.code,
+            ): value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=participant,
+            ).select_related("field")
+        }
+        self.assertEqual(
+            org_values,
+            {
+                (1, "org1"): "共通所属",
+                (1, "org2"): "共通県",
+                (2, "org1"): "共通所属",
+                (2, "org2"): "共通県",
+            },
+        )
 
     def test_empty_category_is_reported_with_row_number(self):
         response = self._post_csv(
@@ -6423,6 +6506,57 @@ class TournamentCloneTests(TestCase):
                 | Q(target_tournament_entry__bracket__category__tournament=clone)
             ).count(),
             2,
+        )
+
+    def test_clone_tournament_copies_organization_fields_and_values(self):
+        org2 = TournamentOrganizationField.objects.create(
+            tournament=self.tournament,
+            code="org2",
+            label="県名",
+            display_order=2,
+        )
+        ParticipantOrganizationValue.objects.create(
+            participant=self.participant1,
+            player_no=1,
+            field=org2,
+            original_value="島根",
+        )
+        ParticipantOrganizationValue.objects.create(
+            participant=self.participant1,
+            player_no=2,
+            field=org2,
+            original_value="鳥取",
+        )
+
+        clone = clone_tournament_without_results(
+            self.tournament,
+            name="所属複製先大会",
+            code="CLONEORG",
+        )
+
+        cloned_field = TournamentOrganizationField.objects.get(
+            tournament=clone,
+            code="org2",
+        )
+        self.assertEqual(cloned_field.label, "県名")
+
+        cloned_participant = Participant.objects.get(
+            category__tournament=clone,
+            entry_code=self.participant1.entry_code,
+        )
+        values = {
+            value.player_no: value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=cloned_participant,
+                field=cloned_field,
+            )
+        }
+        self.assertEqual(
+            values,
+            {
+                1: "島根",
+                2: "鳥取",
+            },
         )
 
     def test_clone_tournament_view_creates_clone_and_redirects(self):

@@ -27,12 +27,14 @@ from ..models import (
     GroupRanking,
     LeagueEntry,
     Participant,
+    ParticipantOrganizationValue,
     RoundRobinMatch,
     Schedule,
     ScheduleBlock,
     Stage,
     Tournament,
     TournamentBracket,
+    TournamentOrganizationField,
     TournamentEntry,
     TournamentMatch,
 )
@@ -52,6 +54,9 @@ STAGE_SLOT_REQUIRED_COLUMNS = {
 }
 
 STAGE_REIMPORT_SESSION_KEY = "stage_reimport_pending"
+PARTICIPANT_ORG_CODES = tuple(
+    f"org{index}" for index in range(1, 6)
+)
 
 
 CSV_FORMAT_HEADERS = {
@@ -61,6 +66,16 @@ CSV_FORMAT_HEADERS = {
         "player1_name",
         "player2_name",
         "organization",
+        "player1_org1",
+        "player1_org2",
+        "player1_org3",
+        "player1_org4",
+        "player1_org5",
+        "player2_org1",
+        "player2_org2",
+        "player2_org3",
+        "player2_org4",
+        "player2_org5",
     ],
     "stage_slots": [
         "category",
@@ -98,6 +113,85 @@ CSV_FORMAT_HEADERS = {
         "match_games",
     ],
 }
+
+
+def _organization_field_label(code):
+    number = code.removeprefix("org")
+    return f"所属{number}"
+
+
+def _get_or_create_organization_field(tournament, code):
+    number = int(code.removeprefix("org"))
+    field, _ = TournamentOrganizationField.objects.get_or_create(
+        tournament=tournament,
+        code=code,
+        defaults={
+            "label": _organization_field_label(code),
+            "display_order": number,
+            "is_active": True,
+        },
+    )
+    return field
+
+
+def _participant_row_org_values(row, *, has_player2):
+    values = {}
+    legacy_organization = (
+        row.get("organization", "") or ""
+    ).strip()
+
+    for code in PARTICIPANT_ORG_CODES:
+        player1_value = (
+            row.get(f"player1_{code}", "") or ""
+        ).strip()
+        player2_value = (
+            row.get(f"player2_{code}", "") or ""
+        ).strip()
+
+        if code == "org1" and legacy_organization:
+            player1_value = player1_value or legacy_organization
+            player2_value = player2_value or legacy_organization
+
+        if has_player2 and player1_value and not player2_value:
+            player2_value = player1_value
+
+        values[code] = {
+            1: player1_value,
+            2: player2_value if has_player2 else "",
+        }
+
+    return values
+
+
+def _save_participant_organization_values(
+        *,
+        tournament,
+        participant,
+        org_values):
+    for code, values_by_player in org_values.items():
+        values_to_save = {
+            player_no: value
+            for player_no, value in values_by_player.items()
+            if value
+        }
+
+        if not values_to_save:
+            continue
+
+        field = _get_or_create_organization_field(
+            tournament,
+            code,
+        )
+
+        for player_no, value in values_to_save.items():
+            ParticipantOrganizationValue.objects.update_or_create(
+                participant=participant,
+                player_no=player_no,
+                field=field,
+                defaults={
+                    "original_value": value,
+                },
+            )
 
 
 CSV_FORMAT_FILENAMES = {
@@ -1045,16 +1139,37 @@ def import_participants(request, tournament_code):
                 )
 
                 entry_code = row["entry_code"].strip()
+                player1_name = row["player1_name"].strip()
+                player2_name = row["player2_name"].strip()
+                org_values = _participant_row_org_values(
+                    row,
+                    has_player2=bool(player2_name),
+                )
+                legacy_organization = (
+                    org_values.get("org1", {}).get(1)
+                    or row.get("organization", "")
+                    or ""
+                )
 
-                Participant.objects.create(
+                participant = Participant.objects.create(
                     category=category,
                     entry_code=entry_code,
-                    organization=row.get(
-                        "organization",
-                        ""
-                    ).strip(),
-                    player1_name=row["player1_name"].strip(),
-                    player2_name=row["player2_name"].strip(),
+                    organization=legacy_organization,
+                    player1_name=player1_name,
+                    player2_name=player2_name,
+                    original_player1_name=player1_name,
+                    original_player2_name=player2_name,
+                    current_player1_name=None,
+                    current_player1_short_name=None,
+                    current_player2_name=None,
+                    current_player2_short_name=None,
+                    has_day_player_change=False,
+                )
+
+                _save_participant_organization_values(
+                    tournament=tournament,
+                    participant=participant,
+                    org_values=org_values,
                 )
 
             return redirect(

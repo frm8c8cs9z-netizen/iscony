@@ -409,25 +409,221 @@ class Participant(models.Model):
         max_length=100
     )
 
+    original_player1_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+    )
+
+    original_player1_short_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+    )
+
+    original_player2_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+    )
+
+    original_player2_short_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+    )
+
+    current_player1_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        default=None,
+    )
+
+    current_player1_short_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        default=None,
+    )
+
+    current_player2_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        default=None,
+    )
+
+    current_player2_short_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        default=None,
+    )
+
+    has_day_player_change = models.BooleanField(
+        default=False,
+    )
+
     display_order = models.IntegerField(
         default=0
     )
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        update_fields_set = (
+            set(update_fields)
+            if update_fields is not None
+            else None
+        )
+
+        sync_player1 = (
+            not self.original_player1_name
+            or (
+                not self.has_day_player_change
+                and (
+                    update_fields_set is None
+                    or "player1_name" in update_fields_set
+                )
+            )
+        )
+        sync_player2 = (
+            not self.original_player2_name
+            or (
+                not self.has_day_player_change
+                and (
+                    update_fields_set is None
+                    or "player2_name" in update_fields_set
+                )
+            )
+        )
+
+        if sync_player1:
+            self.original_player1_name = self.player1_name
+            if update_fields_set is not None:
+                update_fields_set.add("original_player1_name")
+
+        if sync_player2:
+            self.original_player2_name = self.player2_name
+            if update_fields_set is not None:
+                update_fields_set.add("original_player2_name")
+
+        if update_fields_set is not None:
+            kwargs["update_fields"] = update_fields_set
+
+        super().save(*args, **kwargs)
+
+    @staticmethod
+    def _fallback_short_name(name):
+        parts = (name or "").split()
+        if parts:
+            return parts[0]
+        return name or ""
 
     @property
     def code(self):
         return self.entry_code
 
     @property
+    def effective_player1_name(self):
+        if (
+            self.has_day_player_change
+            and self.current_player1_name is not None
+        ):
+            return self.current_player1_name
+
+        return self.original_player1_name or self.player1_name
+
+    @property
+    def effective_player2_name(self):
+        if (
+            self.has_day_player_change
+            and self.current_player2_name is not None
+        ):
+            return self.current_player2_name
+
+        return self.original_player2_name or self.player2_name
+
+    @property
+    def effective_player1_short_name(self):
+        if (
+            self.has_day_player_change
+            and self.current_player1_short_name is not None
+        ):
+            return (
+                self.current_player1_short_name
+                or self.effective_player1_name
+            )
+
+        return (
+            self.original_player1_short_name
+            or self._fallback_short_name(self.effective_player1_name)
+        )
+
+    @property
+    def effective_player2_short_name(self):
+        if (
+            self.has_day_player_change
+            and self.current_player2_short_name is not None
+        ):
+            return (
+                self.current_player2_short_name
+                or self.effective_player2_name
+            )
+
+        return (
+            self.original_player2_short_name
+            or self._fallback_short_name(self.effective_player2_name)
+        )
+
+    def effective_organization_values(self, player_no):
+        values = []
+        qs = self.organization_values.select_related("field").filter(
+            player_no=player_no,
+            field__is_active=True,
+        ).order_by(
+            "field__display_order",
+            "field__code",
+        )
+
+        for value in qs:
+            values.append(value.original_value)
+
+        return values
+
+    @property
+    def effective_player1_organizations(self):
+        return self.effective_organization_values(1)
+
+    @property
+    def effective_player2_organizations(self):
+        return self.effective_organization_values(2)
+
+    @property
+    def effective_organization(self):
+        values = self.effective_player1_organizations
+        if values:
+            return values[0]
+
+        return self.organization
+
+    @property
     def display_name(self):
         return (
-            f"{self.player1_name}"
+            f"{self.effective_player1_name}"
             f"・"
-            f"{self.player2_name}"
+            f"{self.effective_player2_name}"
         )
 
     @property
     def short_name(self):
-        return f"{self.player1_name.split()[0]}・{self.player2_name.split()[0]}"
+        player1 = self.effective_player1_short_name
+        player2 = self.effective_player2_short_name
+
+        if player1 and player2:
+            return f"{player1}・{player2}"
+
+        return player1 or player2
 
     class Meta:
         unique_together = (
@@ -445,6 +641,97 @@ class Participant(models.Model):
             f"{self.category.name} "
             f"{self.entry_code} "
             f"{self.display_name}"
+        )
+
+
+class TournamentOrganizationField(models.Model):
+
+    tournament = models.ForeignKey(
+        Tournament,
+        related_name="organization_fields",
+        on_delete=models.CASCADE,
+    )
+
+    code = models.CharField(
+        max_length=20,
+    )
+
+    label = models.CharField(
+        max_length=100,
+    )
+
+    display_order = models.PositiveSmallIntegerField(
+        default=1,
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+    )
+
+    class Meta:
+        unique_together = (
+            "tournament",
+            "code",
+        )
+
+        ordering = [
+            "display_order",
+            "code",
+        ]
+
+    def __str__(self):
+        return f"{self.tournament.name} {self.code} {self.label}"
+
+
+class ParticipantOrganizationValue(models.Model):
+
+    PLAYER_1 = 1
+    PLAYER_2 = 2
+
+    PLAYER_CHOICES = [
+        (PLAYER_1, "Player1"),
+        (PLAYER_2, "Player2"),
+    ]
+
+    participant = models.ForeignKey(
+        Participant,
+        related_name="organization_values",
+        on_delete=models.CASCADE,
+    )
+
+    player_no = models.PositiveSmallIntegerField(
+        choices=PLAYER_CHOICES,
+    )
+
+    field = models.ForeignKey(
+        TournamentOrganizationField,
+        related_name="participant_values",
+        on_delete=models.CASCADE,
+    )
+
+    original_value = models.CharField(
+        max_length=255,
+    )
+
+    class Meta:
+        unique_together = (
+            "participant",
+            "player_no",
+            "field",
+        )
+
+        ordering = [
+            "participant_id",
+            "player_no",
+            "field__display_order",
+            "field__code",
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.participant} "
+            f"P{self.player_no} "
+            f"{self.field.code}={self.original_value}"
         )
 
 
@@ -583,9 +870,9 @@ class LeagueEntry(models.Model):
 
         if self.participant:
             return (
-                f"{self.participant.player1_name}"
+                f"{self.participant.effective_player1_name}"
                 f"・"
-                f"{self.participant.player2_name}"
+                f"{self.participant.effective_player2_name}"
             )
 
         source = getattr(
@@ -602,7 +889,7 @@ class LeagueEntry(models.Model):
     @property
     def display_player1_name(self):
         if self.participant:
-            return self.participant.player1_name
+            return self.participant.effective_player1_name
 
         source = getattr(
             self,
@@ -618,7 +905,7 @@ class LeagueEntry(models.Model):
     @property
     def display_player2_name(self):
         if self.participant:
-            return self.participant.player2_name
+            return self.participant.effective_player2_name
 
         source = getattr(
             self,
@@ -652,7 +939,7 @@ class LeagueEntry(models.Model):
     def display_organization(self):
 
         if self.participant:
-            return self.participant.organization
+            return self.participant.effective_organization
 
         return ""
 
@@ -1282,7 +1569,7 @@ class TournamentEntry(models.Model):
     @property
     def display_player1_name(self):
         if self.participant:
-            return self.participant.player1_name
+            return self.participant.effective_player1_name
 
         if self.source_pair:
             return self.source_pair.display_player1_name
@@ -1301,7 +1588,7 @@ class TournamentEntry(models.Model):
     @property
     def display_player2_name(self):
         if self.participant:
-            return self.participant.player2_name
+            return self.participant.effective_player2_name
 
         if self.source_pair:
             return self.source_pair.display_player2_name
@@ -1322,9 +1609,9 @@ class TournamentEntry(models.Model):
 
         if self.participant:
             return (
-                f"{self.participant.player1_name}"
+                f"{self.participant.effective_player1_name}"
                 f"・"
-                f"{self.participant.player2_name}"
+                f"{self.participant.effective_player2_name}"
             )
 
         if self.source_pair:
@@ -1364,7 +1651,7 @@ class TournamentEntry(models.Model):
     @property
     def display_organization(self):
         if self.participant:
-            return self.participant.organization
+            return self.participant.effective_organization
 
         if self.source_pair:
             return self.source_pair.display_organization
