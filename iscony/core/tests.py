@@ -3950,6 +3950,63 @@ class ImportParticipantsCsvTests(TestCase):
             },
         )
 
+    def test_common_org_columns_are_imported_for_both_players(self):
+        response = self._post_csv(
+            "category,entry_code,player1_name,player2_name,org1,org2\n"
+            "男子A,E001,参加者1A,参加者1B,共通所属,共通県\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        participant = Participant.objects.get(entry_code="E001")
+        org_values = {
+            (
+                value.player_no,
+                value.field.code,
+            ): value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=participant,
+            ).select_related("field")
+        }
+        self.assertEqual(
+            org_values,
+            {
+                (1, "org1"): "共通所属",
+                (1, "org2"): "共通県",
+                (2, "org1"): "共通所属",
+                (2, "org2"): "共通県",
+            },
+        )
+
+    def test_organization_number_columns_are_imported_as_org_aliases(self):
+        response = self._post_csv(
+            "category,entry_code,player1_name,player2_name,"
+            "organization1,organization2\n"
+            "男子A,E001,参加者1A,参加者1B,別名所属,別名県\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        participant = Participant.objects.get(entry_code="E001")
+        org_values = {
+            (
+                value.player_no,
+                value.field.code,
+            ): value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=participant,
+            ).select_related("field")
+        }
+        self.assertEqual(
+            org_values,
+            {
+                (1, "org1"): "別名所属",
+                (1, "org2"): "別名県",
+                (2, "org1"): "別名所属",
+                (2, "org2"): "別名県",
+            },
+        )
+
     def test_player2_organization_defaults_to_player1_value(self):
         response = self._post_csv(
             "category,entry_code,player1_name,player2_name,"

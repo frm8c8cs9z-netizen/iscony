@@ -334,14 +334,45 @@ has_day_player_change = True
 - `current_*` にはコピーしない。
 - 当日選手変更は、画面操作で `has_day_player_change` をONにし、`current_*` に上書き値を入れる。
 - 表示時は `has_day_player_change=True` かつ `current_*` が `NULL` でなければそれを使い、それ以外は `original_*` を使う。
-- 所属は `player1_org1` から `player1_org5`、`player2_org1` から `player2_org5` を第1段階の正式ヘッダとする。
-- 第1段階では、日本語ヘッダや項目名エイリアス対応は後回しにする。
+- 所属はペア共通入力を標準とし、CSVの第1段階正式ヘッダは `org1` から `org5` とする。
+- `organization1` から `organization5` は、人間が意味を読みやすい別名ヘッダとして受け付ける。
+- `player1_org1` から `player1_org5`、`player2_org1` から `player2_org5` は、選手ごとに所属を分けたい場合の上級ヘッダとして受け付ける。
+- 旧 `organization` は `org1` として扱う。
 - `player1_orgN` のみがあり、player2 が存在し、`player2_orgN` が空の場合は、player2 にも同じ所属値を保存する。
+- `orgN` または `organizationN` があり、player2 が存在する場合は、player1 / player2 の両方に同じ所属値を保存する。
 - 所属項目定義が存在しない場合は、必要な `orgN` を自動生成する。
+- `org1` から `org5` の上限は、当面 `PARTICIPANT_ORGANIZATION_MAX_COUNT` で固定し、将来は大会ごとの利用項目数や有効項目に寄せる。
 
-第1段階の正式ヘッダ:
+第1段階の運用整理:
+
+- DB上は player1 / player2 それぞれの所属値を持てる構造にする。
+- ただし通常運用・通常画面では、当面は player2 側の所属を個別入力・個別表示の対象にしない。
+- 参加者作成・編集画面では、所属入力欄はペア共通の `org1` から `org5` を基本にする。
+- ペア共通の所属値は、保存時に player1 / player2 の両方へ同じ値として保存する。
+- 表示上は、当面 player1 側の `org1` から `org5` をペアの代表所属として扱う。
+- player2 側の所属値は、将来「選手ごとに所属が異なる大会」や「表示設定で player1 / player2 の所属を分ける大会」に対応するための受け皿として残す。
+- `player1_orgN` / `player2_orgN` はCSV取込の上級ヘッダとして受け付けるが、第1段階の通常CSVテンプレート・通常入力画面では前面に出さない。
+- 旧 `organization` や `orgN` で取り込んだ場合は、ペア共通所属として扱い、player2 がいる場合は player2 側にも同じ値を保存する。
+
+第1段階の標準ヘッダ:
 
 ```text
+org1
+org2
+org3
+org4
+org5
+```
+
+読み取り互換ヘッダ:
+
+```text
+organization1
+organization2
+organization3
+organization4
+organization5
+
 player1_org1
 player1_org2
 player1_org3
@@ -422,7 +453,7 @@ Participantについては、複製時に当初情報と当日情報をどう扱
 3. 既存データを `original_*` へ移行し、`current_*` は未設定、`has_day_player_change=False` にする。
 4. 既存 `organization` を `org1` として player1 / player2 の所属値へ移行する。
 5. 表示系の参照を段階的に有効表示値ヘルパへ寄せる。
-6. CSV取込では、`player1_org1` から `player1_org5`、`player2_org1` から `player2_org5` を扱う。
+6. CSV取込では、標準ヘッダとして `org1` から `org5` を扱い、互換ヘッダとして `organization1` から `organization5`、`player1_org1` から `player1_org5`、`player2_org1` から `player2_org5` を扱う。
 7. リーグ表、トーナメント表、採点票PDFで表示が崩れないことを確認する。
 
 指定審判、汎用変更履歴、大会設定モデル整理は、第1弾の後に分けて進めます。
@@ -439,8 +470,14 @@ Participantについては、複製時に当初情報と当日情報をどう扱
 - 既存 `organization` は移行時に `player1_org1` と `player2_org1` へコピーする。
 - player2 が存在しない場合は、player2 側の所属値を作らない。
 - CSV取込と入力画面の両方で、player1 の所属だけが入力され player2 が空なら、player2 に同じ値を保存する。
-- CSVの第1段階正式ヘッダは `player1_org1` から `player1_org5`、`player2_org1` から `player2_org5` とする。
-- 日本語ヘッダや項目名エイリアス対応は第1段階では実装しない。
+- 第1段階の通常画面では、player2 側の所属を個別編集対象にせず、ペア共通所属として player1 側の入力欄を扱う。
+- ペア共通所属として入力した値は、player1 / player2 の両方の `ParticipantOrganizationValue` に保存する。
+- 表示は当面 player1 側の所属値を代表値として使う。
+- player2 側の所属値は、将来の選手別所属表示・個別所属編集のために保持する。
+- CSVの第1段階正式ヘッダは `org1` から `org5` とする。
+- `organization1` から `organization5` は別名として読み取る。
+- `player1_org1` から `player1_org5`、`player2_org1` から `player2_org5` は選手別所属を使う場合の上級ヘッダとして読み取る。
+- 日本語ヘッダ対応は第1段階では実装しない。
 - `current_*` はCSV取込では設定しない。
 - 当日選手変更は `has_day_player_change` を手動ON/OFFし、ONのときだけ `current_*` を表示候補にする。
 - 旧 `player1_name` / `player2_name` / `organization` は移行完了後に削除するが、第1段階では互換のため一時的に残す。

@@ -43,6 +43,7 @@ from ..services import (
     auto_apply_stage_advancements_if_ready,
 )
 from ..helpers.brackets import build_display_bracket_slots, get_bracket_size
+from ..constants import PARTICIPANT_ORGANIZATION_CODES
 
 
 STAGE_SLOT_REQUIRED_COLUMNS = {
@@ -54,29 +55,41 @@ STAGE_SLOT_REQUIRED_COLUMNS = {
 }
 
 STAGE_REIMPORT_SESSION_KEY = "stage_reimport_pending"
-PARTICIPANT_ORG_CODES = tuple(
-    f"org{index}" for index in range(1, 6)
-)
 
 
-CSV_FORMAT_HEADERS = {
-    "participants": [
+def _participant_csv_headers():
+    common_org_headers = list(PARTICIPANT_ORGANIZATION_CODES)
+    player1_org_headers = [
+        f"player1_{code}"
+        for code in PARTICIPANT_ORGANIZATION_CODES
+    ]
+    player2_org_headers = [
+        f"player2_{code}"
+        for code in PARTICIPANT_ORGANIZATION_CODES
+    ]
+    return [
         "category",
         "entry_code",
         "player1_name",
         "player2_name",
         "organization",
-        "player1_org1",
-        "player1_org2",
-        "player1_org3",
-        "player1_org4",
-        "player1_org5",
-        "player2_org1",
-        "player2_org2",
-        "player2_org3",
-        "player2_org4",
-        "player2_org5",
-    ],
+        *common_org_headers,
+        *player1_org_headers,
+        *player2_org_headers,
+    ]
+
+
+def _participant_common_org_value(row, code):
+    number = code.removeprefix("org")
+    return (
+        row.get(code, "")
+        or row.get(f"organization{number}", "")
+        or ""
+    ).strip()
+
+
+CSV_FORMAT_HEADERS = {
+    "participants": _participant_csv_headers(),
     "stage_slots": [
         "category",
         "stage_code",
@@ -140,13 +153,18 @@ def _participant_row_org_values(row, *, has_player2):
         row.get("organization", "") or ""
     ).strip()
 
-    for code in PARTICIPANT_ORG_CODES:
+    for code in PARTICIPANT_ORGANIZATION_CODES:
+        common_value = _participant_common_org_value(row, code)
         player1_value = (
             row.get(f"player1_{code}", "") or ""
         ).strip()
         player2_value = (
             row.get(f"player2_{code}", "") or ""
         ).strip()
+
+        if common_value:
+            player1_value = player1_value or common_value
+            player2_value = player2_value or common_value
 
         if code == "org1" and legacy_organization:
             player1_value = player1_value or legacy_organization

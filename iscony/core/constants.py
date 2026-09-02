@@ -1,6 +1,13 @@
 from reportlab.lib.units import mm
 
 
+PARTICIPANT_ORGANIZATION_MAX_COUNT = 5
+PARTICIPANT_ORGANIZATION_CODES = tuple(
+    f"org{index}"
+    for index in range(1, PARTICIPANT_ORGANIZATION_MAX_COUNT + 1)
+)
+
+
 def _xy_mm(x, y):
     """PDF左下原点の座標をmmで指定し、ReportLab用のpointへ変換する。"""
     return (
