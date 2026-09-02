@@ -7,7 +7,7 @@ core.views.dashboard
 
 from django.contrib import messages
 from django.core.cache import cache
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 
@@ -356,6 +356,81 @@ def maintenance_menu(request, code):
             "tournament": tournament,
             "categories": categories,
         }
+    )
+
+
+def category_management(request, code):
+    """大会内カテゴリの通常管理入口を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    categories = (
+        Category.objects
+        .filter(tournament=tournament)
+        .annotate(
+            participant_count=Count("participant", distinct=True),
+            stage_count=Count("stage", distinct=True),
+        )
+        .order_by("display_order", "name", "id")
+    )
+
+    return render(
+        request,
+        "core/category_management.html",
+        {
+            "tournament": tournament,
+            "categories": categories,
+        },
+    )
+
+
+def edit_category(request, code, category_id):
+    """大会内カテゴリの名称と表示順を編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+
+    if request.method == "POST":
+        form = CategoryForm(
+            request.POST,
+            instance=category,
+        )
+
+        if form.is_valid():
+            form.save()
+            messages.success(
+                request,
+                f"{category.name} を更新しました。",
+            )
+            return redirect(
+                "category_management",
+                code=tournament.code,
+            )
+
+    else:
+        form = CategoryForm(
+            instance=category,
+        )
+
+    return render(
+        request,
+        "core/category_form.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "form": form,
+            "page_title": "カテゴリ編集",
+            "submit_label": "更新",
+        },
     )
 
 
@@ -1575,8 +1650,12 @@ def add_category(
 
             category.save()
 
+            messages.success(
+                request,
+                f"{category.name} を追加しました。",
+            )
             return redirect(
-                "tournament_detail",
+                "category_management",
                 code=tournament.code
             )
 
@@ -1586,10 +1665,13 @@ def add_category(
 
     return render(
         request,
-        "core/add_category.html",
+        "core/category_form.html",
         {
             "tournament": tournament,
             "form": form,
+            "category": None,
+            "page_title": "カテゴリ追加",
+            "submit_label": "保存",
         }
     )
 

@@ -6616,6 +6616,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "採点票一括出力")
         self.assertContains(response, "構成管理")
         self.assertContains(response, "危険操作・初期化")
+        self.assertContains(response, "カテゴリ管理")
         self.assertContains(response, "表示順調整")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
@@ -6653,6 +6654,13 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(
             response,
             reverse(
+                "category_management",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
                 "tournament_settings",
                 kwargs={"code": tournament.code},
             ),
@@ -6675,6 +6683,126 @@ class MaintenanceMenuTests(TestCase):
             content.index(first_category.name),
             content.index(later_category.name),
         )
+
+
+class CategoryManagementTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="カテゴリ管理大会",
+            code="CATEGORYMANAGE",
+        )
+
+    def test_category_management_lists_categories_with_counts(self):
+        later_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子B",
+            display_order=2,
+        )
+        first_category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        Participant.objects.create(
+            category=first_category,
+            entry_code="1",
+            player1_name="山田",
+            player2_name="田中",
+        )
+        Stage.objects.create(
+            category=first_category,
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_management",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "カテゴリ追加")
+        self.assertContains(response, first_category.name)
+        self.assertContains(response, later_category.name)
+        self.assertContains(response, "Stage進行")
+        self.assertContains(
+            response,
+            reverse(
+                "edit_category",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": first_category.id,
+                },
+            ),
+        )
+        self.assertLess(
+            content.index(first_category.name),
+            content.index(later_category.name),
+        )
+
+    def test_add_category_redirects_to_category_management(self):
+        response = self.client.post(
+            reverse(
+                "add_category",
+                kwargs={"code": self.tournament.code},
+            ),
+            {
+                "name": "男子A",
+                "display_order": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_management",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        self.assertTrue(
+            Category.objects.filter(
+                tournament=self.tournament,
+                name="男子A",
+            ).exists()
+        )
+
+    def test_edit_category_updates_name_and_display_order(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_category",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "男子一部",
+                "display_order": "3",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_management",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
+        category.refresh_from_db()
+        self.assertEqual(category.name, "男子一部")
+        self.assertEqual(category.display_order, 3)
+
 
     def test_tournament_settings_can_update_default_display_settings(self):
         tournament = Tournament.objects.create(

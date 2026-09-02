@@ -299,6 +299,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/categories/",
+        dashboard.category_management,
+        name="category_management",
+    ),
+
+    path(
         "tournament/<str:code>/reception/search/",
         dashboard.reception_match_search,
         name="reception_match_search",
@@ -500,6 +506,12 @@ urlpatterns = [
         "tournament/<str:code>/category/add/",
         dashboard.add_category,
         name="add_category",
+    ),
+
+    path(
+        "tournament/<str:code>/category/<int:category_id>/edit/",
+        dashboard.edit_category,
+        name="edit_category",
     ),
 
 ]

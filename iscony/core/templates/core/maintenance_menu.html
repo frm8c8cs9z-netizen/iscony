@@ -102,6 +102,15 @@
         <th>用途</th>
     </tr>
     <tr>
+        <td>カテゴリ管理</td>
+        <td>
+            <a href="{% url 'category_management' tournament.code %}">
+                カテゴリ一覧・追加・編集
+            </a>
+        </td>
+        <td>大会内カテゴリの名称と表示順を管理します。参加者管理の前提になる入口です。</td>
+    </tr>
+    <tr>
         <td>進出元の整理</td>
         <td>
             <a href="{% url 'advancement_source_list' tournament.code %}">
@@ -226,17 +235,13 @@
         <td>リーグとトーナメントのコート割・試合順を登録します。</td>
     </tr>
     <tr>
-        <td>大会の複製・追加</td>
+        <td>大会の複製</td>
         <td>
             <a href="{% url 'clone_tournament' tournament.code %}">
                 大会複製
             </a>
-            ／
-            <a href="{% url 'add_category' tournament.code %}">
-                カテゴリ追加
-            </a>
         </td>
-        <td>既存大会からの作成や、CSV取込前のカテゴリ作成に使います。</td>
+        <td>既存大会から新しい大会を作成します。</td>
     </tr>
 </table>
 

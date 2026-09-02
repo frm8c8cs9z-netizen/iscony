@@ -1,0 +1,31 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ page_title }}</h2>
+        <p class="subtle-text">
+            {{ tournament.name }}
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'category_management' tournament.code %}">
+            カテゴリ管理へ
+        </a>
+    </div>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        {{ submit_label }}
+    </button>
+</form>
+
+{% endblock %}
