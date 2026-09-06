@@ -111,6 +111,15 @@
         <td>大会内カテゴリの名称と表示順を管理します。参加者管理の前提になる入口です。</td>
     </tr>
     <tr>
+        <td>参加者管理</td>
+        <td>
+            <a href="{% url 'participant_category_select' tournament.code %}">
+                カテゴリ別参加者一覧・追加・編集
+            </a>
+        </td>
+        <td>CSV取込後の名簿確認や、参加者の手入力・通常編集を行います。</td>
+    </tr>
+    <tr>
         <td>進出元の整理</td>
         <td>
             <a href="{% url 'advancement_source_list' tournament.code %}">

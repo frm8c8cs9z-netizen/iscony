@@ -1,0 +1,49 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ tournament.name }} 参加者管理{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ tournament.name }} 参加者管理</h2>
+        <p class="subtle-text">
+            カテゴリを選んで参加者一覧へ進みます。
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'maintenance_menu' tournament.code %}">
+            管理メニューへ
+        </a>
+        <a href="{% url 'category_management' tournament.code %}">
+            カテゴリ管理へ
+        </a>
+    </div>
+</div>
+
+<table>
+    <tr>
+        <th>表示順</th>
+        <th>カテゴリ</th>
+        <th>参加者</th>
+        <th>操作</th>
+    </tr>
+    {% for category in categories %}
+        <tr>
+            <td>{{ category.display_order }}</td>
+            <td>{{ category.name }}</td>
+            <td>{{ category.participant_count }}</td>
+            <td>
+                <a href="{% url 'participant_list' tournament.code category.id %}">
+                    参加者一覧
+                </a>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="4">カテゴリがありません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

@@ -305,6 +305,33 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/participants/",
+        dashboard.participant_category_select,
+        name="participant_category_select",
+    ),
+
+    path(
+        "tournament/<str:code>/category/<int:category_id>/participants/",
+        dashboard.participant_list,
+        name="participant_list",
+    ),
+
+    path(
+        "tournament/<str:code>/category/<int:category_id>/participants/add/",
+        dashboard.add_participant,
+        name="add_participant",
+    ),
+
+    path(
+        (
+            "tournament/<str:code>/category/<int:category_id>/"
+            "participants/<int:participant_id>/edit/"
+        ),
+        dashboard.edit_participant,
+        name="edit_participant",
+    ),
+
+    path(
         "tournament/<str:code>/reception/search/",
         dashboard.reception_match_search,
         name="reception_match_search",

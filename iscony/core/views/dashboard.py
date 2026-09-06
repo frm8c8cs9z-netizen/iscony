@@ -20,6 +20,7 @@ from django.shortcuts import (
 from ..models import (
     Tournament,
     Category,
+    Participant,
     Group,
     Court,
     ScheduleBlock,
@@ -32,6 +33,7 @@ from ..forms import (
     ScheduleEditForm,
     ScheduleMoveForm,
     CategoryForm,
+    ParticipantForm,
     ReceptionMatchSearchForm,
     ScheduleBlockSettingsForm,
     TournamentCloneForm,
@@ -44,12 +46,17 @@ from ..match_keys import (
 from ..services import (
     clone_tournament_without_results,
     move_schedule,
+    participant_edit_impact_summary,
+    participant_pair_organization_initials,
+    save_pair_organization_values,
+    tournament_pair_organization_sets,
 )
 
 from ..helpers.view import(
     redirect_next_or_default,
     url_with_next,
 )
+from ..constants import PARTICIPANT_ORGANIZATION_INPUT_CODES
 
 # =========================================================
 # 大会の基本表示
@@ -429,6 +436,233 @@ def edit_category(request, code, category_id):
             "category": category,
             "form": form,
             "page_title": "カテゴリ編集",
+            "submit_label": "更新",
+        },
+    )
+
+
+def participant_category_select(request, code):
+    """参加者管理で編集対象カテゴリを選ぶ。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    categories = (
+        Category.objects
+        .filter(tournament=tournament)
+        .annotate(
+            participant_count=Count("participant", distinct=True),
+        )
+        .order_by("display_order", "name", "id")
+    )
+
+    return render(
+        request,
+        "core/participant_category_select.html",
+        {
+            "tournament": tournament,
+            "categories": categories,
+        },
+    )
+
+
+def participant_list(request, code, category_id):
+    """カテゴリ別の参加者一覧を表示する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+    participants = (
+        Participant.objects
+        .filter(category=category)
+        .prefetch_related(
+            "organization_values__field",
+        )
+        .order_by(
+            "display_order",
+            "entry_code",
+            "id",
+        )
+    )
+
+    return render(
+        request,
+        "core/participant_list.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "participants": participants,
+        },
+    )
+
+
+def add_participant(request, code, category_id):
+    """カテゴリへ参加者を追加する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+
+    if request.method == "POST":
+        form = ParticipantForm(
+            request.POST,
+            instance=Participant(category=category),
+            tournament=tournament,
+        )
+        if form.is_valid():
+            participant = form.save(commit=False)
+            participant.category = category
+            participant.organization = (
+                form.organization_values().get("org1", "")
+            )
+            participant.save()
+            save_pair_organization_values(
+                tournament,
+                participant,
+                form.organization_values(),
+            )
+            messages.success(
+                request,
+                f"{participant.entry_code} を追加しました。",
+            )
+            return redirect(
+                "participant_list",
+                code=tournament.code,
+                category_id=category.id,
+            )
+    else:
+        form = ParticipantForm(
+            instance=Participant(category=category),
+            tournament=tournament,
+        )
+
+    return render(
+        request,
+        "core/participant_form.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "form": form,
+            "org_fields": [
+                form[code]
+                for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
+            ],
+            "org_set_options": tournament_pair_organization_sets(tournament),
+            "page_title": "参加者追加",
+            "submit_label": "追加",
+        },
+    )
+
+
+def edit_participant(request, code, category_id, participant_id):
+    """カテゴリ内の参加者を通常編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+    participant = get_object_or_404(
+        Participant,
+        id=participant_id,
+        category=category,
+    )
+
+    if request.method == "POST":
+        form = ParticipantForm(
+            request.POST,
+            instance=participant,
+            tournament=tournament,
+            organization_initials=participant_pair_organization_initials(
+                participant,
+            ),
+        )
+        if form.is_valid():
+            impact_summary = participant_edit_impact_summary(participant)
+            if (
+                impact_summary["has_impact"]
+                and request.POST.get("confirm_impact") != "1"
+            ):
+                return render(
+                    request,
+                    "core/participant_form.html",
+                    {
+                        "tournament": tournament,
+                        "category": category,
+                        "participant": participant,
+                        "form": form,
+                        "org_fields": [
+                            form[code]
+                            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
+                        ],
+                        "org_set_options": (
+                            tournament_pair_organization_sets(tournament)
+                        ),
+                        "page_title": "参加者編集",
+                        "submit_label": "影響を確認して保存",
+                        "impact_summary": impact_summary,
+                    },
+                )
+
+            participant = form.save(commit=False)
+            participant.organization = (
+                form.organization_values().get("org1", "")
+            )
+            participant.save()
+            save_pair_organization_values(
+                tournament,
+                participant,
+                form.organization_values(),
+            )
+            messages.success(
+                request,
+                f"{participant.entry_code} を更新しました。",
+            )
+            return redirect(
+                "participant_list",
+                code=tournament.code,
+                category_id=category.id,
+            )
+    else:
+        form = ParticipantForm(
+            instance=participant,
+            tournament=tournament,
+            organization_initials=participant_pair_organization_initials(
+                participant,
+            ),
+        )
+
+    return render(
+        request,
+        "core/participant_form.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "participant": participant,
+            "form": form,
+            "org_fields": [
+                form[code]
+                for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
+            ],
+            "org_set_options": tournament_pair_organization_sets(tournament),
+            "page_title": "参加者編集",
             "submit_label": "更新",
         },
     )

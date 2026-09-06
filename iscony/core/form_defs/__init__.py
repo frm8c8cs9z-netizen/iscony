@@ -20,6 +20,7 @@ from .setup import (
     CategoryForm,
     CategoryOrderForm,
     GroupOrderForm,
+    ParticipantForm,
     TournamentCloneForm,
     TournamentSettingsForm,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "GroupOrderForm",
     "LeagueEntryChoiceField",
     "LeagueEntryEditForm",
+    "ParticipantForm",
     "ReceptionMatchSearchForm",
     "ScheduleBlockSettingsForm",
     "ScheduleCreateForm",

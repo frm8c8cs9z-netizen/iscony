@@ -1,0 +1,249 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ page_title }}</h2>
+        <p class="subtle-text">
+            {{ tournament.name }} / {{ category.name }}
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'participant_list' tournament.code category.id %}">
+            参加者一覧へ
+        </a>
+    </div>
+</div>
+
+<form method="post" class="participant-form">
+    {% csrf_token %}
+
+    <div class="participant-form-shell">
+        <section class="participant-form-panel participant-input-panel">
+            <h3>基本情報</h3>
+            <div class="participant-field-stack">
+                <div class="participant-field participant-field--short">
+                    {{ form.entry_code.label_tag }}
+                    {{ form.entry_code }}
+                    {{ form.entry_code.errors }}
+                </div>
+                <div class="participant-field participant-field--short">
+                    {{ form.display_order.label_tag }}
+                    {{ form.display_order }}
+                    {{ form.display_order.errors }}
+                </div>
+            </div>
+
+            <h3>選手</h3>
+            <div class="participant-field-stack">
+                <div class="participant-field participant-field--medium">
+                    {{ form.player1_name.label_tag }}
+                    {{ form.player1_name }}
+                    {{ form.player1_name.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.original_player1_short_name.label_tag }}
+                    {{ form.original_player1_short_name }}
+                    {{ form.original_player1_short_name.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.player2_name.label_tag }}
+                    {{ form.player2_name }}
+                    {{ form.player2_name.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.original_player2_short_name.label_tag }}
+                    {{ form.original_player2_short_name }}
+                    {{ form.original_player2_short_name.errors }}
+                </div>
+            </div>
+
+            <h3>所属</h3>
+            <div
+                class="participant-field-stack participant-org-stack"
+                data-organization-dropzone
+            >
+                {% for field in org_fields %}
+                    <div class="participant-field participant-field--medium">
+                        {{ field.label_tag }}
+                        {{ field }}
+                        {{ field.errors }}
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <aside class="participant-form-panel participant-org-panel">
+            <h3>所属セット候補</h3>
+            <p class="subtle-text">
+                クリックまたはドラッグで、左側の所属欄へまとめてコピーします。
+            </p>
+
+            {% if org_set_options %}
+                <div class="organization-set-list" aria-label="所属セット候補">
+                    {% for option in org_set_options %}
+                        <button
+                            type="button"
+                            class="organization-set-button"
+                            draggable="true"
+                            {% for code, value in option.org_values.items %}
+                                data-{{ code }}="{{ value }}"
+                            {% endfor %}
+                        >
+                            {{ option.label }}
+                        </button>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="subtle-text">
+                    まだ所属セット候補はありません。
+                </p>
+            {% endif %}
+        </aside>
+    </div>
+
+    {% if impact_summary %}
+        <div class="participant-impact-warning">
+            <h3>保存前に確認してください</h3>
+            <p>
+                この参加者は、すでにリーグ表・トーナメント表・進行表・結果に使われています。
+                保存すると、過去の結果も含めて表示名・所属が更新後の内容で表示されます。
+                試合結果そのものは変更されません。
+            </p>
+            <ul>
+                {% if impact_summary.league_entries %}
+                    <li>リーグ枠: {{ impact_summary.league_entries }}件</li>
+                {% endif %}
+                {% if impact_summary.tournament_entries %}
+                    <li>トーナメント枠: {{ impact_summary.tournament_entries }}件</li>
+                {% endif %}
+                {% if impact_summary.round_robin_matches %}
+                    <li>リーグ試合: {{ impact_summary.round_robin_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.tournament_matches %}
+                    <li>トーナメント試合: {{ impact_summary.tournament_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.schedules %}
+                    <li>進行表: {{ impact_summary.schedules }}件</li>
+                {% endif %}
+                {% if impact_summary.scored_round_robin_matches %}
+                    <li>結果入力済みリーグ試合: {{ impact_summary.scored_round_robin_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.scored_tournament_matches %}
+                    <li>結果入力済みトーナメント試合: {{ impact_summary.scored_tournament_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.progressed_schedules %}
+                    <li>呼出・開始・終了済み進行: {{ impact_summary.progressed_schedules }}件</li>
+                {% endif %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="participant-form-actions">
+        <button
+            type="submit"
+            {% if impact_summary %}name="confirm_impact" value="1"{% endif %}
+        >
+            {{ submit_label }}
+        </button>
+        {% if participant %}
+            <a
+                class="participant-form-action-link"
+                href="{% url 'edit_participant' tournament.code category.id participant.id %}"
+            >
+                元に戻す
+            </a>
+        {% endif %}
+        <a
+            class="participant-form-action-link"
+            href="{% url 'participant_list' tournament.code category.id %}"
+        >
+            キャンセル
+        </a>
+    </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const buttons = document.querySelectorAll(".organization-set-button");
+    const dropzone = document.querySelector("[data-organization-dropzone]");
+
+    function organizationValuesFromElement(element) {
+        const values = {};
+        Object.keys(element.dataset).forEach(function (key) {
+            values[key] = element.dataset[key] || "";
+        });
+        return values;
+    }
+
+    function applyOrganizationSet(values) {
+        Object.keys(values).forEach(function (key) {
+            const input = document.querySelector(
+                '.participant-org-input[data-org-code="' + key + '"]'
+            );
+            if (input) {
+                input.value = values[key] || "";
+            }
+        });
+    }
+
+    buttons.forEach(function (button) {
+        button.addEventListener("click", function () {
+            applyOrganizationSet(organizationValuesFromElement(button));
+        });
+
+        button.addEventListener("dragstart", function (event) {
+            const values = organizationValuesFromElement(button);
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData(
+                "application/json",
+                JSON.stringify(values)
+            );
+            event.dataTransfer.setData("text/plain", JSON.stringify(values));
+            button.classList.add("is-dragging");
+        });
+
+        button.addEventListener("dragend", function () {
+            button.classList.remove("is-dragging");
+        });
+    });
+
+    if (dropzone) {
+        dropzone.addEventListener("dragover", function (event) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+            dropzone.classList.add("is-drop-target");
+        });
+
+        dropzone.addEventListener("dragleave", function (event) {
+            if (!dropzone.contains(event.relatedTarget)) {
+                dropzone.classList.remove("is-drop-target");
+            }
+        });
+
+        dropzone.addEventListener("drop", function (event) {
+            event.preventDefault();
+            dropzone.classList.remove("is-drop-target");
+
+            const rawValues = (
+                event.dataTransfer.getData("application/json")
+                || event.dataTransfer.getData("text/plain")
+            );
+            if (!rawValues) {
+                return;
+            }
+
+            try {
+                applyOrganizationSet(JSON.parse(rawValues));
+            } catch (error) {
+                return;
+            }
+        });
+    }
+});
+</script>
+
+{% endblock %}

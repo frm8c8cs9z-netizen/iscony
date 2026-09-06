@@ -43,7 +43,10 @@ from ..services import (
     auto_apply_stage_advancements_if_ready,
 )
 from ..helpers.brackets import build_display_bracket_slots, get_bracket_size
-from ..constants import PARTICIPANT_ORGANIZATION_CODES
+from ..constants import (
+    PARTICIPANT_ORGANIZATION_CODES,
+    PARTICIPANT_ORGANIZATION_INPUT_CODES,
+)
 
 
 STAGE_SLOT_REQUIRED_COLUMNS = {
@@ -58,24 +61,12 @@ STAGE_REIMPORT_SESSION_KEY = "stage_reimport_pending"
 
 
 def _participant_csv_headers():
-    common_org_headers = list(PARTICIPANT_ORGANIZATION_CODES)
-    player1_org_headers = [
-        f"player1_{code}"
-        for code in PARTICIPANT_ORGANIZATION_CODES
-    ]
-    player2_org_headers = [
-        f"player2_{code}"
-        for code in PARTICIPANT_ORGANIZATION_CODES
-    ]
     return [
         "category",
         "entry_code",
         "player1_name",
         "player2_name",
-        "organization",
-        *common_org_headers,
-        *player1_org_headers,
-        *player2_org_headers,
+        *PARTICIPANT_ORGANIZATION_INPUT_CODES,
     ]
 
 

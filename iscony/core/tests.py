@@ -5543,6 +5543,22 @@ class CsvFormatDownloadTests(TestCase):
         self.assertNotIn("pair2", header)
         self.assertIn("meeting_number", header)
 
+    def test_participants_format_uses_two_standard_org_columns(self):
+        response = self._download(
+            "participants"
+        )
+
+        content = response.content.decode("utf-8-sig")
+
+        self.assertEqual(response.status_code, 200)
+        header = content.strip().splitlines()[0].split(",")
+        self.assertIn("org1", header)
+        self.assertIn("org2", header)
+        self.assertNotIn("organization", header)
+        self.assertNotIn("org3", header)
+        self.assertNotIn("player1_org1", header)
+        self.assertNotIn("player2_org1", header)
+
 
 class AdvancementSourceListViewTests(TestCase):
 
@@ -6674,6 +6690,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "構成管理")
         self.assertContains(response, "危険操作・初期化")
         self.assertContains(response, "カテゴリ管理")
+        self.assertContains(response, "参加者管理")
         self.assertContains(response, "表示順調整")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
@@ -6712,6 +6729,13 @@ class MaintenanceMenuTests(TestCase):
             response,
             reverse(
                 "category_management",
+                kwargs={"code": tournament.code},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "participant_category_select",
                 kwargs={"code": tournament.code},
             ),
         )
@@ -6860,6 +6884,361 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(category.name, "男子一部")
         self.assertEqual(category.display_order, 3)
 
+
+class ParticipantManagementTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="参加者管理大会",
+            code="PARTICIPANTMANAGE",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+    def test_participant_category_select_lists_categories(self):
+        Participant.objects.create(
+            category=self.category,
+            entry_code="1",
+            player1_name="山田",
+            player2_name="田中",
+        )
+
+        response = self.client.get(
+            reverse(
+                "participant_category_select",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.category.name)
+        self.assertContains(response, "1")
+        self.assertContains(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+
+    def test_add_participant_saves_pair_common_organizations(self):
+        response = self.client.post(
+            reverse(
+                "add_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+            {
+                "entry_code": "E001",
+                "display_order": "1",
+                "player1_name": "参加者1A",
+                "original_player1_short_name": "参1A",
+                "player2_name": "参加者1B",
+                "original_player2_short_name": "参1B",
+                "org1": "共通所属",
+                "org2": "共通県",
+                "org3": "",
+                "org4": "",
+                "org5": "",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+
+        participant = Participant.objects.get(entry_code="E001")
+        self.assertEqual(participant.original_player1_name, "参加者1A")
+        self.assertEqual(participant.original_player2_name, "参加者1B")
+        self.assertEqual(participant.original_player1_short_name, "参1A")
+        self.assertEqual(participant.original_player2_short_name, "参1B")
+        self.assertEqual(participant.organization, "共通所属")
+        self.assertFalse(participant.has_day_player_change)
+
+        org_values = {
+            (
+                value.player_no,
+                value.field.code,
+            ): value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=participant,
+            ).select_related("field")
+        }
+        self.assertEqual(
+            org_values,
+            {
+                (1, "org1"): "共通所属",
+                (1, "org2"): "共通県",
+                (2, "org1"): "共通所属",
+                (2, "org2"): "共通県",
+            },
+        )
+
+    def test_edit_participant_shows_existing_organization_set_option(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+            organization="候補所属",
+        )
+        field = TournamentOrganizationField.objects.create(
+            tournament=self.tournament,
+            code="org1",
+            label="所属1",
+            display_order=1,
+        )
+        ParticipantOrganizationValue.objects.create(
+            participant=participant,
+            player_no=ParticipantOrganizationValue.PLAYER_1,
+            field=field,
+            original_value="候補所属",
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "候補所属")
+        self.assertContains(response, "organization-set-button")
+        self.assertContains(response, 'draggable="true"')
+        self.assertContains(response, "data-organization-dropzone")
+        self.assertContains(response, "元に戻す")
+        self.assertContains(response, "キャンセル")
+        self.assertContains(
+            response,
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+
+    def test_add_participant_shows_cancel_without_reset_link(self):
+        response = self.client.get(
+            reverse(
+                "add_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "キャンセル")
+        self.assertNotContains(response, "元に戻す")
+        self.assertContains(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+
+    def test_edit_unused_participant_saves_without_impact_confirmation(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            {
+                "entry_code": "E001",
+                "display_order": "1",
+                "player1_name": "参加者1A修正",
+                "original_player1_short_name": "参1A",
+                "player2_name": "参加者1B",
+                "original_player2_short_name": "参1B",
+                "org1": "修正所属",
+                "org2": "",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertEqual(participant.player1_name, "参加者1A修正")
+        self.assertEqual(participant.organization, "修正所属")
+
+    def test_edit_used_participant_requires_impact_confirmation(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+        stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=self.category,
+            stage=stage,
+            name="Aリーグ",
+            display_order=1,
+        )
+        LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            participant=participant,
+            pair_code="A1",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            {
+                "entry_code": "E001",
+                "display_order": "1",
+                "player1_name": "参加者1A修正",
+                "original_player1_short_name": "参1A",
+                "player2_name": "参加者1B",
+                "original_player2_short_name": "参1B",
+                "org1": "修正所属",
+                "org2": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "保存前に確認してください")
+        self.assertContains(response, "リーグ枠: 1件")
+        self.assertContains(response, "影響を確認して保存")
+        participant.refresh_from_db()
+        self.assertEqual(participant.player1_name, "参加者1A")
+        self.assertEqual(participant.organization, "")
+
+    def test_edit_used_participant_saves_after_impact_confirmation(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+        stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=self.category,
+            stage=stage,
+            name="Aリーグ",
+            display_order=1,
+        )
+        LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            participant=participant,
+            pair_code="A1",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            {
+                "entry_code": "E001",
+                "display_order": "1",
+                "player1_name": "参加者1A修正",
+                "original_player1_short_name": "参1A",
+                "player2_name": "参加者1B",
+                "original_player2_short_name": "参1B",
+                "org1": "修正所属",
+                "org2": "",
+                "confirm_impact": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertEqual(participant.player1_name, "参加者1A修正")
+        self.assertEqual(participant.organization, "修正所属")
+
+
+class TournamentSettingsTests(TestCase):
 
     def test_tournament_settings_can_update_default_display_settings(self):
         tournament = Tournament.objects.create(
