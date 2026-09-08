@@ -30,6 +30,7 @@ from ..models import (
     Schedule,
     ScheduleBlock,
     ScheduleReplacementHistory,
+    Stage,
     Tournament,
 )
 from ..services import (
@@ -1093,19 +1094,35 @@ def cancel_retire_pair(request, pair_id):
     )
 
 
-def pair_maintenance(request, category_id):
-    """カテゴリ内のリーグ枠を一覧し、編集入口を表示する。"""
+def pair_maintenance(request, category_id, stage_id=None):
+    """カテゴリ内、または指定Stage内のリーグ枠を一覧し、編集入口を表示する。"""
 
     category = get_object_or_404(
         Category,
         id=category_id
     )
+    stage = None
+
+    if stage_id is not None:
+        stage = get_object_or_404(
+            Stage,
+            id=stage_id,
+            category=category,
+            stage_type=Stage.TYPE_LEAGUE,
+        )
 
     pairs = LeagueEntry.objects.filter(
         category=category
     ).select_related(
         "group"
-    ).order_by(
+    )
+
+    if stage is not None:
+        pairs = pairs.filter(
+            group__stage=stage,
+        )
+
+    pairs = pairs.order_by(
         "group__display_order",
         "group__name",
         "display_order",
@@ -1117,6 +1134,7 @@ def pair_maintenance(request, category_id):
         "core/pair_maintenance.html",
         {
             "category": category,
+            "stage": stage,
             "pairs": pairs,
         }
     )

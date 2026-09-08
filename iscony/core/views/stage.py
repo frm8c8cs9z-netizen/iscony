@@ -1,10 +1,12 @@
 """カテゴリ内のリーグ・トーナメントをStage順に扱う運用画面。"""
 
+from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .league import build_category_group_data
+from ..forms import StageEditForm, StageForm
 from ..models import (
     AdvancementSource,
     Category,
@@ -439,6 +441,162 @@ def category_stage_overview(request, category_id):
                 category.tournament.default_league_score_color_mode
                 != category.tournament.LEAGUE_SCORE_COLOR_NONE
             ),
+        },
+    )
+
+
+def category_stage_management(request, code, category_id):
+    """カテゴリ配下のStage構成を管理する入口を表示する。"""
+
+    category = get_object_or_404(
+        Category.objects.select_related("tournament"),
+        id=category_id,
+        tournament__code=code,
+    )
+    stages = Stage.objects.filter(
+        category=category,
+    ).order_by(
+        "display_order",
+        "name",
+    )
+
+    stage_rows = []
+    for stage in stages:
+        group_count = Group.objects.filter(stage=stage).count()
+        brackets = list(
+            TournamentBracket.objects.filter(stage=stage).order_by(
+                "display_order",
+                "name",
+            )
+        )
+        stage_rows.append({
+            "stage": stage,
+            "group_count": group_count,
+            "brackets": brackets,
+            "bracket_count": len(brackets),
+        })
+
+    return render(
+        request,
+        "core/category_stage_management.html",
+        {
+            "category": category,
+            "tournament": category.tournament,
+            "stage_rows": stage_rows,
+        },
+    )
+
+
+def add_stage(request, code, category_id):
+    """カテゴリにStageを追加する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+
+    if request.method == "POST":
+        form = StageForm(
+            request.POST,
+        )
+        form.instance.category = category
+
+        if form.is_valid():
+            stage = form.save(
+                commit=False,
+            )
+            stage.category = category
+            stage.save()
+
+            messages.success(
+                request,
+                f"{stage.name} を追加しました。",
+            )
+            return redirect(
+                "category_stage_management",
+                code=tournament.code,
+                category_id=category.id,
+            )
+
+    else:
+        form = StageForm()
+
+    return render(
+        request,
+        "core/stage_form.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "form": form,
+            "stage": None,
+            "page_title": "Stage追加",
+            "submit_label": "保存",
+        },
+    )
+
+
+def edit_stage(request, code, category_id, stage_id):
+    """カテゴリ内Stageの名称、種別、表示順を編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+    stage = get_object_or_404(
+        Stage,
+        id=stage_id,
+        category=category,
+    )
+    stage_type_locked = (
+        Group.objects.filter(stage=stage).exists()
+        or TournamentBracket.objects.filter(stage=stage).exists()
+    )
+    form_class = StageEditForm if stage_type_locked else StageForm
+
+    if request.method == "POST":
+        form = form_class(
+            request.POST,
+            instance=stage,
+        )
+
+        if form.is_valid():
+            form.save()
+            messages.success(
+                request,
+                f"{stage.name} を更新しました。",
+            )
+            return redirect(
+                "category_stage_management",
+                code=tournament.code,
+                category_id=category.id,
+            )
+
+    else:
+        form = form_class(
+            instance=stage,
+        )
+
+    return render(
+        request,
+        "core/stage_form.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "form": form,
+            "stage": stage,
+            "stage_type_locked": stage_type_locked,
+            "page_title": "Stage編集",
+            "submit_label": "更新",
         },
     )
 

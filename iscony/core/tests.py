@@ -6810,11 +6810,22 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, "カテゴリ追加")
         self.assertContains(response, first_category.name)
         self.assertContains(response, later_category.name)
-        self.assertContains(response, "Stage進行")
+        self.assertContains(response, "Stage管理")
+        self.assertNotContains(response, "Stage進行")
         self.assertContains(
             response,
             reverse(
                 "edit_category",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": first_category.id,
+                },
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_management",
                 kwargs={
                     "code": self.tournament.code,
                     "category_id": first_category.id,
@@ -6845,6 +6856,231 @@ class CategoryManagementTests(TestCase):
                 kwargs={"code": self.tournament.code},
             ),
         )
+
+    def test_add_stage_saves_stage_and_lists_it(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="予選リーグ",
+        )
+        self.assertEqual(stage.stage_type, Stage.TYPE_LEAGUE)
+        self.assertEqual(stage.display_order, 1)
+        list_response = self.client.get(response.url)
+        self.assertContains(list_response, "予選リーグ")
+        self.assertContains(list_response, "Stage編集")
+
+    def test_add_stage_with_duplicate_name_shows_form_error(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "display_order": "2",
+                "code": "STG1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].errors)
+        self.assertEqual(
+            Stage.objects.filter(
+                category=category,
+                name="予選リーグ",
+            ).count(),
+            1,
+        )
+
+    def test_category_stage_management_shows_stage_specific_entries(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        league_stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        tournament_stage = Stage.objects.create(
+            category=category,
+            code="STG2",
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        Group.objects.create(
+            category=category,
+            stage=league_stage,
+            name="A",
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=tournament_stage,
+            name="本戦",
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Stage管理")
+        self.assertContains(response, "Stage追加")
+        self.assertContains(response, "予選リーグ")
+        self.assertContains(response, "決勝トーナメント")
+        self.assertNotContains(response, "次段階")
+        self.assertContains(
+            response,
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": league_stage.id,
+                },
+            ),
+        )
+        self.assertContains(response, "リーグ枠編集")
+        self.assertContains(
+            response,
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": league_stage.id,
+                },
+            ),
+        )
+        self.assertContains(response, "本戦 試合編集")
+        self.assertContains(
+            response,
+            reverse(
+                "tournament_match_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            ),
+        )
+
+    def test_stage_pair_maintenance_limits_entries_to_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        target_stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        other_stage = Stage.objects.create(
+            category=category,
+            code="STG2",
+            name="順位リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        target_group = Group.objects.create(
+            category=category,
+            stage=target_stage,
+            name="A",
+        )
+        other_group = Group.objects.create(
+            category=category,
+            stage=other_stage,
+            name="B",
+        )
+        create_league_entry_with_participant(
+            category=category,
+            group=target_group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="対象1",
+            player2_name="対象2",
+        )
+        create_league_entry_with_participant(
+            category=category,
+            group=other_group,
+            pair_code="B1",
+            display_order=1,
+            player1_name="別Stage1",
+            player2_name="別Stage2",
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": target_stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "予選リーグ")
+        self.assertContains(response, "対象1")
+        self.assertNotContains(response, "別Stage1")
         self.assertTrue(
             Category.objects.filter(
                 tournament=self.tournament,
@@ -6883,6 +7119,303 @@ class CategoryManagementTests(TestCase):
         category.refresh_from_db()
         self.assertEqual(category.name, "男子一部")
         self.assertEqual(category.display_order, 3)
+
+    def test_edit_stage_updates_name_and_display_order(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "一次リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "3",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage.refresh_from_db()
+        self.assertEqual(stage.name, "一次リーグ")
+        self.assertEqual(stage.stage_type, Stage.TYPE_LEAGUE)
+        self.assertEqual(stage.display_order, 3)
+
+    def test_edit_stage_updates_stage_type_when_no_group_or_bracket_exists(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage.refresh_from_db()
+        self.assertEqual(stage.stage_type, Stage.TYPE_TOURNAMENT)
+
+    def test_edit_stage_locks_stage_type_once_group_exists(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage.refresh_from_db()
+        self.assertEqual(stage.stage_type, Stage.TYPE_LEAGUE)
+
+    def test_edit_stage_locks_stage_type_once_bracket_exists(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "決勝トーナメント",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_LEAGUE,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage.refresh_from_db()
+        self.assertEqual(stage.stage_type, Stage.TYPE_TOURNAMENT)
+
+    def test_edit_stage_returns_404_for_other_category_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+            display_order=2,
+        )
+        other_stage = Stage.objects.create(
+            category=other_category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": other_stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_add_stage_and_edit_stage_get_show_forms(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        add_response = self.client.get(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+        edit_response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(add_response.status_code, 200)
+        self.assertContains(add_response, "Stage追加")
+        self.assertContains(add_response, "保存")
+        self.assertContains(add_response, "stage_type")
+        self.assertEqual(edit_response.status_code, 200)
+        self.assertContains(edit_response, "Stage編集")
+        self.assertContains(edit_response, "更新")
+        self.assertContains(edit_response, "stage_type")
+        self.assertContains(edit_response, 'value="tournament"')
+        self.assertNotContains(edit_response, "種別: リーグ")
+        self.assertNotContains(
+            edit_response,
+            "枠が既に作成されているため変更できません",
+        )
+
+    def test_edit_stage_get_locks_stage_type_once_group_exists(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "種別: リーグ")
+        self.assertContains(
+            response,
+            "リーグ/トーナメントの枠が既に作成されているため変更できません",
+        )
+        self.assertNotContains(response, "stage_type")
+        self.assertNotContains(response, 'value="tournament"')
 
 
 class ParticipantManagementTests(TestCase):

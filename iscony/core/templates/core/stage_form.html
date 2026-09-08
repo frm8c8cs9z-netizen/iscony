@@ -1,0 +1,37 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ page_title }}</h2>
+        <p class="subtle-text">
+            {{ tournament.name }} / {{ category.name }}
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'category_stage_management' tournament.code category.id %}">
+            Stage管理へ
+        </a>
+    </div>
+</div>
+
+{% if stage and stage_type_locked %}
+    <p>
+        種別: {{ stage.get_stage_type_display }}（リーグ/トーナメントの枠が既に作成されているため変更できません）
+    </p>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+    <button type="submit">
+        {{ submit_label }}
+    </button>
+</form>
+
+{% endblock %}

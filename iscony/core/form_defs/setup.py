@@ -6,9 +6,10 @@ the entire event and should eventually sit behind stronger permissions.
 """
 
 from django import forms
+from django.core.exceptions import ValidationError
 
 from ..constants import PARTICIPANT_ORGANIZATION_INPUT_CODES
-from ..models import Category, Group, Participant, Tournament
+from ..models import Category, Group, Participant, Stage, Tournament
 from .tournament import (
     TOURNAMENT_SCORE_COLOR_DEFAULT,
     TOURNAMENT_SCORE_COLOR_PRESETS,
@@ -38,6 +39,48 @@ class CategoryForm(forms.ModelForm):
     class Meta:
 
         model = Category
+
+        fields = [
+            "name",
+            "display_order",
+        ]
+
+
+class StageUniqueFormMixin:
+
+    def validate_unique(self):
+        exclude = self._get_validation_exclusions()
+
+        if self.instance.category_id and "category" in exclude:
+            exclude.remove("category")
+
+        if self.instance.code and "code" in exclude:
+            exclude.remove("code")
+
+        try:
+            self.instance.validate_unique(exclude=exclude)
+        except ValidationError as error:
+            self._update_errors(error)
+
+
+class StageForm(StageUniqueFormMixin, forms.ModelForm):
+
+    class Meta:
+
+        model = Stage
+
+        fields = [
+            "name",
+            "stage_type",
+            "display_order",
+        ]
+
+
+class StageEditForm(StageUniqueFormMixin, forms.ModelForm):
+
+    class Meta:
+
+        model = Stage
 
         fields = [
             "name",

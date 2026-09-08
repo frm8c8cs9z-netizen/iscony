@@ -43,16 +43,12 @@
             <td>{{ category.participant_count }}</td>
             <td>{{ category.stage_count }}</td>
             <td>
-                <a href="{% url 'participant_list' tournament.code category.id %}">
-                    参加者
-                </a>
-                ／
-                <a href="{% url 'category_stage_overview' category.id %}">
-                    Stage進行
-                </a>
-                ／
                 <a href="{% url 'edit_category' tournament.code category.id %}">
                     編集
+                </a>
+                ／
+                <a href="{% url 'category_stage_management' tournament.code category.id %}">
+                    Stage管理
                 </a>
             </td>
         </tr>

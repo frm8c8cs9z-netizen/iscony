@@ -67,6 +67,24 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/category/<int:category_id>/stage-management/",
+        stage.category_stage_management,
+        name="category_stage_management",
+    ),
+
+    path(
+        "tournament/<str:code>/category/<int:category_id>/stage-management/add/",
+        stage.add_stage,
+        name="add_stage",
+    ),
+
+    path(
+        "tournament/<str:code>/category/<int:category_id>/stage/<int:stage_id>/edit/",
+        stage.edit_stage,
+        name="edit_stage",
+    ),
+
+    path(
         "tournament/<str:code>/stage-overview/",
         stage.tournament_stage_overview_index,
         name="tournament_stage_overview_index",
@@ -359,6 +377,12 @@ urlpatterns = [
         "category/<int:category_id>/pairs/maintenance/",
         league.pair_maintenance,
         name="pair_maintenance",
+    ),
+
+    path(
+        "category/<int:category_id>/stage/<int:stage_id>/pairs/maintenance/",
+        league.pair_maintenance,
+        name="stage_pair_maintenance",
     ),
 
     path(

@@ -2,7 +2,16 @@
 
 {% block content %}
 
-<h2>{{ category.name }} リーグ枠メンテナンス</h2>
+<h2>{{ category.name }} リーグ枠編集</h2>
+
+{% if stage %}
+    <p class="subtle-text">
+        {{ stage.name }}
+        {% if stage.code %}
+            ({{ stage.code }})
+        {% endif %}
+    </p>
+{% endif %}
 
 <table>
     <tr>
