@@ -29,7 +29,12 @@
 
     {{ form.as_p }}
 
-    {% if not stage and slot_form %}
+    {% if slot_form %}
+        {% if stage %}
+            <p>
+                参加ペア数やグループ内訳を変更すると、現在の枠構成(参加者未定)を作り直します。
+            </p>
+        {% endif %}
         <div class="stage-slot-setup">
             <p>
                 {{ slot_form.pair_count.label_tag }}
@@ -76,7 +81,7 @@
     </button>
 </form>
 
-{% if not stage %}
+{% if slot_form %}
     <script>
         function toggleStageSlotSetup() {
             const stageType = document.getElementById("id_stage_type");

@@ -25,6 +25,7 @@ from ..models import (
     Stage,
     Tournament,
     TournamentBracket,
+    TournamentEntry,
     TournamentMatch,
 )
 from ..services import (
@@ -519,6 +520,42 @@ def _stage_setup_preview(pair_count):
     }
 
 
+def _validate_stage_slot_setup(stage_type, slot_form):
+    """
+    slot_form が有効(is_valid())である前提で呼ぶ。
+    stage_type に応じて pair_count / group_size を検証し、無効なら
+    slot_form.add_error() でエラーを追加して False を返す。
+    """
+
+    pair_count = slot_form.cleaned_data["pair_count"]
+
+    if stage_type == Stage.TYPE_LEAGUE:
+        group_size = slot_form.cleaned_data.get("group_size")
+        candidate = find_group_size_candidate(
+            pair_count,
+            group_size,
+        )
+
+        if not candidate:
+            slot_form.add_error(
+                "group_size",
+                (
+                    "選択したグループ内ペア数は、入力した参加ペア数に対して無効です。"
+                    "候補から選び直してください。"
+                ),
+            )
+            return False
+
+    if stage_type == Stage.TYPE_TOURNAMENT and pair_count < 1:
+        slot_form.add_error(
+            "pair_count",
+            "参加ペア数は1以上で入力してください。",
+        )
+        return False
+
+    return True
+
+
 def add_stage(request, code, category_id):
     """カテゴリにStageを追加する。"""
 
@@ -549,31 +586,10 @@ def add_stage(request, code, category_id):
             pair_count = slot_form.cleaned_data["pair_count"]
 
             if form_valid:
-                stage_type = form.cleaned_data["stage_type"]
-
-                if stage_type == Stage.TYPE_LEAGUE:
-                    group_size = slot_form.cleaned_data.get("group_size")
-                    candidate = find_group_size_candidate(
-                        pair_count,
-                        group_size,
-                    )
-
-                    if not candidate:
-                        slot_form.add_error(
-                            "group_size",
-                            (
-                                "選択したグループ内ペア数は、入力した参加ペア数に対して無効です。"
-                                "候補から選び直してください。"
-                            ),
-                        )
-                        slot_form_valid = False
-
-                if stage_type == Stage.TYPE_TOURNAMENT and pair_count < 1:
-                    slot_form.add_error(
-                        "pair_count",
-                        "参加ペア数は1以上で入力してください。",
-                    )
-                    slot_form_valid = False
+                slot_form_valid = _validate_stage_slot_setup(
+                    form.cleaned_data["stage_type"],
+                    slot_form,
+                )
 
         if form_valid and slot_form_valid:
             stage = form.save(
@@ -675,10 +691,19 @@ def edit_stage(request, code, category_id, stage_id):
         id=stage_id,
         category=category,
     )
-    stage_type_locked = (
-        Group.objects.filter(stage=stage).exists()
-        or TournamentBracket.objects.filter(stage=stage).exists()
+    has_results = (
+        RoundRobinMatch.objects.filter(
+            group__stage=stage,
+            completed=True,
+        ).exists()
+        or TournamentMatch.objects.filter(
+            bracket__stage=stage,
+        ).filter(
+            Q(pair1_games__isnull=False)
+            | Q(pair2_games__isnull=False)
+        ).exists()
     )
+    stage_type_locked = has_results
     form_class = StageEditForm if stage_type_locked else StageForm
 
     if request.method == "POST":
@@ -687,35 +712,137 @@ def edit_stage(request, code, category_id, stage_id):
             instance=stage,
         )
 
-        if form.is_valid():
-            form.save()
-            messages.success(
-                request,
-                f"{stage.name} を更新しました。",
+        if stage_type_locked:
+            if form.is_valid():
+                form.save()
+                messages.success(
+                    request,
+                    f"{stage.name} を更新しました。",
+                )
+                return redirect(
+                    "category_stage_management",
+                    code=tournament.code,
+                    category_id=category.id,
+                )
+
+            slot_form = None
+            preview_pair_count = 0
+
+        else:
+            slot_form = StageSlotSetupForm(
+                request.POST,
             )
-            return redirect(
-                "category_stage_management",
-                code=tournament.code,
-                category_id=category.id,
-            )
+            form_valid = form.is_valid()
+            slot_form_valid = slot_form.is_valid()
+            pair_count = None
+
+            if slot_form_valid:
+                pair_count = slot_form.cleaned_data["pair_count"]
+
+                if form_valid:
+                    slot_form_valid = _validate_stage_slot_setup(
+                        form.cleaned_data.get("stage_type"),
+                        slot_form,
+                    )
+
+            if form_valid and slot_form_valid:
+                with transaction.atomic():
+                    Group.objects.filter(stage=stage).delete()
+                    TournamentBracket.objects.filter(stage=stage).delete()
+                    stage = form.save()
+
+                    pair_count = slot_form.cleaned_data["pair_count"]
+                    if stage.stage_type == Stage.TYPE_LEAGUE:
+                        group_size = slot_form.cleaned_data["group_size"]
+                        candidate = find_group_size_candidate(
+                            pair_count,
+                            group_size,
+                        )
+                        create_league_stage_groups(
+                            stage,
+                            pair_count,
+                            group_size,
+                        )
+
+                    else:
+                        bracket_size = get_bracket_size(pair_count)
+                        create_tournament_stage_bracket(
+                            stage,
+                            pair_count,
+                        )
+
+                if stage.stage_type == Stage.TYPE_LEAGUE:
+                    messages.success(
+                        request,
+                        (
+                            f"{stage.name} を更新しました"
+                            f"({candidate['group_count']}グループ・計{candidate['total_matches']}試合に作り直しました)"
+                        ),
+                    )
+
+                else:
+                    messages.success(
+                        request,
+                        (
+                            f"{stage.name} を更新しました"
+                            f"({bracket_size}枠のトーナメント表に作り直しました)"
+                        ),
+                    )
+
+                return redirect(
+                    "category_stage_management",
+                    code=tournament.code,
+                    category_id=category.id,
+                )
+
+            preview_pair_count = pair_count or 0
 
     else:
         form = form_class(
             instance=stage,
         )
+        if stage_type_locked:
+            slot_form = None
+            preview_pair_count = 0
+
+        else:
+            if stage.stage_type == Stage.TYPE_LEAGUE:
+                initial_pair_count = LeagueEntry.objects.filter(
+                    group__stage=stage,
+                ).count()
+            else:
+                initial_pair_count = TournamentEntry.objects.filter(
+                    bracket__stage=stage,
+                ).count()
+
+            slot_form = StageSlotSetupForm(
+                initial={
+                    "pair_count": initial_pair_count,
+                },
+            )
+            preview_pair_count = initial_pair_count
+
+    context = {
+        "tournament": tournament,
+        "category": category,
+        "form": form,
+        "stage": stage,
+        "stage_type_locked": stage_type_locked,
+        "page_title": "Stage編集",
+        "submit_label": "更新",
+    }
+
+    if slot_form:
+        context.update({
+            "slot_form": slot_form,
+            "selected_group_size": slot_form["group_size"].value(),
+            **_stage_setup_preview(preview_pair_count),
+        })
 
     return render(
         request,
         "core/stage_form.html",
-        {
-            "tournament": tournament,
-            "category": category,
-            "form": form,
-            "stage": stage,
-            "stage_type_locked": stage_type_locked,
-            "page_title": "Stage編集",
-            "submit_label": "更新",
-        },
+        context,
     )
 
 
