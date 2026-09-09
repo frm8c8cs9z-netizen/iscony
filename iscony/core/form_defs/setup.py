@@ -88,6 +88,27 @@ class StageEditForm(StageUniqueFormMixin, forms.ModelForm):
         ]
 
 
+class StageSlotSetupForm(forms.Form):
+    """Stage追加時の枠数決定を扱う補助フォーム。"""
+
+    pair_count = forms.IntegerField(
+        min_value=1,
+        label="参加ペア数",
+        widget=forms.TextInput(
+            attrs={
+                "autocomplete": "off",
+                "inputmode": "numeric",
+                "pattern": "[0-9]*",
+            },
+        ),
+    )
+    group_size = forms.IntegerField(
+        required=False,
+        min_value=3,
+        label="1グループあたりのペア数",
+    )
+
+
 class ParticipantForm(forms.ModelForm):
     """通常の参加者追加・編集フォーム。
 

@@ -23,6 +23,7 @@ from .setup import (
     ParticipantForm,
     StageEditForm,
     StageForm,
+    StageSlotSetupForm,
     TournamentCloneForm,
     TournamentSettingsForm,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "ScheduleMoveForm",
     "StageEditForm",
     "StageForm",
+    "StageSlotSetupForm",
     "TOURNAMENT_SCORE_COLOR_DEFAULT",
     "TOURNAMENT_SCORE_COLOR_PRESETS",
     "TournamentBracketForm",

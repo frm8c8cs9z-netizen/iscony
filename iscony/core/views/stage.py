@@ -1,18 +1,25 @@
 """カテゴリ内のリーグ・トーナメントをStage順に扱う運用画面。"""
 
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .league import build_category_group_data
-from ..forms import StageEditForm, StageForm
+from ..forms import StageEditForm, StageForm, StageSlotSetupForm
+from ..helpers.brackets import get_bracket_size
+from ..helpers.league_grouping import (
+    build_group_size_candidates,
+    find_group_size_candidate,
+)
 from ..models import (
     AdvancementSource,
     Category,
     Group,
     GroupRanking,
     LeagueEntry,
+    Participant,
     RoundRobinMatch,
     Schedule,
     Stage,
@@ -20,7 +27,11 @@ from ..models import (
     TournamentBracket,
     TournamentMatch,
 )
-from ..services import inspect_stage_advancement_readiness
+from ..services import (
+    create_league_stage_groups,
+    create_tournament_stage_bracket,
+    inspect_stage_advancement_readiness,
+)
 from .tournament import build_tournament_bracket_display_data
 
 
@@ -487,6 +498,27 @@ def category_stage_management(request, code, category_id):
     )
 
 
+def _stage_setup_preview(pair_count):
+    if pair_count and pair_count >= 1:
+        bracket_size = get_bracket_size(pair_count)
+        tournament_slot_preview = {
+            "bracket_size": bracket_size,
+            "bye_count": bracket_size - pair_count,
+            "message": "",
+        }
+    else:
+        tournament_slot_preview = {
+            "bracket_size": None,
+            "bye_count": None,
+            "message": "参加ペア数を入力してください。",
+        }
+
+    return {
+        "group_size_candidates": build_group_size_candidates(pair_count or 0),
+        "tournament_slot_preview": tournament_slot_preview,
+    }
+
+
 def add_stage(request, code, category_id):
     """カテゴリにStageを追加する。"""
 
@@ -504,27 +536,110 @@ def add_stage(request, code, category_id):
         form = StageForm(
             request.POST,
         )
+        slot_form = StageSlotSetupForm(
+            request.POST,
+        )
         form.instance.category = category
 
-        if form.is_valid():
+        form_valid = form.is_valid()
+        slot_form_valid = slot_form.is_valid()
+        pair_count = None
+
+        if slot_form_valid:
+            pair_count = slot_form.cleaned_data["pair_count"]
+
+            if form_valid:
+                stage_type = form.cleaned_data["stage_type"]
+
+                if stage_type == Stage.TYPE_LEAGUE:
+                    group_size = slot_form.cleaned_data.get("group_size")
+                    candidate = find_group_size_candidate(
+                        pair_count,
+                        group_size,
+                    )
+
+                    if not candidate:
+                        slot_form.add_error(
+                            "group_size",
+                            (
+                                "選択したグループ内ペア数は、入力した参加ペア数に対して無効です。"
+                                "候補から選び直してください。"
+                            ),
+                        )
+                        slot_form_valid = False
+
+                if stage_type == Stage.TYPE_TOURNAMENT and pair_count < 1:
+                    slot_form.add_error(
+                        "pair_count",
+                        "参加ペア数は1以上で入力してください。",
+                    )
+                    slot_form_valid = False
+
+        if form_valid and slot_form_valid:
             stage = form.save(
                 commit=False,
             )
             stage.category = category
-            stage.save()
 
-            messages.success(
-                request,
-                f"{stage.name} を追加しました。",
-            )
+            pair_count = slot_form.cleaned_data["pair_count"]
+            if stage.stage_type == Stage.TYPE_LEAGUE:
+                group_size = slot_form.cleaned_data["group_size"]
+                candidate = find_group_size_candidate(
+                    pair_count,
+                    group_size,
+                )
+                with transaction.atomic():
+                    stage.save()
+                    create_league_stage_groups(
+                        stage,
+                        pair_count,
+                        group_size,
+                    )
+
+                messages.success(
+                    request,
+                    (
+                        f"{stage.name} を追加しました"
+                        f"({candidate['group_count']}グループ・計{candidate['total_matches']}試合)"
+                    ),
+                )
+
+            else:
+                bracket_size = get_bracket_size(pair_count)
+                with transaction.atomic():
+                    stage.save()
+                    create_tournament_stage_bracket(
+                        stage,
+                        pair_count,
+                    )
+
+                messages.success(
+                    request,
+                    (
+                        f"{stage.name} を追加しました"
+                        f"({bracket_size}枠のトーナメント表)"
+                    ),
+                )
+
             return redirect(
                 "category_stage_management",
                 code=tournament.code,
                 category_id=category.id,
             )
 
+        preview_pair_count = pair_count or 0
+
     else:
         form = StageForm()
+        initial_pair_count = Participant.objects.filter(
+            category=category,
+        ).count()
+        slot_form = StageSlotSetupForm(
+            initial={
+                "pair_count": initial_pair_count,
+            },
+        )
+        preview_pair_count = initial_pair_count
 
     return render(
         request,
@@ -533,9 +648,12 @@ def add_stage(request, code, category_id):
             "tournament": tournament,
             "category": category,
             "form": form,
+            "slot_form": slot_form,
             "stage": None,
             "page_title": "Stage追加",
             "submit_label": "保存",
+            "selected_group_size": slot_form["group_size"].value(),
+            **_stage_setup_preview(preview_pair_count),
         },
     )
 

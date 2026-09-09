@@ -26,6 +26,7 @@ from .helpers.display import (
     format_entry_one_line,
     resolve_entry_display_mode,
 )
+from .helpers.league_grouping import build_group_size_candidates
 from .match_keys import format_match_key_display
 from .views.csv import STAGE_REIMPORT_SESSION_KEY
 from .models import (
@@ -87,6 +88,70 @@ from .services.snapshots import (
     restore_category_from_tournament_snapshot,
     restore_tournament_snapshot,
 )
+
+
+class LeagueGroupingHelperTests(TestCase):
+
+    def test_build_group_size_candidates_returns_single_three_pair_group(self):
+        self.assertEqual(
+            build_group_size_candidates(3),
+            [
+                {
+                    "group_size": 3,
+                    "group_count": 1,
+                    "group_sizes": [3],
+                    "total_matches": 3,
+                },
+            ],
+        )
+
+    def test_build_group_size_candidates_removes_duplicate_layouts(self):
+        candidates = build_group_size_candidates(4)
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["group_size"], 3)
+        self.assertEqual(candidates[0]["group_count"], 1)
+        self.assertEqual(candidates[0]["group_sizes"], [4])
+        self.assertEqual(candidates[0]["total_matches"], 6)
+
+    def test_build_group_size_candidates_for_seventeen_pairs(self):
+        self.assertEqual(
+            build_group_size_candidates(17),
+            [
+                {
+                    "group_size": 4,
+                    "group_count": 4,
+                    "group_sizes": [5, 4, 4, 4],
+                    "total_matches": 28,
+                },
+                {
+                    "group_size": 5,
+                    "group_count": 3,
+                    "group_sizes": [6, 6, 5],
+                    "total_matches": 40,
+                },
+                {
+                    "group_size": 7,
+                    "group_count": 2,
+                    "group_sizes": [9, 8],
+                    "total_matches": 64,
+                },
+                {
+                    "group_size": 12,
+                    "group_count": 1,
+                    "group_sizes": [17],
+                    "total_matches": 136,
+                },
+            ],
+        )
+
+    def test_build_group_size_candidates_excludes_too_small_groups(self):
+        group_sizes = [
+            candidate["group_size"]
+            for candidate in build_group_size_candidates(5)
+        ]
+
+        self.assertNotIn(3, group_sizes)
 
 
 def create_league_entry_with_participant(
@@ -6876,6 +6941,8 @@ class CategoryManagementTests(TestCase):
                 "name": "予選リーグ",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "1",
+                "pair_count": "4",
+                "group_size": "3",
             },
         )
 
@@ -6898,6 +6965,236 @@ class CategoryManagementTests(TestCase):
         list_response = self.client.get(response.url)
         self.assertContains(list_response, "予選リーグ")
         self.assertContains(list_response, "Stage編集")
+
+    def test_add_stage_creates_league_groups_and_empty_entries(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "17",
+                "group_size": "4",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="予選リーグ",
+        )
+        groups = list(
+            Group.objects.filter(stage=stage).order_by("display_order")
+        )
+        entries = LeagueEntry.objects.filter(group__stage=stage)
+
+        self.assertEqual(len(groups), 4)
+        self.assertEqual([group.name for group in groups], ["A", "B", "C", "D"])
+        self.assertEqual(LeagueEntry.objects.filter(group__stage=stage).count(), 17)
+        self.assertEqual(
+            {
+                entry.pair_code
+                for entry in entries
+            },
+            {str(number) for number in range(1, 18)},
+        )
+        self.assertFalse(
+            LeagueEntry.objects.filter(
+                group__stage=stage,
+                participant__isnull=False,
+            ).exists()
+        )
+
+    def test_add_stage_with_invalid_group_size_does_not_create_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "17",
+                "group_size": "6",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            Stage.objects.filter(
+                category=category,
+                name="予選リーグ",
+            ).exists()
+        )
+        self.assertContains(
+            response,
+            "選択したグループ内ペア数は、入力した参加ペア数に対して無効です。",
+        )
+
+    def test_add_stage_creates_tournament_bracket_and_empty_entries(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "決勝トーナメント",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "display_order": "1",
+                "pair_count": "5",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="決勝トーナメント",
+        )
+        bracket = TournamentBracket.objects.get(stage=stage)
+        entries = list(
+            TournamentEntry.objects.filter(bracket=bracket).order_by(
+                "display_order",
+            )
+        )
+
+        self.assertEqual(bracket.name, "本戦")
+        self.assertEqual(len(entries), 5)
+        self.assertEqual(
+            [entry.pair_code for entry in entries],
+            ["1", "2", "3", "4", "5"],
+        )
+        self.assertFalse(
+            TournamentEntry.objects.filter(
+                bracket=bracket,
+                participant__isnull=False,
+            ).exists()
+        )
+
+    def test_add_stage_get_uses_participant_count_as_pair_count_initial(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        for number in range(1, 4):
+            Participant.objects.create(
+                category=category,
+                entry_code=str(number),
+                player1_name=f"選手{number}A",
+                player2_name=f"選手{number}B",
+            )
+
+        response = self.client.get(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["slot_form"].initial["pair_count"], 3)
+
+    def test_add_stage_allows_pair_count_different_from_participants(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        for number in range(1, 4):
+            Participant.objects.create(
+                category=category,
+                entry_code=str(number),
+                player1_name=f"選手{number}A",
+                player2_name=f"選手{number}B",
+            )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "5",
+                "group_size": "4",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="予選リーグ",
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            5,
+        )
 
     def test_add_stage_with_duplicate_name_shows_form_error(self):
         category = Category.objects.create(

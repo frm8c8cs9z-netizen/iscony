@@ -29,9 +29,78 @@
 
     {{ form.as_p }}
 
+    {% if not stage and slot_form %}
+        <div class="stage-slot-setup">
+            <p>
+                {{ slot_form.pair_count.label_tag }}
+                {{ slot_form.pair_count }}
+                {{ slot_form.pair_count.errors }}
+            </p>
+
+            <div id="league-slot-setup">
+                <p>
+                    <label for="id_group_size">1グループあたりのペア数:</label>
+                    {% if group_size_candidates %}
+                        <select name="group_size" id="id_group_size">
+                            <option value="">選択してください</option>
+                            {% for candidate in group_size_candidates %}
+                                {% with candidate_value=candidate.group_size|stringformat:"s" %}
+                                    <option value="{{ candidate.group_size }}"{% if candidate_value == selected_group_size %} selected{% endif %}>
+                                        {{ candidate.group_size }}ペア/グループ → 内訳: {{ candidate.group_sizes|join:", " }} → 総試合数: {{ candidate.total_matches }}試合
+                                    </option>
+                                {% endwith %}
+                            {% endfor %}
+                        </select>
+                    {% else %}
+                        3ペア以上でグループを作れる組み合わせがありません。
+                    {% endif %}
+                    {{ slot_form.group_size.errors }}
+                </p>
+            </div>
+
+            <div id="tournament-slot-setup">
+                <p>
+                    トーナメント枠:
+                    {% if tournament_slot_preview.bracket_size %}
+                        {{ tournament_slot_preview.bracket_size }}枠(不戦勝{{ tournament_slot_preview.bye_count }}回)
+                    {% else %}
+                        {{ tournament_slot_preview.message }}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
     <button type="submit">
         {{ submit_label }}
     </button>
 </form>
+
+{% if not stage %}
+    <script>
+        function toggleStageSlotSetup() {
+            const stageType = document.getElementById("id_stage_type");
+            const leagueSetup = document.getElementById("league-slot-setup");
+            const tournamentSetup = document.getElementById("tournament-slot-setup");
+
+            if (!stageType || !leagueSetup || !tournamentSetup) {
+                return;
+            }
+
+            leagueSetup.hidden = stageType.value !== "league";
+            tournamentSetup.hidden = stageType.value !== "tournament";
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const stageType = document.getElementById("id_stage_type");
+
+            if (stageType) {
+                stageType.addEventListener("change", toggleStageSlotSetup);
+            }
+
+            toggleStageSlotSetup();
+        });
+    </script>
+{% endif %}
 
 {% endblock %}
