@@ -49,6 +49,10 @@
                         data-group-id="{{ row.group.id }}"
                         data-assigned="{{ pair.participant_id|yesno:'true,false' }}"
                         data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
+                        {% if pair.participant %}
+                            data-unassign-url="{% url 'unassign_league_entry_participant_api' pair.id %}"
+                            draggable="true"
+                        {% endif %}
                     >
                         <td>{{ pair.display_order }}</td>
                         <td>{{ pair.code }}</td>
@@ -102,9 +106,10 @@
 
         <div>
             <h3>未割当の参加者</h3>
-            <ul>
+            <ul id="unassigned-participant-list">
                 {% for participant in unassigned_participants %}
                     <li
+                        class="participant-piece"
                         draggable="true"
                         data-participant-id="{{ participant.id }}"
                         data-participant-name="{{ participant.display_name }}"
@@ -127,106 +132,263 @@
                 "input[name=csrfmiddlewaretoken]"
             );
             const csrfToken = csrfInput ? csrfInput.value : "";
-
-            document.querySelectorAll("[data-participant-id]").forEach(
-                function(participant) {
-                    participant.addEventListener("dragstart", function(event) {
-                        event.dataTransfer.setData(
-                            "text/plain",
-                            participant.dataset.participantId
-                        );
-                    });
-                }
+            const entryList = document.querySelector(
+                ".pair-assignment-layout > div:first-child"
+            );
+            const unassignedList = document.querySelector(
+                "#unassigned-participant-list"
             );
 
-            document.querySelectorAll("[data-entry-id]").forEach(
-                function(entry) {
-                    entry.addEventListener("dragover", function(event) {
-                        if (entry.dataset.assigned === "false") {
-                            event.preventDefault();
-                        }
-                    });
+            function buildDragData(event) {
+                const participant = event.target.closest(
+                    "[data-participant-id]"
+                );
+                if (participant) {
+                    return {
+                        type: "participant",
+                        participantId: participant.dataset.participantId,
+                    };
+                }
 
-                    entry.addEventListener("drop", function(event) {
-                        if (entry.dataset.assigned !== "false") {
-                            return;
-                        }
+                const entry = event.target.closest("[data-entry-id]");
+                if (entry && entry.dataset.assigned === "true") {
+                    return {
+                        type: "entry",
+                        entryId: entry.dataset.entryId,
+                    };
+                }
 
+                return null;
+            }
+
+            function getDragData(event) {
+                const value = event.dataTransfer.getData("text/plain");
+                if (!value) {
+                    return null;
+                }
+
+                try {
+                    return JSON.parse(value);
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            function createParticipantPiece(data) {
+                const participant = document.createElement("li");
+                participant.className = "participant-piece";
+                participant.draggable = true;
+                participant.dataset.participantId = data.participant_id;
+                participant.dataset.participantName = data.participant_name;
+                participant.textContent = data.participant_name;
+
+                if (data.participant_organization) {
+                    participant.textContent += (
+                        " (" + data.participant_organization + ")"
+                    );
+                }
+
+                return participant;
+            }
+
+            function removeEmptyMessage() {
+                if (!unassignedList) {
+                    return;
+                }
+
+                const emptyMessage = unassignedList.querySelector(
+                    "li:not([data-participant-id])"
+                );
+                if (emptyMessage) {
+                    emptyMessage.remove();
+                }
+            }
+
+            document.addEventListener("dragstart", function(event) {
+                const data = buildDragData(event);
+                if (!data) {
+                    return;
+                }
+
+                event.dataTransfer.setData(
+                    "text/plain",
+                    JSON.stringify(data)
+                );
+            });
+
+            if (entryList) {
+                entryList.addEventListener("dragover", function(event) {
+                    const entry = event.target.closest("[data-entry-id]");
+                    if (!entry || entry.dataset.assigned !== "false") {
+                        return;
+                    }
+
+                    const data = getDragData(event);
+                    if (data && data.type === "participant") {
                         event.preventDefault();
+                    }
+                });
 
-                        const participantId = event.dataTransfer.getData(
-                            "text/plain"
-                        );
-                        if (!participantId) {
-                            return;
-                        }
+                entryList.addEventListener("drop", function(event) {
+                    const entry = event.target.closest("[data-entry-id]");
+                    if (!entry || entry.dataset.assigned !== "false") {
+                        return;
+                    }
 
-                        const body = new URLSearchParams();
-                        body.append("participant_id", participantId);
+                    event.preventDefault();
 
-                        fetch(entry.dataset.assignUrl, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": (
-                                    "application/x-www-form-urlencoded"
-                                ),
-                                "X-CSRFToken": csrfToken,
-                            },
-                            body: body,
+                    const data = getDragData(event);
+                    if (!data || data.type !== "participant") {
+                        return;
+                    }
+
+                    const body = new URLSearchParams();
+                    body.append("participant_id", data.participantId);
+
+                    fetch(entry.dataset.assignUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": (
+                                "application/x-www-form-urlencoded"
+                            ),
+                            "X-CSRFToken": csrfToken,
+                        },
+                        body: body,
+                    })
+                        .then(function(response) {
+                            return response.json().then(function(data) {
+                                return {
+                                    ok: response.ok,
+                                    data: data,
+                                };
+                            });
                         })
-                            .then(function(response) {
-                                return response.json().then(function(data) {
-                                    return {
-                                        ok: response.ok,
-                                        data: data,
-                                    };
-                                });
-                            })
-                            .then(function(result) {
-                                if (!result.ok || !result.data.success) {
-                                    alert(
-                                        result.data.error
-                                        || "参加者を割り当てられませんでした。"
-                                    );
-                                    return;
-                                }
+                        .then(function(result) {
+                            if (!result.ok || !result.data.success) {
+                                alert(
+                                    result.data.error
+                                    || "参加者を割り当てられませんでした。"
+                                );
+                                return;
+                            }
 
-                                const nameCell = entry.querySelector(
-                                    "[data-entry-participant-name]"
+                            const nameCell = entry.querySelector(
+                                "[data-entry-participant-name]"
+                            );
+                            const organizationCell = entry.querySelector(
+                                "[data-entry-organization]"
+                            );
+                            const participant = document.querySelector(
+                                (
+                                    "[data-participant-id=\""
+                                    + result.data.participant_id
+                                    + "\"]"
+                                )
+                            );
+
+                            if (nameCell) {
+                                nameCell.textContent = (
+                                    result.data.participant_name
                                 );
-                                const organizationCell = entry.querySelector(
-                                    "[data-entry-organization]"
+                            }
+                            if (organizationCell) {
+                                organizationCell.textContent = (
+                                    result.data.participant_organization
                                 );
-                                const participant = document.querySelector(
-                                    (
-                                        "[data-participant-id=\""
-                                        + result.data.participant_id
-                                        + "\"]"
+                            }
+                            entry.dataset.assigned = "true";
+                            entry.draggable = true;
+                            if (!entry.dataset.unassignUrl) {
+                                entry.dataset.unassignUrl = (
+                                    entry.dataset.assignUrl.replace(
+                                        /\/assign\/$/,
+                                        "/unassign-api/"
                                     )
                                 );
+                            }
 
-                                if (nameCell) {
-                                    nameCell.textContent = (
-                                        result.data.participant_name
-                                    );
-                                }
-                                if (organizationCell) {
-                                    organizationCell.textContent = (
-                                        result.data.participant_organization
-                                    );
-                                }
-                                entry.dataset.assigned = "true";
+                            if (participant) {
+                                participant.remove();
+                            }
+                        })
+                        .catch(function() {
+                            alert("参加者を割り当てられませんでした。");
+                        });
+                });
+            }
 
-                                if (participant) {
-                                    participant.remove();
-                                }
-                            })
-                            .catch(function() {
-                                alert("参加者を割り当てられませんでした。");
+            if (unassignedList) {
+                unassignedList.addEventListener("dragover", function(event) {
+                    const data = getDragData(event);
+                    if (data && data.type === "entry") {
+                        event.preventDefault();
+                    }
+                });
+
+                unassignedList.addEventListener("drop", function(event) {
+                    const data = getDragData(event);
+                    if (!data || data.type !== "entry") {
+                        return;
+                    }
+
+                    event.preventDefault();
+
+                    const entry = document.querySelector(
+                        "[data-entry-id=\"" + data.entryId + "\"]"
+                    );
+                    if (!entry) {
+                        return;
+                    }
+
+                    fetch(entry.dataset.unassignUrl, {
+                        method: "POST",
+                        headers: {
+                            "X-CSRFToken": csrfToken,
+                        },
+                    })
+                        .then(function(response) {
+                            return response.json().then(function(data) {
+                                return {
+                                    ok: response.ok,
+                                    data: data,
+                                };
                             });
-                    });
-                }
-            );
+                        })
+                        .then(function(result) {
+                            if (!result.ok || !result.data.success) {
+                                alert(
+                                    result.data.error
+                                    || "参加者割当を解除できませんでした。"
+                                );
+                                return;
+                            }
+
+                            const nameCell = entry.querySelector(
+                                "[data-entry-participant-name]"
+                            );
+                            const organizationCell = entry.querySelector(
+                                "[data-entry-organization]"
+                            );
+
+                            if (nameCell) {
+                                nameCell.textContent = "未定";
+                            }
+                            if (organizationCell) {
+                                organizationCell.textContent = "";
+                            }
+                            entry.dataset.assigned = "false";
+                            entry.draggable = false;
+                            entry.removeAttribute("data-unassign-url");
+                            removeEmptyMessage();
+                            unassignedList.appendChild(
+                                createParticipantPiece(result.data)
+                            );
+                        })
+                        .catch(function() {
+                            alert("参加者割当を解除できませんでした。");
+                        });
+                });
+            }
         }
 
         document.addEventListener("DOMContentLoaded", function() {

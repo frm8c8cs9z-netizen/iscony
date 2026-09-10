@@ -1296,6 +1296,58 @@ def unassign_league_entry_participant_view(request, entry_id):
     )
 
 
+def unassign_league_entry_participant_api(request, entry_id):
+    """POSTで呼ばれ、指定リーグ枠の参加者割当を解除するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    entry = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+
+    if entry.participant is None:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "この枠は未割当です。",
+            },
+            status=400,
+        )
+
+    participant_id = entry.participant.id
+    participant_name = entry.participant.display_name
+    participant_organization = entry.participant.effective_organization
+
+    try:
+        unassign_league_entry_participant(entry)
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": entry.id,
+            "participant_id": participant_id,
+            "participant_name": participant_name,
+            "participant_organization": participant_organization,
+        }
+    )
+
+
 def assign_league_entry_participant_api(request, entry_id):
     """POSTで呼ばれ、指定リーグ枠へ参加者を割り当てる。"""
 

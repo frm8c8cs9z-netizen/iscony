@@ -398,6 +398,12 @@ urlpatterns = [
     ),
 
     path(
+        "pair/<int:entry_id>/unassign-api/",
+        league.unassign_league_entry_participant_api,
+        name="unassign_league_entry_participant_api",
+    ),
+
+    path(
         "pair/<int:entry_id>/assign/",
         league.assign_league_entry_participant_api,
         name="assign_league_entry_participant",
