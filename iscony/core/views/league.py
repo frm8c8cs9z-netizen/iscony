@@ -12,6 +12,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -37,6 +38,7 @@ from ..models import (
 from ..services import (
     cancel_pair_retirement,
     add_league_entry_slot,
+    assign_participant_to_league_entry,
     create_extra_round_robin_match,
     delete_round_robin_score,
     insert_round_robin_schedule,
@@ -1247,6 +1249,60 @@ def add_league_entry_slot_view(request, group_id):
     return redirect(
         "pair_maintenance",
         category_id=group.category.id,
+    )
+
+
+def assign_league_entry_participant_api(request, entry_id):
+    """POSTで呼ばれ、指定リーグ枠へ参加者を割り当てる。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    entry = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+    participant_id = request.POST.get("participant_id")
+
+    if not participant_id:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "参加者を指定してください。",
+            },
+            status=400,
+        )
+
+    participant = get_object_or_404(
+        Participant,
+        id=participant_id,
+        category=entry.category,
+    )
+
+    try:
+        assign_participant_to_league_entry(entry, participant)
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": entry.id,
+            "participant_id": participant.id,
+            "participant_name": participant.display_name,
+        }
     )
 
 

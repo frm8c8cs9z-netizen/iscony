@@ -9,6 +9,7 @@ from ..constants import (
     PARTICIPANT_ORGANIZATION_CODES,
     PARTICIPANT_ORGANIZATION_INPUT_CODES,
 )
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 
 from ..models import (
@@ -240,6 +241,25 @@ def find_conflicting_league_entry(participant, stage, *, exclude_id=None):
         "display_order",
         "pair_code",
     ).first()
+
+
+def assign_participant_to_league_entry(entry, participant):
+    """LeagueEntryに参加者を割り当てる。"""
+
+    conflict = find_conflicting_league_entry(
+        participant,
+        entry.group.stage,
+        exclude_id=entry.id,
+    )
+    if conflict:
+        raise ValidationError(
+            f"この参加者は既に{conflict.group.name}に割り当てられています。"
+        )
+
+    entry.participant = participant
+    entry.save(update_fields=["participant"])
+
+    return entry
 
 
 def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):

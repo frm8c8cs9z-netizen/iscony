@@ -25,8 +25,10 @@
 
 {% if stage %}
 
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
     {% for row in group_rows %}
-        <h3>{{ row.group.name }}</h3>
+        <h3 data-group-id="{{ row.group.id }}">{{ row.group.name }}</h3>
 
         <table>
             <tr>
@@ -40,11 +42,16 @@
             </tr>
 
             {% for pair in row.entries %}
-            <tr>
+            <tr
+                data-entry-id="{{ pair.id }}"
+                data-group-id="{{ row.group.id }}"
+                data-assigned="{{ pair.participant_id|yesno:'true,false' }}"
+                data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
+            >
                 <td>{{ pair.display_order }}</td>
                 <td>{{ pair.code }}</td>
                 <td>{{ pair.display_organization }}</td>
-                <td>
+                <td data-entry-participant-name>
                     {% if pair.participant %}
                         {{ pair.display_name }}
                     {% else %}
@@ -87,11 +94,125 @@
     <h3>未割当の参加者</h3>
     <ul>
         {% for participant in unassigned_participants %}
-            <li>{{ participant.display_name }}</li>
+            <li
+                draggable="true"
+                data-participant-id="{{ participant.id }}"
+                data-participant-name="{{ participant.display_name }}"
+            >
+                {{ participant.display_name }}
+                {% if participant.effective_organization %}
+                    ({{ participant.effective_organization }})
+                {% endif %}
+            </li>
         {% empty %}
             <li>未割当の参加者はいません。</li>
         {% endfor %}
     </ul>
+
+    <script>
+        function setupLeagueEntryAssignment() {
+            const csrfInput = document.querySelector(
+                "input[name=csrfmiddlewaretoken]"
+            );
+            const csrfToken = csrfInput ? csrfInput.value : "";
+
+            document.querySelectorAll("[data-participant-id]").forEach(
+                function(participant) {
+                    participant.addEventListener("dragstart", function(event) {
+                        event.dataTransfer.setData(
+                            "text/plain",
+                            participant.dataset.participantId
+                        );
+                    });
+                }
+            );
+
+            document.querySelectorAll("[data-entry-id]").forEach(
+                function(entry) {
+                    entry.addEventListener("dragover", function(event) {
+                        if (entry.dataset.assigned === "false") {
+                            event.preventDefault();
+                        }
+                    });
+
+                    entry.addEventListener("drop", function(event) {
+                        if (entry.dataset.assigned !== "false") {
+                            return;
+                        }
+
+                        event.preventDefault();
+
+                        const participantId = event.dataTransfer.getData(
+                            "text/plain"
+                        );
+                        if (!participantId) {
+                            return;
+                        }
+
+                        const body = new URLSearchParams();
+                        body.append("participant_id", participantId);
+
+                        fetch(entry.dataset.assignUrl, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": (
+                                    "application/x-www-form-urlencoded"
+                                ),
+                                "X-CSRFToken": csrfToken,
+                            },
+                            body: body,
+                        })
+                            .then(function(response) {
+                                return response.json().then(function(data) {
+                                    return {
+                                        ok: response.ok,
+                                        data: data,
+                                    };
+                                });
+                            })
+                            .then(function(result) {
+                                if (!result.ok || !result.data.success) {
+                                    alert(
+                                        result.data.error
+                                        || "参加者を割り当てられませんでした。"
+                                    );
+                                    return;
+                                }
+
+                                const nameCell = entry.querySelector(
+                                    "[data-entry-participant-name]"
+                                );
+                                const participant = document.querySelector(
+                                    (
+                                        "[data-participant-id=\""
+                                        + result.data.participant_id
+                                        + "\"]"
+                                    )
+                                );
+
+                                if (nameCell) {
+                                    nameCell.textContent = (
+                                        result.data.participant_name
+                                    );
+                                }
+                                entry.dataset.assigned = "true";
+
+                                if (participant) {
+                                    participant.remove();
+                                }
+                            })
+                            .catch(function() {
+                                alert("参加者を割り当てられませんでした。");
+                            });
+                    });
+                }
+            );
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            setupLeagueEntryAssignment();
+        });
+    </script>
 
 {% else %}
 
