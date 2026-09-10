@@ -45,6 +45,7 @@ from ..services import (
     consume_stage_advancement_result,
     save_round_robin_score,
     undo_schedule_replacement,
+    unassign_league_entry_participant,
     update_group_ranking,
 )
 from ..validators import validate_game_score
@@ -1252,6 +1253,49 @@ def add_league_entry_slot_view(request, group_id):
     )
 
 
+def unassign_league_entry_participant_view(request, entry_id):
+    """POSTで呼ばれ、指定リーグ枠の参加者割当を解除する。"""
+
+    entry = get_object_or_404(
+        LeagueEntry.objects.select_related(
+            "category",
+            "group",
+            "group__stage",
+        ),
+        id=entry_id,
+    )
+
+    if request.method != "POST":
+        return redirect(
+            "pair_maintenance",
+            category_id=entry.category.id,
+        )
+
+    try:
+        unassign_league_entry_participant(entry)
+        messages.success(
+            request,
+            f"{entry.code} の参加者割当を解除しました。",
+        )
+    except ValidationError as error:
+        messages.error(
+            request,
+            " ".join(error.messages),
+        )
+
+    if entry.group.stage is not None:
+        return redirect(
+            "stage_pair_maintenance",
+            category_id=entry.category.id,
+            stage_id=entry.group.stage.id,
+        )
+
+    return redirect(
+        "pair_maintenance",
+        category_id=entry.category.id,
+    )
+
+
 def assign_league_entry_participant_api(request, entry_id):
     """POSTで呼ばれ、指定リーグ枠へ参加者を割り当てる。"""
 
@@ -1302,6 +1346,7 @@ def assign_league_entry_participant_api(request, entry_id):
             "entry_id": entry.id,
             "participant_id": participant.id,
             "participant_name": participant.display_name,
+            "participant_organization": participant.effective_organization,
         }
     )
 

@@ -7845,7 +7845,57 @@ class CategoryManagementTests(TestCase):
                 "entry_id": entry.id,
                 "participant_id": participant.id,
                 "participant_name": "山田・田中",
+                "participant_organization": "",
             },
+        )
+
+    def test_assign_league_entry_participant_api_returns_organization(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        participant = Participant.objects.create(
+            category=category,
+            entry_code="P1",
+            organization="○○クラブ",
+            player1_name="山田",
+            player2_name="田中",
+        )
+        entry = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=None,
+            pair_code="1",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_league_entry_participant",
+                kwargs={"entry_id": entry.id},
+            ),
+            {
+                "participant_id": str(participant.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["participant_organization"],
+            "○○クラブ",
         )
 
     def test_assign_league_entry_participant_api_rejects_stage_conflict(self):
@@ -7996,6 +8046,110 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 405)
         self.assertFalse(response.json()["success"])
 
+    def test_unassign_league_entry_participant_view_clears_participant(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+
+        response = self.client.post(
+            reverse(
+                "unassign_league_entry_participant",
+                kwargs={"entry_id": entry.id},
+            )
+        )
+
+        entry.refresh_from_db()
+        self.assertRedirects(
+            response,
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+        )
+        self.assertIsNone(entry.participant)
+
+    def test_unassign_league_entry_participant_view_rejects_completed_match(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+        opponent = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="2",
+            display_order=2,
+            player1_name="佐藤",
+            player2_name="鈴木",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry,
+            pair2=opponent,
+            completed=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "unassign_league_entry_participant",
+                kwargs={"entry_id": entry.id},
+            ),
+            follow=True,
+        )
+
+        entry.refresh_from_db()
+        message_text = " ".join(
+            str(message)
+            for message in get_messages(response.wsgi_request)
+        )
+        self.assertIn("結果入力済みの試合があるため", message_text)
+        self.assertIsNotNone(entry.participant)
+
     def test_stage_pair_maintenance_shows_unassigned_participants_and_slot_buttons(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -8063,6 +8217,8 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, 'data-group-id="')
         self.assertContains(response, 'data-entry-id="')
         self.assertContains(response, 'data-assigned="false"')
+        self.assertContains(response, 'data-entry-organization')
+        self.assertContains(response, 'class="pair-assignment-layout"')
         self.assertContains(response, 'draggable="true"')
         self.assertContains(response, 'data-participant-id="')
         self.assertContains(response, 'data-participant-name="未割当1・未割当2"')
@@ -8079,6 +8235,59 @@ class CategoryManagementTests(TestCase):
             reverse(
                 "add_league_entry_slot",
                 kwargs={"group_id": group_a.id},
+            ),
+        )
+
+    def test_stage_pair_maintenance_shows_unassign_button_only_for_assigned_entries(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        assigned_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+        LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=None,
+            pair_code="2",
+            display_order=2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertContains(response, "未割当に戻す", count=1)
+        self.assertContains(
+            response,
+            reverse(
+                "unassign_league_entry_participant",
+                kwargs={"entry_id": assigned_entry.id},
             ),
         )
 

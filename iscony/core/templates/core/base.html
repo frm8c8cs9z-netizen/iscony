@@ -746,6 +746,20 @@
         justify-content: flex-start;
     }
 
+    .pair-assignment-layout {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    .pair-assignment-layout > div:first-child {
+        flex: 2;
+    }
+
+    .pair-assignment-layout > div:last-child {
+        flex: 1;
+    }
+
     .admin-quick-links {
         display: flex;
         flex-wrap: wrap;
@@ -1215,6 +1229,10 @@
         .action-row {
             justify-content: flex-start;
             margin-top: 10px;
+        }
+
+        .pair-assignment-layout {
+            flex-direction: column;
         }
 
         .tournament-bracket {

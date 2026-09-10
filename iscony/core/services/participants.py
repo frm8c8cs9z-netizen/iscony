@@ -262,6 +262,25 @@ def assign_participant_to_league_entry(entry, participant):
     return entry
 
 
+def unassign_league_entry_participant(entry):
+    """LeagueEntryの参加者割当を解除する。"""
+
+    has_completed_match = RoundRobinMatch.objects.filter(
+        Q(pair1=entry)
+        | Q(pair2=entry),
+        completed=True,
+    ).exists()
+    if has_completed_match:
+        raise ValidationError(
+            "結果入力済みの試合があるため、参加者割当を解除できません。"
+        )
+
+    entry.participant = None
+    entry.save(update_fields=["participant"])
+
+    return entry
+
+
 def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):
     """同じ参加者が割り当て済みの別トーナメント枠を返す。"""
 
