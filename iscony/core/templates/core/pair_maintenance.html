@@ -223,10 +223,7 @@
                         return;
                     }
 
-                    const data = getDragData(event);
-                    if (data && data.type === "participant") {
-                        event.preventDefault();
-                    }
+                    event.preventDefault();
                 });
 
                 entryList.addEventListener("drop", function(event) {
@@ -319,10 +316,7 @@
 
             if (unassignedList) {
                 unassignedList.addEventListener("dragover", function(event) {
-                    const data = getDragData(event);
-                    if (data && data.type === "entry") {
-                        event.preventDefault();
-                    }
+                    event.preventDefault();
                 });
 
                 unassignedList.addEventListener("drop", function(event) {
