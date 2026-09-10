@@ -7,13 +7,14 @@ import string
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, Max
+from django.db.models import Max
 
 from ..helpers.brackets import get_bracket_size
 from ..helpers.league_grouping import find_group_size_candidate
 from ..models import (
     Group,
     LeagueEntry,
+    Participant,
     TournamentBracket,
     TournamentEntry,
 )
@@ -77,9 +78,43 @@ def create_league_stage_groups(stage, pair_count, group_size):
         return groups
 
 
+def group_base_size(group):
+    """
+    グループの本来のベース枠数を、現在のカテゴリ参加者数と
+    グループ数から算出する。
+
+    既存の枠数がどう変化していても結果がぶれないよう、
+    「その時点のグループ間の最小エントリー数」ではなく、
+    参加者数 // グループ数 という安定した計算にする。
+    """
+
+    if group.stage_id is None:
+        return 0
+
+    group_count = Group.objects.filter(
+        stage_id=group.stage_id,
+    ).count()
+    if group_count == 0:
+        return 0
+
+    participant_count = Participant.objects.filter(
+        category_id=group.category_id,
+    ).count()
+
+    return participant_count // group_count
+
+
 def add_league_entry_slot(group):
     """
-    Stage内の基本枠数のままのGroupへ、空のLeagueEntryを1件追加する。
+    Stage内のグループへ、空のLeagueEntryを1件追加する。
+
+    追加できるのは、そのグループが現在ちょうどベース枠数のみ
+    (追加枠がまだない)で、かつベース枠がすべて参加者で埋まっており、
+    かつステージ全体の総枠数が参加者数を超えない場合のみ。
+
+    新しい枠は、そのグループの現在の最大pair_code+1の位置に挿入し、
+    それより後ろにある他グループの全entryのpair_codeを+1ずつ
+    後ろへシフトする(グループごとのブロック連番を維持するため)。
     """
 
     with transaction.atomic():
@@ -94,56 +129,86 @@ def add_league_entry_slot(group):
                 "Stageに紐づかないグループには枠を追加できません。"
             )
 
-        locked_groups = list(
+        list(
             Group.objects.select_for_update().filter(
                 stage_id=group.stage_id,
             )
         )
-        counts_by_group = dict(
-            LeagueEntry.objects.filter(
-                group__stage_id=group.stage_id,
-            ).values_list(
-                "group_id",
-            ).annotate(
-                entry_count=Count("id"),
-            )
-        )
-        base = min(
-            counts_by_group.get(stage_group.id, 0)
-            for stage_group in locked_groups
-        )
-        current_count = next(
-            counts_by_group.get(stage_group.id, 0)
-            for stage_group in locked_groups
-            if stage_group.id == group.id
-        )
 
-        if current_count > base:
+        base = group_base_size(group)
+
+        current_count = LeagueEntry.objects.filter(
+            group=group,
+        ).count()
+
+        if current_count != base:
             raise ValidationError(
-                f"{group.name} は既に追加枠があります。"
+                f"{group.name} は既に追加枠があるか、基本枠数と一致していません。"
             )
 
-        numeric_pair_codes = [
+        has_empty_slot = LeagueEntry.objects.filter(
+            group=group,
+            participant__isnull=True,
+        ).exists()
+        if has_empty_slot:
+            raise ValidationError(
+                f"{group.name} の基本枠がすべて埋まってから追加してください。"
+            )
+
+        participant_count = Participant.objects.filter(
+            category_id=group.category_id,
+        ).count()
+        stage_total_entries = LeagueEntry.objects.filter(
+            group__stage_id=group.stage_id,
+        ).count()
+        if stage_total_entries + 1 > participant_count:
+            raise ValidationError(
+                "参加者数の上限に達しているため、これ以上枠を追加できません。"
+            )
+
+        group_numeric_codes = [
             int(pair_code)
             for pair_code in LeagueEntry.objects.filter(
-                group__stage_id=group.stage_id,
+                group=group,
             ).values_list(
                 "pair_code",
                 flat=True,
             )
             if pair_code.isdigit()
         ]
+        insertion_code = max(group_numeric_codes, default=0) + 1
+
+        shifting_entries = [
+            shifting_entry
+            for shifting_entry in LeagueEntry.objects.filter(
+                group__stage_id=group.stage_id,
+            )
+            if (
+                shifting_entry.pair_code.isdigit()
+                and int(shifting_entry.pair_code) >= insertion_code
+            )
+        ]
+        shifting_entries.sort(
+            key=lambda shifting_entry: int(shifting_entry.pair_code),
+            reverse=True,
+        )
+        for shifting_entry in shifting_entries:
+            shifting_entry.pair_code = str(
+                int(shifting_entry.pair_code) + 1
+            )
+            shifting_entry.save(update_fields=["pair_code"])
+
         max_display_order = LeagueEntry.objects.filter(
             group=group,
         ).aggregate(
-            max_display_order=Max("display_order"),
-        )["max_display_order"]
+            value=Max("display_order"),
+        )["value"]
 
         return LeagueEntry.objects.create(
             category=group.category,
             group=group,
             participant=None,
-            pair_code=str(max(numeric_pair_codes, default=0) + 1),
+            pair_code=str(insertion_code),
             display_order=(max_display_order or 0) + 1,
         )
 

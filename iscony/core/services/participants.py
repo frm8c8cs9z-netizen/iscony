@@ -10,7 +10,8 @@ from ..constants import (
     PARTICIPANT_ORGANIZATION_INPUT_CODES,
 )
 from django.core.exceptions import ValidationError
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import Max, Q
 
 from ..models import (
     LeagueEntry,
@@ -21,6 +22,7 @@ from ..models import (
     TournamentMatch,
     TournamentOrganizationField,
 )
+from .stage_setup import group_base_size
 
 
 def organization_field_label(code):
@@ -263,7 +265,20 @@ def assign_participant_to_league_entry(entry, participant):
 
 
 def unassign_league_entry_participant(entry):
-    """LeagueEntryの参加者割当を解除する。"""
+    """
+    LeagueEntryの参加者割当を解除する。
+
+    そのentryが属するグループが、現在ベース枠数を超えている
+    (=+1枠がある)場合は、参加者を解除するだけでなく、そのentry
+    自体を削除する。削除後、同グループ内の残りentryの表示順を
+    詰め直し、それより後ろにある他グループの全entryのpair_codeを
+    -1ずつ前へシフトする(グループごとのブロック連番を維持した
+    まま詰める)。この場合は None を返す。
+
+    それ以外(グループがちょうどベース枠数の)場合は、従来通り
+    participant を None にして保存するだけで、枠自体は残す。
+    この場合は entry を返す。
+    """
 
     has_completed_match = RoundRobinMatch.objects.filter(
         Q(pair1=entry)
@@ -275,10 +290,67 @@ def unassign_league_entry_participant(entry):
             "結果入力済みの試合があるため、参加者割当を解除できません。"
         )
 
-    entry.participant = None
-    entry.save(update_fields=["participant"])
+    with transaction.atomic():
+        group = entry.group
+        base = group_base_size(group)
+        group_entry_count = LeagueEntry.objects.filter(
+            group=group,
+        ).count()
 
-    return entry
+        if group_entry_count > base:
+            old_code = (
+                int(entry.pair_code)
+                if entry.pair_code.isdigit()
+                else None
+            )
+
+            entry.delete()
+
+            remaining_entries = list(
+                LeagueEntry.objects.filter(
+                    group=group,
+                ).order_by(
+                    "display_order",
+                )
+            )
+            for index, remaining_entry in enumerate(
+                remaining_entries,
+                start=1,
+            ):
+                if remaining_entry.display_order != index:
+                    remaining_entry.display_order = index
+                    remaining_entry.save(
+                        update_fields=["display_order"],
+                    )
+
+            if old_code is not None:
+                shifting_entries = [
+                    shifting_entry
+                    for shifting_entry in LeagueEntry.objects.filter(
+                        group__stage_id=group.stage_id,
+                    )
+                    if (
+                        shifting_entry.pair_code.isdigit()
+                        and int(shifting_entry.pair_code) > old_code
+                    )
+                ]
+                shifting_entries.sort(
+                    key=lambda shifting_entry: int(
+                        shifting_entry.pair_code
+                    ),
+                )
+                for shifting_entry in shifting_entries:
+                    shifting_entry.pair_code = str(
+                        int(shifting_entry.pair_code) - 1
+                    )
+                    shifting_entry.save(update_fields=["pair_code"])
+
+            return None
+
+        entry.participant = None
+        entry.save(update_fields=["participant"])
+
+        return entry
 
 
 def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):

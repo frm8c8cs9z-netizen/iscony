@@ -30,7 +30,9 @@
     <div class="pair-assignment-layout">
         <div>
             {% for row in group_rows %}
-                <h3 data-group-id="{{ row.group.id }}">{{ row.group.name }}</h3>
+                <h3 id="group-{{ row.group.id }}" data-group-id="{{ row.group.id }}">
+                    {{ row.group.name }}
+                </h3>
 
                 <table>
                     <tr>
@@ -99,6 +101,11 @@
                     <form method="post" action="{% url 'add_league_entry_slot' row.group.id %}">
                         {% csrf_token %}
                         <button type="submit">+1枠追加</button>
+                    </form>
+                {% elif row.can_remove_slot %}
+                    <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}">
+                        {% csrf_token %}
+                        <button type="submit">+1枠解除</button>
                     </form>
                 {% endif %}
             {% endfor %}
@@ -354,6 +361,14 @@
                                     result.data.error
                                     || "参加者割当を解除できませんでした。"
                                 );
+                                return;
+                            }
+
+                            if (result.data.slot_removed) {
+                                window.location.hash = (
+                                    "group-" + result.data.group_id
+                                );
+                                window.location.reload();
                                 return;
                             }
 

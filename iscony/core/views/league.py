@@ -42,6 +42,7 @@ from ..services import (
     create_extra_round_robin_match,
     delete_round_robin_score,
     insert_round_robin_schedule,
+    group_base_size,
     consume_stage_advancement_result,
     save_round_robin_score,
     undo_schedule_replacement,
@@ -1151,13 +1152,6 @@ def pair_maintenance(request, category_id, stage_id=None):
                 "name",
             )
         )
-        base = min(
-            [
-                group.entry_count
-                for group in groups
-            ],
-            default=0,
-        )
         entries_by_group_id = {}
 
         for pair in pairs:
@@ -1185,13 +1179,29 @@ def pair_maintenance(request, category_id, stage_id=None):
             participant__isnull=True,
         ).count()
         unassigned_count = unassigned_participants.count()
+        stage_total_entries = LeagueEntry.objects.filter(
+            group__stage=stage,
+        ).count()
+        category_participant_count = Participant.objects.filter(
+            category=category,
+        ).count()
 
         context.update({
             "group_rows": [
                 {
                     "group": group,
                     "entries": entries_by_group_id.get(group.id, []),
-                    "can_add_slot": group.entry_count == base,
+                    "can_add_slot": (
+                        group.entry_count == group_base_size(group)
+                        and not any(
+                            entry.participant_id is None
+                            for entry in entries_by_group_id.get(group.id, [])
+                        )
+                        and stage_total_entries < category_participant_count
+                    ),
+                    "can_remove_slot": (
+                        group.entry_count > group_base_size(group)
+                    ),
                 }
                 for group in groups
             ],
@@ -1241,11 +1251,14 @@ def add_league_entry_slot_view(request, group_id):
         )
 
     if group.stage is not None:
-        return redirect(
+        url = reverse(
             "stage_pair_maintenance",
-            category_id=group.category.id,
-            stage_id=group.stage.id,
+            kwargs={
+                "category_id": group.category.id,
+                "stage_id": group.stage.id,
+            },
         )
+        return redirect(f"{url}#group-{group.id}")
 
     return redirect(
         "pair_maintenance",
@@ -1271,28 +1284,42 @@ def unassign_league_entry_participant_view(request, entry_id):
             category_id=entry.category.id,
         )
 
+    group_id = entry.group.id
+    stage_id = entry.group.stage_id
+    category_id = entry.category.id
+    entry_code = entry.code
+
     try:
-        unassign_league_entry_participant(entry)
-        messages.success(
-            request,
-            f"{entry.code} の参加者割当を解除しました。",
-        )
+        result = unassign_league_entry_participant(entry)
+        if result is None:
+            messages.success(
+                request,
+                f"{entry_code} の追加枠を削除し、未割当に戻しました。",
+            )
+        else:
+            messages.success(
+                request,
+                f"{entry_code} の参加者割当を解除しました。",
+            )
     except ValidationError as error:
         messages.error(
             request,
             " ".join(error.messages),
         )
 
-    if entry.group.stage is not None:
-        return redirect(
+    if stage_id is not None:
+        url = reverse(
             "stage_pair_maintenance",
-            category_id=entry.category.id,
-            stage_id=entry.group.stage.id,
+            kwargs={
+                "category_id": category_id,
+                "stage_id": stage_id,
+            },
         )
+        return redirect(f"{url}#group-{group_id}")
 
     return redirect(
         "pair_maintenance",
-        category_id=entry.category.id,
+        category_id=category_id,
     )
 
 
@@ -1325,9 +1352,10 @@ def unassign_league_entry_participant_api(request, entry_id):
     participant_id = entry.participant.id
     participant_name = entry.participant.display_name
     participant_organization = entry.participant.effective_organization
+    group_id = entry.group_id
 
     try:
-        unassign_league_entry_participant(entry)
+        result = unassign_league_entry_participant(entry)
     except ValidationError as error:
         return JsonResponse(
             {
@@ -1340,11 +1368,81 @@ def unassign_league_entry_participant_api(request, entry_id):
     return JsonResponse(
         {
             "success": True,
-            "entry_id": entry.id,
+            "entry_id": entry_id,
             "participant_id": participant_id,
             "participant_name": participant_name,
             "participant_organization": participant_organization,
+            "slot_removed": result is None,
+            "group_id": group_id,
         }
+    )
+
+
+def remove_league_entry_slot_view(request, group_id):
+    """POSTで呼ばれ、指定グループの+1枠(あれば)を解除する。"""
+
+    group = get_object_or_404(
+        Group.objects.select_related(
+            "category",
+            "stage",
+        ),
+        id=group_id,
+    )
+
+    if request.method != "POST":
+        return redirect(
+            "pair_maintenance",
+            category_id=group.category.id,
+        )
+
+    base = group_base_size(group)
+    entry = LeagueEntry.objects.filter(
+        group=group,
+    ).order_by(
+        "-display_order",
+    ).first()
+    group_entry_count = LeagueEntry.objects.filter(
+        group=group,
+    ).count()
+
+    if entry is None or group_entry_count <= base:
+        messages.error(
+            request,
+            f"{group.name} には解除できる追加枠がありません。",
+        )
+    else:
+        had_participant = entry.participant_id is not None
+        try:
+            unassign_league_entry_participant(entry)
+            if had_participant:
+                messages.success(
+                    request,
+                    f"{group.name} の追加枠を解除し、参加者を未割当に戻しました。",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"{group.name} の追加枠を解除しました。",
+                )
+        except ValidationError as error:
+            messages.error(
+                request,
+                " ".join(error.messages),
+            )
+
+    if group.stage is not None:
+        url = reverse(
+            "stage_pair_maintenance",
+            kwargs={
+                "category_id": group.category.id,
+                "stage_id": group.stage.id,
+            },
+        )
+        return redirect(f"{url}#group-{group.id}")
+
+    return redirect(
+        "pair_maintenance",
+        category_id=group.category.id,
     )
 
 

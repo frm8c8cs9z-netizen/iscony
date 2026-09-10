@@ -73,7 +73,9 @@ from .services import (
     apply_stage_advancements,
     cancel_pair_retirement,
     clone_tournament_without_results,
+    add_league_entry_slot,
     create_extra_round_robin_match,
+    group_base_size,
     consume_stage_advancement_result,
     insert_round_robin_schedule,
     move_schedule,
@@ -83,6 +85,7 @@ from .services import (
     save_tournament_retirement,
     swap_advancement_sources,
     undo_schedule_replacement,
+    unassign_league_entry_participant,
     update_group_ranking,
     validate_tournament_score_change,
 )
@@ -7125,6 +7128,60 @@ class CategoryManagementTests(TestCase):
             code="CATEGORYMANAGE",
         )
 
+    def _create_participants(self, category, count):
+        participants = []
+
+        for number in range(1, count + 1):
+            participants.append(
+                Participant.objects.create(
+                    category=category,
+                    entry_code=f"P{number}",
+                    player1_name=f"選手{number}A",
+                    player2_name=f"選手{number}B",
+                    display_order=number,
+                )
+            )
+
+        return participants
+
+    def _create_league_stage(self, category, group_count):
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        groups = []
+
+        for number in range(1, group_count + 1):
+            groups.append(
+                Group.objects.create(
+                    category=category,
+                    stage=stage,
+                    name=chr(ord("A") + number - 1),
+                    display_order=number,
+                )
+            )
+
+        return stage, groups
+
+    def _create_entry(
+        self,
+        category,
+        group,
+        pair_code,
+        display_order,
+        participant=None,
+    ):
+        return LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=participant,
+            pair_code=str(pair_code),
+            display_order=display_order,
+        )
+
     def test_category_management_lists_categories_with_counts(self):
         later_category = Category.objects.create(
             tournament=self.tournament,
@@ -7703,13 +7760,15 @@ class CategoryManagementTests(TestCase):
             name="B",
             display_order=2,
         )
+        participants = self._create_participants(category, 7)
 
         for group, offset in ((group_a, 0), (group_b, 3)):
             for number in range(1, 4):
+                participant = participants[offset + number - 1]
                 LeagueEntry.objects.create(
                     category=category,
                     group=group,
-                    participant=None,
+                    participant=participant,
                     pair_code=str(offset + number),
                     display_order=number,
                 )
@@ -7723,21 +7782,563 @@ class CategoryManagementTests(TestCase):
 
         self.assertRedirects(
             response,
+            (
+                reverse(
+                    "stage_pair_maintenance",
+                    kwargs={
+                        "category_id": category.id,
+                        "stage_id": stage.id,
+                    },
+                )
+                + f"#group-{group_a.id}"
+            ),
+            target_status_code=200,
+            fetch_redirect_response=False,
+        )
+        added_entry = LeagueEntry.objects.get(
+            group=group_a,
+            pair_code="4",
+        )
+        self.assertIsNone(added_entry.participant)
+        self.assertEqual(added_entry.display_order, 4)
+        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 4)
+
+    def test_add_league_entry_slot_rejects_when_stage_would_exceed_participant_count(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 4)
+        participants = self._create_participants(category, 17)
+
+        participant_index = 0
+        pair_code = 1
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[participant_index],
+                )
+                participant_index += 1
+                pair_code += 1
+
+        add_league_entry_slot(groups[0])
+        added_entry = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=5,
+        )
+        added_entry.participant = participants[participant_index]
+        added_entry.save(update_fields=["participant"])
+
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            17,
+        )
+        self.assertEqual(group_base_size(groups[0]), 4)
+
+        with self.assertRaises(ValidationError):
+            add_league_entry_slot(groups[1])
+
+    def test_add_league_entry_slot_rejects_empty_base_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 7)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 4):
+                participant = None
+                if not (group == groups[0] and display_order == 3):
+                    participant = participants[pair_code - 1]
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participant,
+                )
+                pair_code += 1
+
+        with self.assertRaises(ValidationError):
+            add_league_entry_slot(groups[0])
+
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            3,
+        )
+
+    def test_add_league_entry_slot_shifts_pair_codes(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        add_league_entry_slot(groups[0])
+
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "pair_code",
+                    flat=True,
+                )
+            ),
+            ["1", "2", "3", "4", "5"],
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[1],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "pair_code",
+                    flat=True,
+                )
+            ),
+            ["6", "7", "8", "9"],
+        )
+
+    def test_unassign_league_entry_participant_removes_extra_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+
+        target_entry = None
+        for display_order in range(1, 6):
+            entry = self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+            if display_order == 5:
+                target_entry = entry
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        target_entry_id = target_entry.id
+        result = unassign_league_entry_participant(target_entry)
+
+        self.assertIsNone(result)
+        self.assertFalse(
+            LeagueEntry.objects.filter(id=target_entry_id).exists()
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            group_base_size(groups[0]),
+        )
+
+    def test_unassign_league_entry_participant_shifts_pair_codes_after_delete(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        target_entry = None
+
+        for display_order in range(1, 6):
+            entry = self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+            if display_order == 2:
+                target_entry = entry
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        unassign_league_entry_participant(target_entry)
+
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "display_order",
+                    flat=True,
+                )
+            ),
+            [1, 2, 3, 4],
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[1],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "pair_code",
+                    flat=True,
+                )
+            ),
+            ["5", "6", "7", "8"],
+        )
+
+    def test_unassign_league_entry_participant_keeps_base_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 8)
+        target_entry = None
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                entry = self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                if group == groups[0] and display_order == 2:
+                    target_entry = entry
+                pair_code += 1
+
+        result = unassign_league_entry_participant(target_entry)
+
+        target_entry.refresh_from_db()
+        self.assertEqual(result, target_entry)
+        self.assertIsNone(target_entry.participant)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            4,
+        )
+
+    def test_add_league_entry_slot_view_redirects_to_group_anchor(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 7)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 4):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        response = self.client.post(
+            reverse(
+                "add_league_entry_slot",
+                kwargs={"group_id": groups[0].id},
+            )
+        )
+
+        self.assertEqual(
+            response.url,
+            (
+                reverse(
+                    "stage_pair_maintenance",
+                    kwargs={
+                        "category_id": category.id,
+                        "stage_id": stage.id,
+                    },
+                )
+                + f"#group-{groups[0].id}"
+            ),
+        )
+
+    def test_remove_league_entry_slot_view_removes_last_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+
+        for display_order in range(1, 6):
+            self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        removed_participant = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=5,
+        ).participant
+        response = self.client.post(
+            reverse(
+                "remove_league_entry_slot",
+                kwargs={"group_id": groups[0].id},
+            ),
+            follow=True,
+        )
+
+        message_text = " ".join(
+            str(message)
+            for message in get_messages(response.wsgi_request)
+        )
+        self.assertIn("参加者を未割当に戻しました", message_text)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            4,
+        )
+        self.assertFalse(
+            LeagueEntry.objects.filter(
+                participant=removed_participant,
+            ).exists()
+        )
+
+    def test_remove_league_entry_slot_view_rejects_base_group(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 8)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        response = self.client.post(
+            reverse(
+                "remove_league_entry_slot",
+                kwargs={"group_id": groups[0].id},
+            ),
+            follow=True,
+        )
+
+        message_text = " ".join(
+            str(message)
+            for message in get_messages(response.wsgi_request)
+        )
+        self.assertIn("解除できる追加枠がありません", message_text)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            4,
+        )
+
+    def test_remove_league_entry_slot_view_rejects_completed_match(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        entries = []
+
+        for display_order in range(1, 6):
+            entries.append(
+                self._create_entry(
+                    category,
+                    groups[0],
+                    display_order,
+                    display_order,
+                    participants[display_order - 1],
+                )
+            )
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        RoundRobinMatch.objects.create(
+            group=groups[0],
+            pair1=entries[-1],
+            pair2=entries[0],
+            completed=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "remove_league_entry_slot",
+                kwargs={"group_id": groups[0].id},
+            ),
+            follow=True,
+        )
+
+        entries[-1].refresh_from_db()
+        message_text = " ".join(
+            str(message)
+            for message in get_messages(response.wsgi_request)
+        )
+        self.assertIn("結果入力済みの試合があるため", message_text)
+        self.assertIsNotNone(entries[-1].participant)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            5,
+        )
+
+    def test_stage_pair_maintenance_hides_add_slot_at_participant_limit(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 8)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        response = self.client.get(
             reverse(
                 "stage_pair_maintenance",
                 kwargs={
                     "category_id": category.id,
                     "stage_id": stage.id,
                 },
+            )
+        )
+
+        self.assertNotContains(response, "+1枠追加")
+        self.assertNotContains(
+            response,
+            reverse(
+                "add_league_entry_slot",
+                kwargs={"group_id": groups[0].id},
             ),
         )
-        added_entry = LeagueEntry.objects.get(
-            group=group_a,
-            pair_code="7",
+
+    def test_stage_pair_maintenance_shows_remove_slot_button_for_extra_group(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
         )
-        self.assertIsNone(added_entry.participant)
-        self.assertEqual(added_entry.display_order, 4)
-        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 4)
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+
+        for display_order in range(1, 6):
+            self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertContains(response, "+1枠解除")
+        self.assertContains(
+            response,
+            reverse(
+                "remove_league_entry_slot",
+                kwargs={"group_id": groups[0].id},
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "remove_league_entry_slot",
+                kwargs={"group_id": groups[1].id},
+            ),
+        )
 
     def test_add_league_entry_slot_view_rejects_already_added_group(self):
         category = Category.objects.create(
@@ -7764,12 +8365,13 @@ class CategoryManagementTests(TestCase):
             name="B",
             display_order=2,
         )
+        participants = self._create_participants(category, 5)
 
         for number in range(1, 4):
             LeagueEntry.objects.create(
                 category=category,
                 group=group_a,
-                participant=None,
+                participant=participants[number - 1],
                 pair_code=str(number),
                 display_order=number,
             )
@@ -7777,7 +8379,7 @@ class CategoryManagementTests(TestCase):
             LeagueEntry.objects.create(
                 category=category,
                 group=group_b,
-                participant=None,
+                participant=participants[number - 1],
                 pair_code=str(number),
                 display_order=number - 3,
             )
@@ -7791,7 +8393,10 @@ class CategoryManagementTests(TestCase):
         )
 
         self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 3)
-        self.assertContains(response, "A は既に追加枠があります。")
+        self.assertContains(
+            response,
+            "A は既に追加枠があるか、基本枠数と一致していません。",
+        )
 
     def test_assign_league_entry_participant_api_assigns_participant(self):
         category = Category.objects.create(
@@ -8093,6 +8698,64 @@ class CategoryManagementTests(TestCase):
                 "participant_id": participant.id,
                 "participant_name": "山田・田中",
                 "participant_organization": "○○クラブ",
+                "slot_removed": False,
+                "group_id": group.id,
+            },
+        )
+
+    def test_unassign_league_entry_participant_api_removes_extra_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+
+        for display_order in range(1, 6):
+            self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        entry = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=5,
+        )
+        participant = entry.participant
+
+        response = self.client.post(
+            reverse(
+                "unassign_league_entry_participant_api",
+                kwargs={"entry_id": entry.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            LeagueEntry.objects.filter(id=entry.id).exists()
+        )
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "entry_id": entry.id,
+                "participant_id": participant.id,
+                "participant_name": participant.display_name,
+                "participant_organization": "",
+                "slot_removed": True,
+                "group_id": groups[0].id,
             },
         )
 
@@ -8280,13 +8943,18 @@ class CategoryManagementTests(TestCase):
         entry.refresh_from_db()
         self.assertRedirects(
             response,
-            reverse(
-                "stage_pair_maintenance",
-                kwargs={
-                    "category_id": category.id,
-                    "stage_id": stage.id,
-                },
+            (
+                reverse(
+                    "stage_pair_maintenance",
+                    kwargs={
+                        "category_id": category.id,
+                        "stage_id": stage.id,
+                    },
+                )
+                + f"#group-{group.id}"
             ),
+            target_status_code=200,
+            fetch_redirect_response=False,
         )
         self.assertIsNone(entry.participant)
 
@@ -8372,30 +9040,41 @@ class CategoryManagementTests(TestCase):
             name="B",
             display_order=2,
         )
-        Participant.objects.create(
-            category=category,
-            entry_code="P1",
-            organization="○○クラブ",
-            player1_name="未割当1",
-            player2_name="未割当2",
-            display_order=1,
-        )
-
-        for number in range(1, 3):
-            LeagueEntry.objects.create(
-                category=category,
-                group=group_a,
-                participant=None,
-                pair_code=str(number),
-                display_order=number,
+        participants = []
+        for number in range(1, 6):
+            participants.append(
+                Participant.objects.create(
+                    category=category,
+                    entry_code=f"P{number}",
+                    organization="○○クラブ",
+                    player1_name=f"未割当{number}A",
+                    player2_name=f"未割当{number}B",
+                    display_order=number,
+                )
             )
+
         LeagueEntry.objects.create(
             category=category,
-            group=group_b,
-            participant=None,
-            pair_code="3",
+            group=group_a,
+            participant=participants[0],
+            pair_code="1",
             display_order=1,
         )
+        LeagueEntry.objects.create(
+            category=category,
+            group=group_a,
+            participant=None,
+            pair_code="2",
+            display_order=2,
+        )
+        for number in range(3, 5):
+            LeagueEntry.objects.create(
+                category=category,
+                group=group_b,
+                participant=participants[number - 2],
+                pair_code=str(number),
+                display_order=number - 2,
+            )
 
         response = self.client.get(
             reverse(
@@ -8409,8 +9088,9 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "未割当の参加者")
-        self.assertContains(response, "未割当1・未割当2")
+        self.assertContains(response, "未割当4A・未割当4B")
         self.assertContains(response, "(○○クラブ)")
+        self.assertContains(response, f'id="group-{group_a.id}"')
         self.assertContains(response, 'data-group-id="')
         self.assertContains(response, 'data-entry-id="')
         self.assertContains(response, 'data-assigned="false"')
@@ -8418,7 +9098,7 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, 'class="pair-assignment-layout"')
         self.assertContains(response, 'draggable="true"')
         self.assertContains(response, 'data-participant-id="')
-        self.assertContains(response, 'data-participant-name="未割当1・未割当2"')
+        self.assertContains(response, 'data-participant-name="未割当4A・未割当4B"')
         self.assertContains(response, "+1枠追加")
         self.assertContains(
             response,
@@ -8434,6 +9114,7 @@ class CategoryManagementTests(TestCase):
                 kwargs={"group_id": group_a.id},
             ),
         )
+        self.assertNotContains(response, "+1枠解除")
 
     def test_stage_pair_maintenance_shows_unassign_button_only_for_assigned_entries(self):
         category = Category.objects.create(
