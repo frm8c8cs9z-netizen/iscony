@@ -7,6 +7,7 @@ import string
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Count, Max
 
 from ..helpers.brackets import get_bracket_size
 from ..helpers.league_grouping import find_group_size_candidate
@@ -48,7 +49,13 @@ def create_league_stage_groups(stage, pair_count, group_size):
         groups = []
         pair_number = 1
 
-        for group_index, entry_count in enumerate(candidate["group_sizes"]):
+        group_count = candidate["group_count"]
+        entry_count, _ = divmod(
+            pair_count,
+            group_count,
+        )
+
+        for group_index in range(group_count):
             group = Group.objects.create(
                 category=stage.category,
                 stage=stage,
@@ -68,6 +75,77 @@ def create_league_stage_groups(stage, pair_count, group_size):
                 pair_number += 1
 
         return groups
+
+
+def add_league_entry_slot(group):
+    """
+    Stage内の基本枠数のままのGroupへ、空のLeagueEntryを1件追加する。
+    """
+
+    with transaction.atomic():
+        group = Group.objects.select_for_update().select_related(
+            "category",
+        ).get(
+            id=group.id,
+        )
+
+        if group.stage_id is None:
+            raise ValidationError(
+                "Stageに紐づかないグループには枠を追加できません。"
+            )
+
+        locked_groups = list(
+            Group.objects.select_for_update().filter(
+                stage_id=group.stage_id,
+            )
+        )
+        counts_by_group = dict(
+            LeagueEntry.objects.filter(
+                group__stage_id=group.stage_id,
+            ).values_list(
+                "group_id",
+            ).annotate(
+                entry_count=Count("id"),
+            )
+        )
+        base = min(
+            counts_by_group.get(stage_group.id, 0)
+            for stage_group in locked_groups
+        )
+        current_count = next(
+            counts_by_group.get(stage_group.id, 0)
+            for stage_group in locked_groups
+            if stage_group.id == group.id
+        )
+
+        if current_count > base:
+            raise ValidationError(
+                f"{group.name} は既に追加枠があります。"
+            )
+
+        numeric_pair_codes = [
+            int(pair_code)
+            for pair_code in LeagueEntry.objects.filter(
+                group__stage_id=group.stage_id,
+            ).values_list(
+                "pair_code",
+                flat=True,
+            )
+            if pair_code.isdigit()
+        ]
+        max_display_order = LeagueEntry.objects.filter(
+            group=group,
+        ).aggregate(
+            max_display_order=Max("display_order"),
+        )["max_display_order"]
+
+        return LeagueEntry.objects.create(
+            category=group.category,
+            group=group,
+            participant=None,
+            pair_code=str(max(numeric_pair_codes, default=0) + 1),
+            display_order=(max_display_order or 0) + 1,
+        )
 
 
 def create_tournament_stage_bracket(stage, pair_count):

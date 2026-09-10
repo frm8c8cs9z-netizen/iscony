@@ -386,6 +386,12 @@ urlpatterns = [
     ),
 
     path(
+        "group/<int:group_id>/entries/add/",
+        league.add_league_entry_slot_view,
+        name="add_league_entry_slot",
+    ),
+
+    path(
         "tournament/<str:code>/schedule/maintenance/",
         dashboard.schedule_maintenance,
         name="schedule_maintenance",

@@ -7297,13 +7297,20 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(len(groups), 4)
         self.assertEqual([group.name for group in groups], ["A", "B", "C", "D"])
-        self.assertEqual(LeagueEntry.objects.filter(group__stage=stage).count(), 17)
+        self.assertEqual(
+            [
+                LeagueEntry.objects.filter(group=group).count()
+                for group in groups
+            ],
+            [4, 4, 4, 4],
+        )
+        self.assertEqual(LeagueEntry.objects.filter(group__stage=stage).count(), 16)
         self.assertEqual(
             {
                 entry.pair_code
                 for entry in entries
             },
-            {str(number) for number in range(1, 18)},
+            {str(number) for number in range(1, 17)},
         )
         self.assertFalse(
             LeagueEntry.objects.filter(
@@ -7663,12 +7670,331 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "予選リーグ")
         self.assertContains(response, "対象1")
-        self.assertNotContains(response, "別Stage1")
+        self.assertNotContains(response, "<td>B1</td>", html=True)
         self.assertTrue(
             Category.objects.filter(
                 tournament=self.tournament,
                 name="男子A",
             ).exists()
+        )
+
+    def test_add_league_entry_slot_view_adds_slot_to_base_group(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group_a = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+            display_order=1,
+        )
+        group_b = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="B",
+            display_order=2,
+        )
+
+        for group, offset in ((group_a, 0), (group_b, 3)):
+            for number in range(1, 4):
+                LeagueEntry.objects.create(
+                    category=category,
+                    group=group,
+                    participant=None,
+                    pair_code=str(offset + number),
+                    display_order=number,
+                )
+
+        response = self.client.post(
+            reverse(
+                "add_league_entry_slot",
+                kwargs={"group_id": group_a.id},
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+        )
+        added_entry = LeagueEntry.objects.get(
+            group=group_a,
+            pair_code="7",
+        )
+        self.assertIsNone(added_entry.participant)
+        self.assertEqual(added_entry.display_order, 4)
+        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 4)
+
+    def test_add_league_entry_slot_view_rejects_already_added_group(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group_a = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+            display_order=1,
+        )
+        group_b = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="B",
+            display_order=2,
+        )
+
+        for number in range(1, 4):
+            LeagueEntry.objects.create(
+                category=category,
+                group=group_a,
+                participant=None,
+                pair_code=str(number),
+                display_order=number,
+            )
+        for number in range(4, 6):
+            LeagueEntry.objects.create(
+                category=category,
+                group=group_b,
+                participant=None,
+                pair_code=str(number),
+                display_order=number - 3,
+            )
+
+        response = self.client.post(
+            reverse(
+                "add_league_entry_slot",
+                kwargs={"group_id": group_a.id},
+            ),
+            follow=True,
+        )
+
+        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 3)
+        self.assertContains(response, "A は既に追加枠があります。")
+
+    def test_stage_pair_maintenance_shows_unassigned_participants_and_slot_buttons(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group_a = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+            display_order=1,
+        )
+        group_b = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="B",
+            display_order=2,
+        )
+        Participant.objects.create(
+            category=category,
+            entry_code="P1",
+            player1_name="未割当1",
+            player2_name="未割当2",
+            display_order=1,
+        )
+
+        for number in range(1, 3):
+            LeagueEntry.objects.create(
+                category=category,
+                group=group_a,
+                participant=None,
+                pair_code=str(number),
+                display_order=number,
+            )
+        LeagueEntry.objects.create(
+            category=category,
+            group=group_b,
+            participant=None,
+            pair_code="3",
+            display_order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "未割当の参加者")
+        self.assertContains(response, "未割当1・未割当2")
+        self.assertContains(response, "+1枠追加")
+        self.assertContains(
+            response,
+            reverse(
+                "add_league_entry_slot",
+                kwargs={"group_id": group_b.id},
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "add_league_entry_slot",
+                kwargs={"group_id": group_a.id},
+            ),
+        )
+
+    def test_pair_maintenance_without_stage_keeps_existing_table(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="対象1",
+            player2_name="対象2",
+        )
+
+        response = self.client.get(
+            reverse(
+                "pair_maintenance",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<th>リーグ</th>", html=True)
+        self.assertContains(response, "対象1")
+        self.assertContains(response, "編集")
+        self.assertNotContains(response, "未割当の参加者")
+        self.assertNotContains(response, "+1枠追加")
+
+    def test_stage_pair_maintenance_shows_slot_shortage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        assigned_participants = []
+
+        for number in range(1, 5):
+            participant = Participant.objects.create(
+                category=category,
+                entry_code=f"P{number}",
+                player1_name=f"選手{number}A",
+                player2_name=f"選手{number}B",
+                display_order=number,
+            )
+            if number <= 2:
+                assigned_participants.append(participant)
+
+        for number, participant in enumerate(assigned_participants, start=1):
+            LeagueEntry.objects.create(
+                category=category,
+                group=group,
+                participant=participant,
+                pair_code=str(number),
+                display_order=number,
+            )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertContains(response, "未割当participant: 2人")
+        self.assertContains(response, "空き枠: 0件")
+        self.assertContains(response, "残り約2枠")
+
+        for number, participant in enumerate(
+            Participant.objects.filter(
+                category=category,
+            ).order_by(
+                "display_order",
+            )[2:],
+            start=3,
+        ):
+            LeagueEntry.objects.create(
+                category=category,
+                group=group,
+                participant=participant,
+                pair_code=str(number),
+                display_order=number,
+            )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertContains(
+            response,
+            "すべての参加者ぶんの枠があります",
         )
 
     def test_edit_category_updates_name_and_display_order(self):

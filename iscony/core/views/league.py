@@ -11,7 +11,7 @@ from itertools import combinations
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -26,6 +26,7 @@ from ..models import (
     Group,
     GroupRanking,
     LeagueEntry,
+    Participant,
     RoundRobinMatch,
     Schedule,
     ScheduleBlock,
@@ -35,6 +36,7 @@ from ..models import (
 )
 from ..services import (
     cancel_pair_retirement,
+    add_league_entry_slot,
     create_extra_round_robin_match,
     delete_round_robin_score,
     insert_round_robin_schedule,
@@ -1129,14 +1131,122 @@ def pair_maintenance(request, category_id, stage_id=None):
         "pair_code"
     )
 
+    context = {
+        "category": category,
+        "stage": stage,
+        "pairs": pairs,
+    }
+
+    if stage is not None:
+        groups = list(
+            Group.objects.filter(
+                stage=stage,
+            ).annotate(
+                entry_count=Count("leagueentry"),
+            ).order_by(
+                "display_order",
+                "name",
+            )
+        )
+        base = min(
+            [
+                group.entry_count
+                for group in groups
+            ],
+            default=0,
+        )
+        entries_by_group_id = {}
+
+        for pair in pairs:
+            entries_by_group_id.setdefault(
+                pair.group_id,
+                [],
+            ).append(pair)
+
+        assigned_participant_ids = LeagueEntry.objects.filter(
+            group__stage=stage,
+            participant__isnull=False,
+        ).values(
+            "participant_id",
+        )
+        unassigned_participants = Participant.objects.filter(
+            category=category,
+        ).exclude(
+            id__in=assigned_participant_ids,
+        ).order_by(
+            "display_order",
+            "entry_code",
+        )
+        empty_slot_count = LeagueEntry.objects.filter(
+            group__stage=stage,
+            participant__isnull=True,
+        ).count()
+        unassigned_count = unassigned_participants.count()
+
+        context.update({
+            "group_rows": [
+                {
+                    "group": group,
+                    "entries": entries_by_group_id.get(group.id, []),
+                    "can_add_slot": group.entry_count == base,
+                }
+                for group in groups
+            ],
+            "unassigned_participants": unassigned_participants,
+            "empty_slot_count": empty_slot_count,
+            "unassigned_count": unassigned_count,
+            "slot_shortage": max(
+                0,
+                unassigned_count - empty_slot_count,
+            ),
+        })
+
     return render(
         request,
         "core/pair_maintenance.html",
-        {
-            "category": category,
-            "stage": stage,
-            "pairs": pairs,
-        }
+        context,
+    )
+
+
+def add_league_entry_slot_view(request, group_id):
+    """POSTで呼ばれ、指定グループへ+1枠を追加する。"""
+
+    group = get_object_or_404(
+        Group.objects.select_related(
+            "category",
+            "stage",
+        ),
+        id=group_id,
+    )
+
+    if request.method != "POST":
+        return redirect(
+            "pair_maintenance",
+            category_id=group.category.id,
+        )
+
+    try:
+        add_league_entry_slot(group)
+        messages.success(
+            request,
+            f"{group.name} に枠を追加しました。",
+        )
+    except ValidationError as error:
+        messages.error(
+            request,
+            " ".join(error.messages),
+        )
+
+    if group.stage is not None:
+        return redirect(
+            "stage_pair_maintenance",
+            category_id=group.category.id,
+            stage_id=group.stage.id,
+        )
+
+    return redirect(
+        "pair_maintenance",
+        category_id=group.category.id,
     )
 
 
