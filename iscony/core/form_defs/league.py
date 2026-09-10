@@ -8,6 +8,7 @@ participants from another category or tournament.
 from django import forms
 
 from ..models import Court, LeagueEntry, Participant, ScheduleBlock
+from ..services.participants import find_conflicting_league_entry
 from .fields import LeagueEntryChoiceField
 
 
@@ -144,3 +145,21 @@ class LeagueEntryEditForm(forms.ModelForm):
                     "entry_code",
                 )
             )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        participant = cleaned_data.get("participant")
+
+        if participant:
+            conflict = find_conflicting_league_entry(
+                participant,
+                self.instance.group.stage,
+                exclude_id=self.instance.pk,
+            )
+            if conflict:
+                self.add_error(
+                    "participant",
+                    f"この参加者は既に{conflict.group.name}に割り当てられています。",
+                )
+
+        return cleaned_data

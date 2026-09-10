@@ -9,6 +9,7 @@ by stronger permissions.
 from django import forms
 
 from ..models import Category, Participant, TournamentBracket, TournamentEntry, TournamentMatch
+from ..services.participants import find_conflicting_tournament_entry
 from .fields import TournamentEntryChoiceField
 
 
@@ -53,6 +54,24 @@ class TournamentEntryEditForm(forms.ModelForm):
                     "entry_code",
                 )
             )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        participant = cleaned_data.get("participant")
+
+        if participant:
+            conflict = find_conflicting_tournament_entry(
+                participant,
+                self.instance.bracket.stage,
+                exclude_id=self.instance.pk,
+            )
+            if conflict:
+                self.add_error(
+                    "participant",
+                    f"この参加者は既に{conflict.bracket.name}に割り当てられています。",
+                )
+
+        return cleaned_data
 
 
 class TournamentMatchEditForm(forms.ModelForm):

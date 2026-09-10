@@ -28,6 +28,10 @@ from .helpers.display import (
 )
 from .helpers.league_grouping import build_group_size_candidates
 from .match_keys import format_match_key_display
+from .form_defs import (
+    LeagueEntryEditForm,
+    TournamentEntryEditForm,
+)
 from .views.csv import STAGE_REIMPORT_SESSION_KEY
 from .models import (
     Category,
@@ -214,6 +218,288 @@ def create_tournament_entry(
         display_order=display_order,
         **kwargs,
     )
+
+
+class EntryAssignmentFormValidationTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="枠割当検証大会",
+            code="ASSIGN",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        self.league_stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.other_league_stage = Stage.objects.create(
+            category=self.category,
+            name="順位リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        self.tournament_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=3,
+        )
+        self.other_tournament_stage = Stage.objects.create(
+            category=self.category,
+            name="順位トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=4,
+        )
+        self.participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P1",
+            player1_name="山田",
+            player2_name="田中",
+            display_order=1,
+        )
+
+    def create_group(self, *, name, stage):
+        return Group.objects.create(
+            category=self.category,
+            stage=stage,
+            name=name,
+        )
+
+    def league_form(self, entry, participant):
+        participant_id = ""
+        if participant:
+            participant_id = str(participant.id)
+
+        return LeagueEntryEditForm(
+            data={
+                "participant": participant_id,
+                "pair_code": entry.pair_code,
+                "display_order": str(entry.display_order),
+                "retired_reason": entry.retired_reason,
+            },
+            instance=entry,
+            category=self.category,
+        )
+
+    def tournament_form(self, entry, participant):
+        participant_id = ""
+        if participant:
+            participant_id = str(participant.id)
+
+        return TournamentEntryEditForm(
+            data={
+                "participant": participant_id,
+            },
+            instance=entry,
+            category=self.category,
+        )
+
+    def test_league_form_rejects_participant_assigned_in_same_stage(self):
+        group_a = self.create_group(
+            name="A",
+            stage=self.league_stage,
+        )
+        group_b = self.create_group(
+            name="B",
+            stage=self.league_stage,
+        )
+        LeagueEntry.objects.create(
+            category=self.category,
+            group=group_a,
+            participant=self.participant,
+            pair_code="A1",
+            display_order=1,
+        )
+        target = LeagueEntry.objects.create(
+            category=self.category,
+            group=group_b,
+            pair_code="B1",
+            display_order=1,
+        )
+
+        form = self.league_form(target, self.participant)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("participant", form.errors)
+        self.assertIn("A", form.errors["participant"][0])
+
+    def test_league_form_allows_unchanged_participant_on_same_entry(self):
+        group = self.create_group(
+            name="A",
+            stage=self.league_stage,
+        )
+        entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            participant=self.participant,
+            pair_code="A1",
+            display_order=1,
+        )
+
+        form = self.league_form(entry, self.participant)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_league_form_allows_participant_assigned_in_other_stage(self):
+        group_a = self.create_group(
+            name="A",
+            stage=self.league_stage,
+        )
+        group_b = self.create_group(
+            name="B",
+            stage=self.other_league_stage,
+        )
+        LeagueEntry.objects.create(
+            category=self.category,
+            group=group_a,
+            participant=self.participant,
+            pair_code="A1",
+            display_order=1,
+        )
+        target = LeagueEntry.objects.create(
+            category=self.category,
+            group=group_b,
+            pair_code="B1",
+            display_order=1,
+        )
+
+        form = self.league_form(target, self.participant)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_league_form_checks_category_when_stage_is_none(self):
+        group_a = self.create_group(
+            name="A",
+            stage=None,
+        )
+        group_b = self.create_group(
+            name="B",
+            stage=None,
+        )
+        LeagueEntry.objects.create(
+            category=self.category,
+            group=group_a,
+            participant=self.participant,
+            pair_code="A1",
+            display_order=1,
+        )
+        target = LeagueEntry.objects.create(
+            category=self.category,
+            group=group_b,
+            pair_code="B1",
+            display_order=1,
+        )
+
+        form = self.league_form(target, self.participant)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("A", form.errors["participant"][0])
+
+    def test_tournament_form_rejects_participant_assigned_in_same_stage(self):
+        bracket_a = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.tournament_stage,
+            name="本戦A",
+        )
+        bracket_b = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.tournament_stage,
+            name="本戦B",
+        )
+        create_tournament_entry(
+            bracket=bracket_a,
+            participant=self.participant,
+            pair_code="1",
+            display_order=1,
+        )
+        target = create_tournament_entry(
+            bracket=bracket_b,
+            pair_code="1",
+            display_order=1,
+        )
+
+        form = self.tournament_form(target, self.participant)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("participant", form.errors)
+        self.assertIn("本戦A", form.errors["participant"][0])
+
+    def test_tournament_form_allows_unchanged_participant_on_same_entry(self):
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.tournament_stage,
+            name="本戦",
+        )
+        entry = create_tournament_entry(
+            bracket=bracket,
+            participant=self.participant,
+            pair_code="1",
+            display_order=1,
+        )
+
+        form = self.tournament_form(entry, self.participant)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_tournament_form_allows_participant_assigned_in_other_stage(self):
+        bracket_a = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.tournament_stage,
+            name="本戦",
+        )
+        bracket_b = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.other_tournament_stage,
+            name="順位戦",
+        )
+        create_tournament_entry(
+            bracket=bracket_a,
+            participant=self.participant,
+            pair_code="1",
+            display_order=1,
+        )
+        target = create_tournament_entry(
+            bracket=bracket_b,
+            pair_code="1",
+            display_order=1,
+        )
+
+        form = self.tournament_form(target, self.participant)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_tournament_form_checks_category_when_stage_is_none(self):
+        bracket_a = TournamentBracket.objects.create(
+            category=self.category,
+            stage=None,
+            name="本戦A",
+        )
+        bracket_b = TournamentBracket.objects.create(
+            category=self.category,
+            stage=None,
+            name="本戦B",
+        )
+        create_tournament_entry(
+            bracket=bracket_a,
+            participant=self.participant,
+            pair_code="1",
+            display_order=1,
+        )
+        target = create_tournament_entry(
+            bracket=bracket_b,
+            pair_code="1",
+            display_order=1,
+        )
+
+        form = self.tournament_form(target, self.participant)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("本戦A", form.errors["participant"][0])
 
 
 class EntryDisplayHelperTests(TestCase):

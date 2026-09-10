@@ -208,6 +208,74 @@ def participant_edit_impact_summary(participant):
     return summary
 
 
+def find_conflicting_league_entry(participant, stage, *, exclude_id=None):
+    """同じ参加者が割り当て済みの別リーグ枠を返す。"""
+
+    if not participant:
+        return None
+
+    entries = LeagueEntry.objects.filter(
+        participant=participant,
+    ).select_related(
+        "group",
+    )
+
+    if stage:
+        entries = entries.filter(
+            group__stage=stage,
+        )
+    else:
+        entries = entries.filter(
+            category=participant.category,
+        )
+
+    if exclude_id:
+        entries = entries.exclude(
+            id=exclude_id,
+        )
+
+    return entries.order_by(
+        "group__display_order",
+        "group__name",
+        "display_order",
+        "pair_code",
+    ).first()
+
+
+def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):
+    """同じ参加者が割り当て済みの別トーナメント枠を返す。"""
+
+    if not participant:
+        return None
+
+    entries = TournamentEntry.objects.filter(
+        participant=participant,
+    ).select_related(
+        "bracket",
+    )
+
+    if stage:
+        entries = entries.filter(
+            bracket__stage=stage,
+        )
+    else:
+        entries = entries.filter(
+            bracket__category=participant.category,
+        )
+
+    if exclude_id:
+        entries = entries.exclude(
+            id=exclude_id,
+        )
+
+    return entries.order_by(
+        "bracket__display_order",
+        "bracket__name",
+        "display_order",
+        "pair_code",
+    ).first()
+
+
 def tournament_pair_organization_sets(tournament):
     """既存参加者からペア共通所属セット候補を作る。"""
 
