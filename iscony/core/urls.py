@@ -392,6 +392,12 @@ urlpatterns = [
     ),
 
     path(
+        "group/<int:group_id>/add-slot-and-assign/",
+        league.group_add_league_entry_slot_and_assign_api,
+        name="group_add_league_entry_slot_and_assign",
+    ),
+
+    path(
         "group/<int:group_id>/remove-slot/",
         league.remove_league_entry_slot_view,
         name="remove_league_entry_slot",

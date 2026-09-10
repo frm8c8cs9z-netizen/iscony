@@ -1266,6 +1266,68 @@ def add_league_entry_slot_view(request, group_id):
     )
 
 
+def group_add_league_entry_slot_and_assign_api(request, group_id):
+    """
+    POSTで呼ばれ、指定グループへ+1枠を作成し、同時に参加者を割り当てるJSON API。
+    """
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    group = get_object_or_404(
+        Group.objects.select_related(
+            "category",
+            "stage",
+        ),
+        id=group_id,
+    )
+    participant_id = request.POST.get("participant_id")
+
+    if not participant_id:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "参加者を指定してください。",
+            },
+            status=400,
+        )
+
+    participant = get_object_or_404(
+        Participant,
+        id=participant_id,
+        category=group.category,
+    )
+
+    try:
+        with transaction.atomic():
+            entry = add_league_entry_slot(group)
+            assign_participant_to_league_entry(entry, participant)
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "group_id": group.id,
+            "entry_id": entry.id,
+            "participant_id": participant.id,
+            "participant_name": participant.display_name,
+        }
+    )
+
+
 def unassign_league_entry_participant_view(request, entry_id):
     """POSTで呼ばれ、指定リーグ枠の参加者割当を解除する。"""
 

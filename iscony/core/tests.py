@@ -8398,6 +8398,191 @@ class CategoryManagementTests(TestCase):
             "A は既に追加枠があるか、基本枠数と一致していません。",
         )
 
+    def test_group_add_league_entry_slot_and_assign_api_adds_slot_and_assigns_participant(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        response = self.client.post(
+            reverse(
+                "group_add_league_entry_slot_and_assign",
+                kwargs={"group_id": groups[0].id},
+            ),
+            {
+                "participant_id": str(participants[8].id),
+            },
+        )
+
+        added_entry = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=5,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(added_entry.participant, participants[8])
+        self.assertEqual(added_entry.pair_code, "5")
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "group_id": groups[0].id,
+                "entry_id": added_entry.id,
+                "participant_id": participants[8].id,
+                "participant_name": participants[8].display_name,
+            },
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[1],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "pair_code",
+                    flat=True,
+                )
+            ),
+            ["6", "7", "8", "9"],
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            9,
+        )
+
+    def test_group_add_league_entry_slot_and_assign_api_rolls_back_at_participant_limit(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 8)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        response = self.client.post(
+            reverse(
+                "group_add_league_entry_slot_and_assign",
+                kwargs={"group_id": groups[0].id},
+            ),
+            {
+                "participant_id": str(participants[0].id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertIn(
+            "参加者数の上限に達しているため",
+            response.json()["error"],
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            8,
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            4,
+        )
+
+    def test_group_add_league_entry_slot_and_assign_api_rejects_other_category(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子B",
+            display_order=2,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participant = Participant.objects.create(
+            category=other_category,
+            entry_code="P1",
+            player1_name="別カテゴリ1",
+            player2_name="別カテゴリ2",
+        )
+
+        response = self.client.post(
+            reverse(
+                "group_add_league_entry_slot_and_assign",
+                kwargs={"group_id": groups[0].id},
+            ),
+            {
+                "participant_id": str(participant.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_group_add_league_entry_slot_and_assign_api_requires_participant(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+
+        response = self.client.post(
+            reverse(
+                "group_add_league_entry_slot_and_assign",
+                kwargs={"group_id": groups[0].id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": False,
+                "error": "参加者を指定してください。",
+            },
+        )
+
+    def test_group_add_league_entry_slot_and_assign_api_rejects_get(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+
+        response = self.client.get(
+            reverse(
+                "group_add_league_entry_slot_and_assign",
+                kwargs={"group_id": groups[0].id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(response.json()["success"])
+
     def test_assign_league_entry_participant_api_assigns_participant(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -9115,6 +9300,84 @@ class CategoryManagementTests(TestCase):
             ),
         )
         self.assertNotContains(response, "+1枠解除")
+
+    def test_stage_pair_maintenance_add_slot_form_has_drop_target_data(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+
+        self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        self._create_entry(
+            category,
+            groups[0],
+            2,
+            2,
+            None,
+        )
+        for display_order, pair_code in enumerate(range(3, 7), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        group_a_add_slot_url = reverse(
+            "group_add_league_entry_slot_and_assign",
+            kwargs={"group_id": groups[0].id},
+        )
+        group_b_add_slot_url = reverse(
+            "group_add_league_entry_slot_and_assign",
+            kwargs={"group_id": groups[1].id},
+        )
+        group_b_form = re.search(
+            (
+                r"<form(?=[^>]*action=\""
+                + reverse(
+                    "add_league_entry_slot",
+                    kwargs={"group_id": groups[1].id},
+                )
+                + r"\")[^>]*>"
+            ),
+            content,
+            re.S,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(group_b_form)
+        self.assertIn(
+            f'data-group-id="{groups[1].id}"',
+            group_b_form.group(0),
+        )
+        self.assertIn(
+            f'data-add-slot-url="{group_b_add_slot_url}"',
+            group_b_form.group(0),
+        )
+        self.assertNotIn(
+            group_a_add_slot_url,
+            content,
+        )
 
     def test_stage_pair_maintenance_shows_unassign_button_only_for_assigned_entries(self):
         category = Category.objects.create(

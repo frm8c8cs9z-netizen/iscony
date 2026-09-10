@@ -98,7 +98,12 @@
                 </table>
 
                 {% if row.can_add_slot %}
-                    <form method="post" action="{% url 'add_league_entry_slot' row.group.id %}">
+                    <form
+                        method="post"
+                        action="{% url 'add_league_entry_slot' row.group.id %}"
+                        data-group-id="{{ row.group.id }}"
+                        data-add-slot-url="{% url 'group_add_league_entry_slot_and_assign' row.group.id %}"
+                    >
                         {% csrf_token %}
                         <button type="submit">+1枠追加</button>
                     </form>
@@ -226,16 +231,108 @@
             if (entryList) {
                 entryList.addEventListener("dragover", function(event) {
                     const entry = event.target.closest("[data-entry-id]");
-                    if (!entry || entry.dataset.assigned !== "false") {
+                    if (entry && entry.dataset.assigned === "false") {
+                        event.preventDefault();
                         return;
                     }
 
-                    event.preventDefault();
+                    const addSlotTarget = event.target.closest(
+                        "[data-add-slot-url]"
+                    );
+                    if (addSlotTarget) {
+                        event.preventDefault();
+                    }
                 });
 
                 entryList.addEventListener("drop", function(event) {
                     const entry = event.target.closest("[data-entry-id]");
-                    if (!entry || entry.dataset.assigned !== "false") {
+                    if (entry && entry.dataset.assigned === "false") {
+                        event.preventDefault();
+
+                        const data = getDragData(event);
+                        if (!data || data.type !== "participant") {
+                            return;
+                        }
+
+                        const body = new URLSearchParams();
+                        body.append("participant_id", data.participantId);
+
+                        fetch(entry.dataset.assignUrl, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": (
+                                    "application/x-www-form-urlencoded"
+                                ),
+                                "X-CSRFToken": csrfToken,
+                            },
+                            body: body,
+                        })
+                            .then(function(response) {
+                                return response.json().then(function(data) {
+                                    return {
+                                        ok: response.ok,
+                                        data: data,
+                                    };
+                                });
+                            })
+                            .then(function(result) {
+                                if (!result.ok || !result.data.success) {
+                                    alert(
+                                        result.data.error
+                                        || "参加者を割り当てられませんでした。"
+                                    );
+                                    return;
+                                }
+
+                                const nameCell = entry.querySelector(
+                                    "[data-entry-participant-name]"
+                                );
+                                const organizationCell = entry.querySelector(
+                                    "[data-entry-organization]"
+                                );
+                                const participant = document.querySelector(
+                                    (
+                                        "[data-participant-id=\""
+                                        + result.data.participant_id
+                                        + "\"]"
+                                    )
+                                );
+
+                                if (nameCell) {
+                                    nameCell.textContent = (
+                                        result.data.participant_name
+                                    );
+                                }
+                                if (organizationCell) {
+                                    organizationCell.textContent = (
+                                        result.data.participant_organization
+                                    );
+                                }
+                                entry.dataset.assigned = "true";
+                                entry.draggable = true;
+                                if (!entry.dataset.unassignUrl) {
+                                    entry.dataset.unassignUrl = (
+                                        entry.dataset.assignUrl.replace(
+                                            /\/assign\/$/,
+                                            "/unassign-api/"
+                                        )
+                                    );
+                                }
+
+                                if (participant) {
+                                    participant.remove();
+                                }
+                            })
+                            .catch(function() {
+                                alert("参加者を割り当てられませんでした。");
+                            });
+                        return;
+                    }
+
+                    const addSlotTarget = event.target.closest(
+                        "[data-add-slot-url]"
+                    );
+                    if (!addSlotTarget) {
                         return;
                     }
 
@@ -249,7 +346,7 @@
                     const body = new URLSearchParams();
                     body.append("participant_id", data.participantId);
 
-                    fetch(entry.dataset.assignUrl, {
+                    fetch(addSlotTarget.dataset.addSlotUrl, {
                         method: "POST",
                         headers: {
                             "Content-Type": (
@@ -271,52 +368,18 @@
                             if (!result.ok || !result.data.success) {
                                 alert(
                                     result.data.error
-                                    || "参加者を割り当てられませんでした。"
+                                    || "枠の作成・参加者の割当に失敗しました。"
                                 );
                                 return;
                             }
 
-                            const nameCell = entry.querySelector(
-                                "[data-entry-participant-name]"
+                            window.location.hash = (
+                                "group-" + result.data.group_id
                             );
-                            const organizationCell = entry.querySelector(
-                                "[data-entry-organization]"
-                            );
-                            const participant = document.querySelector(
-                                (
-                                    "[data-participant-id=\""
-                                    + result.data.participant_id
-                                    + "\"]"
-                                )
-                            );
-
-                            if (nameCell) {
-                                nameCell.textContent = (
-                                    result.data.participant_name
-                                );
-                            }
-                            if (organizationCell) {
-                                organizationCell.textContent = (
-                                    result.data.participant_organization
-                                );
-                            }
-                            entry.dataset.assigned = "true";
-                            entry.draggable = true;
-                            if (!entry.dataset.unassignUrl) {
-                                entry.dataset.unassignUrl = (
-                                    entry.dataset.assignUrl.replace(
-                                        /\/assign\/$/,
-                                        "/unassign-api/"
-                                    )
-                                );
-                            }
-
-                            if (participant) {
-                                participant.remove();
-                            }
+                            window.location.reload();
                         })
                         .catch(function() {
-                            alert("参加者を割り当てられませんでした。");
+                            alert("枠の作成・参加者の割当に失敗しました。");
                         });
                 });
             }
