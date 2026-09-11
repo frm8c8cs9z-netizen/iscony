@@ -44,6 +44,7 @@ from ..services import (
     insert_round_robin_schedule,
     group_base_size,
     consume_stage_advancement_result,
+    move_league_entry_participant,
     save_round_robin_score,
     undo_schedule_replacement,
     unassign_league_entry_participant,
@@ -1436,6 +1437,67 @@ def unassign_league_entry_participant_api(request, entry_id):
             "participant_organization": participant_organization,
             "slot_removed": result is None,
             "group_id": group_id,
+        }
+    )
+
+
+def move_league_entry_participant_api(request, entry_id):
+    """
+    POSTで呼ばれ、指定リーグ枠の参加者を別枠へ移動/入れ替えするJSON API。
+    """
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    source_entry = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+    target_entry_id = request.POST.get("target_entry_id")
+
+    if not target_entry_id:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "移動先を指定してください。",
+            },
+            status=400,
+        )
+
+    target_entry = get_object_or_404(
+        LeagueEntry,
+        id=target_entry_id,
+        category=source_entry.category,
+    )
+    source_group_id = source_entry.group_id
+    target_group_id = target_entry.group_id
+
+    try:
+        result = move_league_entry_participant(
+            source_entry,
+            target_entry,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "mode": result["mode"],
+            "source_group_id": source_group_id,
+            "target_group_id": target_group_id,
         }
     )
 

@@ -264,6 +264,16 @@ def assign_participant_to_league_entry(entry, participant):
     return entry
 
 
+def _entry_has_completed_match(entry):
+    """LeagueEntryに結果入力済みの試合があるかを返す。"""
+
+    return RoundRobinMatch.objects.filter(
+        Q(pair1=entry)
+        | Q(pair2=entry),
+        completed=True,
+    ).exists()
+
+
 def unassign_league_entry_participant(entry):
     """
     LeagueEntryの参加者割当を解除する。
@@ -280,12 +290,7 @@ def unassign_league_entry_participant(entry):
     この場合は entry を返す。
     """
 
-    has_completed_match = RoundRobinMatch.objects.filter(
-        Q(pair1=entry)
-        | Q(pair2=entry),
-        completed=True,
-    ).exists()
-    if has_completed_match:
+    if _entry_has_completed_match(entry):
         raise ValidationError(
             "結果入力済みの試合があるため、参加者割当を解除できません。"
         )
@@ -351,6 +356,59 @@ def unassign_league_entry_participant(entry):
         entry.save(update_fields=["participant"])
 
         return entry
+
+
+def move_league_entry_participant(source_entry, target_entry):
+    """
+    source_entry の参加者を target_entry へ移動する。
+
+    target_entry が未割当なら、参加者をそこへ移動する。source_entry
+    側は unassign_league_entry_participant と同じ扱いにする。
+
+    target_entry に既に参加者がいる場合は、source_entry と
+    target_entry の参加者を入れ替える。この場合は枠自体を動かさない。
+    """
+
+    if source_entry.id == target_entry.id:
+        raise ValidationError("移動元と移動先が同じ枠です。")
+
+    if source_entry.participant is None:
+        raise ValidationError("この枠は未割当です。")
+
+    if target_entry.participant is not None:
+        if (
+            _entry_has_completed_match(source_entry)
+            or _entry_has_completed_match(target_entry)
+        ):
+            raise ValidationError(
+                "結果入力済みの試合があるため、入れ替えできません。"
+            )
+
+        with transaction.atomic():
+            source_participant = source_entry.participant
+            target_participant = target_entry.participant
+            source_entry.participant = target_participant
+            target_entry.participant = source_participant
+            source_entry.save(update_fields=["participant"])
+            target_entry.save(update_fields=["participant"])
+
+        return {
+            "mode": "swap",
+            "source_entry": source_entry,
+            "target_entry": target_entry,
+        }
+
+    participant = source_entry.participant
+
+    with transaction.atomic():
+        unassign_league_entry_participant(source_entry)
+        assign_participant_to_league_entry(target_entry, participant)
+
+    return {
+        "mode": "move",
+        "source_entry": source_entry,
+        "target_entry": target_entry,
+    }
 
 
 def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):

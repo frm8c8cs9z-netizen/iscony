@@ -53,6 +53,7 @@
                         data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
                         {% if pair.participant %}
                             data-unassign-url="{% url 'unassign_league_entry_participant_api' pair.id %}"
+                            data-move-url="{% url 'move_league_entry_participant_api' pair.id %}"
                             draggable="true"
                         {% endif %}
                     >
@@ -231,7 +232,7 @@
             if (entryList) {
                 entryList.addEventListener("dragover", function(event) {
                     const entry = event.target.closest("[data-entry-id]");
-                    if (entry && entry.dataset.assigned === "false") {
+                    if (entry) {
                         event.preventDefault();
                         return;
                     }
@@ -246,13 +247,15 @@
 
                 entryList.addEventListener("drop", function(event) {
                     const entry = event.target.closest("[data-entry-id]");
-                    if (entry && entry.dataset.assigned === "false") {
-                        event.preventDefault();
+                    const data = getDragData(event);
 
-                        const data = getDragData(event);
-                        if (!data || data.type !== "participant") {
-                            return;
-                        }
+                    if (
+                        entry
+                        && entry.dataset.assigned === "false"
+                        && data
+                        && data.type === "participant"
+                    ) {
+                        event.preventDefault();
 
                         const body = new URLSearchParams();
                         body.append("participant_id", data.participantId);
@@ -329,6 +332,64 @@
                         return;
                     }
 
+                    if (entry && data && data.type === "entry") {
+                        event.preventDefault();
+
+                        if (data.entryId === entry.dataset.entryId) {
+                            return;
+                        }
+
+                        const sourceEntry = document.querySelector(
+                            "[data-entry-id=\"" + data.entryId + "\"]"
+                        );
+                        if (!sourceEntry || !sourceEntry.dataset.moveUrl) {
+                            return;
+                        }
+
+                        const body = new URLSearchParams();
+                        body.append(
+                            "target_entry_id",
+                            entry.dataset.entryId
+                        );
+
+                        fetch(sourceEntry.dataset.moveUrl, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": (
+                                    "application/x-www-form-urlencoded"
+                                ),
+                                "X-CSRFToken": csrfToken,
+                            },
+                            body: body,
+                        })
+                            .then(function(response) {
+                                return response.json().then(function(data) {
+                                    return {
+                                        ok: response.ok,
+                                        data: data,
+                                    };
+                                });
+                            })
+                            .then(function(result) {
+                                if (!result.ok || !result.data.success) {
+                                    alert(
+                                        result.data.error
+                                        || "参加者を移動できませんでした。"
+                                    );
+                                    return;
+                                }
+
+                                window.location.hash = (
+                                    "group-" + result.data.target_group_id
+                                );
+                                window.location.reload();
+                            })
+                            .catch(function() {
+                                alert("参加者を移動できませんでした。");
+                            });
+                        return;
+                    }
+
                     const addSlotTarget = event.target.closest(
                         "[data-add-slot-url]"
                     );
@@ -338,7 +399,6 @@
 
                     event.preventDefault();
 
-                    const data = getDragData(event);
                     if (!data || data.type !== "participant") {
                         return;
                     }

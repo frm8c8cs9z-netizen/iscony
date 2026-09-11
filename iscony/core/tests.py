@@ -79,6 +79,7 @@ from .services import (
     consume_stage_advancement_result,
     insert_round_robin_schedule,
     move_schedule,
+    move_league_entry_participant,
     delete_tournament_score,
     save_round_robin_score,
     save_tournament_score,
@@ -7966,6 +7967,306 @@ class CategoryManagementTests(TestCase):
             group_base_size(groups[0]),
         )
 
+    def test_move_league_entry_participant_moves_to_empty_base_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        source_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=None,
+            pair_code="2",
+            display_order=2,
+        )
+        Participant.objects.create(
+            category=category,
+            entry_code="P2",
+            player1_name="未割当",
+            player2_name="参加者",
+        )
+        participant = source_entry.participant
+
+        result = move_league_entry_participant(
+            source_entry,
+            target_entry,
+        )
+
+        source_entry.refresh_from_db()
+        target_entry.refresh_from_db()
+        self.assertEqual(result["mode"], "move")
+        self.assertIsNone(source_entry.participant)
+        self.assertEqual(target_entry.participant, participant)
+        self.assertTrue(
+            LeagueEntry.objects.filter(id=source_entry.id).exists()
+        )
+
+    def test_move_league_entry_participant_removes_extra_source_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        source_entry = None
+
+        for display_order in range(1, 6):
+            entry = self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+            if display_order == 5:
+                source_entry = entry
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            participant = participants[pair_code - 1]
+            if pair_code == 9:
+                participant = None
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participant,
+            )
+
+        target_entry = LeagueEntry.objects.get(
+            group=groups[1],
+            display_order=4,
+        )
+        source_entry_id = source_entry.id
+        participant = source_entry.participant
+
+        result = move_league_entry_participant(
+            source_entry,
+            target_entry,
+        )
+
+        target_entry.refresh_from_db()
+        self.assertEqual(result["mode"], "move")
+        self.assertFalse(
+            LeagueEntry.objects.filter(id=source_entry_id).exists()
+        )
+        self.assertEqual(target_entry.participant, participant)
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "display_order",
+                    flat=True,
+                )
+            ),
+            [1, 2, 3, 4],
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[1],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "pair_code",
+                    flat=True,
+                )
+            ),
+            ["5", "6", "7", "8"],
+        )
+
+    def test_move_league_entry_participant_swaps_assigned_entries(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 2)
+        source_entry = self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        target_entry = self._create_entry(
+            category,
+            groups[1],
+            2,
+            1,
+            participants[1],
+        )
+        before_slots = list(
+            LeagueEntry.objects.filter(
+                group__stage=stage,
+            ).order_by(
+                "id",
+            ).values_list(
+                "id",
+                "group_id",
+                "pair_code",
+                "display_order",
+            )
+        )
+
+        result = move_league_entry_participant(
+            source_entry,
+            target_entry,
+        )
+
+        source_entry.refresh_from_db()
+        target_entry.refresh_from_db()
+        self.assertEqual(result["mode"], "swap")
+        self.assertEqual(source_entry.participant, participants[1])
+        self.assertEqual(target_entry.participant, participants[0])
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group__stage=stage,
+                ).order_by(
+                    "id",
+                ).values_list(
+                    "id",
+                    "group_id",
+                    "pair_code",
+                    "display_order",
+                )
+            ),
+            before_slots,
+        )
+
+    def test_move_league_entry_participant_rejects_completed_match_move(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        source_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+        opponent = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="2",
+            display_order=2,
+            player1_name="佐藤",
+            player2_name="鈴木",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=None,
+            pair_code="3",
+            display_order=3,
+        )
+        participant = source_entry.participant
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=source_entry,
+            pair2=opponent,
+            completed=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            move_league_entry_participant(
+                source_entry,
+                target_entry,
+            )
+
+        source_entry.refresh_from_db()
+        target_entry.refresh_from_db()
+        self.assertEqual(source_entry.participant, participant)
+        self.assertIsNone(target_entry.participant)
+
+    def test_move_league_entry_participant_rejects_completed_match_swap(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 3)
+        source_entry = self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        target_entry = self._create_entry(
+            category,
+            groups[1],
+            2,
+            1,
+            participants[1],
+        )
+        opponent = self._create_entry(
+            category,
+            groups[1],
+            3,
+            2,
+            participants[2],
+        )
+        RoundRobinMatch.objects.create(
+            group=groups[1],
+            pair1=target_entry,
+            pair2=opponent,
+            completed=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            move_league_entry_participant(
+                source_entry,
+                target_entry,
+            )
+
+        source_entry.refresh_from_db()
+        target_entry.refresh_from_db()
+        self.assertEqual(source_entry.participant, participants[0])
+        self.assertEqual(target_entry.participant, participants[1])
+
     def test_unassign_league_entry_participant_shifts_pair_codes_after_delete(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -9091,6 +9392,260 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 405)
         self.assertFalse(response.json()["success"])
 
+    def test_move_league_entry_participant_api_moves_entry(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        source_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=None,
+            pair_code="2",
+            display_order=2,
+        )
+        Participant.objects.create(
+            category=category,
+            entry_code="P2",
+            player1_name="未割当",
+            player2_name="参加者",
+        )
+
+        response = self.client.post(
+            reverse(
+                "move_league_entry_participant_api",
+                kwargs={"entry_id": source_entry.id},
+            ),
+            {
+                "target_entry_id": str(target_entry.id),
+            },
+        )
+
+        target_entry.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(target_entry.participant, source_entry.participant)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "mode": "move",
+                "source_group_id": group.id,
+                "target_group_id": group.id,
+            },
+        )
+
+    def test_move_league_entry_participant_api_swaps_entry(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 2)
+        source_entry = self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        target_entry = self._create_entry(
+            category,
+            groups[1],
+            2,
+            1,
+            participants[1],
+        )
+
+        response = self.client.post(
+            reverse(
+                "move_league_entry_participant_api",
+                kwargs={"entry_id": source_entry.id},
+            ),
+            {
+                "target_entry_id": str(target_entry.id),
+            },
+        )
+
+        source_entry.refresh_from_db()
+        target_entry.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(source_entry.participant, participants[1])
+        self.assertEqual(target_entry.participant, participants[0])
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "mode": "swap",
+                "source_group_id": groups[0].id,
+                "target_group_id": groups[1].id,
+            },
+        )
+
+    def test_move_league_entry_participant_api_rejects_other_category(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子B",
+            display_order=2,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        other_stage = Stage.objects.create(
+            category=other_category,
+            code="STG2",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        other_group = Group.objects.create(
+            category=other_category,
+            stage=other_stage,
+            name="A",
+        )
+        source_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=other_category,
+            group=other_group,
+            participant=None,
+            pair_code="1",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "move_league_entry_participant_api",
+                kwargs={"entry_id": source_entry.id},
+            ),
+            {
+                "target_entry_id": str(target_entry.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_move_league_entry_participant_api_rejects_missing_target(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        source_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+
+        response = self.client.post(
+            reverse(
+                "move_league_entry_participant_api",
+                kwargs={"entry_id": source_entry.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": False,
+                "error": "移動先を指定してください。",
+            },
+        )
+
+    def test_move_league_entry_participant_api_rejects_get(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        source_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+
+        response = self.client.get(
+            reverse(
+                "move_league_entry_participant_api",
+                kwargs={"entry_id": source_entry.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(response.json()["success"])
+
     def test_unassign_league_entry_participant_view_clears_participant(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -9438,6 +9993,13 @@ class CategoryManagementTests(TestCase):
                 kwargs={"entry_id": assigned_entry.id},
             ),
         )
+        self.assertContains(
+            response,
+            reverse(
+                "move_league_entry_participant_api",
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+        )
         content = response.content.decode()
         assigned_row = re.search(
             (
@@ -9461,9 +10023,11 @@ class CategoryManagementTests(TestCase):
         self.assertIsNotNone(empty_row)
         self.assertIn('data-assigned="true"', assigned_row.group(0))
         self.assertIn('data-unassign-url="', assigned_row.group(0))
+        self.assertIn('data-move-url="', assigned_row.group(0))
         self.assertIn('draggable="true"', assigned_row.group(0))
         self.assertIn('data-assigned="false"', empty_row.group(0))
         self.assertNotIn('data-unassign-url="', empty_row.group(0))
+        self.assertNotIn('data-move-url="', empty_row.group(0))
         self.assertNotIn('draggable="true"', empty_row.group(0))
 
     def test_pair_maintenance_without_stage_keeps_existing_table(self):

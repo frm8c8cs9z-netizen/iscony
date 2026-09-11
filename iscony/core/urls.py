@@ -416,6 +416,12 @@ urlpatterns = [
     ),
 
     path(
+        "pair/<int:entry_id>/move/",
+        league.move_league_entry_participant_api,
+        name="move_league_entry_participant_api",
+    ),
+
+    path(
         "pair/<int:entry_id>/assign/",
         league.assign_league_entry_participant_api,
         name="assign_league_entry_participant",
