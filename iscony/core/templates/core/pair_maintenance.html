@@ -287,6 +287,14 @@
                                     return;
                                 }
 
+                                if (result.data.group_can_add_slot) {
+                                    window.location.hash = (
+                                        "group-" + result.data.group_id
+                                    );
+                                    window.location.reload();
+                                    return;
+                                }
+
                                 const nameCell = entry.querySelector(
                                     "[data-entry-participant-name]"
                                 );
@@ -318,6 +326,14 @@
                                         entry.dataset.assignUrl.replace(
                                             /\/assign\/$/,
                                             "/unassign-api/"
+                                        )
+                                    );
+                                }
+                                if (!entry.dataset.moveUrl) {
+                                    entry.dataset.moveUrl = (
+                                        entry.dataset.assignUrl.replace(
+                                            /\/assign\/$/,
+                                            "/move/"
                                         )
                                     );
                                 }

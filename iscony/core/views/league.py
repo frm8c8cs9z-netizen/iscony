@@ -1614,10 +1614,30 @@ def assign_league_entry_participant_api(request, entry_id):
             status=400,
         )
 
+    group = entry.group
+    base = group_base_size(group)
+    has_empty_slot = LeagueEntry.objects.filter(
+        group=group,
+        participant__isnull=True,
+    ).exists()
+    stage_total_entries = LeagueEntry.objects.filter(
+        group__stage_id=group.stage_id,
+    ).count()
+    participant_count = Participant.objects.filter(
+        category_id=group.category_id,
+    ).count()
+    group_can_add_slot = (
+        LeagueEntry.objects.filter(group=group).count() == base
+        and not has_empty_slot
+        and stage_total_entries < participant_count
+    )
+
     return JsonResponse(
         {
             "success": True,
             "entry_id": entry.id,
+            "group_id": entry.group_id,
+            "group_can_add_slot": group_can_add_slot,
             "participant_id": participant.id,
             "participant_name": participant.display_name,
             "participant_organization": participant.effective_organization,

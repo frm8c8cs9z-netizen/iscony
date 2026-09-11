@@ -8934,11 +8934,176 @@ class CategoryManagementTests(TestCase):
             {
                 "success": True,
                 "entry_id": entry.id,
+                "group_id": group.id,
+                "group_can_add_slot": False,
                 "participant_id": participant.id,
                 "participant_name": "山田・田中",
                 "participant_organization": "",
             },
         )
+
+    def test_assign_league_entry_participant_api_returns_can_add_slot_true(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 5)
+        target_entry = self._create_entry(
+            category,
+            groups[0],
+            2,
+            2,
+        )
+        self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            3,
+            1,
+            participants[2],
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            4,
+            2,
+            participants[3],
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_league_entry_participant",
+                kwargs={"entry_id": target_entry.id},
+            ),
+            {
+                "participant_id": str(participants[1].id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["group_id"], groups[0].id)
+        self.assertTrue(response.json()["group_can_add_slot"])
+
+    def test_assign_league_entry_participant_api_returns_can_add_slot_false_for_empty_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 7)
+        target_entry = self._create_entry(
+            category,
+            groups[0],
+            2,
+            2,
+        )
+        self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        self._create_entry(
+            category,
+            groups[0],
+            3,
+            3,
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            4,
+            1,
+            participants[3],
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            5,
+            2,
+            participants[4],
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            6,
+            3,
+            participants[5],
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_league_entry_participant",
+                kwargs={"entry_id": target_entry.id},
+            ),
+            {
+                "participant_id": str(participants[1].id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["group_id"], groups[0].id)
+        self.assertFalse(response.json()["group_can_add_slot"])
+
+    def test_assign_league_entry_participant_api_returns_can_add_slot_false_at_participant_limit(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 4)
+        target_entry = self._create_entry(
+            category,
+            groups[0],
+            2,
+            2,
+        )
+        self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            3,
+            1,
+            participants[2],
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            4,
+            2,
+            participants[3],
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_league_entry_participant",
+                kwargs={"entry_id": target_entry.id},
+            ),
+            {
+                "participant_id": str(participants[1].id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["group_id"], groups[0].id)
+        self.assertFalse(response.json()["group_can_add_slot"])
 
     def test_assign_league_entry_participant_api_returns_organization(self):
         category = Category.objects.create(
