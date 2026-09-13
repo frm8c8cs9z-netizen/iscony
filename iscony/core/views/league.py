@@ -45,6 +45,7 @@ from ..services import (
     group_base_size,
     consume_stage_advancement_result,
     move_league_entry_participant,
+    move_league_entry_participant_to_new_slot,
     save_round_robin_score,
     undo_schedule_replacement,
     unassign_league_entry_participant,
@@ -1288,6 +1289,39 @@ def group_add_league_entry_slot_and_assign_api(request, group_id):
         ),
         id=group_id,
     )
+    source_entry_id = request.POST.get("source_entry_id")
+
+    if source_entry_id:
+        source_entry = get_object_or_404(
+            LeagueEntry,
+            id=source_entry_id,
+            category=group.category,
+        )
+
+        try:
+            new_entry = move_league_entry_participant_to_new_slot(
+                source_entry,
+                group,
+            )
+        except ValidationError as error:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": " ".join(error.messages),
+                },
+                status=400,
+            )
+
+        return JsonResponse(
+            {
+                "success": True,
+                "group_id": group.id,
+                "entry_id": new_entry.id,
+                "participant_id": new_entry.participant_id,
+                "participant_name": new_entry.participant.display_name,
+            }
+        )
+
     participant_id = request.POST.get("participant_id")
 
     if not participant_id:

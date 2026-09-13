@@ -22,7 +22,7 @@ from ..models import (
     TournamentMatch,
     TournamentOrganizationField,
 )
-from .stage_setup import group_base_size
+from .stage_setup import add_league_entry_slot, group_base_size
 
 
 def organization_field_label(code):
@@ -409,6 +409,30 @@ def move_league_entry_participant(source_entry, target_entry):
         "source_entry": source_entry,
         "target_entry": target_entry,
     }
+
+
+def move_league_entry_participant_to_new_slot(source_entry, target_group):
+    """
+    source_entry の参加者を、target_group内に新規作成する+1枠へ
+    移動する。
+
+    source_entry側は unassign_league_entry_participant と同じ扱いに
+    する(+1枠なら削除して詰め直し、ベース枠ならそのまま空きにする)。
+    target_group側には add_league_entry_slot で+1枠を新規作成し、
+    そこへ参加者を割り当てる。
+    """
+
+    if source_entry.participant is None:
+        raise ValidationError("この枠は未割当です。")
+
+    participant = source_entry.participant
+
+    with transaction.atomic():
+        unassign_league_entry_participant(source_entry)
+        new_entry = add_league_entry_slot(target_group)
+        assign_participant_to_league_entry(new_entry, participant)
+
+    return new_entry
 
 
 def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):

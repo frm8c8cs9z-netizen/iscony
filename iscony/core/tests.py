@@ -80,6 +80,7 @@ from .services import (
     insert_round_robin_schedule,
     move_schedule,
     move_league_entry_participant,
+    move_league_entry_participant_to_new_slot,
     delete_tournament_score,
     save_round_robin_score,
     save_tournament_score,
@@ -8099,6 +8100,176 @@ class CategoryManagementTests(TestCase):
             ["5", "6", "7", "8"],
         )
 
+    def test_move_league_entry_participant_to_new_slot_moves_base_source(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        source_entry = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=1,
+        )
+        participant = source_entry.participant
+
+        new_entry = move_league_entry_participant_to_new_slot(
+            source_entry,
+            groups[1],
+        )
+
+        source_entry.refresh_from_db()
+        self.assertIsNone(source_entry.participant)
+        self.assertEqual(new_entry.group, groups[1])
+        self.assertEqual(new_entry.display_order, 5)
+        self.assertEqual(new_entry.pair_code, "9")
+        self.assertEqual(new_entry.participant, participant)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            9,
+        )
+
+    def test_move_league_entry_participant_to_new_slot_removes_extra_source(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 3)
+        participants = self._create_participants(category, 11)
+        source_entry = None
+
+        for display_order in range(1, 5):
+            entry = self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+            if display_order == 4:
+                source_entry = entry
+        for display_order, pair_code in enumerate(range(5, 8), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+        for display_order, pair_code in enumerate(range(8, 11), start=1):
+            self._create_entry(
+                category,
+                groups[2],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        source_entry_id = source_entry.id
+        participant = source_entry.participant
+
+        new_entry = move_league_entry_participant_to_new_slot(
+            source_entry,
+            groups[2],
+        )
+
+        self.assertFalse(
+            LeagueEntry.objects.filter(id=source_entry_id).exists()
+        )
+        self.assertEqual(new_entry.group, groups[2])
+        self.assertEqual(new_entry.display_order, 4)
+        self.assertEqual(new_entry.pair_code, "10")
+        self.assertEqual(new_entry.participant, participant)
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "display_order",
+                    flat=True,
+                )
+            ),
+            [1, 2, 3],
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[1],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "pair_code",
+                    flat=True,
+                )
+            ),
+            ["4", "5", "6"],
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            10,
+        )
+
+    def test_move_league_entry_participant_to_new_slot_rolls_back_at_limit(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 8)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        source_entry = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=1,
+        )
+        participant = source_entry.participant
+
+        with self.assertRaises(ValidationError):
+            move_league_entry_participant_to_new_slot(
+                source_entry,
+                groups[1],
+            )
+
+        source_entry.refresh_from_db()
+        self.assertEqual(source_entry.participant, participant)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            8,
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[1]).count(),
+            4,
+        )
+
     def test_move_league_entry_participant_swaps_assigned_entries(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -8763,6 +8934,112 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(
             LeagueEntry.objects.filter(group__stage=stage).count(),
             9,
+        )
+
+    def test_group_add_league_entry_slot_and_assign_api_moves_source_entry(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        source_entry = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=1,
+        )
+        participant = source_entry.participant
+
+        response = self.client.post(
+            reverse(
+                "group_add_league_entry_slot_and_assign",
+                kwargs={"group_id": groups[1].id},
+            ),
+            {
+                "source_entry_id": str(source_entry.id),
+            },
+        )
+
+        added_entry = LeagueEntry.objects.get(
+            group=groups[1],
+            display_order=5,
+        )
+        source_entry.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(source_entry.participant)
+        self.assertEqual(added_entry.participant, participant)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "group_id": groups[1].id,
+                "entry_id": added_entry.id,
+                "participant_id": participant.id,
+                "participant_name": participant.display_name,
+            },
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            9,
+        )
+
+    def test_group_add_league_entry_slot_and_assign_api_rejects_same_group_source_entry(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        pair_code = 1
+
+        for group in groups:
+            for display_order in range(1, 5):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[pair_code - 1],
+                )
+                pair_code += 1
+
+        source_entry = LeagueEntry.objects.get(
+            group=groups[0],
+            display_order=1,
+        )
+        participant = source_entry.participant
+
+        response = self.client.post(
+            reverse(
+                "group_add_league_entry_slot_and_assign",
+                kwargs={"group_id": groups[0].id},
+            ),
+            {
+                "source_entry_id": str(source_entry.id),
+            },
+        )
+
+        source_entry.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertEqual(source_entry.participant, participant)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            8,
         )
 
     def test_group_add_league_entry_slot_and_assign_api_rolls_back_at_participant_limit(self):

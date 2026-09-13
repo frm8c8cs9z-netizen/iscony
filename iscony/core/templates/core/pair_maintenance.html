@@ -415,12 +415,18 @@
 
                     event.preventDefault();
 
-                    if (!data || data.type !== "participant") {
+                    if (!data) {
                         return;
                     }
 
                     const body = new URLSearchParams();
-                    body.append("participant_id", data.participantId);
+                    if (data.type === "participant") {
+                        body.append("participant_id", data.participantId);
+                    } else if (data.type === "entry") {
+                        body.append("source_entry_id", data.entryId);
+                    } else {
+                        return;
+                    }
 
                     fetch(addSlotTarget.dataset.addSlotUrl, {
                         method: "POST",
