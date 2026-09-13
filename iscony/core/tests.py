@@ -8100,6 +8100,74 @@ class CategoryManagementTests(TestCase):
             ["5", "6", "7", "8"],
         )
 
+    def test_move_league_entry_participant_refreshes_shifted_empty_target(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+        source_entry = None
+        target_entry = None
+
+        for display_order in range(1, 6):
+            entry = self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+            if display_order == 5:
+                source_entry = entry
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            participant = participants[pair_code - 1]
+            if pair_code == 6:
+                participant = None
+            entry = self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participant,
+            )
+            if pair_code == 6:
+                target_entry = entry
+
+        source_entry_id = source_entry.id
+        participant = source_entry.participant
+
+        result = move_league_entry_participant(
+            source_entry,
+            target_entry,
+        )
+
+        self.assertEqual(result["mode"], "move")
+        self.assertFalse(
+            LeagueEntry.objects.filter(id=source_entry_id).exists()
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            group_base_size(groups[0]),
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[1],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "pair_code",
+                    flat=True,
+                )
+            ),
+            ["5", "6", "7", "8"],
+        )
+        shifted_target = LeagueEntry.objects.get(id=target_entry.id)
+        self.assertEqual(shifted_target.pair_code, "5")
+        self.assertEqual(shifted_target.participant, participant)
+
     def test_move_league_entry_participant_to_new_slot_moves_base_source(self):
         category = Category.objects.create(
             tournament=self.tournament,

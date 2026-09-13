@@ -402,6 +402,7 @@ def move_league_entry_participant(source_entry, target_entry):
 
     with transaction.atomic():
         unassign_league_entry_participant(source_entry)
+        target_entry.refresh_from_db()
         assign_participant_to_league_entry(target_entry, participant)
 
     return {
