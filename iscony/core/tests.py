@@ -2591,6 +2591,152 @@ class ScheduleMoveLockTests(TestCase):
             )
 
 
+class OrderMaintenanceTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="表示順テスト大会",
+            code="ORDER",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self.other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+            display_order=2,
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.other_stage = Stage.objects.create(
+            category=self.category,
+            name="順位戦",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        self.other_category_stage = Stage.objects.create(
+            category=self.other_category,
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.group_a = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+            display_order=1,
+        )
+        self.group_b = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="B",
+            display_order=2,
+        )
+        self.url = reverse(
+            "order_maintenance",
+            kwargs={"code": self.tournament.code},
+        )
+
+    def test_group_name_can_be_updated(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"group_name_{self.group_a.id}": "C",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.group_a.refresh_from_db()
+        self.assertEqual(self.group_a.name, "C")
+
+    def test_group_names_can_be_swapped(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"group_name_{self.group_a.id}": "B",
+                f"group_name_{self.group_b.id}": "A",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.group_a.refresh_from_db()
+        self.group_b.refresh_from_db()
+        self.assertEqual(self.group_a.name, "B")
+        self.assertEqual(self.group_b.name, "A")
+
+    def test_blank_group_name_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"group_name_{self.group_a.id}": "",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "男子A / A の名前を空にすることはできません。",
+        )
+        self.group_a.refresh_from_db()
+        self.assertEqual(self.group_a.name, "A")
+
+    def test_duplicate_group_name_in_same_category_and_stage_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"group_name_{self.group_a.id}": "C",
+                f"group_name_{self.group_b.id}": "C",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "同じカテゴリ・Stage内でグループ名が重複しています: C",
+        )
+        self.group_a.refresh_from_db()
+        self.group_b.refresh_from_db()
+        self.assertEqual(self.group_a.name, "A")
+        self.assertEqual(self.group_b.name, "B")
+
+    def test_same_group_name_is_allowed_in_different_category_or_stage(self):
+        other_stage_group = Group.objects.create(
+            category=self.category,
+            stage=self.other_stage,
+            name="A",
+            display_order=1,
+        )
+        other_category_group = Group.objects.create(
+            category=self.other_category,
+            stage=self.other_category_stage,
+            name="A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                f"group_name_{self.group_a.id}": "C",
+                f"group_name_{other_stage_group.id}": "C",
+                f"group_name_{other_category_group.id}": "C",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.group_a.refresh_from_db()
+        other_stage_group.refresh_from_db()
+        other_category_group.refresh_from_db()
+        self.assertEqual(self.group_a.name, "C")
+        self.assertEqual(other_stage_group.name, "C")
+        self.assertEqual(other_category_group.name, "C")
+
+
 class CourtOrderMaintenanceTests(TestCase):
 
     def setUp(self):

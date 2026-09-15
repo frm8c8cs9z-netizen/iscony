@@ -58,7 +58,12 @@
                 >
             </td>
             <td>
-                {{ group.name }}リーグ
+                <input
+                    type="text"
+                    name="group_name_{{ group.id }}"
+                    value="{{ group.name }}"
+                    style="width:100px;"
+                >リーグ
             </td>
         </tr>
         {% endfor %}

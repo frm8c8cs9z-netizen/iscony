@@ -5,8 +5,11 @@ core.views.dashboard
 リーグ戦、トーナメント、CSV取込、PDF出力は専用ビューへ分離済み。
 """
 
+from collections import defaultdict
+
 from django.contrib import messages
 from django.core.cache import cache
+from django.db import transaction
 from django.db.models import Count, Q
 from django.urls import reverse
 from django.core.exceptions import ValidationError
@@ -1695,6 +1698,87 @@ def order_maintenance(request, code):
             if value is not None:
                 group.display_order = int(value or 0)
                 group.save()
+
+        pending_renames = []
+        has_blank_name_error = False
+
+        for group in groups:
+
+            new_name = request.POST.get(
+                f"group_name_{group.id}"
+            )
+
+            if new_name is None:
+                continue
+
+            new_name = new_name.strip()
+
+            if not new_name:
+                messages.error(
+                    request,
+                    (
+                        f"{group.category.name} / {group.name} の"
+                        "名前を空にすることはできません。"
+                    ),
+                )
+                has_blank_name_error = True
+                continue
+
+            if new_name != group.name:
+                pending_renames.append((group, new_name))
+
+        if has_blank_name_error:
+            return redirect(
+                "order_maintenance",
+                code=tournament.code,
+            )
+
+        if pending_renames:
+            final_names_by_scope = defaultdict(dict)
+
+            for group in groups:
+                final_names_by_scope[
+                    (group.category_id, group.stage_id)
+                ][group.id] = group.name
+
+            for group, new_name in pending_renames:
+                final_names_by_scope[
+                    (group.category_id, group.stage_id)
+                ][group.id] = new_name
+
+            duplicate_names = set()
+
+            for names_by_id in final_names_by_scope.values():
+                seen_names = set()
+
+                for name in names_by_id.values():
+                    if name in seen_names:
+                        duplicate_names.add(name)
+
+                    seen_names.add(name)
+
+            if duplicate_names:
+                messages.error(
+                    request,
+                    (
+                        "同じカテゴリ・Stage内でグループ名が"
+                        "重複しています: "
+                        + "、".join(sorted(duplicate_names))
+                    ),
+                )
+                return redirect(
+                    "order_maintenance",
+                    code=tournament.code,
+                )
+
+            with transaction.atomic():
+                for group, new_name in pending_renames:
+                    group.name = f"__rename_tmp_{group.id}__"
+                    group.save(update_fields=["name"])
+
+                for group, new_name in pending_renames:
+                    group.name = new_name
+                    group.save(update_fields=["name"])
 
         return redirect(
             "order_maintenance",
