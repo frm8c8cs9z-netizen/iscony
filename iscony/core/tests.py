@@ -9085,6 +9085,8 @@ class CategoryManagementTests(TestCase):
         self.assertIsNotNone(extra_row)
         self.assertNotContains(response, "枠を解除")
         self.assertIn("未割当に戻す", extra_row.group(0))
+        self.assertIn('data-role="unassign-form"', extra_row.group(0))
+        self.assertNotIn('data-role="remove-slot-form"', extra_row.group(0))
         self.assertIn(
             reverse(
                 "unassign_league_entry_participant",
@@ -9124,7 +9126,7 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-        self._create_entry(
+        extra_entry = self._create_entry(
             category,
             groups[0],
             9,
@@ -9150,7 +9152,19 @@ class CategoryManagementTests(TestCase):
             )
         )
 
+        content = response.content.decode()
+        extra_row = re.search(
+            (
+                r"<tr(?=[^>]*data-entry-id=\""
+                + str(extra_entry.id)
+                + r"\")[\s\S]*?</tr>"
+            ),
+            content,
+        )
+
+        self.assertIsNotNone(extra_row)
         self.assertContains(response, "枠を解除")
+        self.assertIn('data-role="remove-slot-form"', extra_row.group(0))
         self.assertContains(
             response,
             reverse(
@@ -9165,6 +9179,7 @@ class CategoryManagementTests(TestCase):
                 kwargs={"group_id": groups[1].id},
             ),
         )
+        self.assertNotIn('data-role="unassign-form"', extra_row.group(0))
 
     def test_add_league_entry_slot_view_rejects_already_added_group(self):
         category = Category.objects.create(
@@ -10695,6 +10710,7 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, 'data-group-id="')
         self.assertContains(response, 'data-entry-id="')
         self.assertContains(response, 'data-assigned="false"')
+        self.assertContains(response, 'data-edit-url="')
         self.assertContains(response, 'data-entry-organization')
         self.assertContains(response, 'class="pair-assignment-layout"')
         self.assertContains(response, 'draggable="true"')
@@ -10853,7 +10869,7 @@ class CategoryManagementTests(TestCase):
             )
         )
 
-        self.assertContains(response, "未割当に戻す", count=1)
+        self.assertContains(response, "未割当に戻す")
         self.assertContains(
             response,
             reverse(
@@ -10897,10 +10913,32 @@ class CategoryManagementTests(TestCase):
         self.assertIsNotNone(assigned_row)
         self.assertIsNotNone(empty_row)
         self.assertIn('data-assigned="true"', assigned_row.group(0))
+        self.assertIn(
+            (
+                'data-edit-url="'
+                + reverse(
+                    "edit_pair",
+                    kwargs={"pair_id": assigned_entry.id},
+                )
+                + '"'
+            ),
+            assigned_row.group(0),
+        )
         self.assertIn('data-unassign-url="', assigned_row.group(0))
         self.assertIn('data-move-url="', assigned_row.group(0))
         self.assertIn('draggable="true"', assigned_row.group(0))
         self.assertIn('data-assigned="false"', empty_row.group(0))
+        self.assertIn(
+            (
+                'data-edit-url="'
+                + reverse(
+                    "edit_pair",
+                    kwargs={"pair_id": empty_entry.id},
+                )
+                + '"'
+            ),
+            empty_row.group(0),
+        )
         self.assertNotIn('data-unassign-url="', empty_row.group(0))
         self.assertNotIn('data-move-url="', empty_row.group(0))
         self.assertNotIn('draggable="true"', empty_row.group(0))
@@ -10970,6 +11008,8 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(assigned_row)
         self.assertIsNotNone(empty_row)
+        self.assertIn('data-role="unassign-form"', assigned_row.group(0))
+        self.assertNotIn('data-role="unassign-form"', empty_row.group(0))
         self.assertIn(
             'class="select-participant-trigger"',
             empty_row.group(0),
@@ -10980,7 +11020,11 @@ class CategoryManagementTests(TestCase):
         )
         self.assertIn("参加者を選ぶ", empty_row.group(0))
         self.assertNotIn(
-            reverse("edit_pair", kwargs={"pair_id": empty_entry.id}),
+            (
+                '<a href="'
+                + reverse("edit_pair", kwargs={"pair_id": empty_entry.id})
+                + '">'
+            ),
             empty_row.group(0),
         )
         self.assertNotIn(

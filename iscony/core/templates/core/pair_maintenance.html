@@ -51,6 +51,7 @@
                         data-group-id="{{ row.group.id }}"
                         data-assigned="{{ pair.participant_id|yesno:'true,false' }}"
                         data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
+                        data-edit-url="{% url 'edit_pair' pair.id %}"
                         {% if pair.participant %}
                             data-unassign-url="{% url 'unassign_league_entry_participant_api' pair.id %}"
                             data-move-url="{% url 'move_league_entry_participant_api' pair.id %}"
@@ -85,14 +86,14 @@
                                 </button>
                             {% endif %}
                             {% if pair.participant %}
-                                <form method="post" action="{% url 'unassign_league_entry_participant' pair.id %}">
+                                <form method="post" action="{% url 'unassign_league_entry_participant' pair.id %}" data-role="unassign-form">
                                     {% csrf_token %}
                                     <button type="submit">未割当に戻す</button>
                                 </form>
                             {% endif %}
                             {# +1枠が割当済みの場合は、未割当に戻すボタンが同じ結果(参加者解除+枠削除)になるため、枠を解除は未割当のときだけ表示する #}
                             {% if forloop.last and row.can_remove_slot and not pair.participant %}
-                                <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}">
+                                <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}" data-role="remove-slot-form">
                                     {% csrf_token %}
                                     <button type="submit">枠を解除</button>
                                 </form>
@@ -318,6 +319,63 @@
 
                         if (participant) {
                             participant.remove();
+                        }
+
+                        const actionCell = entry.querySelector(
+                            ".entry-action-cell"
+                        );
+                        if (actionCell) {
+                            const trigger = actionCell.querySelector(
+                                ".select-participant-trigger"
+                            );
+                            if (trigger) {
+                                const editLink = document.createElement("a");
+                                editLink.href = entry.dataset.editUrl;
+                                editLink.textContent = "編集";
+                                trigger.replaceWith(editLink);
+                            }
+
+                            if (
+                                !actionCell.querySelector(
+                                    "[data-role=\"unassign-form\"]"
+                                )
+                            ) {
+                                const unassignForm = (
+                                    document.createElement("form")
+                                );
+                                unassignForm.method = "post";
+                                unassignForm.action = (
+                                    entry.dataset.assignUrl.replace(
+                                        /\/assign\/$/,
+                                        "/unassign/"
+                                    )
+                                );
+                                unassignForm.dataset.role = "unassign-form";
+
+                                const csrfInput = (
+                                    document.createElement("input")
+                                );
+                                csrfInput.type = "hidden";
+                                csrfInput.name = "csrfmiddlewaretoken";
+                                csrfInput.value = csrfToken;
+                                unassignForm.appendChild(csrfInput);
+
+                                const submitButton = (
+                                    document.createElement("button")
+                                );
+                                submitButton.type = "submit";
+                                submitButton.textContent = "未割当に戻す";
+                                unassignForm.appendChild(submitButton);
+
+                                actionCell.appendChild(unassignForm);
+                            }
+
+                            const removeSlotForm = actionCell.querySelector(
+                                "[data-role=\"remove-slot-form\"]"
+                            );
+                            if (removeSlotForm) {
+                                removeSlotForm.remove();
+                            }
                         }
                     })
                     .catch(function() {
