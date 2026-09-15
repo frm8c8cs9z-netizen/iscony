@@ -2736,6 +2736,90 @@ class OrderMaintenanceTests(TestCase):
         self.assertEqual(other_stage_group.name, "C")
         self.assertEqual(other_category_group.name, "C")
 
+    def test_category_scoped_post_updates_only_category_groups(self):
+        other_category_group = Group.objects.create(
+            category=self.other_category,
+            stage=self.other_category_stage,
+            name="A",
+            display_order=1,
+        )
+        url = reverse(
+            "category_group_order_maintenance",
+            kwargs={
+                "code": self.tournament.code,
+                "category_id": self.category.id,
+            },
+        )
+
+        response = self.client.post(
+            url,
+            {
+                f"group_order_{self.group_a.id}": "3",
+                f"group_name_{self.group_a.id}": "C",
+                f"group_order_{other_category_group.id}": "9",
+                f"group_name_{other_category_group.id}": "Z",
+            },
+        )
+
+        self.assertRedirects(response, url)
+        self.group_a.refresh_from_db()
+        other_category_group.refresh_from_db()
+        self.assertEqual(self.group_a.display_order, 3)
+        self.assertEqual(self.group_a.name, "C")
+        self.assertEqual(other_category_group.display_order, 1)
+        self.assertEqual(other_category_group.name, "A")
+
+    def test_stage_scoped_post_updates_only_stage_groups(self):
+        other_stage_group = Group.objects.create(
+            category=self.category,
+            stage=self.other_stage,
+            name="A",
+            display_order=1,
+        )
+        url = reverse(
+            "stage_group_order_maintenance",
+            kwargs={
+                "code": self.tournament.code,
+                "category_id": self.category.id,
+                "stage_id": self.stage.id,
+            },
+        )
+
+        response = self.client.post(
+            url,
+            {
+                f"group_order_{self.group_a.id}": "3",
+                f"group_name_{self.group_a.id}": "C",
+                f"group_order_{other_stage_group.id}": "9",
+                f"group_name_{other_stage_group.id}": "Z",
+            },
+        )
+
+        self.assertRedirects(response, url)
+        self.group_a.refresh_from_db()
+        other_stage_group.refresh_from_db()
+        self.assertEqual(self.group_a.display_order, 3)
+        self.assertEqual(self.group_a.name, "C")
+        self.assertEqual(other_stage_group.display_order, 1)
+        self.assertEqual(other_stage_group.name, "A")
+
+    def test_category_scoped_get_heading_includes_category_name(self):
+        response = self.client.get(
+            reverse(
+                "category_group_order_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "男子A のリーグ名称・表示順メンテナンス",
+        )
+
 
 class CategoryOrderMaintenanceTests(TestCase):
 
@@ -7304,6 +7388,8 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "カテゴリ管理")
         self.assertContains(response, "参加者管理")
         self.assertContains(response, "表示順調整")
+        self.assertContains(response, "リーグ表示順")
+        self.assertNotContains(response, "カテゴリ・リーグ表示順")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
         self.assertContains(response, "進出元一覧・入れ替え")
@@ -7895,9 +7981,20 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Stage管理")
         self.assertContains(response, "Stage追加")
+        self.assertContains(response, "リーグ名称・表示順")
         self.assertContains(response, "予選リーグ")
         self.assertContains(response, "決勝トーナメント")
         self.assertNotContains(response, "次段階")
+        self.assertContains(
+            response,
+            reverse(
+                "category_group_order_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
         self.assertContains(
             response,
             reverse(

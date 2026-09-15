@@ -23,6 +23,7 @@ from django.shortcuts import (
 from ..models import (
     Tournament,
     Category,
+    Stage,
     Participant,
     Group,
     Court,
@@ -1767,13 +1768,30 @@ def category_order_maintenance(request, code):
     )
 
 
-def order_maintenance(request, code):
+def order_maintenance(request, code, category_id=None, stage_id=None):
     """リーグの表示順・名前をまとめて編集する。"""
 
     tournament = get_object_or_404(
         Tournament,
         code=code
     )
+
+    category = None
+    stage = None
+
+    if category_id is not None:
+        category = get_object_or_404(
+            Category,
+            id=category_id,
+            tournament=tournament,
+        )
+
+    if stage_id is not None:
+        stage = get_object_or_404(
+            Stage,
+            id=stage_id,
+            category=category,
+        )
 
     groups = Group.objects.filter(
         category__tournament=tournament
@@ -1785,6 +1803,12 @@ def order_maintenance(request, code):
         "display_order",
         "name"
     )
+
+    if category is not None:
+        groups = groups.filter(category=category)
+
+    if stage is not None:
+        groups = groups.filter(stage=stage)
 
     if request.method == "POST":
 
@@ -1828,8 +1852,7 @@ def order_maintenance(request, code):
 
         if has_blank_name_error:
             return redirect(
-                "order_maintenance",
-                code=tournament.code,
+                request.path
             )
 
         if pending_renames:
@@ -1866,8 +1889,7 @@ def order_maintenance(request, code):
                     ),
                 )
                 return redirect(
-                    "order_maintenance",
-                    code=tournament.code,
+                    request.path
                 )
 
             with transaction.atomic():
@@ -1880,8 +1902,7 @@ def order_maintenance(request, code):
                     group.save(update_fields=["name"])
 
         return redirect(
-            "order_maintenance",
-            code=tournament.code
+            request.path
         )
 
     return render(
@@ -1889,6 +1910,8 @@ def order_maintenance(request, code):
         "core/order_maintenance.html",
         {
             "tournament": tournament,
+            "category": category,
+            "stage": stage,
             "groups": groups,
         }
     )

@@ -3,7 +3,13 @@
 {% block content %}
 
 <h2>
-    {{ tournament.name }} リーグ名称・表示順メンテナンス
+    {% if stage %}
+        {{ category.name }} / {{ stage.name }} のリーグ名称・表示順メンテナンス
+    {% elif category %}
+        {{ category.name }} のリーグ名称・表示順メンテナンス
+    {% else %}
+        {{ tournament.name }} リーグ名称・表示順メンテナンス
+    {% endif %}
 </h2>
 
 <form method="post">
