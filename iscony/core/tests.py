@@ -10905,6 +10905,94 @@ class CategoryManagementTests(TestCase):
         self.assertNotIn('data-move-url="', empty_row.group(0))
         self.assertNotIn('draggable="true"', empty_row.group(0))
 
+    def test_stage_pair_maintenance_shows_tap_select_button_only_for_empty_entries(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        assigned_entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+        empty_entry = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=None,
+            pair_code="2",
+            display_order=2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        content = response.content.decode()
+        assigned_row = re.search(
+            (
+                r"<tr(?=[^>]*data-entry-id=\""
+                + str(assigned_entry.id)
+                + r"\")[\s\S]*?</tr>"
+            ),
+            content,
+        )
+        empty_row = re.search(
+            (
+                r"<tr(?=[^>]*data-entry-id=\""
+                + str(empty_entry.id)
+                + r"\")[\s\S]*?</tr>"
+            ),
+            content,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(assigned_row)
+        self.assertIsNotNone(empty_row)
+        self.assertIn(
+            'class="select-participant-trigger"',
+            empty_row.group(0),
+        )
+        self.assertIn(
+            '<button type="button" class="select-participant-trigger">',
+            empty_row.group(0),
+        )
+        self.assertIn("参加者を選ぶ", empty_row.group(0))
+        self.assertNotIn(
+            reverse("edit_pair", kwargs={"pair_id": empty_entry.id}),
+            empty_row.group(0),
+        )
+        self.assertNotIn(
+            'class="select-participant-trigger"',
+            assigned_row.group(0),
+        )
+        self.assertIn(
+            reverse("edit_pair", kwargs={"pair_id": assigned_entry.id}),
+            assigned_row.group(0),
+        )
+        self.assertIn("編集", assigned_row.group(0))
+
     def test_pair_maintenance_without_stage_keeps_existing_table(self):
         category = Category.objects.create(
             tournament=self.tournament,
