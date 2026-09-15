@@ -39,6 +39,7 @@ from ..services import (
     cancel_pair_retirement,
     add_league_entry_slot,
     assign_participant_to_league_entry,
+    assign_participant_with_shift,
     create_extra_round_robin_match,
     delete_round_robin_score,
     insert_round_robin_schedule,
@@ -1637,8 +1638,13 @@ def assign_league_entry_participant_api(request, entry_id):
         category=entry.category,
     )
 
+    was_occupied = entry.participant_id is not None
+
     try:
-        assign_participant_to_league_entry(entry, participant)
+        if was_occupied:
+            assign_participant_with_shift(entry, participant)
+        else:
+            assign_participant_to_league_entry(entry, participant)
     except ValidationError as error:
         return JsonResponse(
             {
@@ -1672,6 +1678,7 @@ def assign_league_entry_participant_api(request, entry_id):
             "entry_id": entry.id,
             "group_id": entry.group_id,
             "group_can_add_slot": group_can_add_slot,
+            "was_occupied": was_occupied,
             "participant_id": participant.id,
             "participant_name": participant.display_name,
             "participant_organization": participant.effective_organization,

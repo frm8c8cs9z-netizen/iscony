@@ -264,6 +264,72 @@ def assign_participant_to_league_entry(entry, participant):
     return entry
 
 
+def assign_participant_with_shift(entry, participant):
+    """
+    割当済みのLeagueEntry(entry)へ、未割当のparticipantを割り当てる。
+
+    同じグループ内でentryより後ろに未割当の枠があれば、entryから
+    その空き枠の直前までの参加者を1つずつ後ろへ送り、entryへ
+    participantを割り当てる(連鎖シフト、誰も未割当に戻らない)。
+
+    後ろに空き枠が無ければ、entryの現在の参加者を未割当に戻しつつ
+    participantをentryへ割り当てる(スワップ)。
+    """
+
+    if entry.participant is None:
+        raise ValidationError("この枠は未割当です。")
+
+    if _entry_has_completed_match(entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、参加者を変更できません。"
+        )
+
+    conflict = find_conflicting_league_entry(
+        participant,
+        entry.group.stage,
+        exclude_id=entry.id,
+    )
+    if conflict:
+        raise ValidationError(
+            f"この参加者は既に{conflict.group.name}に割り当てられています。"
+        )
+
+    with transaction.atomic():
+        later_entries = list(
+            LeagueEntry.objects.filter(
+                group=entry.group,
+                display_order__gt=entry.display_order,
+            ).order_by("display_order")
+        )
+
+        empty_index = next(
+            (
+                index
+                for index, later_entry in enumerate(later_entries)
+                if later_entry.participant_id is None
+            ),
+            None,
+        )
+
+        if empty_index is not None:
+            chain = [entry] + later_entries[: empty_index + 1]
+            old_participants = [
+                chain_entry.participant for chain_entry in chain
+            ]
+
+            for index in range(1, len(chain)):
+                chain[index].participant = old_participants[index - 1]
+                chain[index].save(update_fields=["participant"])
+
+            entry.participant = participant
+            entry.save(update_fields=["participant"])
+        else:
+            entry.participant = participant
+            entry.save(update_fields=["participant"])
+
+    return entry
+
+
 def _entry_has_completed_match(entry):
     """LeagueEntryに結果入力済みの試合があるかを返す。"""
 

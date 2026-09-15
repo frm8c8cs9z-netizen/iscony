@@ -256,7 +256,6 @@
 
                     if (
                         entry
-                        && entry.dataset.assigned === "false"
                         && data
                         && data.type === "participant"
                     ) {
@@ -289,6 +288,14 @@
                                         result.data.error
                                         || "参加者を割り当てられませんでした。"
                                     );
+                                    return;
+                                }
+
+                                if (result.data.was_occupied) {
+                                    window.location.hash = (
+                                        "group-" + entry.dataset.groupId
+                                    );
+                                    window.location.reload();
                                     return;
                                 }
 

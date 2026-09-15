@@ -74,6 +74,7 @@ from .services import (
     cancel_pair_retirement,
     clone_tournament_without_results,
     add_league_entry_slot,
+    assign_participant_with_shift,
     create_extra_round_robin_match,
     group_base_size,
     consume_stage_advancement_result,
@@ -8399,6 +8400,210 @@ class CategoryManagementTests(TestCase):
             before_slots,
         )
 
+    def test_assign_participant_with_shift_shifts_to_later_empty_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 1)
+        participants = self._create_participants(category, 4)
+        entries = [
+            self._create_entry(
+                category,
+                groups[0],
+                number,
+                number,
+                participants[number - 1] if number < 4 else None,
+            )
+            for number in range(1, 5)
+        ]
+        new_participant = participants[3]
+        before_slots = list(
+            LeagueEntry.objects.filter(
+                group=groups[0],
+            ).order_by(
+                "display_order",
+            ).values_list(
+                "id",
+                "pair_code",
+                "display_order",
+            )
+        )
+
+        result = assign_participant_with_shift(
+            entries[1],
+            new_participant,
+        )
+
+        self.assertEqual(result.id, entries[1].id)
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "participant_id",
+                    flat=True,
+                )
+            ),
+            [
+                participants[0].id,
+                new_participant.id,
+                participants[1].id,
+                participants[2].id,
+            ],
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "id",
+                    "pair_code",
+                    "display_order",
+                )
+            ),
+            before_slots,
+        )
+
+    def test_assign_participant_with_shift_swaps_when_no_later_empty_slot(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 1)
+        participants = self._create_participants(category, 5)
+        entries = [
+            self._create_entry(
+                category,
+                groups[0],
+                number,
+                number,
+                participants[number - 1],
+            )
+            for number in range(1, 5)
+        ]
+        new_participant = participants[4]
+
+        assign_participant_with_shift(
+            entries[1],
+            new_participant,
+        )
+
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "participant_id",
+                    flat=True,
+                )
+            ),
+            [
+                participants[0].id,
+                new_participant.id,
+                participants[2].id,
+                participants[3].id,
+            ],
+        )
+        self.assertFalse(
+            LeagueEntry.objects.filter(
+                group__stage=groups[0].stage,
+                participant=participants[1],
+            ).exists()
+        )
+
+    def test_assign_participant_with_shift_rejects_completed_match(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 1)
+        participants = self._create_participants(category, 4)
+        entries = [
+            self._create_entry(
+                category,
+                groups[0],
+                number,
+                number,
+                participants[number - 1] if number < 4 else None,
+            )
+            for number in range(1, 5)
+        ]
+        RoundRobinMatch.objects.create(
+            group=groups[0],
+            pair1=entries[1],
+            pair2=entries[0],
+            completed=True,
+        )
+
+        with self.assertRaises(ValidationError):
+            assign_participant_with_shift(
+                entries[1],
+                participants[3],
+            )
+
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "participant_id",
+                    flat=True,
+                )
+            ),
+            [
+                participants[0].id,
+                participants[1].id,
+                participants[2].id,
+                None,
+            ],
+        )
+
+    def test_assign_participant_with_shift_rejects_stage_conflict(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 3)
+        source_entry = self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        target_entry = self._create_entry(
+            category,
+            groups[1],
+            2,
+            1,
+            participants[1],
+        )
+
+        with self.assertRaises(ValidationError):
+            assign_participant_with_shift(
+                target_entry,
+                participants[0],
+            )
+
+        source_entry.refresh_from_db()
+        target_entry.refresh_from_db()
+        self.assertEqual(source_entry.participant, participants[0])
+        self.assertEqual(target_entry.participant, participants[1])
+
     def test_move_league_entry_participant_rejects_completed_match_move(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -9362,10 +9567,72 @@ class CategoryManagementTests(TestCase):
                 "entry_id": entry.id,
                 "group_id": group.id,
                 "group_can_add_slot": False,
+                "was_occupied": False,
                 "participant_id": participant.id,
                 "participant_name": "山田・田中",
                 "participant_organization": "",
             },
+        )
+
+    def test_assign_league_entry_participant_api_assigns_occupied_entry(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _, groups = self._create_league_stage(category, 1)
+        participants = self._create_participants(category, 4)
+        target_entry = self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        self._create_entry(
+            category,
+            groups[0],
+            2,
+            2,
+            participants[1],
+        )
+        self._create_entry(
+            category,
+            groups[0],
+            3,
+            3,
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_league_entry_participant",
+                kwargs={"entry_id": target_entry.id},
+            ),
+            {
+                "participant_id": str(participants[2].id),
+            },
+        )
+
+        target_entry.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["was_occupied"])
+        self.assertEqual(target_entry.participant, participants[2])
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(
+                    group=groups[0],
+                ).order_by(
+                    "display_order",
+                ).values_list(
+                    "participant_id",
+                    flat=True,
+                )
+            ),
+            [
+                participants[2].id,
+                participants[0].id,
+                participants[1].id,
+            ],
         )
 
     def test_assign_league_entry_participant_api_returns_can_add_slot_true(self):
@@ -9416,6 +9683,7 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["group_id"], groups[0].id)
+        self.assertFalse(response.json()["was_occupied"])
         self.assertTrue(response.json()["group_can_add_slot"])
 
     def test_assign_league_entry_participant_api_returns_can_add_slot_false_for_empty_slot(self):
@@ -9479,6 +9747,7 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["group_id"], groups[0].id)
+        self.assertFalse(response.json()["was_occupied"])
         self.assertFalse(response.json()["group_can_add_slot"])
 
     def test_assign_league_entry_participant_api_returns_can_add_slot_false_at_participant_limit(self):
@@ -9529,6 +9798,7 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["group_id"], groups[0].id)
+        self.assertFalse(response.json()["was_occupied"])
         self.assertFalse(response.json()["group_can_add_slot"])
 
     def test_assign_league_entry_participant_api_returns_organization(self):
