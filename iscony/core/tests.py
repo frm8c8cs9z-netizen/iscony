@@ -8864,7 +8864,7 @@ class CategoryManagementTests(TestCase):
             )
         )
 
-        self.assertContains(response, "+1枠解除")
+        self.assertContains(response, "枠を解除")
         self.assertContains(
             response,
             reverse(
@@ -10365,7 +10365,7 @@ class CategoryManagementTests(TestCase):
                 kwargs={"group_id": group_a.id},
             ),
         )
-        self.assertNotContains(response, "+1枠解除")
+        self.assertNotContains(response, "枠を解除")
 
     def test_stage_pair_maintenance_add_slot_ghost_row_has_drop_target_data(self):
         category = Category.objects.create(

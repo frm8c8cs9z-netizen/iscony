@@ -88,6 +88,12 @@
                                     <button type="submit">未割当に戻す</button>
                                 </form>
                             {% endif %}
+                            {% if forloop.last and row.can_remove_slot %}
+                                <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit">枠を解除</button>
+                                </form>
+                            {% endif %}
                         </td>
                         <td>
                             <a href="{% url 'league_entry_action' pair.id %}">
@@ -112,13 +118,6 @@
                     </tr>
                     {% endif %}
                 </table>
-
-                {% if row.can_remove_slot %}
-                    <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}">
-                        {% csrf_token %}
-                        <button type="submit">+1枠解除</button>
-                    </form>
-                {% endif %}
             {% endfor %}
         </div>
 
