@@ -96,19 +96,24 @@
                         </td>
                     </tr>
                     {% endfor %}
-                </table>
 
-                {% if row.can_add_slot %}
-                    <form
-                        method="post"
-                        action="{% url 'add_league_entry_slot' row.group.id %}"
+                    {% if row.can_add_slot %}
+                    <tr
+                        class="entry-ghost-row"
                         data-group-id="{{ row.group.id }}"
                         data-add-slot-url="{% url 'group_add_league_entry_slot_and_assign' row.group.id %}"
                     >
-                        {% csrf_token %}
-                        <button type="submit">+1枠追加</button>
-                    </form>
-                {% elif row.can_remove_slot %}
+                        <td colspan="7">
+                            <form method="post" action="{% url 'add_league_entry_slot' row.group.id %}">
+                                {% csrf_token %}
+                                <button type="submit">+1枠を追加</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+
+                {% if row.can_remove_slot %}
                     <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}">
                         {% csrf_token %}
                         <button type="submit">+1枠解除</button>

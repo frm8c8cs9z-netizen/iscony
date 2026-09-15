@@ -8819,7 +8819,7 @@ class CategoryManagementTests(TestCase):
             )
         )
 
-        self.assertNotContains(response, "+1枠追加")
+        self.assertNotContains(response, "+1枠を追加")
         self.assertNotContains(
             response,
             reverse(
@@ -10349,7 +10349,8 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, 'draggable="true"')
         self.assertContains(response, 'data-participant-id="')
         self.assertContains(response, 'data-participant-name="未割当4A・未割当4B"')
-        self.assertContains(response, "+1枠追加")
+        self.assertContains(response, "+1枠を追加")
+        self.assertContains(response, 'class="entry-ghost-row"')
         self.assertContains(
             response,
             reverse(
@@ -10366,7 +10367,7 @@ class CategoryManagementTests(TestCase):
         )
         self.assertNotContains(response, "+1枠解除")
 
-    def test_stage_pair_maintenance_add_slot_form_has_drop_target_data(self):
+    def test_stage_pair_maintenance_add_slot_ghost_row_has_drop_target_data(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -10416,7 +10417,17 @@ class CategoryManagementTests(TestCase):
             "group_add_league_entry_slot_and_assign",
             kwargs={"group_id": groups[1].id},
         )
-        group_b_form = re.search(
+        group_b_ghost_row = re.search(
+            (
+                r"<tr(?=[^>]*class=\"entry-ghost-row\")"
+                + r"(?=[^>]*data-group-id=\""
+                + str(groups[1].id)
+                + r"\")[^>]*>"
+            ),
+            content,
+            re.S,
+        )
+        group_b_add_slot_form = re.search(
             (
                 r"<form(?=[^>]*action=\""
                 + reverse(
@@ -10430,15 +10441,18 @@ class CategoryManagementTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(group_b_form)
+        self.assertIsNotNone(group_b_ghost_row)
+        self.assertIsNotNone(group_b_add_slot_form)
         self.assertIn(
             f'data-group-id="{groups[1].id}"',
-            group_b_form.group(0),
+            group_b_ghost_row.group(0),
         )
         self.assertIn(
             f'data-add-slot-url="{group_b_add_slot_url}"',
-            group_b_form.group(0),
+            group_b_ghost_row.group(0),
         )
+        self.assertContains(response, 'colspan="7"')
+        self.assertContains(response, "+1枠を追加")
         self.assertNotIn(
             group_a_add_slot_url,
             content,
@@ -10579,7 +10593,7 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, "対象1")
         self.assertContains(response, "編集")
         self.assertNotContains(response, "未割当の参加者")
-        self.assertNotContains(response, "+1枠追加")
+        self.assertNotContains(response, "+1枠を追加")
 
     def test_stage_pair_maintenance_shows_slot_shortage(self):
         category = Category.objects.create(
