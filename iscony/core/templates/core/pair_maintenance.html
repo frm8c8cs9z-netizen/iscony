@@ -159,6 +159,7 @@
                 "#unassigned-participant-list"
             );
             let selectedEntryForTap = null;
+            let highlightedDropTarget = null;
 
             function buildDragData(event) {
                 const participant = event.target.closest(
@@ -333,6 +334,24 @@
                 selectedEntryForTap = null;
             }
 
+            function setDropHighlight(target) {
+                if (highlightedDropTarget === target) {
+                    return;
+                }
+
+                if (highlightedDropTarget) {
+                    highlightedDropTarget.classList.remove(
+                        "drag-hover-target"
+                    );
+                }
+
+                if (target) {
+                    target.classList.add("drag-hover-target");
+                }
+
+                highlightedDropTarget = target;
+            }
+
             document.addEventListener("dragstart", function(event) {
                 const data = buildDragData(event);
                 if (!data) {
@@ -345,11 +364,16 @@
                 );
             });
 
+            document.addEventListener("dragend", function() {
+                setDropHighlight(null);
+            });
+
             if (entryList) {
                 entryList.addEventListener("dragover", function(event) {
                     const entry = event.target.closest("[data-entry-id]");
                     if (entry) {
                         event.preventDefault();
+                        setDropHighlight(entry);
                         return;
                     }
 
@@ -358,7 +382,11 @@
                     );
                     if (addSlotTarget) {
                         event.preventDefault();
+                        setDropHighlight(addSlotTarget);
+                        return;
                     }
+
+                    setDropHighlight(null);
                 });
 
                 entryList.addEventListener("drop", function(event) {
@@ -371,6 +399,7 @@
                         && data.type === "participant"
                     ) {
                         event.preventDefault();
+                        setDropHighlight(null);
                         assignParticipantToEntry(
                             entry,
                             data.participantId
@@ -380,6 +409,7 @@
 
                     if (entry && data && data.type === "entry") {
                         event.preventDefault();
+                        setDropHighlight(null);
 
                         if (data.entryId === entry.dataset.entryId) {
                             return;
@@ -444,6 +474,7 @@
                     }
 
                     event.preventDefault();
+                    setDropHighlight(null);
 
                     if (!data) {
                         return;
@@ -522,6 +553,7 @@
             if (unassignedList) {
                 unassignedList.addEventListener("dragover", function(event) {
                     event.preventDefault();
+                    setDropHighlight(unassignedList);
                 });
 
                 unassignedList.addEventListener("drop", function(event) {
@@ -531,6 +563,7 @@
                     }
 
                     event.preventDefault();
+                    setDropHighlight(null);
 
                     const entry = document.querySelector(
                         "[data-entry-id=\"" + data.entryId + "\"]"
