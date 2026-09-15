@@ -3,37 +3,12 @@
 {% block content %}
 
 <h2>
-    {{ tournament.name }} 表示順メンテナンス
+    {{ tournament.name }} リーグ名称・表示順メンテナンス
 </h2>
 
 <form method="post">
 
     {% csrf_token %}
-
-    <h3>カテゴリ表示順</h3>
-
-    <table>
-        <tr>
-            <th>表示順</th>
-            <th>カテゴリ</th>
-        </tr>
-
-        {% for category in categories %}
-        <tr>
-            <td>
-                <input
-                    type="number"
-                    name="category_order_{{ category.id }}"
-                    value="{{ category.display_order }}"
-                    style="width:70px;"
-                >
-            </td>
-            <td>
-                {{ category.name }}
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
 
     <h3>リーグ表示順</h3>
 

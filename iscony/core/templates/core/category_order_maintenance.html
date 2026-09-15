@@ -1,0 +1,47 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    {{ tournament.name }} カテゴリ名称・表示順メンテナンス
+</h2>
+
+<form method="post">
+
+    {% csrf_token %}
+
+    <table>
+        <tr>
+            <th>表示順</th>
+            <th>カテゴリ</th>
+        </tr>
+
+        {% for category in categories %}
+        <tr>
+            <td>
+                <input
+                    type="number"
+                    name="category_order_{{ category.id }}"
+                    value="{{ category.display_order }}"
+                    style="width:70px;"
+                >
+            </td>
+            <td>
+                <input
+                    type="text"
+                    name="category_name_{{ category.id }}"
+                    value="{{ category.name }}"
+                    style="width:100px;"
+                >
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <button type="submit">
+        保存
+    </button>
+
+</form>
+
+{% endblock %}

@@ -2737,6 +2737,115 @@ class OrderMaintenanceTests(TestCase):
         self.assertEqual(other_category_group.name, "C")
 
 
+class CategoryOrderMaintenanceTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="カテゴリ順テスト大会",
+            code="CATEGORYORDER",
+        )
+        self.category_a = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self.category_b = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+            display_order=2,
+        )
+        self.url = reverse(
+            "category_order_maintenance",
+            kwargs={"code": self.tournament.code},
+        )
+
+    def test_category_name_can_be_updated(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"category_name_{self.category_a.id}": "男子B",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.category_a.refresh_from_db()
+        self.assertEqual(self.category_a.name, "男子B")
+
+    def test_category_names_can_be_swapped(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"category_name_{self.category_a.id}": "女子A",
+                f"category_name_{self.category_b.id}": "男子A",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.category_a.refresh_from_db()
+        self.category_b.refresh_from_db()
+        self.assertEqual(self.category_a.name, "女子A")
+        self.assertEqual(self.category_b.name, "男子A")
+
+    def test_blank_category_name_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"category_name_{self.category_a.id}": "",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "男子A の名前を空にすることはできません。",
+        )
+        self.category_a.refresh_from_db()
+        self.assertEqual(self.category_a.name, "男子A")
+
+    def test_duplicate_category_name_in_same_tournament_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"category_name_{self.category_a.id}": "混合",
+                f"category_name_{self.category_b.id}": "混合",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "同じ大会内でカテゴリ名が重複しています: 混合",
+        )
+        self.category_a.refresh_from_db()
+        self.category_b.refresh_from_db()
+        self.assertEqual(self.category_a.name, "男子A")
+        self.assertEqual(self.category_b.name, "女子A")
+
+    def test_same_category_name_is_allowed_in_different_tournament(self):
+        other_tournament = Tournament.objects.create(
+            name="別カテゴリ順テスト大会",
+            code="OTHERCATEGORYORDER",
+        )
+        other_category = Category.objects.create(
+            tournament=other_tournament,
+            name="混合",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                f"category_name_{self.category_a.id}": "混合",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.category_a.refresh_from_db()
+        other_category.refresh_from_db()
+        self.assertEqual(self.category_a.name, "混合")
+        self.assertEqual(other_category.name, "混合")
+
+
 class CourtOrderMaintenanceTests(TestCase):
 
     def setUp(self):
@@ -7369,6 +7478,13 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, later_category.name)
         self.assertContains(response, "Stage管理")
         self.assertNotContains(response, "Stage進行")
+        self.assertContains(
+            response,
+            reverse(
+                "category_order_maintenance",
+                kwargs={"code": self.tournament.code},
+            ),
+        )
         self.assertContains(
             response,
             reverse(

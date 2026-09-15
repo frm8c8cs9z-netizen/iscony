@@ -1651,8 +1651,8 @@ def edit_schedule(request, schedule_id):
     )
 
 
-def order_maintenance(request, code):
-    """カテゴリとリーグの表示順をまとめて編集する。"""
+def category_order_maintenance(request, code):
+    """カテゴリの名前・表示順をまとめて編集する。"""
 
     tournament = get_object_or_404(
         Tournament,
@@ -1662,17 +1662,6 @@ def order_maintenance(request, code):
     categories = Category.objects.filter(
         tournament=tournament
     ).order_by(
-        "display_order",
-        "name"
-    )
-
-    groups = Group.objects.filter(
-        category__tournament=tournament
-    ).select_related(
-        "category"
-    ).order_by(
-        "category__display_order",
-        "category__name",
         "display_order",
         "name"
     )
@@ -1688,6 +1677,116 @@ def order_maintenance(request, code):
             if value is not None:
                 category.display_order = int(value or 0)
                 category.save()
+
+        pending_renames = []
+        has_blank_name_error = False
+
+        for category in categories:
+
+            new_name = request.POST.get(
+                f"category_name_{category.id}"
+            )
+
+            if new_name is None:
+                continue
+
+            new_name = new_name.strip()
+
+            if not new_name:
+                messages.error(
+                    request,
+                    (
+                        f"{category.name} の"
+                        "名前を空にすることはできません。"
+                    ),
+                )
+                has_blank_name_error = True
+                continue
+
+            if new_name != category.name:
+                pending_renames.append((category, new_name))
+
+        if has_blank_name_error:
+            return redirect(
+                "category_order_maintenance",
+                code=tournament.code,
+            )
+
+        if pending_renames:
+            final_names = {}
+
+            for category in categories:
+                final_names[category.id] = category.name
+
+            for category, new_name in pending_renames:
+                final_names[category.id] = new_name
+
+            seen_names = set()
+            duplicate_names = set()
+
+            for name in final_names.values():
+                if name in seen_names:
+                    duplicate_names.add(name)
+
+                seen_names.add(name)
+
+            if duplicate_names:
+                messages.error(
+                    request,
+                    (
+                        "同じ大会内でカテゴリ名が重複しています: "
+                        + "、".join(sorted(duplicate_names))
+                    ),
+                )
+                return redirect(
+                    "category_order_maintenance",
+                    code=tournament.code,
+                )
+
+            with transaction.atomic():
+                for category, new_name in pending_renames:
+                    category.name = f"__rename_tmp_{category.id}__"
+                    category.save(update_fields=["name"])
+
+                for category, new_name in pending_renames:
+                    category.name = new_name
+                    category.save(update_fields=["name"])
+
+        return redirect(
+            "category_order_maintenance",
+            code=tournament.code
+        )
+
+    return render(
+        request,
+        "core/category_order_maintenance.html",
+        {
+            "tournament": tournament,
+            "categories": categories,
+        }
+    )
+
+
+def order_maintenance(request, code):
+    """リーグの表示順・名前をまとめて編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code
+    )
+
+    groups = Group.objects.filter(
+        category__tournament=tournament
+    ).select_related(
+        "category"
+    ).order_by(
+        "category__display_order",
+        "category__name",
+        "display_order",
+        "name"
+    )
+
+    if request.method == "POST":
 
         for group in groups:
 
@@ -1790,7 +1889,6 @@ def order_maintenance(request, code):
         "core/order_maintenance.html",
         {
             "tournament": tournament,
-            "categories": categories,
             "groups": groups,
         }
     )
