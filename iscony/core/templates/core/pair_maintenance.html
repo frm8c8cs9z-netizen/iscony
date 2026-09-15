@@ -88,7 +88,8 @@
                                     <button type="submit">未割当に戻す</button>
                                 </form>
                             {% endif %}
-                            {% if forloop.last and row.can_remove_slot %}
+                            {# +1枠が割当済みの場合は、未割当に戻すボタンが同じ結果(参加者解除+枠削除)になるため、枠を解除は未割当のときだけ表示する #}
+                            {% if forloop.last and row.can_remove_slot and not pair.participant %}
                                 <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}">
                                     {% csrf_token %}
                                     <button type="submit">枠を解除</button>

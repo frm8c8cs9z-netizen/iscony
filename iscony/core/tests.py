@@ -8828,7 +8828,7 @@ class CategoryManagementTests(TestCase):
             ),
         )
 
-    def test_stage_pair_maintenance_shows_remove_slot_button_for_extra_group(self):
+    def test_stage_pair_maintenance_hides_remove_slot_button_for_assigned_extra_group(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -8837,7 +8837,81 @@ class CategoryManagementTests(TestCase):
         stage, groups = self._create_league_stage(category, 2)
         participants = self._create_participants(category, 9)
 
+        extra_entry = None
         for display_order in range(1, 6):
+            entry = self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+            if display_order == 5:
+                extra_entry = entry
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                participants[pair_code - 1],
+            )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        content = response.content.decode()
+        extra_row = re.search(
+            (
+                r"<tr(?=[^>]*data-entry-id=\""
+                + str(extra_entry.id)
+                + r"\")[\s\S]*?</tr>"
+            ),
+            content,
+        )
+
+        self.assertIsNotNone(extra_row)
+        self.assertNotContains(response, "枠を解除")
+        self.assertIn("未割当に戻す", extra_row.group(0))
+        self.assertIn(
+            reverse(
+                "unassign_league_entry_participant",
+                kwargs={"entry_id": extra_entry.id},
+            ),
+            extra_row.group(0),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "remove_league_entry_slot",
+                kwargs={"group_id": groups[0].id},
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "remove_league_entry_slot",
+                kwargs={"group_id": groups[1].id},
+            ),
+        )
+
+    def test_stage_pair_maintenance_shows_remove_slot_button_for_empty_extra_group(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 8)
+
+        for display_order in range(1, 5):
             self._create_entry(
                 category,
                 groups[0],
@@ -8845,7 +8919,14 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        self._create_entry(
+            category,
+            groups[0],
+            9,
+            5,
+            None,
+        )
+        for display_order, pair_code in enumerate(range(5, 9), start=1):
             self._create_entry(
                 category,
                 groups[1],
