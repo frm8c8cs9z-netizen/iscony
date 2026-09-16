@@ -192,15 +192,26 @@ class BracketGenerateForm(forms.Form):
         label="出場者数"
     )
 
-    match_games = forms.ChoiceField(
-        choices=[
-            (5, "5ゲームマッチ"),
-            (7, "7ゲームマッチ"),
-            (9, "9ゲームマッチ"),
-        ],
+    match_games = forms.IntegerField(
         initial=7,
         label="ゲーム数"
     )
+
+    def clean_match_games(self):
+
+        match_games = self.cleaned_data["match_games"]
+
+        if (
+            match_games < 3
+            or match_games > 9
+            or match_games % 2 == 0
+        ):
+
+            raise forms.ValidationError(
+                "ゲーム数は3〜9の奇数で入力してください。"
+            )
+
+        return match_games
 
     def clean_size(self):
 

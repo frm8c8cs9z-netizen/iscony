@@ -12,24 +12,32 @@
     {{ bracket.name }}
 </p>
 
-<p style="color:red;">
-    既存のトーナメント試合は削除されます。
-</p>
+{% if has_scored_matches %}
+    <p style="color:red;">
+        結果入力済みの試合があるため、試合を再生成できません。
+    </p>
+{% elif has_existing_matches %}
+    <p style="color:red;">
+        既存の試合をすべて削除して作り直します。よろしいですか？
+    </p>
+{% endif %}
 
-<form method="post">
+{% if not has_scored_matches %}
+    <form method="post">
 
-    {% csrf_token %}
+        {% csrf_token %}
 
-    {{ form.as_p }}
+        {{ form.as_p }}
 
-    <button
-        type="submit"
-        onclick="return confirm('既存の試合を削除して、トーナメント枠を作成します。よろしいですか？');"
-    >
-        作成
-    </button>
+        <button
+            type="submit"
+            {% if has_existing_matches %}onclick="return confirm('既存の試合を削除して、トーナメント枠を作成します。よろしいですか？');"{% endif %}
+        >
+            作成
+        </button>
 
-</form>
+    </form>
+{% endif %}
 
 <p>
     <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">

@@ -30,6 +30,7 @@ from .helpers.display import (
 from .helpers.league_grouping import build_group_size_candidates
 from .match_keys import format_match_key_display
 from .form_defs import (
+    BracketGenerateForm,
     LeagueEntryEditForm,
     TournamentEntryEditForm,
 )
@@ -163,6 +164,37 @@ class LeagueGroupingHelperTests(TestCase):
         ]
 
         self.assertNotIn(3, group_sizes)
+
+
+class BracketGenerateFormTests(TestCase):
+
+    def test_match_games_accepts_odd_values_from_three_to_nine(self):
+        for match_games in [3, 5, 7, 9]:
+            with self.subTest(match_games=match_games):
+                form = BracketGenerateForm(
+                    {
+                        "entry_count": "4",
+                        "match_games": str(match_games),
+                    }
+                )
+
+                self.assertTrue(form.is_valid())
+
+    def test_match_games_rejects_even_or_out_of_range_values(self):
+        for match_games in [4, 10, 2]:
+            with self.subTest(match_games=match_games):
+                form = BracketGenerateForm(
+                    {
+                        "entry_count": "4",
+                        "match_games": str(match_games),
+                    }
+                )
+
+                self.assertFalse(form.is_valid())
+                self.assertIn(
+                    "ゲーム数は3〜9の奇数で入力してください。",
+                    form.errors["match_games"],
+                )
 
 
 def create_league_entry_with_participant(
@@ -1358,6 +1390,128 @@ class TournamentAdvancementTests(TestCase):
         self.assertEqual(
             target_entry.participant,
             source_entry.participant,
+        )
+
+    def test_generate_tournament_matches_creates_matches_without_existing_matches(self):
+        response = self.client.post(
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "entry_count": "4",
+                "match_games": "7",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_match_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+        )
+        self.assertEqual(
+            TournamentMatch.objects.filter(
+                bracket=self.bracket,
+            ).count(),
+            3,
+        )
+
+    def test_generate_tournament_matches_blocks_when_existing_match_has_score(self):
+        scored_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1_games=4,
+            match_games=7,
+        )
+
+        response = self.client.post(
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "entry_count": "4",
+                "match_games": "7",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "結果入力済みの試合があるため、試合を再生成できません。",
+        )
+        self.assertEqual(
+            list(
+                TournamentMatch.objects.filter(
+                    bracket=self.bracket,
+                ).values_list(
+                    "id",
+                    flat=True,
+                )
+            ),
+            [scored_match.id],
+        )
+        scored_match.refresh_from_db()
+        self.assertEqual(scored_match.pair1_games, 4)
+
+    def test_generate_tournament_matches_allows_regeneration_with_bye_winner_only(self):
+        seed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entries[0],
+            winner=self.entries[0],
+            match_games=7,
+        )
+
+        response = self.client.post(
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "entry_count": "4",
+                "match_games": "7",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_match_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+        )
+        self.assertFalse(
+            TournamentMatch.objects.filter(
+                id=seed_match.id,
+            ).exists()
+        )
+        self.assertEqual(
+            TournamentMatch.objects.filter(
+                bracket=self.bracket,
+            ).count(),
+            3,
         )
 
     def test_seed_line_highlights_when_seed_becomes_champion_after_double_retirement(self):
@@ -8135,6 +8289,17 @@ class CategoryManagementTests(TestCase):
             ),
         )
         self.assertContains(response, "本戦 試合編集")
+        self.assertContains(response, "本戦 試合生成")
+        self.assertContains(
+            response,
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            ),
+        )
         self.assertContains(
             response,
             reverse(
