@@ -50,8 +50,9 @@ from ..rendering.tournament_svg_builder import (
 )
 from ..services import (
     advance_tournament_bye_winners,
-    delete_tournament_score,
+    auto_apply_stage_advancements_if_ready,
     consume_stage_advancement_result,
+    delete_tournament_score,
     save_tournament_score,
     save_tournament_retirement,
     validate_tournament_score_change,
@@ -658,6 +659,9 @@ def generate_tournament_matches(request, code, bracket_id):
                     match.next_match = next_match
                     match.next_slot = next_slot
                     match.save()
+
+            advance_tournament_bye_winners(bracket)
+            auto_apply_stage_advancements_if_ready(bracket.stage)
 
             return redirect(
                 "tournament_match_maintenance",

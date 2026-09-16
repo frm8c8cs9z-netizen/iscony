@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.db.models import Q
+from django.db.models.signals import post_save
 from django.template import Context, Template
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -1242,6 +1243,122 @@ class TournamentAdvancementTests(TestCase):
         self.assertIsNone(seed_match.pair1_games)
         self.assertIsNone(seed_match.pair2_games)
         self.assertEqual(next_match.pair1, self.entries[0])
+
+    def test_generate_tournament_matches_advances_seed_and_stage_advancement(self):
+        source_stage = Stage.objects.create(
+            category=self.category,
+            name="本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        next_stage = Stage.objects.create(
+            category=self.category,
+            name="順位決定",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=source_stage,
+            name="本戦",
+        )
+        target_bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=next_stage,
+            name="順位決定",
+        )
+        source_entry = create_tournament_entry(
+            bracket=bracket,
+            pair_code="1",
+            display_order=1,
+            player1_name="シード1A",
+            player2_name="シード1B",
+        )
+        target_entry = create_tournament_entry(
+            bracket=target_bracket,
+            pair_code="WIN",
+            display_order=1,
+        )
+
+        def assign_seed_entry(sender, instance, created, **kwargs):
+            if (
+                not created
+                or instance.bracket_id != bracket.id
+                or instance.match_code != "S1"
+            ):
+                return
+
+            instance.pair1 = source_entry
+            instance.save(
+                update_fields=["pair1"]
+            )
+            AdvancementSource.objects.create(
+                target_tournament_entry=target_entry,
+                source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+                source_stage=source_stage,
+                source_match=instance,
+                source_result=AdvancementSource.RESULT_WINNER,
+            )
+
+        dispatch_uid = (
+            "test_generate_tournament_matches_advances_seed_and_stage_advancement"
+        )
+        post_save.connect(
+            assign_seed_entry,
+            sender=TournamentMatch,
+            dispatch_uid=dispatch_uid,
+        )
+
+        try:
+            response = self.client.post(
+                reverse(
+                    "generate_tournament_matches",
+                    kwargs={
+                        "code": self.tournament.code,
+                        "bracket_id": bracket.id,
+                    },
+                ),
+                {
+                    "entry_count": "3",
+                    "match_games": "7",
+                },
+            )
+        finally:
+            post_save.disconnect(
+                sender=TournamentMatch,
+                dispatch_uid=dispatch_uid,
+            )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_match_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            ),
+        )
+
+        seed_match = TournamentMatch.objects.get(
+            bracket=bracket,
+            match_code="S1",
+        )
+        next_match = TournamentMatch.objects.get(
+            bracket=bracket,
+            round_number=2,
+            match_number=1,
+        )
+        target_entry.refresh_from_db()
+
+        self.assertEqual(seed_match.winner, source_entry)
+        self.assertIsNone(seed_match.pair1_games)
+        self.assertIsNone(seed_match.pair2_games)
+        self.assertEqual(next_match.pair1, source_entry)
+        self.assertEqual(
+            target_entry.participant,
+            source_entry.participant,
+        )
 
     def test_seed_line_highlights_when_seed_becomes_champion_after_double_retirement(self):
         seed_match = TournamentMatch.objects.create(
