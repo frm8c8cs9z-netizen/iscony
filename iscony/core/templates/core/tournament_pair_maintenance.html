@@ -25,6 +25,7 @@
                         data-assign-url="{% url 'assign_tournament_entry_participant' slot.entry.id %}"
                         data-unassign-url="{% url 'unassign_tournament_entry_participant_api' slot.entry.id %}"
                         {% if slot.entry.participant %}data-assigned="true"{% else %}data-assigned="false"{% endif %}
+                        {% if slot.entry.participant %}draggable="true" data-move-url="{% url 'move_tournament_entry_participant_api' slot.entry.id %}"{% endif %}
                     >
                         {% if slot.entry.participant %}
                             <span class="tournament-slot-name">{{ slot.entry.participant.display_name }}</span>
@@ -69,6 +70,7 @@
             "#unassigned-participant-list"
         );
         let selectedParticipantForTap = null;
+        let selectedEntrySlotForTap = null;
         let highlightedDropTarget = null;
 
         function getDragData(event) {
@@ -91,6 +93,12 @@
                 );
             }
             selectedParticipantForTap = null;
+            if (selectedEntrySlotForTap) {
+                selectedEntrySlotForTap.classList.remove(
+                    "entry-tap-selecting"
+                );
+            }
+            selectedEntrySlotForTap = null;
         }
 
         function setDropHighlight(target) {
@@ -182,19 +190,63 @@
                 });
         }
 
+        function moveParticipantBetweenSlots(moveUrl, targetEntryId) {
+            const body = new URLSearchParams();
+            body.append("target_entry_id", targetEntryId);
+
+            fetch(moveUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: body,
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(
+                            result.data.error
+                            || "参加者を移動できませんでした。"
+                        );
+                        return;
+                    }
+
+                    location.reload();
+                })
+                .catch(function() {
+                    alert("参加者を移動できませんでした。");
+                });
+        }
+
         document.addEventListener("dragstart", function(event) {
             const participant = event.target.closest(
                 "#unassigned-participant-list [data-participant-id]"
             );
-            if (!participant) {
+            if (participant) {
+                event.dataTransfer.setData(
+                    "text/plain",
+                    JSON.stringify({
+                        type: "participant",
+                        participantId: participant.dataset.participantId,
+                    })
+                );
+                return;
+            }
+
+            const slot = event.target.closest(
+                ".tournament-slot-row[data-assigned=\"true\"]"
+            );
+            if (!slot) {
                 return;
             }
 
             event.dataTransfer.setData(
                 "text/plain",
                 JSON.stringify({
-                    type: "participant",
-                    participantId: participant.dataset.participantId,
+                    type: "entry",
+                    entryId: slot.dataset.entryId,
+                    moveUrl: slot.dataset.moveUrl,
                 })
             );
         });
@@ -218,13 +270,26 @@
             assignmentArea.addEventListener("drop", function(event) {
                 const slot = event.target.closest(".tournament-slot-row");
                 const data = getDragData(event);
-                if (!slot || !data || data.type !== "participant") {
+                if (!slot || !data) {
                     return;
                 }
 
                 event.preventDefault();
                 setDropHighlight(null);
-                assignParticipantToSlot(slot, data.participantId);
+                if (data.type === "participant") {
+                    assignParticipantToSlot(slot, data.participantId);
+                    return;
+                }
+
+                if (
+                    data.type === "entry"
+                    && data.entryId !== slot.dataset.entryId
+                ) {
+                    moveParticipantBetweenSlots(
+                        data.moveUrl,
+                        slot.dataset.entryId
+                    );
+                }
             });
 
             assignmentArea.addEventListener("click", function(event) {
@@ -242,15 +307,37 @@
                 }
 
                 const slot = event.target.closest(".tournament-slot-row");
-                if (!slot || !selectedParticipantForTap) {
+                if (!slot) {
                     return;
                 }
 
-                const participantId = (
-                    selectedParticipantForTap.dataset.participantId
-                );
-                clearTapSelection();
-                assignParticipantToSlot(slot, participantId);
+                if (selectedEntrySlotForTap) {
+                    const selectedSlot = selectedEntrySlotForTap;
+                    const moveUrl = selectedSlot.dataset.moveUrl;
+                    clearTapSelection();
+                    if (selectedSlot.dataset.entryId !== slot.dataset.entryId) {
+                        moveParticipantBetweenSlots(
+                            moveUrl,
+                            slot.dataset.entryId
+                        );
+                    }
+                    return;
+                }
+
+                if (selectedParticipantForTap) {
+                    const participantId = (
+                        selectedParticipantForTap.dataset.participantId
+                    );
+                    clearTapSelection();
+                    assignParticipantToSlot(slot, participantId);
+                    return;
+                }
+
+                if (slot.dataset.assigned === "true") {
+                    clearTapSelection();
+                    selectedEntrySlotForTap = slot;
+                    slot.classList.add("entry-tap-selecting");
+                }
             });
         }
 
@@ -279,5 +366,4 @@
         setupTournamentEntryAssignment();
     });
 </script>
-
 {% endblock %}

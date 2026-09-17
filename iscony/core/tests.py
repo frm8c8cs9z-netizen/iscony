@@ -1737,6 +1737,50 @@ class TournamentAdvancementTests(TestCase):
             content,
         )
 
+    def test_tournament_pair_maintenance_marks_assigned_slots_as_movable(self):
+        empty_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=empty_entry,
+            match_games=7,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+        assigned_slot = re.search(
+            rf"<div[^>]*data-entry-id=\"{self.entries[0].id}\"[^>]*>",
+            content,
+        ).group(0)
+        empty_slot = re.search(
+            rf"<div[^>]*data-entry-id=\"{empty_entry.id}\"[^>]*>",
+            content,
+        ).group(0)
+        move_url = reverse(
+            "move_tournament_entry_participant_api",
+            kwargs={"entry_id": self.entries[0].id},
+        )
+
+        self.assertIn('draggable="true"', assigned_slot)
+        self.assertIn(f'data-move-url="{move_url}"', assigned_slot)
+        self.assertNotIn("draggable=", empty_slot)
+        self.assertNotIn("data-move-url=", empty_slot)
+
     def test_tournament_pair_maintenance_shows_bye_as_one_slot(self):
         TournamentMatch.objects.create(
             bracket=self.bracket,
