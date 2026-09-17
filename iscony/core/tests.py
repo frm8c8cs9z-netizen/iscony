@@ -77,6 +77,7 @@ from .services import (
     clone_tournament_without_results,
     add_league_entry_slot,
     assign_participant_with_shift,
+    assign_participant_to_tournament_entry,
     create_extra_round_robin_match,
     group_base_size,
     consume_stage_advancement_result,
@@ -84,6 +85,7 @@ from .services import (
     move_schedule,
     move_league_entry_participant,
     move_league_entry_participant_to_new_slot,
+    move_tournament_entry_participant,
     delete_tournament_score,
     save_round_robin_score,
     save_tournament_score,
@@ -91,6 +93,7 @@ from .services import (
     swap_advancement_sources,
     undo_schedule_replacement,
     unassign_league_entry_participant,
+    unassign_tournament_entry_participant,
     update_group_ranking,
     validate_tournament_score_change,
 )
@@ -1306,6 +1309,20 @@ class TournamentAdvancementTests(TestCase):
             player1_name="シード1A",
             player2_name="シード1B",
         )
+        create_tournament_entry(
+            bracket=bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="シード2A",
+            player2_name="シード2B",
+        )
+        create_tournament_entry(
+            bracket=bracket,
+            pair_code="3",
+            display_order=3,
+            player1_name="シード3A",
+            player2_name="シード3B",
+        )
         target_entry = create_tournament_entry(
             bracket=target_bracket,
             pair_code="WIN",
@@ -1424,6 +1441,135 @@ class TournamentAdvancementTests(TestCase):
             3,
         )
 
+    def test_generate_tournament_matches_assigns_real_entries_to_first_round(self):
+        response = self.client.post(
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "entry_count": "8",
+                "match_games": "7",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_match_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+        )
+
+        first_round_matches = list(
+            TournamentMatch.objects.filter(
+                bracket=self.bracket,
+                round_number=1,
+            ).order_by(
+                "match_number",
+            )
+        )
+
+        self.assertEqual(
+            [
+                (
+                    match.pair1_id,
+                    match.pair2_id,
+                )
+                for match in first_round_matches
+            ],
+            [
+                (
+                    self.entries[0].id,
+                    self.entries[1].id,
+                ),
+                (
+                    self.entries[2].id,
+                    self.entries[3].id,
+                ),
+            ],
+        )
+
+    def test_generate_tournament_matches_assigns_bye_entries_and_advances_winners(self):
+        extra_entries = [
+            create_tournament_entry(
+                bracket=self.bracket,
+                pair_code=str(index),
+                display_order=index,
+                player1_name=f"追加{index}A",
+                player2_name=f"追加{index}B",
+            )
+            for index in range(5, 7)
+        ]
+        entries = self.entries + extra_entries
+
+        response = self.client.post(
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            {
+                "entry_count": "6",
+                "match_games": "7",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "tournament_match_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+        )
+
+        first_round_matches = list(
+            TournamentMatch.objects.filter(
+                bracket=self.bracket,
+                round_number=1,
+            ).order_by(
+                "match_number",
+            )
+        )
+        second_round_matches = list(
+            TournamentMatch.objects.filter(
+                bracket=self.bracket,
+                round_number=2,
+            ).order_by(
+                "match_number",
+            )
+        )
+
+        self.assertEqual(
+            [
+                (
+                    match.pair1_id,
+                    match.pair2_id,
+                    match.winner_id,
+                )
+                for match in first_round_matches
+            ],
+            [
+                (entries[0].id, None, entries[0].id),
+                (entries[1].id, entries[2].id, None),
+                (entries[3].id, entries[4].id, None),
+                (None, entries[5].id, entries[5].id),
+            ],
+        )
+        self.assertEqual(second_round_matches[0].pair1_id, entries[0].id)
+        self.assertEqual(second_round_matches[1].pair2_id, entries[5].id)
+
     def test_generate_tournament_matches_blocks_when_existing_match_has_score(self):
         scored_match = TournamentMatch.objects.create(
             bracket=self.bracket,
@@ -1513,6 +1659,379 @@ class TournamentAdvancementTests(TestCase):
             ).count(),
             3,
         )
+
+    def test_assign_participant_to_tournament_entry_assigns_empty_slot(self):
+        entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P5",
+            player1_name="割当",
+            display_order=5,
+        )
+
+        result = assign_participant_to_tournament_entry(
+            entry,
+            participant,
+        )
+
+        entry.refresh_from_db()
+        self.assertEqual(result, entry)
+        self.assertEqual(entry.participant, participant)
+
+    def test_assign_participant_to_tournament_entry_rejects_same_stage_conflict(self):
+        stage = Stage.objects.create(
+            category=self.category,
+            name="本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        self.bracket.stage = stage
+        self.bracket.save()
+        other_bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=stage,
+            name="別山",
+        )
+        target = create_tournament_entry(
+            bracket=other_bracket,
+            pair_code="1",
+            display_order=1,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "この参加者は既に本戦に割り当てられています。",
+        ):
+            assign_participant_to_tournament_entry(
+                target,
+                self.entries[0].participant,
+            )
+
+    def test_unassign_tournament_entry_participant_clears_participant_only(self):
+        entry_id = self.entries[0].id
+
+        result = unassign_tournament_entry_participant(self.entries[0])
+
+        self.assertEqual(result.id, entry_id)
+        self.entries[0].refresh_from_db()
+        self.assertIsNone(self.entries[0].participant)
+        self.assertTrue(
+            TournamentEntry.objects.filter(id=entry_id).exists()
+        )
+
+    def test_unassign_tournament_entry_participant_rejects_scored_match(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=4,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "結果入力済みの試合があるため、参加者割当を解除できません。",
+        ):
+            unassign_tournament_entry_participant(self.entries[0])
+
+    def test_unassign_tournament_entry_participant_allows_bye_winner(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entries[0],
+            winner=self.entries[0],
+        )
+
+        unassign_tournament_entry_participant(self.entries[0])
+
+        self.entries[0].refresh_from_db()
+        self.assertIsNone(self.entries[0].participant)
+
+    def test_move_tournament_entry_participant_moves_to_empty_slot(self):
+        target = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+        participant = self.entries[0].participant
+
+        result = move_tournament_entry_participant(
+            self.entries[0],
+            target,
+        )
+
+        self.assertEqual(result["mode"], "move")
+        self.entries[0].refresh_from_db()
+        target.refresh_from_db()
+        self.assertIsNone(self.entries[0].participant)
+        self.assertEqual(target.participant, participant)
+
+    def test_move_tournament_entry_participant_swaps_occupied_slots(self):
+        source_participant = self.entries[0].participant
+        target_participant = self.entries[1].participant
+
+        result = move_tournament_entry_participant(
+            self.entries[0],
+            self.entries[1],
+        )
+
+        self.assertEqual(result["mode"], "swap")
+        self.entries[0].refresh_from_db()
+        self.entries[1].refresh_from_db()
+        self.assertEqual(self.entries[0].participant, target_participant)
+        self.assertEqual(self.entries[1].participant, source_participant)
+
+    def test_move_tournament_entry_participant_rejects_scored_swap(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=4,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "結果入力済みの試合があるため、入れ替えできません。",
+        ):
+            move_tournament_entry_participant(
+                self.entries[0],
+                self.entries[1],
+            )
+
+    def test_assign_tournament_entry_participant_api_assigns_empty_slot(self):
+        entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P5",
+            player1_name="API割当",
+            organization="所属A",
+            display_order=5,
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_tournament_entry_participant",
+                kwargs={"entry_id": entry.id},
+            ),
+            {"participant_id": str(participant.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "entry_id": entry.id,
+                "bracket_id": self.bracket.id,
+                "participant_id": participant.id,
+                "participant_name": participant.display_name,
+                "participant_organization": participant.effective_organization,
+            },
+        )
+        entry.refresh_from_db()
+        self.assertEqual(entry.participant, participant)
+
+    def test_assign_tournament_entry_participant_api_rejects_get(self):
+        response = self.client.get(
+            reverse(
+                "assign_tournament_entry_participant",
+                kwargs={"entry_id": self.entries[0].id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(response.json()["success"])
+
+    def test_assign_tournament_entry_participant_api_requires_participant(self):
+        response = self.client.post(
+            reverse(
+                "assign_tournament_entry_participant",
+                kwargs={"entry_id": self.entries[0].id},
+            ),
+            {},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "参加者を指定してください。")
+
+    def test_assign_tournament_entry_participant_api_rejects_occupied_slot(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P5",
+            player1_name="API割当",
+            display_order=5,
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_tournament_entry_participant",
+                kwargs={"entry_id": self.entries[0].id},
+            ),
+            {"participant_id": str(participant.id)},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["error"],
+            "この枠は割当済みです。入れ替えは移動機能を使ってください。",
+        )
+
+    def test_assign_tournament_entry_participant_api_returns_404_for_missing_participant(self):
+        entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+
+        response = self.client.post(
+            reverse(
+                "assign_tournament_entry_participant",
+                kwargs={"entry_id": entry.id},
+            ),
+            {"participant_id": "999999"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_unassign_tournament_entry_participant_api_unassigns_slot(self):
+        participant = self.entries[0].participant
+
+        response = self.client.post(
+            reverse(
+                "unassign_tournament_entry_participant_api",
+                kwargs={"entry_id": self.entries[0].id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "entry_id": self.entries[0].id,
+                "participant_id": participant.id,
+                "participant_name": participant.display_name,
+                "participant_organization": participant.effective_organization,
+                "bracket_id": self.bracket.id,
+            },
+        )
+        self.entries[0].refresh_from_db()
+        self.assertIsNone(self.entries[0].participant)
+
+    def test_unassign_tournament_entry_participant_api_rejects_get(self):
+        response = self.client.get(
+            reverse(
+                "unassign_tournament_entry_participant_api",
+                kwargs={"entry_id": self.entries[0].id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(response.json()["success"])
+
+    def test_unassign_tournament_entry_participant_api_rejects_empty_slot(self):
+        entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+
+        response = self.client.post(
+            reverse(
+                "unassign_tournament_entry_participant_api",
+                kwargs={"entry_id": entry.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "この枠は未割当です。")
+
+    def test_move_tournament_entry_participant_api_moves_to_empty_slot(self):
+        target = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+        participant = self.entries[0].participant
+
+        response = self.client.post(
+            reverse(
+                "move_tournament_entry_participant_api",
+                kwargs={"entry_id": self.entries[0].id},
+            ),
+            {"target_entry_id": str(target.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "mode": "move",
+                "source_bracket_id": self.bracket.id,
+                "target_bracket_id": self.bracket.id,
+            },
+        )
+        self.entries[0].refresh_from_db()
+        target.refresh_from_db()
+        self.assertIsNone(self.entries[0].participant)
+        self.assertEqual(target.participant, participant)
+
+    def test_move_tournament_entry_participant_api_swaps_occupied_slots(self):
+        source_participant = self.entries[0].participant
+        target_participant = self.entries[1].participant
+
+        response = self.client.post(
+            reverse(
+                "move_tournament_entry_participant_api",
+                kwargs={"entry_id": self.entries[0].id},
+            ),
+            {"target_entry_id": str(self.entries[1].id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["mode"], "swap")
+        self.entries[0].refresh_from_db()
+        self.entries[1].refresh_from_db()
+        self.assertEqual(self.entries[0].participant, target_participant)
+        self.assertEqual(self.entries[1].participant, source_participant)
+
+    def test_move_tournament_entry_participant_api_rejects_get(self):
+        response = self.client.get(
+            reverse(
+                "move_tournament_entry_participant_api",
+                kwargs={"entry_id": self.entries[0].id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(response.json()["success"])
+
+    def test_move_tournament_entry_participant_api_requires_target(self):
+        response = self.client.post(
+            reverse(
+                "move_tournament_entry_participant_api",
+                kwargs={"entry_id": self.entries[0].id},
+            ),
+            {},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "移動先を指定してください。")
 
     def test_seed_line_highlights_when_seed_becomes_champion_after_double_retirement(self):
         seed_match = TournamentMatch.objects.create(

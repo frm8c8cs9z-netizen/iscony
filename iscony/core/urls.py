@@ -509,6 +509,24 @@ urlpatterns = [
     ),
 
     path(
+        "tournament-entry/<int:entry_id>/assign/",
+        tournament.assign_tournament_entry_participant_api,
+        name="assign_tournament_entry_participant",
+    ),
+
+    path(
+        "tournament-entry/<int:entry_id>/unassign-api/",
+        tournament.unassign_tournament_entry_participant_api,
+        name="unassign_tournament_entry_participant_api",
+    ),
+
+    path(
+        "tournament-entry/<int:entry_id>/move/",
+        tournament.move_tournament_entry_participant_api,
+        name="move_tournament_entry_participant_api",
+    ),
+
+    path(
         "tournament/<str:code>/bracket/<int:bracket_id>/generate/",
         tournament.generate_tournament_matches,
         name="generate_tournament_matches",

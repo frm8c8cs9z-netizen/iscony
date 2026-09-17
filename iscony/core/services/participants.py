@@ -22,6 +22,7 @@ from ..models import (
     TournamentMatch,
     TournamentOrganizationField,
 )
+from .operations import tournament_match_has_score
 from .stage_setup import add_league_entry_slot, group_base_size
 
 
@@ -534,6 +535,107 @@ def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):
         "display_order",
         "pair_code",
     ).first()
+
+
+def _tournament_entry_has_completed_match(entry):
+    """TournamentEntryに結果入力済みの試合(byeを除く)があるかを返す。"""
+
+    matches = TournamentMatch.objects.filter(
+        Q(pair1=entry) | Q(pair2=entry)
+    )
+
+    return any(
+        tournament_match_has_score(match)
+        for match in matches
+    )
+
+
+def assign_participant_to_tournament_entry(entry, participant):
+    """TournamentEntryに参加者を割り当てる。"""
+
+    conflict = find_conflicting_tournament_entry(
+        participant,
+        entry.bracket.stage,
+        exclude_id=entry.id,
+    )
+    if conflict:
+        raise ValidationError(
+            f"この参加者は既に{conflict.bracket.name}に割り当てられています。"
+        )
+
+    entry.participant = participant
+    entry.save(update_fields=["participant"])
+
+    return entry
+
+
+def unassign_tournament_entry_participant(entry):
+    """TournamentEntryの参加者割当を解除する。枠自体は残す。"""
+
+    if entry.participant is None:
+        raise ValidationError("この枠は未割当です。")
+
+    if _tournament_entry_has_completed_match(entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、参加者割当を解除できません。"
+        )
+
+    entry.participant = None
+    entry.save(update_fields=["participant"])
+
+    return entry
+
+
+def move_tournament_entry_participant(source_entry, target_entry):
+    """
+    source_entry の参加者を target_entry へ移動する。
+
+    target_entry が未割当ならそこへ移動する。target_entry に既に
+    参加者がいる場合は、source_entry と target_entry の参加者を
+    入れ替える(枠自体は動かさない)。
+    """
+
+    if source_entry.id == target_entry.id:
+        raise ValidationError("移動元と移動先が同じ枠です。")
+
+    if source_entry.participant is None:
+        raise ValidationError("この枠は未割当です。")
+
+    if target_entry.participant is not None:
+        if (
+            _tournament_entry_has_completed_match(source_entry)
+            or _tournament_entry_has_completed_match(target_entry)
+        ):
+            raise ValidationError(
+                "結果入力済みの試合があるため、入れ替えできません。"
+            )
+
+        with transaction.atomic():
+            source_participant = source_entry.participant
+            target_participant = target_entry.participant
+            source_entry.participant = target_participant
+            target_entry.participant = source_participant
+            source_entry.save(update_fields=["participant"])
+            target_entry.save(update_fields=["participant"])
+
+        return {
+            "mode": "swap",
+            "source_entry": source_entry,
+            "target_entry": target_entry,
+        }
+
+    participant = source_entry.participant
+
+    with transaction.atomic():
+        unassign_tournament_entry_participant(source_entry)
+        target_entry.refresh_from_db()
+        assign_participant_to_tournament_entry(target_entry, participant)
+
+    return {
+        "mode": "move",
+        "source_entry": source_entry,
+        "target_entry": target_entry,
+    }
 
 
 def tournament_pair_organization_sets(tournament):

@@ -10,8 +10,9 @@ import csv
 import io
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -50,12 +51,15 @@ from ..rendering.tournament_svg_builder import (
 )
 from ..services import (
     advance_tournament_bye_winners,
+    assign_participant_to_tournament_entry,
     auto_apply_stage_advancements_if_ready,
     consume_stage_advancement_result,
     delete_tournament_score,
+    move_tournament_entry_participant,
     save_tournament_score,
     save_tournament_retirement,
     tournament_match_has_score,
+    unassign_tournament_entry_participant,
     validate_tournament_score_change,
 )
 from ..helpers.brackets import (
@@ -544,13 +548,19 @@ def generate_tournament_matches(request, code, bracket_id):
 
             else:
 
-                entry_count = int(
-                    form.cleaned_data["entry_count"]
+                entries = list(
+                    TournamentEntry.objects.filter(
+                        bracket=bracket,
+                    ).order_by(
+                        "display_order",
+                    )
                 )
 
                 match_games = int(
                     form.cleaned_data["match_games"]
                 )
+
+                entry_count = len(entries)
 
                 size = get_bracket_size(
                     entry_count
@@ -567,15 +577,8 @@ def generate_tournament_matches(request, code, bracket_id):
                     rounds_count += 1
                     temp_size = temp_size // 2
 
-                dummy_entries = list(
-                    range(
-                        1,
-                        entry_count + 1
-                    )
-                )
-
                 slots = build_display_bracket_slots(
-                    dummy_entries,
+                    entries,
                     size
                 )
 
@@ -681,6 +684,20 @@ def generate_tournament_matches(request, code, bracket_id):
                         match.next_slot = next_slot
                         match.save()
 
+                first_round_matches = list(
+                    TournamentMatch.objects.filter(
+                        bracket=bracket,
+                        round_number=1,
+                    ).order_by(
+                        "match_number"
+                    )
+                )
+
+                for index, match in enumerate(first_round_matches):
+                    match.pair1 = slots[index * 2]
+                    match.pair2 = slots[index * 2 + 1]
+                    match.save()
+
                 advance_tournament_bye_winners(bracket)
                 auto_apply_stage_advancements_if_ready(bracket.stage)
 
@@ -703,6 +720,186 @@ def generate_tournament_matches(request, code, bracket_id):
             "form": form,
             "has_existing_matches": has_existing_matches,
             "has_scored_matches": has_scored_matches,
+        }
+    )
+
+
+def assign_tournament_entry_participant_api(request, entry_id):
+    """POSTで呼ばれ、指定トーナメント枠へ参加者を割り当てる。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    entry = get_object_or_404(
+        TournamentEntry,
+        id=entry_id,
+    )
+    participant_id = request.POST.get("participant_id")
+
+    if not participant_id:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "参加者を指定してください。",
+            },
+            status=400,
+        )
+
+    participant = get_object_or_404(
+        Participant,
+        id=participant_id,
+        category=entry.bracket.category,
+    )
+
+    if entry.participant_id is not None:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "この枠は割当済みです。入れ替えは移動機能を使ってください。",
+            },
+            status=400,
+        )
+
+    try:
+        assign_participant_to_tournament_entry(entry, participant)
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": entry.id,
+            "bracket_id": entry.bracket_id,
+            "participant_id": participant.id,
+            "participant_name": participant.display_name,
+            "participant_organization": participant.effective_organization,
+        }
+    )
+
+
+def unassign_tournament_entry_participant_api(request, entry_id):
+    """POSTで呼ばれ、指定トーナメント枠の参加者割当を解除するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    entry = get_object_or_404(
+        TournamentEntry,
+        id=entry_id,
+    )
+
+    if entry.participant is None:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "この枠は未割当です。",
+            },
+            status=400,
+        )
+
+    participant_id = entry.participant.id
+    participant_name = entry.participant.display_name
+    participant_organization = entry.participant.effective_organization
+    bracket_id = entry.bracket_id
+
+    try:
+        unassign_tournament_entry_participant(entry)
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": entry_id,
+            "participant_id": participant_id,
+            "participant_name": participant_name,
+            "participant_organization": participant_organization,
+            "bracket_id": bracket_id,
+        }
+    )
+
+
+def move_tournament_entry_participant_api(request, entry_id):
+    """
+    POSTで呼ばれ、指定トーナメント枠の参加者を別枠へ移動/入れ替えするJSON API。
+    """
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    source_entry = get_object_or_404(
+        TournamentEntry,
+        id=entry_id,
+    )
+    target_entry_id = request.POST.get("target_entry_id")
+
+    if not target_entry_id:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "移動先を指定してください。",
+            },
+            status=400,
+        )
+
+    target_entry = get_object_or_404(
+        TournamentEntry,
+        id=target_entry_id,
+        bracket__category=source_entry.bracket.category,
+    )
+    source_bracket_id = source_entry.bracket_id
+    target_bracket_id = target_entry.bracket_id
+
+    try:
+        result = move_tournament_entry_participant(
+            source_entry,
+            target_entry,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "mode": result["mode"],
+            "source_bracket_id": source_bracket_id,
+            "target_bracket_id": target_bracket_id,
         }
     )
 
