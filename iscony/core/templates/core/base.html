@@ -790,6 +790,47 @@
         overflow-y: auto;
     }
 
+    .svg-bracket-wrap--with-slots {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .tournament-slot-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 32px;
+        padding: 4px 8px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #fff;
+        box-sizing: border-box;
+    }
+
+    .tournament-slot-row--assigned {
+        background: #eef7ee;
+        border-color: #9fca9f;
+    }
+
+    .tournament-slot-name {
+        font-weight: bold;
+    }
+
+    .tournament-slot-empty {
+        color: #6b7a8f;
+    }
+
+    .tournament-slot-unassign {
+        flex: 0 0 auto;
+        padding: 2px 6px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+    }
+
     .participant-piece {
         display: block;
         margin-bottom: 6px;

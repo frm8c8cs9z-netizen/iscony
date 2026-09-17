@@ -503,6 +503,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/bracket/<int:bracket_id>/assign/",
+        tournament.tournament_pair_maintenance,
+        name="tournament_pair_maintenance",
+    ),
+
+    path(
         "tournament/<str:code>/tournament-match/<int:match_id>/edit/",
         tournament.edit_tournament_match,
         name="edit_tournament_match",

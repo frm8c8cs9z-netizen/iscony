@@ -73,6 +73,10 @@
                             {{ bracket.name }} 試合生成
                         </a>
                         ／
+                        <a href="{% url 'tournament_pair_maintenance' tournament.code bracket.id %}">
+                            {{ bracket.name }} 参加者割当
+                        </a>
+                        ／
                         <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
                             {{ bracket.name }} 試合編集
                         </a>

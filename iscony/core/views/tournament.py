@@ -46,9 +46,10 @@ from ..rendering.tournament_svg_score import (
     should_highlight_svg_winner as _should_highlight_svg_winner,
 )
 from ..rendering.tournament_svg_builder import (
-    build_svg_bracket_data as _build_svg_bracket_data,
+    build_svg_bracket_data,
     build_tournament_bracket_display_data,
 )
+from ..selectors.tournament_brackets import build_tournament_round_data
 from ..services import (
     advance_tournament_bye_winners,
     assign_participant_to_tournament_entry,
@@ -721,6 +722,97 @@ def generate_tournament_matches(request, code, bracket_id):
             "has_existing_matches": has_existing_matches,
             "has_scored_matches": has_scored_matches,
         }
+    )
+
+
+def tournament_pair_maintenance(request, code, bracket_id):
+    """トーナメント枠へ参加者を割り当てる画面。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+
+    bracket = get_object_or_404(
+        TournamentBracket,
+        id=bracket_id,
+        category__tournament=tournament,
+    )
+
+    has_matches = TournamentMatch.objects.filter(
+        bracket=bracket,
+    ).exists()
+
+    if not has_matches:
+        return redirect(
+            "generate_tournament_matches",
+            code=tournament.code,
+            bracket_id=bracket.id,
+        )
+
+    round_data = build_tournament_round_data(bracket)
+    svg_bracket = build_svg_bracket_data(
+        bracket,
+        round_data,
+        forced_layout_type=TournamentBracket.LAYOUT_SINGLE,
+    )
+    match_positions = (
+        svg_bracket["match_positions"] if svg_bracket else {}
+    )
+
+    first_round_matches = TournamentMatch.objects.filter(
+        bracket=bracket,
+        round_number=1,
+    ).select_related(
+        "pair1",
+        "pair2",
+    ).order_by(
+        "match_number",
+    )
+
+    slots = []
+
+    for match in first_round_matches:
+        position = match_positions.get(("left", match.id), {})
+
+        if match.pair1_id:
+            slots.append({
+                "entry": match.pair1,
+                "y": position.get("y1", 0),
+            })
+
+        if match.pair2_id:
+            slots.append({
+                "entry": match.pair2,
+                "y": position.get("y2", 0),
+            })
+
+    slots.sort(key=lambda slot: slot["y"])
+
+    assigned_participant_ids = TournamentEntry.objects.filter(
+        bracket__stage=bracket.stage,
+        participant__isnull=False,
+    ).values("participant_id")
+
+    unassigned_participants = Participant.objects.filter(
+        category=bracket.category,
+    ).exclude(
+        id__in=assigned_participant_ids,
+    ).order_by(
+        "display_order",
+        "entry_code",
+    )
+
+    return render(
+        request,
+        "core/tournament_pair_maintenance.html",
+        {
+            "tournament": tournament,
+            "bracket": bracket,
+            "svg_bracket": svg_bracket,
+            "slots": slots,
+            "unassigned_participants": unassigned_participants,
+        },
     )
 
 

@@ -1660,6 +1660,112 @@ class TournamentAdvancementTests(TestCase):
             3,
         )
 
+    def test_tournament_pair_maintenance_redirects_without_matches(self):
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+        )
+
+    def test_tournament_pair_maintenance_shows_slots_and_unassigned_list(self):
+        empty_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+        unassigned_participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P5",
+            player1_name="未割当A",
+            player2_name="未割当B",
+            display_order=5,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=empty_entry,
+            match_games=7,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "参加者割り当て")
+        self.assertContains(response, self.entries[0].participant.display_name)
+        self.assertContains(response, "未割当")
+        self.assertContains(
+            response,
+            f'data-entry-id="{self.entries[0].id}"',
+        )
+        self.assertContains(
+            response,
+            f'data-entry-id="{empty_entry.id}"',
+        )
+        self.assertIn(
+            f'data-participant-id="{unassigned_participant.id}"',
+            content,
+        )
+        self.assertNotIn(
+            f'data-participant-id="{self.entries[0].participant.id}"',
+            content,
+        )
+
+    def test_tournament_pair_maintenance_shows_bye_as_one_slot(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="S1",
+            pair1=self.entries[0],
+            match_games=7,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.entries[0].participant.display_name)
+        self.assertIn(
+            f'data-entry-id="{self.entries[0].id}"',
+            content,
+        )
+        self.assertEqual(content.count('class="tournament-slot-row'), 1)
+
     def test_assign_participant_to_tournament_entry_assigns_empty_slot(self):
         entry = create_tournament_entry(
             bracket=self.bracket,
@@ -8809,10 +8915,21 @@ class CategoryManagementTests(TestCase):
         )
         self.assertContains(response, "本戦 試合編集")
         self.assertContains(response, "本戦 試合生成")
+        self.assertContains(response, "本戦 参加者割当")
         self.assertContains(
             response,
             reverse(
                 "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "tournament_pair_maintenance",
                 kwargs={
                     "code": self.tournament.code,
                     "bracket_id": bracket.id,

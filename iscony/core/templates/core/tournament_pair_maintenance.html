@@ -1,0 +1,283 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>{{ bracket.category.name }} / {{ bracket.name }} 参加者割り当て</h2>
+
+<p>
+    <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">試合編集へ戻る</a>
+</p>
+
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
+<div class="pair-assignment-layout">
+    <div>
+        <div class="svg-bracket-wrap svg-bracket-wrap--with-slots">
+            <div
+                class="tournament-slot-column"
+                style="position:relative; width:200px; height:{{ svg_bracket.height }}px; flex:0 0 auto;"
+            >
+                {% for slot in slots %}
+                    <div
+                        class="tournament-slot-row{% if slot.entry.participant %} tournament-slot-row--assigned{% endif %}"
+                        style="position:absolute; top:{{ slot.y }}px; left:0; right:0; transform:translateY(-50%);"
+                        data-entry-id="{{ slot.entry.id }}"
+                        data-assign-url="{% url 'assign_tournament_entry_participant' slot.entry.id %}"
+                        data-unassign-url="{% url 'unassign_tournament_entry_participant_api' slot.entry.id %}"
+                        {% if slot.entry.participant %}data-assigned="true"{% else %}data-assigned="false"{% endif %}
+                    >
+                        {% if slot.entry.participant %}
+                            <span class="tournament-slot-name">{{ slot.entry.participant.display_name }}</span>
+                            <button type="button" class="tournament-slot-unassign" data-role="unassign">解除</button>
+                        {% else %}
+                            <span class="tournament-slot-empty">未割当</span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=bracket.name|add:" トーナメント表" %}
+        </div>
+    </div>
+
+    <ul id="unassigned-participant-list">
+        {% for participant in unassigned_participants %}
+            <li
+                class="participant-piece"
+                draggable="true"
+                data-participant-id="{{ participant.id }}"
+                data-participant-name="{{ participant.display_name }}"
+            >
+                {{ participant.display_name }}
+            </li>
+        {% empty %}
+            <li class="subtle-text">未割当の参加者はいません。</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<script>
+    function setupTournamentEntryAssignment() {
+        const csrfInput = document.querySelector(
+            "input[name=csrfmiddlewaretoken]"
+        );
+        const csrfToken = csrfInput ? csrfInput.value : "";
+        const assignmentArea = document.querySelector(
+            ".svg-bracket-wrap--with-slots"
+        );
+        const unassignedList = document.querySelector(
+            "#unassigned-participant-list"
+        );
+        let selectedParticipantForTap = null;
+        let highlightedDropTarget = null;
+
+        function getDragData(event) {
+            const value = event.dataTransfer.getData("text/plain");
+            if (!value) {
+                return null;
+            }
+
+            try {
+                return JSON.parse(value);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function clearTapSelection() {
+            if (selectedParticipantForTap) {
+                selectedParticipantForTap.classList.remove(
+                    "entry-tap-selecting"
+                );
+            }
+            selectedParticipantForTap = null;
+        }
+
+        function setDropHighlight(target) {
+            if (highlightedDropTarget === target) {
+                return;
+            }
+
+            if (highlightedDropTarget) {
+                highlightedDropTarget.classList.remove(
+                    "drag-hover-target"
+                );
+            }
+
+            if (target) {
+                target.classList.add("drag-hover-target");
+            }
+
+            highlightedDropTarget = target;
+        }
+
+        function alertAssignedSlot() {
+            alert("この枠は割当済みです。先に解除してください。");
+        }
+
+        function parseJsonResponse(response) {
+            return response.json().then(function(data) {
+                return {
+                    ok: response.ok,
+                    data: data,
+                };
+            });
+        }
+
+        function assignParticipantToSlot(slot, participantId) {
+            if (slot.dataset.assigned === "true") {
+                alertAssignedSlot();
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append("participant_id", participantId);
+
+            fetch(slot.dataset.assignUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: body,
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(
+                            result.data.error
+                            || "参加者を割り当てられませんでした。"
+                        );
+                        return;
+                    }
+
+                    location.reload();
+                })
+                .catch(function() {
+                    alert("参加者を割り当てられませんでした。");
+                });
+        }
+
+        function unassignSlot(slot) {
+            fetch(slot.dataset.unassignUrl, {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": csrfToken,
+                },
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(
+                            result.data.error
+                            || "参加者割当を解除できませんでした。"
+                        );
+                        return;
+                    }
+
+                    location.reload();
+                })
+                .catch(function() {
+                    alert("参加者割当を解除できませんでした。");
+                });
+        }
+
+        document.addEventListener("dragstart", function(event) {
+            const participant = event.target.closest(
+                "#unassigned-participant-list [data-participant-id]"
+            );
+            if (!participant) {
+                return;
+            }
+
+            event.dataTransfer.setData(
+                "text/plain",
+                JSON.stringify({
+                    type: "participant",
+                    participantId: participant.dataset.participantId,
+                })
+            );
+        });
+
+        document.addEventListener("dragend", function() {
+            setDropHighlight(null);
+        });
+
+        if (assignmentArea) {
+            assignmentArea.addEventListener("dragover", function(event) {
+                const slot = event.target.closest(".tournament-slot-row");
+                if (!slot) {
+                    setDropHighlight(null);
+                    return;
+                }
+
+                event.preventDefault();
+                setDropHighlight(slot);
+            });
+
+            assignmentArea.addEventListener("drop", function(event) {
+                const slot = event.target.closest(".tournament-slot-row");
+                const data = getDragData(event);
+                if (!slot || !data || data.type !== "participant") {
+                    return;
+                }
+
+                event.preventDefault();
+                setDropHighlight(null);
+                assignParticipantToSlot(slot, data.participantId);
+            });
+
+            assignmentArea.addEventListener("click", function(event) {
+                const unassignButton = event.target.closest(
+                    "[data-role=\"unassign\"]"
+                );
+                if (unassignButton) {
+                    const slot = unassignButton.closest(
+                        ".tournament-slot-row"
+                    );
+                    if (slot) {
+                        unassignSlot(slot);
+                    }
+                    return;
+                }
+
+                const slot = event.target.closest(".tournament-slot-row");
+                if (!slot || !selectedParticipantForTap) {
+                    return;
+                }
+
+                const participantId = (
+                    selectedParticipantForTap.dataset.participantId
+                );
+                clearTapSelection();
+                assignParticipantToSlot(slot, participantId);
+            });
+        }
+
+        if (unassignedList) {
+            unassignedList.addEventListener("click", function(event) {
+                const participant = event.target.closest(
+                    "[data-participant-id]"
+                );
+                if (!participant) {
+                    return;
+                }
+
+                if (selectedParticipantForTap === participant) {
+                    clearTapSelection();
+                    return;
+                }
+
+                clearTapSelection();
+                selectedParticipantForTap = participant;
+                participant.classList.add("entry-tap-selecting");
+            });
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        setupTournamentEntryAssignment();
+    });
+</script>
+
+{% endblock %}
