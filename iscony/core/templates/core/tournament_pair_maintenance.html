@@ -46,12 +46,7 @@
                         {% if slot.entry.participant %}draggable="true" data-move-url="{% url 'move_tournament_entry_participant_api' slot.entry.id %}"{% endif %}
                     >
                         {% if slot.entry.participant %}
-                            <span class="tournament-slot-name">
-                                {{ slot.entry.participant.display_name }}
-                                {% if slot.entry.participant.effective_organization %}
-                                    ({{ slot.entry.participant.effective_organization }})
-                                {% endif %}
-                            </span>
+                            <span class="tournament-slot-name">{{ slot.entry.participant.display_name }}</span>
                             <button type="button" class="tournament-slot-unassign" data-role="unassign">解除</button>
                         {% else %}
                             <span class="tournament-slot-empty">未割当</span>

@@ -1722,7 +1722,8 @@ class TournamentAdvancementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "参加者割り当て")
         self.assertContains(response, self.entries[0].participant.display_name)
-        self.assertContains(response, "割当済所属")
+        slot_area_content = content.split("<svg", 1)[0]
+        self.assertNotIn("割当済所属", slot_area_content)
         self.assertContains(response, "未割当所属")
         self.assertContains(response, "未割当")
         self.assertContains(
