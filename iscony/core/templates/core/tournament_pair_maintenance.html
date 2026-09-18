@@ -46,10 +46,10 @@
                         {% if slot.entry.participant %}draggable="true" data-move-url="{% url 'move_tournament_entry_participant_api' slot.entry.id %}"{% endif %}
                     >
                         {% if slot.entry.participant %}
-                            <span class="tournament-slot-empty">割当済</span>
-                            <button type="button" class="tournament-slot-unassign" data-role="unassign">割当解除</button>
+                            <button type="button" class="tournament-slot-empty">割当済</button>
+                            <button type="button" class="tournament-slot-empty" data-role="unassign">割当解除</button>
                         {% else %}
-                            <span class="tournament-slot-empty">未割当</span>
+                            <button type="button" class="tournament-slot-empty">未割当</button>
                         {% endif %}
                     </div>
                 {% endfor %}
@@ -122,10 +122,6 @@
             highlightedDropTarget = target;
         }
 
-        function alertAssignedSlot() {
-            alert("この枠は割当済みです。先に解除してください。");
-        }
-
         function parseJsonResponse(response) {
             return response.json().then(function(data) {
                 return {
@@ -136,11 +132,6 @@
         }
 
         function assignParticipantToSlot(slot, participantId) {
-            if (slot.dataset.assigned === "true") {
-                alertAssignedSlot();
-                return;
-            }
-
             const body = new URLSearchParams();
             body.append("participant_id", participantId);
 

@@ -78,6 +78,7 @@ from .services import (
     add_league_entry_slot,
     assign_participant_with_shift,
     assign_participant_to_tournament_entry,
+    assign_participant_to_tournament_entry_with_swap,
     create_extra_round_robin_match,
     group_base_size,
     consume_stage_advancement_result,
@@ -1866,6 +1867,77 @@ class TournamentAdvancementTests(TestCase):
                 self.entries[0].participant,
             )
 
+    def test_assign_participant_to_tournament_entry_with_swap_rejects_empty_slot(self):
+        entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="5",
+            display_order=5,
+        )
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P5",
+            player1_name="割当",
+            display_order=5,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "この枠は未割当です。",
+        ):
+            assign_participant_to_tournament_entry_with_swap(
+                entry,
+                participant,
+            )
+
+    def test_assign_participant_to_tournament_entry_with_swap_rejects_scored_match(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P5",
+            player1_name="割当",
+            display_order=5,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entries[0],
+            pair2=self.entries[1],
+            pair1_games=4,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "結果入力済みの試合があるため、参加者を変更できません。",
+        ):
+            assign_participant_to_tournament_entry_with_swap(
+                self.entries[0],
+                participant,
+            )
+
+    def test_assign_participant_to_tournament_entry_with_swap_assigns_occupied_slot(self):
+        original_participant = self.entries[0].participant
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="P5",
+            player1_name="割当",
+            display_order=5,
+        )
+
+        result = assign_participant_to_tournament_entry_with_swap(
+            self.entries[0],
+            participant,
+        )
+
+        self.entries[0].refresh_from_db()
+        self.assertEqual(result, self.entries[0])
+        self.assertEqual(self.entries[0].participant, participant)
+        self.assertFalse(
+            TournamentEntry.objects.filter(
+                participant=original_participant,
+            ).exists()
+        )
+
     def test_unassign_tournament_entry_participant_clears_participant_only(self):
         entry_id = self.entries[0].id
 
@@ -1993,6 +2065,7 @@ class TournamentAdvancementTests(TestCase):
                 "success": True,
                 "entry_id": entry.id,
                 "bracket_id": self.bracket.id,
+                "was_occupied": False,
                 "participant_id": participant.id,
                 "participant_name": participant.display_name,
                 "participant_organization": participant.effective_organization,
@@ -2024,11 +2097,13 @@ class TournamentAdvancementTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "参加者を指定してください。")
 
-    def test_assign_tournament_entry_participant_api_rejects_occupied_slot(self):
+    def test_assign_tournament_entry_participant_api_assigns_occupied_slot(self):
+        original_participant = self.entries[0].participant
         participant = Participant.objects.create(
             category=self.category,
             entry_code="P5",
             player1_name="API割当",
+            organization="所属B",
             display_order=5,
         )
 
@@ -2040,10 +2115,25 @@ class TournamentAdvancementTests(TestCase):
             {"participant_id": str(participant.id)},
         )
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            response.json()["error"],
-            "この枠は割当済みです。入れ替えは移動機能を使ってください。",
+            response.json(),
+            {
+                "success": True,
+                "entry_id": self.entries[0].id,
+                "bracket_id": self.bracket.id,
+                "was_occupied": True,
+                "participant_id": participant.id,
+                "participant_name": participant.display_name,
+                "participant_organization": participant.effective_organization,
+            },
+        )
+        self.entries[0].refresh_from_db()
+        self.assertEqual(self.entries[0].participant, participant)
+        self.assertFalse(
+            TournamentEntry.objects.filter(
+                participant=original_participant,
+            ).exists()
         )
 
     def test_assign_tournament_entry_participant_api_returns_404_for_missing_participant(self):

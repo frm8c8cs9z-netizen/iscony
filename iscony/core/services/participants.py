@@ -569,6 +569,38 @@ def assign_participant_to_tournament_entry(entry, participant):
     return entry
 
 
+def assign_participant_to_tournament_entry_with_swap(entry, participant):
+    """
+    割当済みのTournamentEntry(entry)へ、未割当のparticipantを割り当てる。
+
+    entryの現在の参加者は未割当に戻る(スワップ)。Tournamentには
+    League側のような+1枠の玉突き移動が無いため、常にスワップになる。
+    """
+
+    if entry.participant is None:
+        raise ValidationError("この枠は未割当です。")
+
+    if _tournament_entry_has_completed_match(entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、参加者を変更できません。"
+        )
+
+    conflict = find_conflicting_tournament_entry(
+        participant,
+        entry.bracket.stage,
+        exclude_id=entry.id,
+    )
+    if conflict:
+        raise ValidationError(
+            f"この参加者は既に{conflict.bracket.name}に割り当てられています。"
+        )
+
+    entry.participant = participant
+    entry.save(update_fields=["participant"])
+
+    return entry
+
+
 def unassign_tournament_entry_participant(entry):
     """TournamentEntryの参加者割当を解除する。枠自体は残す。"""
 

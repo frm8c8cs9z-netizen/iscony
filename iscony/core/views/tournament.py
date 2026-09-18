@@ -53,6 +53,7 @@ from ..selectors.tournament_brackets import build_tournament_round_data
 from ..services import (
     advance_tournament_bye_winners,
     assign_participant_to_tournament_entry,
+    assign_participant_to_tournament_entry_with_swap,
     auto_apply_stage_advancements_if_ready,
     consume_stage_advancement_result,
     delete_tournament_score,
@@ -849,31 +850,37 @@ def assign_tournament_entry_participant_api(request, entry_id):
         category=entry.bracket.category,
     )
 
-    if entry.participant_id is not None:
-        return JsonResponse(
-            {
-                "success": False,
-                "error": "この枠は割当済みです。入れ替えは移動機能を使ってください。",
-            },
-            status=400,
-        )
+    was_occupied = entry.participant_id is not None
 
-    try:
-        assign_participant_to_tournament_entry(entry, participant)
-    except ValidationError as error:
-        return JsonResponse(
-            {
-                "success": False,
-                "error": " ".join(error.messages),
-            },
-            status=400,
-        )
+    if was_occupied:
+        try:
+            assign_participant_to_tournament_entry_with_swap(entry, participant)
+        except ValidationError as error:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": " ".join(error.messages),
+                },
+                status=400,
+            )
+    else:
+        try:
+            assign_participant_to_tournament_entry(entry, participant)
+        except ValidationError as error:
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": " ".join(error.messages),
+                },
+                status=400,
+            )
 
     return JsonResponse(
         {
             "success": True,
             "entry_id": entry.id,
             "bracket_id": entry.bracket_id,
+            "was_occupied": was_occupied,
             "participant_id": participant.id,
             "participant_name": participant.display_name,
             "participant_organization": participant.effective_organization,
