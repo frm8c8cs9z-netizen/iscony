@@ -10,8 +10,26 @@
 
 <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
 
-<div class="pair-assignment-layout">
-    <div>
+<div class="pair-assignment-layout pair-assignment-layout--tournament">
+    <ul id="unassigned-participant-list" class="tournament-assign-participants">
+        {% for participant in unassigned_participants %}
+            <li
+                class="participant-piece"
+                draggable="true"
+                data-participant-id="{{ participant.id }}"
+                data-participant-name="{{ participant.display_name }}"
+            >
+                {{ participant.display_name }}
+                {% if participant.effective_organization %}
+                    ({{ participant.effective_organization }})
+                {% endif %}
+            </li>
+        {% empty %}
+            <li class="subtle-text">未割当の参加者はいません。</li>
+        {% endfor %}
+    </ul>
+
+    <div class="tournament-assign-board">
         <div class="svg-bracket-wrap svg-bracket-wrap--with-slots">
             <div
                 class="tournament-slot-column"
@@ -28,7 +46,12 @@
                         {% if slot.entry.participant %}draggable="true" data-move-url="{% url 'move_tournament_entry_participant_api' slot.entry.id %}"{% endif %}
                     >
                         {% if slot.entry.participant %}
-                            <span class="tournament-slot-name">{{ slot.entry.participant.display_name }}</span>
+                            <span class="tournament-slot-name">
+                                {{ slot.entry.participant.display_name }}
+                                {% if slot.entry.participant.effective_organization %}
+                                    ({{ slot.entry.participant.effective_organization }})
+                                {% endif %}
+                            </span>
                             <button type="button" class="tournament-slot-unassign" data-role="unassign">解除</button>
                         {% else %}
                             <span class="tournament-slot-empty">未割当</span>
@@ -40,21 +63,6 @@
             {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=bracket.name|add:" トーナメント表" %}
         </div>
     </div>
-
-    <ul id="unassigned-participant-list">
-        {% for participant in unassigned_participants %}
-            <li
-                class="participant-piece"
-                draggable="true"
-                data-participant-id="{{ participant.id }}"
-                data-participant-name="{{ participant.display_name }}"
-            >
-                {{ participant.display_name }}
-            </li>
-        {% empty %}
-            <li class="subtle-text">未割当の参加者はいません。</li>
-        {% endfor %}
-    </ul>
 </div>
 
 <script>

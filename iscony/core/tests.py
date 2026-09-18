@@ -1691,10 +1691,13 @@ class TournamentAdvancementTests(TestCase):
         unassigned_participant = Participant.objects.create(
             category=self.category,
             entry_code="P5",
+            organization="未割当所属",
             player1_name="未割当A",
             player2_name="未割当B",
             display_order=5,
         )
+        self.entries[0].participant.organization = "割当済所属"
+        self.entries[0].participant.save(update_fields=["organization"])
         TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -1719,6 +1722,8 @@ class TournamentAdvancementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "参加者割り当て")
         self.assertContains(response, self.entries[0].participant.display_name)
+        self.assertContains(response, "割当済所属")
+        self.assertContains(response, "未割当所属")
         self.assertContains(response, "未割当")
         self.assertContains(
             response,

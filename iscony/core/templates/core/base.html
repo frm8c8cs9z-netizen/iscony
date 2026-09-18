@@ -790,6 +790,18 @@
         overflow-y: auto;
     }
 
+    .pair-assignment-layout--tournament > .tournament-assign-participants {
+        flex: 1;
+        position: sticky;
+        top: 16px;
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+    }
+
+    .pair-assignment-layout--tournament > .tournament-assign-board {
+        flex: 2;
+    }
+
     .svg-bracket-wrap--with-slots {
         display: flex;
         align-items: flex-start;
@@ -807,6 +819,7 @@
         border-radius: 4px;
         background: #fff;
         box-sizing: border-box;
+        overflow: hidden;
     }
 
     .tournament-slot-row--assigned {
@@ -815,7 +828,17 @@
     }
 
     .tournament-slot-name {
+        display: block;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        max-width: 100%;
         font-weight: bold;
+    }
+
+    .tournament-assign-board .svg-bracket a {
+        pointer-events: none;
+        cursor: default;
     }
 
     .tournament-slot-empty {
@@ -1343,6 +1366,12 @@
         }
 
         .pair-assignment-layout > div:last-child {
+            position: static;
+            max-height: none;
+            overflow-y: visible;
+        }
+
+        .pair-assignment-layout--tournament > .tournament-assign-participants {
             position: static;
             max-height: none;
             overflow-y: visible;
