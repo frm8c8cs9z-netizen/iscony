@@ -56,10 +56,7 @@ def create_league_stage_groups(stage, pair_count, group_size):
         pair_number = 1
 
         group_count = candidate["group_count"]
-        entry_count, _ = divmod(
-            pair_count,
-            group_count,
-        )
+        group_sizes = candidate["group_sizes"]
 
         for group_index in range(group_count):
             group = Group.objects.create(
@@ -70,7 +67,7 @@ def create_league_stage_groups(stage, pair_count, group_size):
             )
             groups.append(group)
 
-            for display_order in range(1, entry_count + 1):
+            for display_order in range(1, group_sizes[group_index] + 1):
                 LeagueEntry.objects.create(
                     category=stage.category,
                     group=group,

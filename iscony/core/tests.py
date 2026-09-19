@@ -27,7 +27,10 @@ from .helpers.display import (
     format_entry_one_line,
     resolve_entry_display_mode,
 )
-from .helpers.league_grouping import build_group_size_candidates
+from .helpers.league_grouping import (
+    build_group_size_candidates,
+    find_group_size_candidate,
+)
 from .match_keys import format_match_key_display
 from .form_defs import (
     BracketGenerateForm,
@@ -79,6 +82,7 @@ from .services import (
     assign_participant_with_shift,
     assign_participant_to_tournament_entry,
     assign_participant_to_tournament_entry_with_swap,
+    create_league_stage_groups,
     create_extra_round_robin_match,
     group_base_size,
     consume_stage_advancement_result,
@@ -8757,21 +8761,51 @@ class CategoryManagementTests(TestCase):
                 LeagueEntry.objects.filter(group=group).count()
                 for group in groups
             ],
-            [4, 4, 4, 4],
+            [5, 4, 4, 4],
         )
-        self.assertEqual(LeagueEntry.objects.filter(group__stage=stage).count(), 16)
+        self.assertEqual(LeagueEntry.objects.filter(group__stage=stage).count(), 17)
         self.assertEqual(
             {
                 entry.pair_code
                 for entry in entries
             },
-            {str(number) for number in range(1, 17)},
+            {str(number) for number in range(1, 18)},
         )
         self.assertFalse(
             LeagueEntry.objects.filter(
                 group__stage=stage,
                 participant__isnull=False,
             ).exists()
+        )
+
+    def test_create_league_stage_groups_uses_candidate_group_sizes(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        candidate = find_group_size_candidate(17, 4)
+
+        groups = create_league_stage_groups(stage, 17, 4)
+
+        self.assertEqual(candidate["group_sizes"], [5, 4, 4, 4])
+        self.assertEqual(len(groups), candidate["group_count"])
+        self.assertEqual(
+            [
+                LeagueEntry.objects.filter(group=group).count()
+                for group in groups
+            ],
+            candidate["group_sizes"],
+        )
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            sum(candidate["group_sizes"]),
         )
 
     def test_add_stage_with_invalid_group_size_does_not_create_stage(self):
