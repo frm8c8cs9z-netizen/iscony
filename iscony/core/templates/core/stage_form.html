@@ -24,7 +24,7 @@
     </p>
 {% endif %}
 
-<form method="post">
+<form method="post" id="stage-edit-form">
     {% csrf_token %}
 
     {{ form.as_p }}
@@ -83,9 +83,6 @@
         </div>
     {% endif %}
 
-    <button type="submit">
-        {{ submit_label }}
-    </button>
 </form>
 
 {% if bracket %}
@@ -127,6 +124,10 @@
         {% endif %}
     </div>
 {% endif %}
+
+<button type="submit" form="stage-edit-form">
+    {{ submit_label }}
+</button>
 
 {% if slot_form %}
     <script>
