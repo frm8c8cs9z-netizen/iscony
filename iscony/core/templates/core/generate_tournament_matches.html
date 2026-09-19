@@ -43,6 +43,10 @@
     <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">
         戻る
     </a>
+    |
+    <a href="{% url 'category_stage_management' tournament.code bracket.category_id %}">
+        Stage管理へ戻る
+    </a>
 </p>
 
 {% endblock %}

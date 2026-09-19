@@ -6,6 +6,8 @@
 
 <p>
     <a href="{% url 'tournament_match_maintenance' tournament.code bracket.id %}">試合編集へ戻る</a>
+    |
+    <a href="{% url 'category_stage_management' tournament.code bracket.category_id %}">Stage管理へ戻る</a>
 </p>
 
 <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
