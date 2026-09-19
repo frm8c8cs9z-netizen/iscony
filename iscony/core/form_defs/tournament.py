@@ -186,12 +186,6 @@ class TournamentMatchEditForm(forms.ModelForm):
 
 class BracketGenerateForm(forms.Form):
 
-    entry_count = forms.IntegerField(
-        min_value=2,
-        max_value=256,
-        label="出場者数"
-    )
-
     match_games = forms.IntegerField(
         initial=7,
         label="ゲーム数"

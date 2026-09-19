@@ -32,7 +32,12 @@
     {% if slot_form %}
         {% if stage %}
             <p>
-                参加ペア数やグループ内訳を変更すると、現在の枠構成(参加者未定)を作り直します。
+                参加ペア数やグループ内訳を変更すると、現在の枠構成を作り直します。
+                {% if has_matches %}
+                    <strong style="color:red;">
+                        既に生成済みの試合({{ match_count }}枠)も削除されます。
+                    </strong>
+                {% endif %}
             </p>
         {% endif %}
         <div class="stage-slot-setup">
@@ -42,11 +47,11 @@
                 {{ slot_form.pair_count.errors }}
             </p>
 
-            <div id="league-slot-setup">
+            <div id="league-slot-setup"{% if stage and stage.stage_type != "league" %} hidden{% endif %}>
                 <p>
                     <label for="id_group_size">1グループあたりのペア数:</label>
                     {% if group_size_candidates %}
-                        <select name="group_size" id="id_group_size">
+                        <select name="group_size" id="id_group_size"{% if slot_form.group_size.field.widget.attrs.disabled %} disabled{% endif %}>
                             <option value="">選択してください</option>
                             {% for candidate in group_size_candidates %}
                                 {% with candidate_value=candidate.group_size|stringformat:"s" %}
@@ -63,14 +68,16 @@
                 </p>
             </div>
 
-            <div id="tournament-slot-setup">
+            <div id="tournament-slot-setup"{% if stage and stage.stage_type != "tournament" %} hidden{% endif %}>
                 <p>
                     トーナメント枠:
-                    {% if tournament_slot_preview.bracket_size %}
-                        {{ tournament_slot_preview.bracket_size }}枠(不戦勝{{ tournament_slot_preview.bye_count }}回)
-                    {% else %}
-                        {{ tournament_slot_preview.message }}
-                    {% endif %}
+                    <span id="tournament-slot-preview-text">
+                        {% if tournament_slot_preview.bracket_size %}
+                            {{ tournament_slot_preview.bracket_size }}枠(不戦勝{{ tournament_slot_preview.bye_count }}回)
+                        {% else %}
+                            {{ tournament_slot_preview.message }}
+                        {% endif %}
+                    </span>
                 </p>
             </div>
         </div>
@@ -80,6 +87,42 @@
         {{ submit_label }}
     </button>
 </form>
+
+{% if bracket %}
+    <div class="stage-match-generation-tool">
+        <h3>試合生成</h3>
+
+        <p>
+            {% if has_matches %}
+                {{ match_count }}枠 生成済み
+            {% else %}
+                試合はまだ生成されていません。
+            {% endif %}
+        </p>
+
+        {% if has_scored_matches %}
+            <p style="color:red;">
+                結果入力済みの試合があるため、試合を再生成できません。
+            </p>
+        {% elif generate_form %}
+            <form method="post" action="{% url 'generate_tournament_matches' tournament.code bracket.id %}">
+                {% csrf_token %}
+                <input
+                    type="hidden"
+                    name="next"
+                    value="{% url 'edit_stage' tournament.code category.id stage.id %}"
+                >
+                {{ generate_form.as_p }}
+                <button
+                    type="submit"
+                    {% if has_matches %}onclick="return confirm('既存の試合を削除して、新しいゲーム数で作り直します。よろしいですか？');"{% endif %}
+                >
+                    {% if has_matches %}再生成する{% else %}生成する{% endif %}
+                </button>
+            </form>
+        {% endif %}
+    </div>
+{% endif %}
 
 {% if slot_form %}
     <script>
@@ -96,11 +139,44 @@
             tournamentSetup.hidden = stageType.value !== "tournament";
         }
 
+        function bracketSizeFor(pairCount) {
+            let size = 1;
+            while (size < pairCount) {
+                size *= 2;
+            }
+            return size;
+        }
+
+        function updateTournamentSlotPreview() {
+            const pairCountInput = document.getElementById("id_pair_count");
+            const previewText = document.getElementById("tournament-slot-preview-text");
+
+            if (!pairCountInput || !previewText) {
+                return;
+            }
+
+            const pairCount = parseInt(pairCountInput.value, 10);
+
+            if (!pairCount || pairCount < 1) {
+                previewText.textContent = "参加ペア数を入力してください。";
+                return;
+            }
+
+            const bracketSize = bracketSizeFor(pairCount);
+            const byeCount = bracketSize - pairCount;
+            previewText.textContent = bracketSize + "枠(不戦勝" + byeCount + "回)";
+        }
+
         document.addEventListener("DOMContentLoaded", function() {
             const stageType = document.getElementById("id_stage_type");
+            const pairCountInput = document.getElementById("id_pair_count");
 
             if (stageType) {
                 stageType.addEventListener("change", toggleStageSlotSetup);
+            }
+
+            if (pairCountInput) {
+                pairCountInput.addEventListener("input", updateTournamentSlotPreview);
             }
 
             toggleStageSlotSetup();

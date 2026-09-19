@@ -184,6 +184,17 @@ class BracketGenerateFormTests(TestCase):
 
                 self.assertTrue(form.is_valid())
 
+    def test_entry_count_is_ignored_when_posted(self):
+        form = BracketGenerateForm(
+            {
+                "entry_count": "invalid",
+                "match_games": "7",
+            }
+        )
+
+        self.assertNotIn("entry_count", form.fields)
+        self.assertTrue(form.is_valid())
+
     def test_match_games_rejects_even_or_out_of_range_values(self):
         for match_games in [4, 10, 2]:
             with self.subTest(match_games=match_games):
@@ -12911,7 +12922,13 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         self.assertTrue(get_response.context["stage_type_locked"])
-        self.assertIsNone(get_response.context.get("slot_form"))
+        self.assertIsNotNone(get_response.context.get("slot_form"))
+        self.assertEqual(
+            get_response.context["slot_form"].initial["pair_count"],
+            2,
+        )
+        self.assertContains(get_response, 'name="pair_count"')
+        self.assertContains(get_response, "disabled")
         self.assertRedirects(
             response,
             reverse(
@@ -13003,7 +13020,18 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         self.assertTrue(get_response.context["stage_type_locked"])
-        self.assertIsNone(get_response.context.get("slot_form"))
+        self.assertIsNotNone(get_response.context.get("slot_form"))
+        self.assertEqual(
+            get_response.context["slot_form"].initial["pair_count"],
+            2,
+        )
+        self.assertContains(get_response, 'name="pair_count"')
+        self.assertContains(get_response, "disabled")
+        self.assertContains(
+            get_response,
+            "結果入力済みの試合があるため、試合を再生成できません。",
+        )
+        self.assertNotContains(get_response, 'name="match_games"')
         self.assertRedirects(
             response,
             reverse(
@@ -13149,7 +13177,7 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, "参加ペア数")
         self.assertContains(
             response,
-            "参加ペア数やグループ内訳を変更すると、現在の枠構成(参加者未定)を作り直します。",
+            "参加ペア数やグループ内訳を変更すると、現在の枠構成を作り直します。",
         )
         self.assertContains(response, "stage_type")
         self.assertContains(response, 'value="tournament"')
@@ -13192,6 +13220,150 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["stage_type_locked"])
         self.assertEqual(response.context["slot_form"].initial["pair_count"], 4)
+
+    def test_edit_stage_shows_tournament_match_generation_tool_without_matches(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        for number in range(1, 5):
+            TournamentEntry.objects.create(
+                bracket=bracket,
+                pair_code=str(number),
+                display_order=number,
+            )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "試合生成")
+        self.assertContains(response, "試合はまだ生成されていません。")
+        self.assertContains(response, "ゲーム数")
+        self.assertContains(response, 'name="match_games"')
+        self.assertContains(response, "生成する")
+
+    def test_edit_stage_shows_regeneration_tool_and_match_warning(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        for number in range(1, 5):
+            TournamentEntry.objects.create(
+                bracket=bracket,
+                pair_code=str(number),
+                display_order=number,
+            )
+        for number in range(1, 4):
+            TournamentMatch.objects.create(
+                bracket=bracket,
+                round_number=1,
+                match_number=number,
+                match_code=f"M{number}",
+            )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "3枠 生成済み")
+        self.assertContains(response, "再生成する")
+        self.assertContains(response, "既に生成済みの試合(3枠)も削除されます。")
+        self.assertContains(response, "ゲーム数")
+
+    def test_edit_stage_generate_matches_form_redirects_back_to_edit_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        for number in range(1, 5):
+            TournamentEntry.objects.create(
+                bracket=bracket,
+                pair_code=str(number),
+                display_order=number,
+            )
+        edit_stage_url = reverse(
+            "edit_stage",
+            kwargs={
+                "code": self.tournament.code,
+                "category_id": category.id,
+                "stage_id": stage.id,
+            },
+        )
+
+        response = self.client.post(
+            reverse(
+                "generate_tournament_matches",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            ),
+            {
+                "match_games": "7",
+                "next": edit_stage_url,
+            },
+        )
+
+        self.assertRedirects(response, edit_stage_url)
+        self.assertEqual(
+            TournamentMatch.objects.filter(
+                bracket=bracket,
+            ).count(),
+            3,
+        )
 
     def test_edit_stage_invalid_group_size_keeps_existing_league_slots(self):
         category = Category.objects.create(

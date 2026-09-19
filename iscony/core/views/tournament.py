@@ -511,6 +511,8 @@ def generate_tournament_matches(request, code, bracket_id):
     シード/byeに相当する内部通過試合は、後続の勝ち上がり確認にも使う。
     """
 
+    next_url = request.GET.get("next") or request.POST.get("next") or ""
+
     tournament = get_object_or_404(
         Tournament,
         code=code
@@ -703,6 +705,9 @@ def generate_tournament_matches(request, code, bracket_id):
                 advance_tournament_bye_winners(bracket)
                 auto_apply_stage_advancements_if_ready(bracket.stage)
 
+                if next_url.startswith("/"):
+                    return redirect(next_url)
+
                 return redirect(
                     "tournament_match_maintenance",
                     code=tournament.code,
@@ -722,6 +727,7 @@ def generate_tournament_matches(request, code, bracket_id):
             "form": form,
             "has_existing_matches": has_existing_matches,
             "has_scored_matches": has_scored_matches,
+            "next_url": next_url,
         }
     )
 

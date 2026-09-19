@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .league import build_category_group_data
+from ..form_defs.tournament import BracketGenerateForm
 from ..forms import StageEditForm, StageForm, StageSlotSetupForm
 from ..helpers.brackets import get_bracket_size
 from ..helpers.league_grouping import (
@@ -44,6 +45,31 @@ def _target_stage(source):
         return source.target_tournament_entry.bracket.stage
 
     return None
+
+
+def _stage_slot_form_for_current_entries(stage, disabled=False):
+    """現在のStage枠数を表示するためのStage枠フォームを作る。"""
+
+    if stage.stage_type == Stage.TYPE_LEAGUE:
+        initial_pair_count = LeagueEntry.objects.filter(
+            group__stage=stage,
+        ).count()
+    else:
+        initial_pair_count = TournamentEntry.objects.filter(
+            bracket__stage=stage,
+        ).count()
+
+    slot_form = StageSlotSetupForm(
+        initial={
+            "pair_count": initial_pair_count,
+        },
+    )
+
+    if disabled:
+        slot_form.fields["pair_count"].widget.attrs["disabled"] = True
+        slot_form.fields["group_size"].widget.attrs["disabled"] = True
+
+    return slot_form, initial_pair_count
 
 
 def _league_stage_data(stage):
@@ -705,6 +731,25 @@ def edit_stage(request, code, category_id, stage_id):
     )
     stage_type_locked = has_results
     form_class = StageEditForm if stage_type_locked else StageForm
+    bracket = None
+    match_count = 0
+    has_matches = False
+
+    if stage.stage_type == Stage.TYPE_TOURNAMENT:
+        bracket = TournamentBracket.objects.filter(
+            stage=stage,
+        ).first()
+
+        if bracket:
+            match_count = TournamentMatch.objects.filter(
+                bracket=bracket,
+            ).count()
+            has_matches = match_count > 0
+
+    generate_form = None
+
+    if bracket and not has_results:
+        generate_form = BracketGenerateForm()
 
     if request.method == "POST":
         form = form_class(
@@ -725,8 +770,10 @@ def edit_stage(request, code, category_id, stage_id):
                     category_id=category.id,
                 )
 
-            slot_form = None
-            preview_pair_count = 0
+            slot_form, preview_pair_count = _stage_slot_form_for_current_entries(
+                stage,
+                disabled=True,
+            )
 
         else:
             slot_form = StageSlotSetupForm(
@@ -801,26 +848,10 @@ def edit_stage(request, code, category_id, stage_id):
         form = form_class(
             instance=stage,
         )
-        if stage_type_locked:
-            slot_form = None
-            preview_pair_count = 0
-
-        else:
-            if stage.stage_type == Stage.TYPE_LEAGUE:
-                initial_pair_count = LeagueEntry.objects.filter(
-                    group__stage=stage,
-                ).count()
-            else:
-                initial_pair_count = TournamentEntry.objects.filter(
-                    bracket__stage=stage,
-                ).count()
-
-            slot_form = StageSlotSetupForm(
-                initial={
-                    "pair_count": initial_pair_count,
-                },
-            )
-            preview_pair_count = initial_pair_count
+        slot_form, preview_pair_count = _stage_slot_form_for_current_entries(
+            stage,
+            disabled=stage_type_locked,
+        )
 
     context = {
         "tournament": tournament,
@@ -828,6 +859,11 @@ def edit_stage(request, code, category_id, stage_id):
         "form": form,
         "stage": stage,
         "stage_type_locked": stage_type_locked,
+        "bracket": bracket,
+        "has_matches": has_matches,
+        "match_count": match_count,
+        "has_scored_matches": has_results,
+        "generate_form": generate_form,
         "page_title": "Stage編集",
         "submit_label": "更新",
     }
