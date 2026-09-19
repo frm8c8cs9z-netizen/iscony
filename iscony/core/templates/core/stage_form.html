@@ -89,8 +89,12 @@
 </form>
 
 {% if bracket %}
-    <div class="stage-match-generation-tool">
+    <div class="stage-match-generation-tool" id="tournament-match-generation-tool">
         <h3>試合生成</h3>
+
+        <p class="subtle-text">
+            Stage本体の「更新」ボタンとは別の操作です。試合を作成・作り直すには、ここの「生成する」「再生成する」ボタンを押してください。
+        </p>
 
         <p>
             {% if has_matches %}
@@ -130,6 +134,7 @@
             const stageType = document.getElementById("id_stage_type");
             const leagueSetup = document.getElementById("league-slot-setup");
             const tournamentSetup = document.getElementById("tournament-slot-setup");
+            const matchGenerationTool = document.getElementById("tournament-match-generation-tool");
 
             if (!stageType || !leagueSetup || !tournamentSetup) {
                 return;
@@ -137,6 +142,10 @@
 
             leagueSetup.hidden = stageType.value !== "league";
             tournamentSetup.hidden = stageType.value !== "tournament";
+
+            if (matchGenerationTool) {
+                matchGenerationTool.hidden = stageType.value !== "tournament";
+            }
         }
 
         function bracketSizeFor(pairCount) {
