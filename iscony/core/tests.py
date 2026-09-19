@@ -8808,6 +8808,75 @@ class CategoryManagementTests(TestCase):
             sum(candidate["group_sizes"]),
         )
 
+    def test_group_base_size_uses_remainder_group_distribution(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self._create_participants(category, 17)
+        stage, groups = self._create_league_stage(category, 4)
+
+        self.assertEqual(
+            [
+                group_base_size(group)
+                for group in groups
+            ],
+            [5, 4, 4, 4],
+        )
+
+    def test_add_league_entry_slot_adds_extra_slot_after_remainder_base(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        participants = self._create_participants(category, 17)
+        _, groups = self._create_league_stage(category, 4)
+        group_sizes = [5, 4, 4, 3]
+        participant_index = 0
+        pair_code = 1
+
+        for group, group_size in zip(groups, group_sizes):
+            for display_order in range(1, group_size + 1):
+                self._create_entry(
+                    category,
+                    group,
+                    pair_code,
+                    display_order,
+                    participants[participant_index],
+                )
+                participant_index += 1
+                pair_code += 1
+
+        self.assertEqual(group_base_size(groups[0]), 5)
+
+        added_entry = add_league_entry_slot(groups[0])
+
+        self.assertIsNone(added_entry.participant)
+        self.assertEqual(added_entry.display_order, 6)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[0]).count(),
+            6,
+        )
+
+    def test_group_base_size_returns_same_base_without_remainder(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self._create_participants(category, 16)
+        _, groups = self._create_league_stage(category, 4)
+
+        self.assertEqual(
+            [
+                group_base_size(group)
+                for group in groups
+            ],
+            [4, 4, 4, 4],
+        )
+
     def test_add_stage_with_invalid_group_size_does_not_create_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -9236,10 +9305,13 @@ class CategoryManagementTests(TestCase):
             name="B",
             display_order=2,
         )
-        participants = self._create_participants(category, 7)
+        participants = self._create_participants(category, 9)
 
-        for group, offset in ((group_a, 0), (group_b, 3)):
-            for number in range(1, 4):
+        for group, offset, size in (
+            (group_a, 0, 5),
+            (group_b, 5, 3),
+        ):
+            for number in range(1, size + 1):
                 participant = participants[offset + number - 1]
                 LeagueEntry.objects.create(
                     category=category,
@@ -9273,11 +9345,11 @@ class CategoryManagementTests(TestCase):
         )
         added_entry = LeagueEntry.objects.get(
             group=group_a,
-            pair_code="4",
+            pair_code="6",
         )
         self.assertIsNone(added_entry.participant)
-        self.assertEqual(added_entry.display_order, 4)
-        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 4)
+        self.assertEqual(added_entry.display_order, 6)
+        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 6)
 
     def test_add_league_entry_slot_rejects_when_stage_would_exceed_participant_count(self):
         category = Category.objects.create(
@@ -9286,7 +9358,7 @@ class CategoryManagementTests(TestCase):
             display_order=1,
         )
         stage, groups = self._create_league_stage(category, 4)
-        participants = self._create_participants(category, 17)
+        participants = self._create_participants(category, 16)
 
         participant_index = 0
         pair_code = 1
@@ -9302,22 +9374,14 @@ class CategoryManagementTests(TestCase):
                 participant_index += 1
                 pair_code += 1
 
-        add_league_entry_slot(groups[0])
-        added_entry = LeagueEntry.objects.get(
-            group=groups[0],
-            display_order=5,
-        )
-        added_entry.participant = participants[participant_index]
-        added_entry.save(update_fields=["participant"])
-
         self.assertEqual(
             LeagueEntry.objects.filter(group__stage=stage).count(),
-            17,
+            16,
         )
         self.assertEqual(group_base_size(groups[0]), 4)
 
         with self.assertRaises(ValidationError):
-            add_league_entry_slot(groups[1])
+            add_league_entry_slot(groups[0])
 
     def test_add_league_entry_slot_rejects_empty_base_slot(self):
         category = Category.objects.create(
@@ -9329,8 +9393,8 @@ class CategoryManagementTests(TestCase):
         participants = self._create_participants(category, 7)
         pair_code = 1
 
-        for group in groups:
-            for display_order in range(1, 4):
+        for group, group_size in zip(groups, [4, 2]):
+            for display_order in range(1, group_size + 1):
                 participant = None
                 if not (group == groups[0] and display_order == 3):
                     participant = participants[pair_code - 1]
@@ -9348,7 +9412,7 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(
             LeagueEntry.objects.filter(group=groups[0]).count(),
-            3,
+            4,
         )
 
     def test_add_league_entry_slot_shifts_pair_codes(self):
@@ -9361,8 +9425,8 @@ class CategoryManagementTests(TestCase):
         participants = self._create_participants(category, 9)
         pair_code = 1
 
-        for group in groups:
-            for display_order in range(1, 5):
+        for group, group_size in zip(groups, [5, 3]):
+            for display_order in range(1, group_size + 1):
                 self._create_entry(
                     category,
                     group,
@@ -9385,7 +9449,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            ["1", "2", "3", "4", "5"],
+            ["1", "2", "3", "4", "5", "6"],
         )
         self.assertEqual(
             list(
@@ -9398,7 +9462,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            ["6", "7", "8", "9"],
+            ["7", "8", "9"],
         )
 
     def test_unassign_league_entry_participant_removes_extra_slot(self):
@@ -9411,7 +9475,7 @@ class CategoryManagementTests(TestCase):
         participants = self._create_participants(category, 9)
 
         target_entry = None
-        for display_order in range(1, 6):
+        for display_order in range(1, 7):
             entry = self._create_entry(
                 category,
                 groups[0],
@@ -9419,9 +9483,9 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-            if display_order == 5:
+            if display_order == 6:
                 target_entry = entry
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        for display_order, pair_code in enumerate(range(7, 10), start=1):
             self._create_entry(
                 category,
                 groups[1],
@@ -9507,7 +9571,7 @@ class CategoryManagementTests(TestCase):
         participants = self._create_participants(category, 9)
         source_entry = None
 
-        for display_order in range(1, 6):
+        for display_order in range(1, 7):
             entry = self._create_entry(
                 category,
                 groups[0],
@@ -9515,9 +9579,9 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-            if display_order == 5:
+            if display_order == 6:
                 source_entry = entry
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        for display_order, pair_code in enumerate(range(7, 10), start=1):
             participant = participants[pair_code - 1]
             if pair_code == 9:
                 participant = None
@@ -9531,7 +9595,7 @@ class CategoryManagementTests(TestCase):
 
         target_entry = LeagueEntry.objects.get(
             group=groups[1],
-            display_order=4,
+            display_order=3,
         )
         source_entry_id = source_entry.id
         participant = source_entry.participant
@@ -9558,7 +9622,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            [1, 2, 3, 4],
+            [1, 2, 3, 4, 5],
         )
         self.assertEqual(
             list(
@@ -9571,7 +9635,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            ["5", "6", "7", "8"],
+            ["6", "7", "8"],
         )
 
     def test_move_league_entry_participant_refreshes_shifted_empty_target(self):
@@ -9585,7 +9649,7 @@ class CategoryManagementTests(TestCase):
         source_entry = None
         target_entry = None
 
-        for display_order in range(1, 6):
+        for display_order in range(1, 7):
             entry = self._create_entry(
                 category,
                 groups[0],
@@ -9593,11 +9657,11 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-            if display_order == 5:
+            if display_order == 6:
                 source_entry = entry
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        for display_order, pair_code in enumerate(range(7, 10), start=1):
             participant = participants[pair_code - 1]
-            if pair_code == 6:
+            if pair_code == 7:
                 participant = None
             entry = self._create_entry(
                 category,
@@ -9606,7 +9670,7 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participant,
             )
-            if pair_code == 6:
+            if pair_code == 7:
                 target_entry = entry
 
         source_entry_id = source_entry.id
@@ -9636,10 +9700,10 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            ["5", "6", "7", "8"],
+            ["6", "7", "8"],
         )
         shifted_target = LeagueEntry.objects.get(id=target_entry.id)
-        self.assertEqual(shifted_target.pair_code, "5")
+        self.assertEqual(shifted_target.pair_code, "6")
         self.assertEqual(shifted_target.participant, participant)
 
     def test_move_league_entry_participant_to_new_slot_moves_base_source(self):
@@ -9692,10 +9756,10 @@ class CategoryManagementTests(TestCase):
             display_order=1,
         )
         stage, groups = self._create_league_stage(category, 3)
-        participants = self._create_participants(category, 11)
+        participants = self._create_participants(category, 12)
         source_entry = None
 
-        for display_order in range(1, 5):
+        for display_order in range(1, 6):
             entry = self._create_entry(
                 category,
                 groups[0],
@@ -9703,9 +9767,9 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-            if display_order == 4:
+            if display_order == 5:
                 source_entry = entry
-        for display_order, pair_code in enumerate(range(5, 8), start=1):
+        for display_order, pair_code in enumerate(range(6, 9), start=1):
             self._create_entry(
                 category,
                 groups[1],
@@ -9713,7 +9777,7 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[pair_code - 1],
             )
-        for display_order, pair_code in enumerate(range(8, 11), start=1):
+        for display_order, pair_code in enumerate(range(9, 13), start=1):
             self._create_entry(
                 category,
                 groups[2],
@@ -9734,8 +9798,8 @@ class CategoryManagementTests(TestCase):
             LeagueEntry.objects.filter(id=source_entry_id).exists()
         )
         self.assertEqual(new_entry.group, groups[2])
-        self.assertEqual(new_entry.display_order, 4)
-        self.assertEqual(new_entry.pair_code, "10")
+        self.assertEqual(new_entry.display_order, 5)
+        self.assertEqual(new_entry.pair_code, "12")
         self.assertEqual(new_entry.participant, participant)
         self.assertEqual(
             list(
@@ -9748,7 +9812,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            [1, 2, 3],
+            [1, 2, 3, 4],
         )
         self.assertEqual(
             list(
@@ -9761,11 +9825,11 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            ["4", "5", "6"],
+            ["5", "6", "7"],
         )
         self.assertEqual(
             LeagueEntry.objects.filter(group__stage=stage).count(),
-            10,
+            12,
         )
 
     def test_move_league_entry_participant_to_new_slot_rolls_back_at_limit(self):
@@ -9880,7 +9944,7 @@ class CategoryManagementTests(TestCase):
             display_order=1,
         )
         _, groups = self._create_league_stage(category, 1)
-        participants = self._create_participants(category, 4)
+        participants = self._create_participants(category, 5)
         entries = [
             self._create_entry(
                 category,
@@ -10194,7 +10258,7 @@ class CategoryManagementTests(TestCase):
         participants = self._create_participants(category, 9)
         target_entry = None
 
-        for display_order in range(1, 6):
+        for display_order in range(1, 7):
             entry = self._create_entry(
                 category,
                 groups[0],
@@ -10204,7 +10268,7 @@ class CategoryManagementTests(TestCase):
             )
             if display_order == 2:
                 target_entry = entry
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        for display_order, pair_code in enumerate(range(7, 10), start=1):
             self._create_entry(
                 category,
                 groups[1],
@@ -10226,7 +10290,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            [1, 2, 3, 4],
+            [1, 2, 3, 4, 5],
         )
         self.assertEqual(
             list(
@@ -10239,7 +10303,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            ["5", "6", "7", "8"],
+            ["6", "7", "8"],
         )
 
     def test_unassign_league_entry_participant_keeps_base_slot(self):
@@ -10283,11 +10347,11 @@ class CategoryManagementTests(TestCase):
             display_order=1,
         )
         stage, groups = self._create_league_stage(category, 2)
-        participants = self._create_participants(category, 7)
+        participants = self._create_participants(category, 9)
         pair_code = 1
 
-        for group in groups:
-            for display_order in range(1, 4):
+        for group, group_size in zip(groups, [5, 3]):
+            for display_order in range(1, group_size + 1):
                 self._create_entry(
                     category,
                     group,
@@ -10327,7 +10391,7 @@ class CategoryManagementTests(TestCase):
         _, groups = self._create_league_stage(category, 2)
         participants = self._create_participants(category, 9)
 
-        for display_order in range(1, 6):
+        for display_order in range(1, 7):
             self._create_entry(
                 category,
                 groups[0],
@@ -10335,7 +10399,7 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        for display_order, pair_code in enumerate(range(7, 10), start=1):
             self._create_entry(
                 category,
                 groups[1],
@@ -10346,7 +10410,7 @@ class CategoryManagementTests(TestCase):
 
         removed_participant = LeagueEntry.objects.get(
             group=groups[0],
-            display_order=5,
+            display_order=6,
         ).participant
         response = self.client.post(
             reverse(
@@ -10363,7 +10427,7 @@ class CategoryManagementTests(TestCase):
         self.assertIn("参加者を未割当に戻しました", message_text)
         self.assertEqual(
             LeagueEntry.objects.filter(group=groups[0]).count(),
-            4,
+            5,
         )
         self.assertFalse(
             LeagueEntry.objects.filter(
@@ -10420,7 +10484,7 @@ class CategoryManagementTests(TestCase):
         participants = self._create_participants(category, 9)
         entries = []
 
-        for display_order in range(1, 6):
+        for display_order in range(1, 7):
             entries.append(
                 self._create_entry(
                     category,
@@ -10430,7 +10494,7 @@ class CategoryManagementTests(TestCase):
                     participants[display_order - 1],
                 )
             )
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        for display_order, pair_code in enumerate(range(7, 10), start=1):
             self._create_entry(
                 category,
                 groups[1],
@@ -10463,7 +10527,7 @@ class CategoryManagementTests(TestCase):
         self.assertIsNotNone(entries[-1].participant)
         self.assertEqual(
             LeagueEntry.objects.filter(group=groups[0]).count(),
-            5,
+            6,
         )
 
     def test_stage_pair_maintenance_hides_add_slot_at_participant_limit(self):
@@ -10679,9 +10743,9 @@ class CategoryManagementTests(TestCase):
             name="B",
             display_order=2,
         )
-        participants = self._create_participants(category, 5)
+        participants = self._create_participants(category, 6)
 
-        for number in range(1, 4):
+        for number in range(1, 5):
             LeagueEntry.objects.create(
                 category=category,
                 group=group_a,
@@ -10689,13 +10753,13 @@ class CategoryManagementTests(TestCase):
                 pair_code=str(number),
                 display_order=number,
             )
-        for number in range(4, 6):
+        for number in range(5, 7):
             LeagueEntry.objects.create(
                 category=category,
                 group=group_b,
                 participant=participants[number - 1],
                 pair_code=str(number),
-                display_order=number - 3,
+                display_order=number - 4,
             )
 
         response = self.client.post(
@@ -10706,7 +10770,7 @@ class CategoryManagementTests(TestCase):
             follow=True,
         )
 
-        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 3)
+        self.assertEqual(LeagueEntry.objects.filter(group=group_a).count(), 4)
         self.assertContains(
             response,
             "A は既に追加枠があるか、基本枠数と一致していません。",
@@ -10722,8 +10786,8 @@ class CategoryManagementTests(TestCase):
         participants = self._create_participants(category, 9)
         pair_code = 1
 
-        for group in groups:
-            for display_order in range(1, 5):
+        for group, group_size in zip(groups, [5, 3]):
+            for display_order in range(1, group_size + 1):
                 self._create_entry(
                     category,
                     group,
@@ -10745,11 +10809,11 @@ class CategoryManagementTests(TestCase):
 
         added_entry = LeagueEntry.objects.get(
             group=groups[0],
-            display_order=5,
+            display_order=6,
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(added_entry.participant, participants[8])
-        self.assertEqual(added_entry.pair_code, "5")
+        self.assertEqual(added_entry.pair_code, "6")
         self.assertEqual(
             response.json(),
             {
@@ -10771,7 +10835,7 @@ class CategoryManagementTests(TestCase):
                     flat=True,
                 )
             ),
-            ["6", "7", "8", "9"],
+            ["7", "8", "9"],
         )
         self.assertEqual(
             LeagueEntry.objects.filter(group__stage=stage).count(),
@@ -11153,12 +11217,11 @@ class CategoryManagementTests(TestCase):
         )
         self._create_entry(
             category,
-            groups[1],
+            groups[0],
             4,
-            2,
-            participants[3],
+            3,
+            participants[4],
         )
-
         response = self.client.post(
             reverse(
                 "assign_league_entry_participant",
@@ -11547,7 +11610,7 @@ class CategoryManagementTests(TestCase):
         _, groups = self._create_league_stage(category, 2)
         participants = self._create_participants(category, 9)
 
-        for display_order in range(1, 6):
+        for display_order in range(1, 7):
             self._create_entry(
                 category,
                 groups[0],
@@ -11555,7 +11618,7 @@ class CategoryManagementTests(TestCase):
                 display_order,
                 participants[display_order - 1],
             )
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
+        for display_order, pair_code in enumerate(range(7, 10), start=1):
             self._create_entry(
                 category,
                 groups[1],
@@ -11566,7 +11629,7 @@ class CategoryManagementTests(TestCase):
 
         entry = LeagueEntry.objects.get(
             group=groups[0],
-            display_order=5,
+            display_order=6,
         )
         participant = entry.participant
 

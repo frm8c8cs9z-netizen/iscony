@@ -87,7 +87,11 @@ def group_base_size(group):
 
     既存の枠数がどう変化していても結果がぶれないよう、
     「その時点のグループ間の最小エントリー数」ではなく、
-    参加者数 // グループ数 という安定した計算にする。
+    参加者数・グループ数・display_orderという安定した値から
+    計算する。参加ペア数がグループ数で割り切れない場合、
+    create_league_stage_groups() は余りをdisplay_orderの若い
+    グループから順に+1人多く配分するため、ここでも同じ規則で
+    「このグループの本来のベース枠数」を算出する。
     """
 
     if group.stage_id is None:
@@ -103,7 +107,15 @@ def group_base_size(group):
         category_id=group.category_id,
     ).count()
 
-    return participant_count // group_count
+    base, remainder = divmod(
+        participant_count,
+        group_count,
+    )
+
+    if group.display_order <= remainder:
+        return base + 1
+
+    return base
 
 
 def add_league_entry_slot(group):
