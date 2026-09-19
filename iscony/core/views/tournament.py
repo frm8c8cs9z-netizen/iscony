@@ -57,6 +57,7 @@ from ..services import (
     auto_apply_stage_advancements_if_ready,
     consume_stage_advancement_result,
     delete_tournament_score,
+    generate_tournament_bracket_matches,
     move_tournament_entry_participant,
     save_tournament_score,
     save_tournament_retirement,
@@ -552,158 +553,14 @@ def generate_tournament_matches(request, code, bracket_id):
 
             else:
 
-                entries = list(
-                    TournamentEntry.objects.filter(
-                        bracket=bracket,
-                    ).order_by(
-                        "display_order",
-                    )
-                )
-
                 match_games = int(
                     form.cleaned_data["match_games"]
                 )
 
-                entry_count = len(entries)
-
-                size = get_bracket_size(
-                    entry_count
+                generate_tournament_bracket_matches(
+                    bracket,
+                    match_games,
                 )
-
-                TournamentMatch.objects.filter(
-                    bracket=bracket
-                ).delete()
-
-                rounds_count = 0
-                temp_size = size
-
-                while temp_size > 1:
-                    rounds_count += 1
-                    temp_size = temp_size // 2
-
-                slots = build_display_bracket_slots(
-                    entries,
-                    size
-                )
-
-                m_number = 1
-                s_number = 1
-
-                created_matches = {}
-
-                for round_number in range(
-                    1,
-                    rounds_count + 1
-                ):
-
-                    matches_count = size // (
-                        2 ** round_number
-                    )
-
-                    for match_number in range(
-                        1,
-                        matches_count + 1
-                    ):
-
-                        is_seed_match = False
-
-                        if round_number == 1:
-
-                            slot1 = slots[
-                                (match_number - 1) * 2
-                            ]
-
-                            slot2 = slots[
-                                (match_number - 1) * 2 + 1
-                            ]
-
-                            is_seed_match = (
-                                (slot1 and not slot2)
-                                or
-                                (slot2 and not slot1)
-                            )
-
-                        if is_seed_match:
-                            match_code = f"S{s_number}"
-                            s_number += 1
-                        else:
-                            match_code = f"M{m_number}"
-                            m_number += 1
-
-                        match = TournamentMatch.objects.create(
-                            bracket=bracket,
-                            round_number=round_number,
-                            match_number=match_number,
-                            match_games=match_games,
-                            match_code=match_code,
-                            match_label=match_code,
-                        )
-
-                        created_matches[
-                            (
-                                round_number,
-                                match_number
-                            )
-                        ] = match
-
-                for round_number in range(
-                    1,
-                    rounds_count
-                ):
-
-                    matches_count = size // (
-                        2 ** round_number
-                    )
-
-                    for match_number in range(
-                        1,
-                        matches_count + 1
-                    ):
-
-                        match = created_matches[
-                            (
-                                round_number,
-                                match_number
-                            )
-                        ]
-
-                        next_match_number = (
-                            match_number + 1
-                        ) // 2
-
-                        next_match = created_matches[
-                            (
-                                round_number + 1,
-                                next_match_number
-                            )
-                        ]
-
-                        next_slot = (
-                            "pair1"
-                            if match_number % 2 == 1
-                            else "pair2"
-                        )
-
-                        match.next_match = next_match
-                        match.next_slot = next_slot
-                        match.save()
-
-                first_round_matches = list(
-                    TournamentMatch.objects.filter(
-                        bracket=bracket,
-                        round_number=1,
-                    ).order_by(
-                        "match_number"
-                    )
-                )
-
-                for index, match in enumerate(first_round_matches):
-                    match.pair1 = slots[index * 2]
-                    match.pair2 = slots[index * 2 + 1]
-                    match.save()
-
-                advance_tournament_bye_winners(bracket)
-                auto_apply_stage_advancements_if_ready(bracket.stage)
 
                 if next_url.startswith("/"):
                     return redirect(next_url)

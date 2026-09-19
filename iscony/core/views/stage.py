@@ -7,7 +7,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .league import build_category_group_data
-from ..form_defs.tournament import BracketGenerateForm
 from ..forms import StageEditForm, StageForm, StageSlotSetupForm
 from ..helpers.brackets import get_bracket_size
 from ..helpers.league_grouping import (
@@ -32,6 +31,7 @@ from ..models import (
 from ..services import (
     create_league_stage_groups,
     create_tournament_stage_bracket,
+    generate_tournament_bracket_matches,
     inspect_stage_advancement_readiness,
 )
 from .tournament import build_tournament_bracket_display_data
@@ -48,28 +48,38 @@ def _target_stage(source):
 
 
 def _stage_slot_form_for_current_entries(stage, disabled=False):
-    """現在のStage枠数を表示するためのStage枠フォームを作る。"""
+    """現在のStage枠数(・トーナメントの場合はゲーム数)を表示するためのStage枠フォームを作る。"""
+
+    initial = {}
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
-        initial_pair_count = LeagueEntry.objects.filter(
+        initial["pair_count"] = LeagueEntry.objects.filter(
             group__stage=stage,
         ).count()
     else:
-        initial_pair_count = TournamentEntry.objects.filter(
+        initial["pair_count"] = TournamentEntry.objects.filter(
             bracket__stage=stage,
         ).count()
 
+        existing_match_games = TournamentMatch.objects.filter(
+            bracket__stage=stage,
+        ).values_list(
+            "match_games",
+            flat=True,
+        ).first()
+
+        initial["match_games"] = existing_match_games or 7
+
     slot_form = StageSlotSetupForm(
-        initial={
-            "pair_count": initial_pair_count,
-        },
+        initial=initial,
     )
 
     if disabled:
         slot_form.fields["pair_count"].widget.attrs["disabled"] = True
         slot_form.fields["group_size"].widget.attrs["disabled"] = True
+        slot_form.fields["match_games"].widget.attrs["disabled"] = True
 
-    return slot_form, initial_pair_count
+    return slot_form, initial["pair_count"]
 
 
 def _league_stage_data(stage):
@@ -572,12 +582,31 @@ def _validate_stage_slot_setup(stage_type, slot_form):
             )
             return False
 
-    if stage_type == Stage.TYPE_TOURNAMENT and pair_count < 1:
-        slot_form.add_error(
-            "pair_count",
-            "参加ペア数は1以上で入力してください。",
-        )
-        return False
+    if stage_type == Stage.TYPE_TOURNAMENT:
+
+        if pair_count < 1:
+            slot_form.add_error(
+                "pair_count",
+                "参加ペア数は1以上で入力してください。",
+            )
+            return False
+
+        match_games = slot_form.cleaned_data.get("match_games")
+
+        if match_games is None:
+            match_games = 7
+            slot_form.cleaned_data["match_games"] = match_games
+
+        if (
+            match_games < 3
+            or match_games > 9
+            or match_games % 2 == 0
+        ):
+            slot_form.add_error(
+                "match_games",
+                "ゲーム数は3〜9の奇数で入力してください。",
+            )
+            return False
 
     return True
 
@@ -648,18 +677,23 @@ def add_stage(request, code, category_id):
 
             else:
                 bracket_size = get_bracket_size(pair_count)
+                match_games = slot_form.cleaned_data.get("match_games") or 7
                 with transaction.atomic():
                     stage.save()
-                    create_tournament_stage_bracket(
+                    bracket = create_tournament_stage_bracket(
                         stage,
                         pair_count,
+                    )
+                    generate_tournament_bracket_matches(
+                        bracket,
+                        match_games,
                     )
 
                 messages.success(
                     request,
                     (
                         f"{stage.name} を追加しました"
-                        f"({bracket_size}枠のトーナメント表)"
+                        f"({bracket_size}枠のトーナメント表、ゲーム数{match_games})"
                     ),
                 )
 
@@ -731,25 +765,6 @@ def edit_stage(request, code, category_id, stage_id):
     )
     stage_type_locked = has_results
     form_class = StageEditForm if stage_type_locked else StageForm
-    bracket = None
-    match_count = 0
-    has_matches = False
-
-    if stage.stage_type == Stage.TYPE_TOURNAMENT:
-        bracket = TournamentBracket.objects.filter(
-            stage=stage,
-        ).first()
-
-        if bracket:
-            match_count = TournamentMatch.objects.filter(
-                bracket=bracket,
-            ).count()
-            has_matches = match_count > 0
-
-    generate_form = None
-
-    if bracket and not has_results:
-        generate_form = BracketGenerateForm()
 
     if request.method == "POST":
         form = form_class(
@@ -813,9 +828,16 @@ def edit_stage(request, code, category_id, stage_id):
 
                     else:
                         bracket_size = get_bracket_size(pair_count)
-                        create_tournament_stage_bracket(
+                        match_games = slot_form.cleaned_data.get(
+                            "match_games",
+                        ) or 7
+                        bracket = create_tournament_stage_bracket(
                             stage,
                             pair_count,
+                        )
+                        generate_tournament_bracket_matches(
+                            bracket,
+                            match_games,
                         )
 
                 if stage.stage_type == Stage.TYPE_LEAGUE:
@@ -832,7 +854,7 @@ def edit_stage(request, code, category_id, stage_id):
                         request,
                         (
                             f"{stage.name} を更新しました"
-                            f"({bracket_size}枠のトーナメント表に作り直しました)"
+                            f"({bracket_size}枠のトーナメント表、ゲーム数{match_games}に作り直しました)"
                         ),
                     )
 
@@ -859,11 +881,6 @@ def edit_stage(request, code, category_id, stage_id):
         "form": form,
         "stage": stage,
         "stage_type_locked": stage_type_locked,
-        "bracket": bracket,
-        "has_matches": has_matches,
-        "match_count": match_count,
-        "has_scored_matches": has_results,
-        "generate_form": generate_form,
         "page_title": "Stage編集",
         "submit_label": "更新",
     }

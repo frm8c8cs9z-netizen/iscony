@@ -107,6 +107,10 @@ class StageSlotSetupForm(forms.Form):
         min_value=3,
         label="1グループあたりのペア数",
     )
+    match_games = forms.IntegerField(
+        required=False,
+        label="ゲーム数",
+    )
 
 
 class ParticipantForm(forms.ModelForm):
