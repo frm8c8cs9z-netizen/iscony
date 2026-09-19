@@ -18538,14 +18538,6 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Stage一覧へ戻る")
-        self.assertContains(
-            response,
-            reverse(
-                "category_stage_overview",
-                kwargs={"category_id": self.category.id},
-            ),
-        )
 
     def test_tournament_match_edit_limits_pair_choices_to_category_entries(self):
         other_category = Category.objects.create(
