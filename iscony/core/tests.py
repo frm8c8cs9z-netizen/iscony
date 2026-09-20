@@ -13666,6 +13666,10 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         self.assertTrue(get_response.context["stage_type_locked"])
+        self.assertNotContains(
+            get_response,
+            'data-confirm-regenerate="true"',
+        )
         self.assertIsNotNone(get_response.context.get("slot_form"))
         self.assertEqual(
             get_response.context["slot_form"].initial["pair_count"],
@@ -13870,10 +13874,40 @@ class CategoryManagementTests(TestCase):
         self.assertContains(add_response, "Stage追加")
         self.assertContains(add_response, "保存")
         self.assertContains(add_response, "stage_type")
+        self.assertContains(add_response, "キャンセル")
+        self.assertContains(
+            add_response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertNotContains(
+            add_response,
+            'data-confirm-regenerate="true"',
+        )
         self.assertEqual(edit_response.status_code, 200)
         self.assertContains(edit_response, "Stage編集")
         self.assertContains(edit_response, "更新")
         self.assertContains(edit_response, "stage_type")
+        self.assertContains(edit_response, "キャンセル")
+        self.assertContains(
+            edit_response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertContains(
+            edit_response,
+            'data-confirm-regenerate="true"',
+        )
         self.assertContains(edit_response, 'value="tournament"')
         self.assertNotContains(edit_response, "種別: リーグ")
         self.assertNotContains(

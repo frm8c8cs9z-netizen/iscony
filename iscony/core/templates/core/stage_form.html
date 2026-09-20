@@ -24,7 +24,7 @@
     </p>
 {% endif %}
 
-<form method="post">
+<form method="post"{% if stage and not stage_type_locked %} data-confirm-regenerate="true"{% endif %}>
     {% csrf_token %}
 
     {{ form.as_p }}
@@ -88,6 +88,9 @@
     <button type="submit">
         {{ submit_label }}
     </button>
+    <a href="{% url 'category_stage_management' tournament.code category.id %}">
+        キャンセル
+    </a>
 </form>
 
 {% if slot_form %}
@@ -143,6 +146,20 @@
 
             if (pairCountInput) {
                 pairCountInput.addEventListener("input", updateTournamentSlotPreview);
+            }
+
+            const regenerateForm = document.querySelector(
+                "form[data-confirm-regenerate]"
+            );
+            if (regenerateForm) {
+                regenerateForm.addEventListener("submit", function(event) {
+                    const confirmed = window.confirm(
+                        "現在の枠構成を削除して作り直します。よろしいですか？"
+                    );
+                    if (!confirmed) {
+                        event.preventDefault();
+                    }
+                });
             }
 
             toggleStageSlotSetup();
