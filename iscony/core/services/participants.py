@@ -14,7 +14,9 @@ from django.db import transaction
 from django.db.models import Max, Q
 
 from ..models import (
+    Group,
     LeagueEntry,
+    Participant,
     ParticipantOrganizationValue,
     RoundRobinMatch,
     Schedule,
@@ -358,6 +360,65 @@ def _entry_has_completed_match(entry):
     ).exists()
 
 
+def _delete_league_entry_and_renumber(entry):
+    """
+    LeagueEntryを削除し、同グループ内の残りentryの表示順を詰め直し、
+    それより後ろにある他グループの全entryのpair_codeを-1ずつ前へ
+    シフトする(グループごとのブロック連番を維持したまま詰める)。
+
+    呼び出し側で、削除してよいかどうかの判定は済ませてから呼ぶこと。
+    """
+
+    group = entry.group
+
+    old_code = (
+        int(entry.pair_code)
+        if entry.pair_code.isdigit()
+        else None
+    )
+
+    entry.delete()
+
+    remaining_entries = list(
+        LeagueEntry.objects.filter(
+            group=group,
+        ).order_by(
+            "display_order",
+        )
+    )
+    for index, remaining_entry in enumerate(
+        remaining_entries,
+        start=1,
+    ):
+        if remaining_entry.display_order != index:
+            remaining_entry.display_order = index
+            remaining_entry.save(
+                update_fields=["display_order"],
+            )
+
+    if old_code is not None:
+        shifting_entries = [
+            shifting_entry
+            for shifting_entry in LeagueEntry.objects.filter(
+                group__stage_id=group.stage_id,
+            )
+            if (
+                shifting_entry.pair_code.isdigit()
+                and int(shifting_entry.pair_code) > old_code
+            )
+        ]
+        shifting_entries.sort(
+            key=lambda shifting_entry: int(
+                shifting_entry.pair_code
+            ),
+        )
+        for shifting_entry in shifting_entries:
+            shifting_entry.pair_code = str(
+                int(shifting_entry.pair_code) - 1
+            )
+            shifting_entry.save(update_fields=["pair_code"])
+
+
 def unassign_league_entry_participant(entry):
     """
     LeagueEntryの参加者割当を解除する。
@@ -387,59 +448,72 @@ def unassign_league_entry_participant(entry):
         ).count()
 
         if group_entry_count > base:
-            old_code = (
-                int(entry.pair_code)
-                if entry.pair_code.isdigit()
-                else None
-            )
-
-            entry.delete()
-
-            remaining_entries = list(
-                LeagueEntry.objects.filter(
-                    group=group,
-                ).order_by(
-                    "display_order",
-                )
-            )
-            for index, remaining_entry in enumerate(
-                remaining_entries,
-                start=1,
-            ):
-                if remaining_entry.display_order != index:
-                    remaining_entry.display_order = index
-                    remaining_entry.save(
-                        update_fields=["display_order"],
-                    )
-
-            if old_code is not None:
-                shifting_entries = [
-                    shifting_entry
-                    for shifting_entry in LeagueEntry.objects.filter(
-                        group__stage_id=group.stage_id,
-                    )
-                    if (
-                        shifting_entry.pair_code.isdigit()
-                        and int(shifting_entry.pair_code) > old_code
-                    )
-                ]
-                shifting_entries.sort(
-                    key=lambda shifting_entry: int(
-                        shifting_entry.pair_code
-                    ),
-                )
-                for shifting_entry in shifting_entries:
-                    shifting_entry.pair_code = str(
-                        int(shifting_entry.pair_code) - 1
-                    )
-                    shifting_entry.save(update_fields=["pair_code"])
-
+            _delete_league_entry_and_renumber(entry)
             return None
 
         entry.participant = None
         entry.save(update_fields=["participant"])
 
         return entry
+
+
+def move_empty_league_entry_slot(source_entry, target_group):
+    """
+    参加者が割り当てられていない枠(source_entry)を削除し、
+    target_groupに新しい未割当枠を1つ追加する。
+
+    source_entryは、そのグループの現在の枠数が、ステージ全体の
+    素の基本枠数(参加者数 // グループ数の切り捨て)より多い場合
+    (=そのグループが余りを受け持っている場合)のみ削除できる。
+
+    参加者を割り振る段階(結果未入力)で、余りをどのグループに
+    持たせるかを調整するための機能。結果入力済みの場合は
+    呼び出し元(ビュー)で弾くこと。
+    """
+
+    if source_entry.participant is not None:
+        raise ValidationError(
+            "この枠には参加者が割り当てられています。"
+        )
+
+    group = source_entry.group
+
+    if group.id == target_group.id:
+        raise ValidationError(
+            "移動元と移動先が同じグループです。"
+        )
+
+    if group.stage_id is None or target_group.stage_id != group.stage_id:
+        raise ValidationError(
+            "同じStage内のグループ間でのみ移動できます。"
+        )
+
+    stage_group_count = Group.objects.filter(
+        stage_id=group.stage_id,
+    ).count()
+    participant_count = Participant.objects.filter(
+        category_id=group.category_id,
+    ).count()
+    plain_base = (
+        participant_count // stage_group_count
+        if stage_group_count
+        else 0
+    )
+
+    current_count = LeagueEntry.objects.filter(
+        group=group,
+    ).count()
+
+    if current_count <= plain_base:
+        raise ValidationError(
+            f"{group.name}はこれ以上枠を減らせません。"
+        )
+
+    with transaction.atomic():
+        _delete_league_entry_and_renumber(source_entry)
+        new_entry = add_league_entry_slot(target_group)
+
+    return new_entry
 
 
 def move_league_entry_participant(source_entry, target_entry):

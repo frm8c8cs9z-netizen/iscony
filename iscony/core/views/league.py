@@ -46,6 +46,7 @@ from ..services import (
     group_base_size,
     consume_stage_advancement_result,
     move_league_entry_participant,
+    move_empty_league_entry_slot,
     move_league_entry_participant_to_new_slot,
     save_round_robin_score,
     undo_schedule_replacement,
@@ -1188,25 +1189,41 @@ def pair_maintenance(request, category_id, stage_id=None):
         category_participant_count = Participant.objects.filter(
             category=category,
         ).count()
+        group_rows = [
+            {
+                "group": group,
+                "entries": entries_by_group_id.get(group.id, []),
+                "can_add_slot": (
+                    group.entry_count == group_base_size(group)
+                    and not any(
+                        entry.participant_id is None
+                        for entry in entries_by_group_id.get(group.id, [])
+                    )
+                    and stage_total_entries < category_participant_count
+                ),
+                "can_remove_slot": (
+                    group.entry_count > group_base_size(group)
+                ),
+                "can_give_up_slot": (
+                    group.entry_count > (
+                        category_participant_count // len(groups)
+                        if groups
+                        else 0
+                    )
+                ),
+            }
+            for group in groups
+        ]
 
         context.update({
-            "group_rows": [
+            "group_rows": group_rows,
+            "movable_target_groups": [
                 {
-                    "group": group,
-                    "entries": entries_by_group_id.get(group.id, []),
-                    "can_add_slot": (
-                        group.entry_count == group_base_size(group)
-                        and not any(
-                            entry.participant_id is None
-                            for entry in entries_by_group_id.get(group.id, [])
-                        )
-                        and stage_total_entries < category_participant_count
-                    ),
-                    "can_remove_slot": (
-                        group.entry_count > group_base_size(group)
-                    ),
+                    "id": row["group"].id,
+                    "name": row["group"].name,
                 }
-                for group in groups
+                for row in group_rows
+                if row["can_add_slot"]
             ],
             "unassigned_participants": unassigned_participants,
             "empty_slot_count": empty_slot_count,
@@ -1472,6 +1489,64 @@ def unassign_league_entry_participant_api(request, entry_id):
             "participant_organization": participant_organization,
             "slot_removed": result is None,
             "group_id": group_id,
+        }
+    )
+
+
+def move_empty_league_entry_slot_api(request, entry_id):
+    """POSTで呼ばれ、未割当のLeagueEntry枠を別グループへ移動する。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    source_entry = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+    target_group_id = request.POST.get("target_group_id")
+
+    if not target_group_id:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "移動先を指定してください。",
+            },
+            status=400,
+        )
+
+    target_group = get_object_or_404(
+        Group,
+        id=target_group_id,
+        category=source_entry.category,
+    )
+    source_group_id = source_entry.group_id
+
+    try:
+        new_entry = move_empty_league_entry_slot(
+            source_entry,
+            target_group,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "source_group_id": source_group_id,
+            "target_group_id": target_group.id,
+            "new_entry_id": new_entry.id,
         }
     )
 

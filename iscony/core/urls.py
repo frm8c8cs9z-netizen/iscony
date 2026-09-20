@@ -416,6 +416,12 @@ urlpatterns = [
     ),
 
     path(
+        "pair/<int:entry_id>/move-empty-slot/",
+        league.move_empty_league_entry_slot_api,
+        name="move_empty_league_entry_slot_api",
+    ),
+
+    path(
         "pair/<int:entry_id>/move/",
         league.move_league_entry_participant_api,
         name="move_league_entry_participant_api",

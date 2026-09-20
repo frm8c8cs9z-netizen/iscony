@@ -800,6 +800,31 @@
         overflow-y: auto;
     }
 
+    .move-empty-slot-dialog {
+        border: 1px solid #b8c7dc;
+        border-radius: 8px;
+        padding: 20px;
+        max-width: 360px;
+        box-shadow: 0 4px 16px rgba(38, 62, 90, 0.2);
+    }
+
+    .move-empty-slot-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    .move-empty-slot-dialog select {
+        width: 100%;
+        padding: 6px;
+        margin-top: 6px;
+    }
+
+    .move-empty-slot-dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 16px;
+    }
+
     .pair-assignment-layout--tournament > ul.tournament-assign-participants {
         flex: 0 0 260px;
         max-width: 260px;
