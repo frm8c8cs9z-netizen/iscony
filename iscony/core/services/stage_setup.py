@@ -129,6 +129,13 @@ def add_league_entry_slot(group):
     新しい枠は、そのグループの現在の最大pair_code+1の位置に挿入し、
     それより後ろにある他グループの全entryのpair_codeを+1ずつ
     後ろへシフトする(グループごとのブロック連番を維持するため)。
+
+    この関数を含む＋1枠系の操作は「裏機能」であり、通常の運用
+    (結果未入力の段階でのStage編集からの枠再生成)では使わない想定。
+    詳細はcore/services/participants.pyの
+    assign_participant_with_shift直前のコメント、および
+    docs/participant_db_design.md「リーグの＋1枠D&D機能の位置づけ」
+    を参照。
     """
 
     with transaction.atomic():
