@@ -103,6 +103,7 @@
                                     type="button"
                                     class="move-empty-slot-trigger"
                                     data-move-empty-slot-url="{% url 'move_empty_league_entry_slot_api' pair.id %}"
+                                    data-source-group-id="{{ row.group.id }}"
                                 >
                                     別グループへ移動
                                 </button>
@@ -748,8 +749,21 @@
                 function(button) {
                     button.addEventListener("click", function() {
                         moveEmptySlotUrl = button.dataset.moveEmptySlotUrl;
+                        const sourceGroupId = button.dataset.sourceGroupId;
                         if (moveEmptySlotTargetSelect) {
                             moveEmptySlotTargetSelect.value = "";
+                            Array.from(
+                                moveEmptySlotTargetSelect.options
+                            ).forEach(function(option) {
+                                if (option.value === "") {
+                                    return;
+                                }
+                                const isSourceGroup = (
+                                    option.value === sourceGroupId
+                                );
+                                option.hidden = isSourceGroup;
+                                option.disabled = isSourceGroup;
+                            });
                         }
                         if (moveEmptySlotDialog) {
                             moveEmptySlotDialog.showModal();

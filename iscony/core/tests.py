@@ -9590,6 +9590,53 @@ class CategoryManagementTests(TestCase):
             9,
         )
 
+    def test_move_empty_league_entry_slot_allows_target_with_unassigned_slots(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 9)
+
+        for display_order in range(1, 5):
+            self._create_entry(
+                category,
+                groups[0],
+                display_order,
+                display_order,
+                participants[display_order - 1],
+            )
+        source_entry = self._create_entry(
+            category,
+            groups[0],
+            5,
+            5,
+            None,
+        )
+        # 移動先グループは、ベース枠数(4)ちょうどだが、
+        # 参加者はまだ誰も割り当てられていない(全て空き枠)。
+        for display_order, pair_code in enumerate(range(6, 10), start=1):
+            self._create_entry(
+                category,
+                groups[1],
+                pair_code,
+                display_order,
+                None,
+            )
+
+        new_entry = move_empty_league_entry_slot(
+            source_entry,
+            groups[1],
+        )
+
+        self.assertIsNone(new_entry.participant)
+        self.assertEqual(new_entry.group, groups[1])
+        self.assertEqual(
+            LeagueEntry.objects.filter(group=groups[1]).count(),
+            5,
+        )
+
     def test_move_empty_league_entry_slot_rejects_base_group(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -10940,10 +10987,18 @@ class CategoryManagementTests(TestCase):
             ),
             source_row.group(0),
         )
+        self.assertIn(
+            f'data-source-group-id="{groups[0].id}"',
+            source_row.group(0),
+        )
         self.assertNotIn("枠を解除", source_row.group(0))
         self.assertEqual(
             response.context["movable_target_groups"],
             [
+                {
+                    "id": groups[0].id,
+                    "name": groups[0].name,
+                },
                 {
                     "id": groups[1].id,
                     "name": groups[1].name,

@@ -1211,6 +1211,9 @@ def pair_maintenance(request, category_id, stage_id=None):
                         else 0
                     )
                 ),
+                "can_receive_moved_slot": (
+                    group.entry_count == group_base_size(group)
+                ),
             }
             for group in groups
         ]
@@ -1223,7 +1226,7 @@ def pair_maintenance(request, category_id, stage_id=None):
                     "name": row["group"].name,
                 }
                 for row in group_rows
-                if row["can_add_slot"]
+                if row["can_receive_moved_slot"]
             ],
             "unassigned_participants": unassigned_participants,
             "empty_slot_count": empty_slot_count,

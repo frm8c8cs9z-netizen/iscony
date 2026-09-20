@@ -25,7 +25,11 @@ from ..models import (
     TournamentOrganizationField,
 )
 from .operations import tournament_match_has_score
-from .stage_setup import add_league_entry_slot, group_base_size
+from .stage_setup import (
+    _create_empty_league_entry_slot,
+    add_league_entry_slot,
+    group_base_size,
+)
 
 
 def organization_field_label(code):
@@ -466,6 +470,12 @@ def move_empty_league_entry_slot(source_entry, target_group):
     素の基本枠数(参加者数 // グループ数の切り捨て)より多い場合
     (=そのグループが余りを受け持っている場合)のみ削除できる。
 
+    target_groupは、現在の枠数がそのグループ本来のベース枠数
+    (group_base_size)とちょうど一致している場合のみ移動先にできる。
+    target_group側の枠に未割当のものが残っていても移動先にできる
+    (「参加者を割り振る前に、余りをどのグループに持たせるか決める」
+    という使い方を想定しているため)。
+
     参加者を割り振る段階(結果未入力)で、余りをどのグループに
     持たせるかを調整するための機能。結果入力済みの場合は
     呼び出し元(ビュー)で弾くこと。
@@ -509,9 +519,18 @@ def move_empty_league_entry_slot(source_entry, target_group):
             f"{group.name}はこれ以上枠を減らせません。"
         )
 
+    target_base = group_base_size(target_group)
+    target_current_count = LeagueEntry.objects.filter(
+        group=target_group,
+    ).count()
+    if target_current_count != target_base:
+        raise ValidationError(
+            f"{target_group.name}は既に追加枠があるか、基本枠数と一致していません。"
+        )
+
     with transaction.atomic():
         _delete_league_entry_and_renumber(source_entry)
-        new_entry = add_league_entry_slot(target_group)
+        new_entry = _create_empty_league_entry_slot(target_group)
 
     return new_entry
 
