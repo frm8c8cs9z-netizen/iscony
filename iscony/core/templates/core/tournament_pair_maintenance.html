@@ -251,6 +251,23 @@
                 });
         }
 
+        function moveOrSwapBetweenSlots(slotA, slotB) {
+            if (slotA.dataset.assigned === "true") {
+                moveParticipantBetweenSlots(
+                    slotA.dataset.moveUrl,
+                    slotB.dataset.entryId
+                );
+                return;
+            }
+
+            if (slotB.dataset.assigned === "true") {
+                moveParticipantBetweenSlots(
+                    slotB.dataset.moveUrl,
+                    slotA.dataset.entryId
+                );
+            }
+        }
+
         document.addEventListener("dragstart", function(event) {
             const participant = event.target.closest(
                 "#unassigned-participant-list [data-participant-id]"
@@ -345,13 +362,9 @@
 
                 if (selectedEntrySlotForTap) {
                     const selectedSlot = selectedEntrySlotForTap;
-                    const moveUrl = selectedSlot.dataset.moveUrl;
                     clearTapSelection();
                     if (selectedSlot.dataset.entryId !== slot.dataset.entryId) {
-                        moveParticipantBetweenSlots(
-                            moveUrl,
-                            slot.dataset.entryId
-                        );
+                        moveOrSwapBetweenSlots(selectedSlot, slot);
                     }
                     return;
                 }
@@ -365,11 +378,9 @@
                     return;
                 }
 
-                if (slot.dataset.assigned === "true") {
-                    clearTapSelection();
-                    selectedEntrySlotForTap = slot;
-                    slot.classList.add("entry-tap-selecting");
-                }
+                clearTapSelection();
+                selectedEntrySlotForTap = slot;
+                slot.classList.add("entry-tap-selecting");
             });
         }
 
@@ -384,6 +395,14 @@
 
                 if (selectedParticipantForTap === participant) {
                     clearTapSelection();
+                    return;
+                }
+
+                if (selectedEntrySlotForTap) {
+                    const selectedSlot = selectedEntrySlotForTap;
+                    const participantId = participant.dataset.participantId;
+                    clearTapSelection();
+                    assignParticipantToSlot(selectedSlot, participantId);
                     return;
                 }
 
