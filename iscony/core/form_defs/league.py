@@ -121,16 +121,12 @@ class LeagueEntryEditForm(forms.ModelForm):
             "participant",
             "pair_code",
             "display_order",
-            "retired",
-            "retired_reason",
         ]
 
         labels = {
             "participant": "参加者",
             "pair_code": "枠番号",
             "display_order": "表示順",
-            "retired": "リタイア",
-            "retired_reason": "リタイア理由",
         }
 
     def __init__(self, *args, category=None, **kwargs):

@@ -52,6 +52,10 @@
                         data-assigned="{{ pair.participant_id|yesno:'true,false' }}"
                         data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
                         data-edit-url="{% url 'edit_pair' pair.id %}"
+                        data-edit-api-url="{% url 'edit_league_entry_api' pair.id %}"
+                        data-participant-id="{{ pair.participant_id|default_if_none:'' }}"
+                        data-pair-code="{{ pair.pair_code }}"
+                        data-display-order="{{ pair.display_order }}"
                         {% if pair.participant %}
                             data-unassign-url="{% url 'unassign_league_entry_participant_api' pair.id %}"
                             data-move-url="{% url 'move_league_entry_participant_api' pair.id %}"
@@ -77,9 +81,11 @@
                         </td>
                         <td class="entry-action-cell">
                             {% if pair.participant %}
-                                <a href="{% url 'edit_pair' pair.id %}">
+                                <button type="button" class="edit-pair-trigger">
                                     編集
-                                </a>
+                                </button>
+                            {% else %}
+                                <span class="subtle-text">タップして選択</span>
                             {% endif %}
                             {% if pair.participant %}
                                 <form method="post" action="{% url 'unassign_league_entry_participant' pair.id %}" data-role="unassign-form">
@@ -167,6 +173,33 @@
         <div class="move-empty-slot-dialog-actions">
             <button type="button" id="move-empty-slot-cancel">キャンセル</button>
             <button type="button" id="move-empty-slot-confirm">移動する</button>
+        </div>
+    </dialog>
+
+    <dialog id="edit-pair-dialog" class="edit-pair-dialog">
+        <h3>枠を編集</h3>
+        <p>
+            <label for="edit-pair-participant">参加者</label>
+            <select id="edit-pair-participant">
+                <option value="">未割当</option>
+                {% for participant in category_participants %}
+                    <option value="{{ participant.id }}">
+                        {{ participant.display_name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </p>
+        <p>
+            <label for="edit-pair-pair-code">枠番号</label>
+            <input type="text" id="edit-pair-pair-code">
+        </p>
+        <p>
+            <label for="edit-pair-display-order">表示順</label>
+            <input type="number" id="edit-pair-display-order" min="1">
+        </p>
+        <div class="edit-pair-dialog-actions">
+            <button type="button" id="edit-pair-cancel">キャンセル</button>
+            <button type="button" id="edit-pair-confirm">保存</button>
         </div>
     </dialog>
 
@@ -323,6 +356,9 @@
                             );
                         }
                         entry.dataset.assigned = "true";
+                        entry.dataset.participantId = (
+                            result.data.participant_id
+                        );
                         entry.draggable = true;
                         if (!entry.dataset.unassignUrl) {
                             entry.dataset.unassignUrl = (
@@ -349,11 +385,24 @@
                             ".entry-action-cell"
                         );
                         if (actionCell) {
-                            if (!actionCell.querySelector("a")) {
-                                const editLink = document.createElement("a");
-                                editLink.href = entry.dataset.editUrl;
-                                editLink.textContent = "編集";
-                                actionCell.prepend(editLink);
+                            if (
+                                !actionCell.querySelector(
+                                    ".edit-pair-trigger"
+                                )
+                            ) {
+                                const editButton = (
+                                    document.createElement("button")
+                                );
+                                editButton.type = "button";
+                                editButton.className = "edit-pair-trigger";
+                                editButton.textContent = "編集";
+                                actionCell.prepend(editButton);
+                                const hint = actionCell.querySelector(
+                                    ".subtle-text"
+                                );
+                                if (hint) {
+                                    hint.remove();
+                                }
                             }
 
                             if (
@@ -418,6 +467,110 @@
                     );
                 }
                 selectedParticipantForTap = null;
+            }
+
+            const editPairDialog = document.getElementById(
+                "edit-pair-dialog"
+            );
+            const editPairParticipantSelect = document.getElementById(
+                "edit-pair-participant"
+            );
+            const editPairPairCodeInput = document.getElementById(
+                "edit-pair-pair-code"
+            );
+            const editPairDisplayOrderInput = document.getElementById(
+                "edit-pair-display-order"
+            );
+            const editPairConfirmButton = document.getElementById(
+                "edit-pair-confirm"
+            );
+            const editPairCancelButton = document.getElementById(
+                "edit-pair-cancel"
+            );
+            let editPairUrl = null;
+
+            function openEditPairDialog(entry) {
+                editPairUrl = entry.dataset.editApiUrl;
+
+                if (editPairParticipantSelect) {
+                    editPairParticipantSelect.value = (
+                        entry.dataset.participantId || ""
+                    );
+                }
+                if (editPairPairCodeInput) {
+                    editPairPairCodeInput.value = (
+                        entry.dataset.pairCode || ""
+                    );
+                }
+                if (editPairDisplayOrderInput) {
+                    editPairDisplayOrderInput.value = (
+                        entry.dataset.displayOrder || ""
+                    );
+                }
+                if (editPairDialog) {
+                    editPairDialog.showModal();
+                }
+            }
+
+            if (editPairCancelButton) {
+                editPairCancelButton.addEventListener("click", function() {
+                    editPairDialog.close();
+                });
+            }
+
+            if (editPairConfirmButton) {
+                editPairConfirmButton.addEventListener("click", function() {
+                    if (!editPairUrl) {
+                        return;
+                    }
+
+                    const body = new URLSearchParams();
+                    body.append(
+                        "participant",
+                        editPairParticipantSelect.value
+                    );
+                    body.append(
+                        "pair_code",
+                        editPairPairCodeInput.value
+                    );
+                    body.append(
+                        "display_order",
+                        editPairDisplayOrderInput.value
+                    );
+
+                    fetch(editPairUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": (
+                                "application/x-www-form-urlencoded"
+                            ),
+                            "X-CSRFToken": csrfToken,
+                        },
+                        body: body,
+                    })
+                        .then(function(response) {
+                            return response.json().then(function(data) {
+                                return {
+                                    ok: response.ok,
+                                    data: data,
+                                };
+                            });
+                        })
+                        .then(function(result) {
+                            if (!result.ok || !result.data.success) {
+                                alert(
+                                    result.data.error
+                                    || "保存できませんでした。"
+                                );
+                                return;
+                            }
+
+                            window.location.reload();
+                        })
+                        .catch(function() {
+                            alert("保存できませんでした。");
+                        });
+                });
             }
 
             function moveParticipantBetweenEntries(sourceEntry, targetEntry) {
@@ -628,6 +781,19 @@
                 });
 
                 entryList.addEventListener("click", function(event) {
+                    const editTrigger = event.target.closest(
+                        ".edit-pair-trigger"
+                    );
+                    if (editTrigger) {
+                        const entry = editTrigger.closest(
+                            "[data-entry-id]"
+                        );
+                        if (entry) {
+                            openEditPairDialog(entry);
+                        }
+                        return;
+                    }
+
                     if (event.target.closest("a, button")) {
                         return;
                     }
@@ -730,6 +896,7 @@
                             if (organizationCell) {
                                 organizationCell.textContent = "";
                             }
+                            entry.dataset.participantId = "";
                             entry.dataset.assigned = "false";
                             entry.draggable = false;
                             entry.removeAttribute("data-unassign-url");

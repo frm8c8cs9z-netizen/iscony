@@ -1178,6 +1178,12 @@ def pair_maintenance(request, category_id, stage_id=None):
             "display_order",
             "entry_code",
         )
+        category_participants = Participant.objects.filter(
+            category=category,
+        ).order_by(
+            "display_order",
+            "entry_code",
+        )
         empty_slot_count = LeagueEntry.objects.filter(
             group__stage=stage,
             participant__isnull=True,
@@ -1229,6 +1235,7 @@ def pair_maintenance(request, category_id, stage_id=None):
                 if row["can_receive_moved_slot"]
             ],
             "unassigned_participants": unassigned_participants,
+            "category_participants": category_participants,
             "empty_slot_count": empty_slot_count,
             "unassigned_count": unassigned_count,
             "slot_shortage": max(
@@ -1760,6 +1767,73 @@ def assign_league_entry_participant_api(request, entry_id):
             "participant_id": participant.id,
             "participant_name": participant.display_name,
             "participant_organization": participant.effective_organization,
+        }
+    )
+
+
+def edit_league_entry_api(request, entry_id):
+    """POSTで呼ばれ、リーグ枠の参加者・枠番号・表示順をその場で編集するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    pair = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+
+    form = LeagueEntryEditForm(
+        request.POST,
+        instance=pair,
+        category=pair.category,
+    )
+
+    if not form.is_valid():
+        error_messages = []
+        for field_errors in form.errors.values():
+            error_messages.extend(field_errors)
+
+        return JsonResponse(
+            {
+                "success": False,
+                "error": (
+                    " ".join(error_messages)
+                    or "入力内容を確認してください。"
+                ),
+            },
+            status=400,
+        )
+
+    try:
+        form.save()
+    except ValidationError as error:
+        if hasattr(error, "message_dict"):
+            error_messages = [
+                message
+                for field_messages in error.message_dict.values()
+                for message in field_messages
+            ]
+        else:
+            error_messages = error.messages
+
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error_messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": pair.id,
         }
     )
 

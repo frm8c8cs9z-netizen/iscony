@@ -345,6 +345,32 @@ class EntryAssignmentFormValidationTests(TestCase):
             category=self.category,
         )
 
+    def test_league_entry_edit_form_excludes_retirement_fields(self):
+        group = self.create_group(
+            name="A",
+            stage=self.league_stage,
+        )
+        entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            participant=self.participant,
+            pair_code="A1",
+            display_order=1,
+        )
+
+        form = self.league_form(entry, self.participant)
+
+        self.assertEqual(
+            list(form.fields),
+            [
+                "participant",
+                "pair_code",
+                "display_order",
+            ],
+        )
+        self.assertNotIn("retired", form.fields)
+        self.assertNotIn("retired_reason", form.fields)
+
     def tournament_form(self, entry, participant):
         participant_id = ""
         if participant:
@@ -11838,6 +11864,153 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 405)
         self.assertFalse(response.json()["success"])
 
+    def test_edit_league_entry_api_updates_entry(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        original_participant = Participant.objects.create(
+            category=category,
+            entry_code="P1",
+            player1_name="変更前1",
+            player2_name="変更前2",
+            display_order=1,
+        )
+        new_participant = Participant.objects.create(
+            category=category,
+            entry_code="P2",
+            player1_name="変更後1",
+            player2_name="変更後2",
+            display_order=2,
+        )
+        entry = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=original_participant,
+            pair_code="1",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_league_entry_api",
+                kwargs={"entry_id": entry.id},
+            ),
+            {
+                "participant": str(new_participant.id),
+                "pair_code": "9",
+                "display_order": "9",
+            },
+        )
+
+        entry.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "entry_id": entry.id,
+            },
+        )
+        self.assertEqual(entry.participant, new_participant)
+        self.assertEqual(entry.pair_code, "9")
+        self.assertEqual(entry.display_order, 9)
+
+    def test_edit_league_entry_api_rejects_duplicate_stage_pair_code(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 2)
+        participants = self._create_participants(category, 2)
+        target_entry = self._create_entry(
+            category,
+            groups[0],
+            1,
+            1,
+            participants[0],
+        )
+        self._create_entry(
+            category,
+            groups[1],
+            2,
+            1,
+            participants[1],
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_league_entry_api",
+                kwargs={"entry_id": target_entry.id},
+            ),
+            {
+                "participant": str(participants[0].id),
+                "pair_code": "2",
+                "display_order": "9",
+            },
+        )
+
+        target_entry.refresh_from_db()
+        self.assertEqual(stage, groups[0].stage)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertIn(
+            "同じStage内でslot_codeを重複させることはできません。",
+            response.json()["error"],
+        )
+        self.assertEqual(target_entry.pair_code, "1")
+        self.assertEqual(target_entry.display_order, 1)
+
+    def test_edit_league_entry_api_rejects_get(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            participant=None,
+            pair_code="1",
+            display_order=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_league_entry_api",
+                kwargs={"entry_id": entry.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(response.json()["success"])
+
     def test_unassign_league_entry_participant_api_clears_participant(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -12851,6 +13024,29 @@ class CategoryManagementTests(TestCase):
             ),
             assigned_row.group(0),
         )
+        self.assertIn(
+            (
+                'data-edit-api-url="'
+                + reverse(
+                    "edit_league_entry_api",
+                    kwargs={"entry_id": assigned_entry.id},
+                )
+                + '"'
+            ),
+            assigned_row.group(0),
+        )
+        self.assertIn(
+            f'data-participant-id="{assigned_entry.participant_id}"',
+            assigned_row.group(0),
+        )
+        self.assertIn(
+            f'data-pair-code="{assigned_entry.pair_code}"',
+            assigned_row.group(0),
+        )
+        self.assertIn(
+            f'data-display-order="{assigned_entry.display_order}"',
+            assigned_row.group(0),
+        )
         self.assertIn('data-unassign-url="', assigned_row.group(0))
         self.assertIn('data-move-url="', assigned_row.group(0))
         self.assertIn('draggable="true"', assigned_row.group(0))
@@ -12864,6 +13060,26 @@ class CategoryManagementTests(TestCase):
                 )
                 + '"'
             ),
+            empty_row.group(0),
+        )
+        self.assertIn(
+            (
+                'data-edit-api-url="'
+                + reverse(
+                    "edit_league_entry_api",
+                    kwargs={"entry_id": empty_entry.id},
+                )
+                + '"'
+            ),
+            empty_row.group(0),
+        )
+        self.assertIn('data-participant-id=""', empty_row.group(0))
+        self.assertIn(
+            f'data-pair-code="{empty_entry.pair_code}"',
+            empty_row.group(0),
+        )
+        self.assertIn(
+            f'data-display-order="{empty_entry.display_order}"',
             empty_row.group(0),
         )
         self.assertNotIn('data-unassign-url="', empty_row.group(0))
@@ -12956,6 +13172,18 @@ class CategoryManagementTests(TestCase):
         )
         self.assertIn(
             reverse("edit_pair", kwargs={"pair_id": assigned_entry.id}),
+            assigned_row.group(0),
+        )
+        self.assertNotIn(
+            (
+                '<a href="'
+                + reverse("edit_pair", kwargs={"pair_id": assigned_entry.id})
+                + '">'
+            ),
+            assigned_row.group(0),
+        )
+        self.assertIn(
+            'class="edit-pair-trigger"',
             assigned_row.group(0),
         )
         self.assertIn("編集", assigned_row.group(0))

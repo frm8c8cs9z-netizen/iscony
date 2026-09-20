@@ -434,6 +434,12 @@ urlpatterns = [
     ),
 
     path(
+        "pair/<int:entry_id>/edit-api/",
+        league.edit_league_entry_api,
+        name="edit_league_entry_api",
+    ),
+
+    path(
         "tournament/<str:code>/schedule/maintenance/",
         dashboard.schedule_maintenance,
         name="schedule_maintenance",
