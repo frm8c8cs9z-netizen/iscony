@@ -764,6 +764,13 @@ def edit_stage(request, code, category_id, stage_id):
         ).exists()
     )
     stage_type_locked = has_results
+    advancement_targets = _advancement_data(stage)
+    downstream_advancement_count = sum(
+        data["slot_count"] for data in advancement_targets
+    )
+    downstream_advancement_stage_names = [
+        data["stage"].name for data in advancement_targets
+    ]
     form_class = StageEditForm if stage_type_locked else StageForm
 
     if request.method == "POST":
@@ -881,6 +888,8 @@ def edit_stage(request, code, category_id, stage_id):
         "form": form,
         "stage": stage,
         "stage_type_locked": stage_type_locked,
+        "downstream_advancement_count": downstream_advancement_count,
+        "downstream_advancement_stage_names": downstream_advancement_stage_names,
         "page_title": "Stage編集",
         "submit_label": "更新",
     }

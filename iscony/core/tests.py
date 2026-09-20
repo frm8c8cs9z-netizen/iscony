@@ -2538,6 +2538,76 @@ class AdvancementSourceModelTests(TestCase):
         self.assertEqual(source.label, "M1勝者")
         self.assertEqual(self.league_entry.display_name, "M1勝者")
 
+    def test_source_group_delete_cascades_advancement_source(self):
+        downstream_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        downstream_group = Group.objects.create(
+            category=self.category,
+            stage=downstream_stage,
+            name="決勝A",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=downstream_group,
+            pair_code="F1",
+            display_order=1,
+        )
+        source = AdvancementSource.objects.create(
+            target_league_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+
+        self.group.delete()
+
+        self.assertFalse(
+            AdvancementSource.objects.filter(id=source.id).exists()
+        )
+        self.assertTrue(
+            LeagueEntry.objects.filter(id=target_entry.id).exists()
+        )
+
+    def test_source_stage_delete_cascades_advancement_source(self):
+        downstream_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        downstream_group = Group.objects.create(
+            category=self.category,
+            stage=downstream_stage,
+            name="決勝A",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=downstream_group,
+            pair_code="F1",
+            display_order=1,
+        )
+        source = AdvancementSource.objects.create(
+            target_league_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+
+        self.stage.delete()
+
+        self.assertFalse(
+            AdvancementSource.objects.filter(id=source.id).exists()
+        )
+        self.assertTrue(
+            LeagueEntry.objects.filter(id=target_entry.id).exists()
+        )
+
     def test_league_entry_short_name_uses_participant(self):
         participant = Participant.objects.create(
             category=self.category,
@@ -13531,6 +13601,166 @@ class CategoryManagementTests(TestCase):
             ["1", "2", "3", "4", "5"],
         )
 
+    def test_edit_stage_rebuild_deletes_downstream_advancement_sources(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+        )
+        for number in range(1, 4):
+            LeagueEntry.objects.create(
+                category=category,
+                group=source_group,
+                pair_code=f"A{number}",
+                display_order=number,
+            )
+        target_stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        target_group = Group.objects.create(
+            category=category,
+            stage=target_stage,
+            name="決勝A",
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="F1",
+            display_order=1,
+        )
+        source = AdvancementSource.objects.create(
+            target_league_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": source_stage.id,
+                },
+            ),
+            {
+                "name": "一次リーグ",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "pair_count": "4",
+                "group_size": "3",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertFalse(
+            AdvancementSource.objects.filter(id=source.id).exists()
+        )
+        self.assertTrue(
+            LeagueEntry.objects.filter(id=target_entry.id).exists()
+        )
+
+    def test_edit_stage_get_shows_downstream_advancement_warning_data(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+        )
+        target_stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        target_group = Group.objects.create(
+            category=category,
+            stage=target_stage,
+            name="決勝A",
+        )
+        target_entry_1 = LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="F1",
+            display_order=1,
+        )
+        target_entry_2 = LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="F2",
+            display_order=2,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=target_entry_1,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=1,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=target_entry_2,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": source_stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'data-downstream-advancement-count="2"',
+        )
+        self.assertContains(
+            response,
+            'data-downstream-advancement-stages="決勝リーグ"',
+        )
+
     def test_edit_stage_rebuilds_tournament_slots_without_results(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -13929,6 +14159,10 @@ class CategoryManagementTests(TestCase):
         self.assertContains(
             edit_response,
             'data-confirm-regenerate="true"',
+        )
+        self.assertNotContains(
+            edit_response,
+            "data-downstream-advancement-count",
         )
         self.assertContains(edit_response, 'value="tournament"')
         self.assertNotContains(edit_response, "種別: リーグ")

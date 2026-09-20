@@ -1905,14 +1905,14 @@ class AdvancementSource(models.Model):
         Stage,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.CASCADE
     )
 
     source_group = models.ForeignKey(
         Group,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.CASCADE
     )
 
     source_rank = models.IntegerField(
@@ -1924,7 +1924,7 @@ class AdvancementSource(models.Model):
         TournamentMatch,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.CASCADE
     )
 
     source_result = models.CharField(

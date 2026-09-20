@@ -24,7 +24,7 @@
     </p>
 {% endif %}
 
-<form method="post"{% if stage and not stage_type_locked %} data-confirm-regenerate="true"{% endif %}>
+<form method="post"{% if stage and not stage_type_locked %} data-confirm-regenerate="true"{% if downstream_advancement_count %} data-downstream-advancement-count="{{ downstream_advancement_count }}" data-downstream-advancement-stages="{{ downstream_advancement_stage_names|join:'、' }}"{% endif %}{% endif %}>
     {% csrf_token %}
 
     {{ form.as_p }}
@@ -153,9 +153,25 @@
             );
             if (regenerateForm) {
                 regenerateForm.addEventListener("submit", function(event) {
-                    const confirmed = window.confirm(
+                    let confirmMessage = (
                         "現在の枠構成を削除して作り直します。よろしいですか？"
                     );
+                    const downstreamCount = (
+                        regenerateForm.dataset.downstreamAdvancementCount
+                    );
+                    const downstreamStages = (
+                        regenerateForm.dataset.downstreamAdvancementStages
+                    );
+                    if (downstreamCount) {
+                        confirmMessage += (
+                            "\n\nさらに、このStageを進出元にしている後続Stage("
+                            + downstreamStages
+                            + ")の進出元設定が"
+                            + downstreamCount
+                            + "件失われます。"
+                        );
+                    }
+                    const confirmed = window.confirm(confirmMessage);
                     if (!confirmed) {
                         event.preventDefault();
                     }
