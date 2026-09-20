@@ -12937,15 +12937,11 @@ class CategoryManagementTests(TestCase):
         self.assertIsNotNone(empty_row)
         self.assertIn('data-role="unassign-form"', assigned_row.group(0))
         self.assertNotIn('data-role="unassign-form"', empty_row.group(0))
-        self.assertIn(
+        self.assertNotIn(
             'class="select-participant-trigger"',
             empty_row.group(0),
         )
-        self.assertIn(
-            '<button type="button" class="select-participant-trigger">',
-            empty_row.group(0),
-        )
-        self.assertIn("参加者を選ぶ", empty_row.group(0))
+        self.assertNotIn("参加者を選ぶ", empty_row.group(0))
         self.assertNotIn(
             (
                 '<a href="'

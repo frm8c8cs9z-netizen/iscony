@@ -80,10 +80,6 @@
                                 <a href="{% url 'edit_pair' pair.id %}">
                                     編集
                                 </a>
-                            {% else %}
-                                <button type="button" class="select-participant-trigger">
-                                    参加者を選ぶ
-                                </button>
                             {% endif %}
                             {% if pair.participant %}
                                 <form method="post" action="{% url 'unassign_league_entry_participant' pair.id %}" data-role="unassign-form">
@@ -187,6 +183,7 @@
                 "#unassigned-participant-list"
             );
             let selectedEntryForTap = null;
+            let selectedParticipantForTap = null;
             let highlightedDropTarget = null;
 
             function buildDragData(event) {
@@ -352,14 +349,11 @@
                             ".entry-action-cell"
                         );
                         if (actionCell) {
-                            const trigger = actionCell.querySelector(
-                                ".select-participant-trigger"
-                            );
-                            if (trigger) {
+                            if (!actionCell.querySelector("a")) {
                                 const editLink = document.createElement("a");
                                 editLink.href = entry.dataset.editUrl;
                                 editLink.textContent = "編集";
-                                trigger.replaceWith(editLink);
+                                actionCell.prepend(editLink);
                             }
 
                             if (
@@ -417,6 +411,68 @@
                     );
                 }
                 selectedEntryForTap = null;
+
+                if (selectedParticipantForTap) {
+                    selectedParticipantForTap.classList.remove(
+                        "entry-tap-selecting"
+                    );
+                }
+                selectedParticipantForTap = null;
+            }
+
+            function moveParticipantBetweenEntries(sourceEntry, targetEntry) {
+                const body = new URLSearchParams();
+                body.append(
+                    "target_entry_id",
+                    targetEntry.dataset.entryId
+                );
+
+                fetch(sourceEntry.dataset.moveUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": (
+                            "application/x-www-form-urlencoded"
+                        ),
+                        "X-CSRFToken": csrfToken,
+                    },
+                    body: body,
+                })
+                    .then(function(response) {
+                        return response.json().then(function(data) {
+                            return {
+                                ok: response.ok,
+                                data: data,
+                            };
+                        });
+                    })
+                    .then(function(result) {
+                        if (!result.ok || !result.data.success) {
+                            alert(
+                                result.data.error
+                                || "参加者を移動できませんでした。"
+                            );
+                            return;
+                        }
+
+                        window.location.hash = (
+                            "group-" + result.data.target_group_id
+                        );
+                        window.location.reload();
+                    })
+                    .catch(function() {
+                        alert("参加者を移動できませんでした。");
+                    });
+            }
+
+            function moveOrSwapBetweenEntries(entryA, entryB) {
+                if (entryA.dataset.assigned === "true") {
+                    moveParticipantBetweenEntries(entryA, entryB);
+                    return;
+                }
+
+                if (entryB.dataset.assigned === "true") {
+                    moveParticipantBetweenEntries(entryB, entryA);
+                }
             }
 
             function setDropHighlight(target) {
@@ -507,47 +563,7 @@
                             return;
                         }
 
-                        const body = new URLSearchParams();
-                        body.append(
-                            "target_entry_id",
-                            entry.dataset.entryId
-                        );
-
-                        fetch(sourceEntry.dataset.moveUrl, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": (
-                                    "application/x-www-form-urlencoded"
-                                ),
-                                "X-CSRFToken": csrfToken,
-                            },
-                            body: body,
-                        })
-                            .then(function(response) {
-                                return response.json().then(function(data) {
-                                    return {
-                                        ok: response.ok,
-                                        data: data,
-                                    };
-                                });
-                            })
-                            .then(function(result) {
-                                if (!result.ok || !result.data.success) {
-                                    alert(
-                                        result.data.error
-                                        || "参加者を移動できませんでした。"
-                                    );
-                                    return;
-                                }
-
-                                window.location.hash = (
-                                    "group-" + result.data.target_group_id
-                                );
-                                window.location.reload();
-                            })
-                            .catch(function() {
-                                alert("参加者を移動できませんでした。");
-                            });
+                        moveParticipantBetweenEntries(sourceEntry, entry);
                         return;
                     }
 
@@ -612,20 +628,33 @@
                 });
 
                 entryList.addEventListener("click", function(event) {
-                    const trigger = event.target.closest(
-                        ".select-participant-trigger"
-                    );
-                    if (!trigger) {
+                    if (event.target.closest("a, button")) {
                         return;
                     }
 
-                    const entry = trigger.closest("[data-entry-id]");
+                    const entry = event.target.closest("[data-entry-id]");
                     if (!entry) {
                         return;
                     }
 
-                    if (selectedEntryForTap === entry) {
+                    if (selectedEntryForTap) {
+                        const selectedEntry = selectedEntryForTap;
                         clearTapSelection();
+                        if (
+                            selectedEntry.dataset.entryId
+                            !== entry.dataset.entryId
+                        ) {
+                            moveOrSwapBetweenEntries(selectedEntry, entry);
+                        }
+                        return;
+                    }
+
+                    if (selectedParticipantForTap) {
+                        const participantId = (
+                            selectedParticipantForTap.dataset.participantId
+                        );
+                        clearTapSelection();
+                        assignParticipantToEntry(entry, participantId);
                         return;
                     }
 
@@ -718,16 +747,28 @@
                     const participant = event.target.closest(
                         "[data-participant-id]"
                     );
-                    if (!participant || !selectedEntryForTap) {
+                    if (!participant) {
                         return;
                     }
 
-                    const entry = selectedEntryForTap;
+                    if (selectedEntryForTap) {
+                        const entry = selectedEntryForTap;
+                        clearTapSelection();
+                        assignParticipantToEntry(
+                            entry,
+                            participant.dataset.participantId
+                        );
+                        return;
+                    }
+
+                    if (selectedParticipantForTap === participant) {
+                        clearTapSelection();
+                        return;
+                    }
+
                     clearTapSelection();
-                    assignParticipantToEntry(
-                        entry,
-                        participant.dataset.participantId
-                    );
+                    selectedParticipantForTap = participant;
+                    participant.classList.add("entry-tap-selecting");
                 });
             }
 
