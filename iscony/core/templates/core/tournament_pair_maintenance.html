@@ -68,6 +68,9 @@
             "input[name=csrfmiddlewaretoken]"
         );
         const csrfToken = csrfInput ? csrfInput.value : "";
+        const scrollAnchorKey = (
+            "tournament-pair-maintenance-scroll-anchor:{{ bracket.id }}"
+        );
         const assignmentArea = document.querySelector(
             ".svg-bracket-wrap--with-slots"
         );
@@ -77,6 +80,36 @@
         let selectedParticipantForTap = null;
         let selectedEntrySlotForTap = null;
         let highlightedDropTarget = null;
+
+        function rememberScrollAnchor(entryId) {
+            if (!entryId) {
+                return;
+            }
+            try {
+                sessionStorage.setItem(scrollAnchorKey, entryId);
+            } catch (error) {
+                // sessionStorageが使えない環境では何もしない
+            }
+        }
+
+        function restoreScrollAnchor() {
+            let entryId = null;
+            try {
+                entryId = sessionStorage.getItem(scrollAnchorKey);
+                sessionStorage.removeItem(scrollAnchorKey);
+            } catch (error) {
+                return;
+            }
+            if (!entryId) {
+                return;
+            }
+            const target = document.querySelector(
+                '.tournament-slot-row[data-entry-id="' + entryId + '"]'
+            );
+            if (target) {
+                target.scrollIntoView({ block: "center" });
+            }
+        }
 
         function getDragData(event) {
             const value = event.dataTransfer.getData("text/plain");
@@ -155,6 +188,7 @@
                         return;
                     }
 
+                    rememberScrollAnchor(slot.dataset.entryId);
                     location.reload();
                 })
                 .catch(function() {
@@ -179,6 +213,7 @@
                         return;
                     }
 
+                    rememberScrollAnchor(slot.dataset.entryId);
                     location.reload();
                 })
                 .catch(function() {
@@ -208,6 +243,7 @@
                         return;
                     }
 
+                    rememberScrollAnchor(targetEntryId);
                     location.reload();
                 })
                 .catch(function() {
@@ -356,6 +392,8 @@
                 participant.classList.add("entry-tap-selecting");
             });
         }
+
+        restoreScrollAnchor();
     }
 
     document.addEventListener("DOMContentLoaded", function() {
