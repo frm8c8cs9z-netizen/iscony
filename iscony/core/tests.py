@@ -9333,6 +9333,17 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "予選リーグ")
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": category.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertContains(response, "Stage管理へ戻る")
         self.assertContains(response, "対象1")
         self.assertNotContains(response, "<td>B1</td>", html=True)
         self.assertTrue(
@@ -13223,6 +13234,17 @@ class CategoryManagementTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": category.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertContains(response, "Stage管理へ戻る")
         self.assertContains(response, "<th>リーグ</th>", html=True)
         self.assertContains(response, "対象1")
         self.assertContains(response, "編集")
