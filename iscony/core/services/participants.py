@@ -29,6 +29,7 @@ from .stage_setup import (
     _create_empty_league_entry_slot,
     add_league_entry_slot,
     group_base_size,
+    group_slot_reference_total,
 )
 
 
@@ -506,9 +507,7 @@ def move_empty_league_entry_slot(source_entry, target_group):
     stage_group_count = Group.objects.filter(
         stage_id=group.stage_id,
     ).count()
-    participant_count = Participant.objects.filter(
-        category_id=group.category_id,
-    ).count()
+    participant_count = group_slot_reference_total(group)
     plain_base = (
         participant_count // stage_group_count
         if stage_group_count

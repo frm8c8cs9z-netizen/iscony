@@ -46,6 +46,7 @@ from ..services import (
     delete_round_robin_score,
     insert_round_robin_schedule,
     group_base_size,
+    group_slot_reference_total,
     consume_stage_advancement_result,
     move_league_entry_advancement_piece,
     move_league_entry_participant,
@@ -1199,6 +1200,11 @@ def pair_maintenance(request, category_id, stage_id=None):
         category_participant_count = Participant.objects.filter(
             category=category,
         ).count()
+        plain_base_total = (
+            group_slot_reference_total(groups[0])
+            if groups
+            else 0
+        )
         group_rows = [
             {
                 "group": group,
@@ -1216,7 +1222,7 @@ def pair_maintenance(request, category_id, stage_id=None):
                 ),
                 "can_give_up_slot": (
                     group.entry_count > (
-                        category_participant_count // len(groups)
+                        plain_base_total // len(groups)
                         if groups
                         else 0
                     )

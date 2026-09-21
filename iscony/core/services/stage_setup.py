@@ -80,14 +80,42 @@ def create_league_stage_groups(stage, pair_count, group_size):
         return groups
 
 
+def group_slot_reference_total(group):
+    """
+    グループ本来の枠数を計算する際に基準にする「参加ペア総数」を返す。
+
+    参加者を直接割り当てるStageでは、カテゴリの参加者登録数を基準に
+    する(Stageの枠総数が参加者登録数と一致している前提)。
+
+    進出元Stageの結果を使うStage(Stage.advancement_source_stageが
+    設定されている)は、参加者登録数とは無関係にStage作成時の参加
+    ペア数で枠が決まっているため、代わりにそのStage自体の現在の
+    枠総数を基準にする。このStage種別では「+1枠を追加/解除」を
+    使わない(枠の増減はStage編集からの再生成のみで行う)ため、
+    グループ間の枠移動だけでは変化しない安定した値になる。
+    """
+
+    if group.stage_id is None:
+        return 0
+
+    if group.stage.advancement_source_stage_id:
+        return LeagueEntry.objects.filter(
+            group__stage_id=group.stage_id,
+        ).count()
+
+    return Participant.objects.filter(
+        category_id=group.category_id,
+    ).count()
+
+
 def group_base_size(group):
     """
-    グループの本来のベース枠数を、現在のカテゴリ参加者数と
+    グループの本来のベース枠数を、group_slot_reference_total()の値と
     グループ数から算出する。
 
     既存の枠数がどう変化していても結果がぶれないよう、
     「その時点のグループ間の最小エントリー数」ではなく、
-    参加者数・グループ数・display_orderという安定した値から
+    参加ペア総数・グループ数・display_orderという安定した値から
     計算する。参加ペア数がグループ数で割り切れない場合、
     create_league_stage_groups() は余りをdisplay_orderの若い
     グループから順に+1人多く配分するため、ここでも同じ規則で
@@ -103,9 +131,7 @@ def group_base_size(group):
     if group_count == 0:
         return 0
 
-    participant_count = Participant.objects.filter(
-        category_id=group.category_id,
-    ).count()
+    participant_count = group_slot_reference_total(group)
 
     base, remainder = divmod(
         participant_count,

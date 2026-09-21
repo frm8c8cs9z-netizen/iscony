@@ -88,6 +88,7 @@ from .services import (
     create_league_stage_groups,
     create_extra_round_robin_match,
     group_base_size,
+    group_slot_reference_total,
     consume_stage_advancement_result,
     insert_round_robin_schedule,
     move_schedule,
@@ -9471,6 +9472,47 @@ class CategoryManagementTests(TestCase):
             ],
             [5, 4, 4, 4],
         )
+
+    def test_group_slot_reference_total_uses_category_participant_count(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self._create_participants(category, 17)
+        _, groups = self._create_league_stage(category, 4)
+
+        self.assertEqual(group_slot_reference_total(groups[0]), 17)
+
+    def test_group_slot_reference_total_uses_entry_count_for_advancement_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self._create_participants(category, 17)
+        source_stage = Stage.objects.create(
+            category=category,
+            code="SRC",
+            name="進出元リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        stage, groups = self._create_league_stage(category, 4)
+        stage.advancement_source_stage = source_stage
+        stage.save()
+
+        for index in range(1, 9):
+            group = groups[0] if index <= 4 else groups[1]
+            display_order = index if index <= 4 else index - 4
+            self._create_entry(
+                category,
+                group,
+                index,
+                display_order,
+            )
+
+        self.assertEqual(group_slot_reference_total(groups[0]), 8)
 
     def test_add_league_entry_slot_adds_extra_slot_after_remainder_base(self):
         category = Category.objects.create(
