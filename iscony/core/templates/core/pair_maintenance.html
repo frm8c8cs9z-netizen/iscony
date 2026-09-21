@@ -165,7 +165,7 @@
         <div>
             {% if is_advancement_source_stage %}
                 <h3>未割当の進出元ピース</h3>
-                <ul id="unassigned-participant-list">
+                <ul id="unassigned-participant-list" data-mode="piece">
                     {% for piece in unassigned_pieces %}
                         <li
                             class="participant-piece"
@@ -181,7 +181,7 @@
                 </ul>
             {% else %}
                 <h3>未割当の参加者</h3>
-                <ul id="unassigned-participant-list">
+                <ul id="unassigned-participant-list" data-mode="participant">
                     {% for participant in unassigned_participants %}
                         <li
                             class="participant-piece"
@@ -260,6 +260,7 @@
             );
             let selectedEntryForTap = null;
             let selectedParticipantForTap = null;
+            let selectedPieceForTap = null;
             let highlightedDropTarget = null;
 
             function buildDragData(event) {
@@ -270,6 +271,17 @@
                     return {
                         type: "participant",
                         participantId: participant.dataset.participantId,
+                    };
+                }
+
+                const piece = event.target.closest(
+                    "[data-source-group-id]"
+                );
+                if (piece) {
+                    return {
+                        type: "piece",
+                        sourceGroupId: piece.dataset.sourceGroupId,
+                        sourceRank: piece.dataset.sourceRank,
                     };
                 }
 
@@ -496,6 +508,48 @@
                     });
             }
 
+            function assignPieceToEntry(entry, sourceGroupId, sourceRank) {
+                const body = new URLSearchParams();
+                body.append("source_group_id", sourceGroupId);
+                body.append("source_rank", sourceRank);
+
+                return fetch(entry.dataset.assignUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": (
+                            "application/x-www-form-urlencoded"
+                        ),
+                        "X-CSRFToken": csrfToken,
+                    },
+                    body: body,
+                })
+                    .then(function(response) {
+                        return response.json().then(function(data) {
+                            return {
+                                ok: response.ok,
+                                data: data,
+                            };
+                        });
+                    })
+                    .then(function(result) {
+                        if (!result.ok || !result.data.success) {
+                            alert(
+                                result.data.error
+                                || "進出元を割り当てられませんでした。"
+                            );
+                            return;
+                        }
+
+                        window.location.hash = (
+                            "group-" + entry.dataset.groupId
+                        );
+                        window.location.reload();
+                    })
+                    .catch(function() {
+                        alert("進出元を割り当てられませんでした。");
+                    });
+            }
+
             function clearTapSelection() {
                 if (selectedEntryForTap) {
                     selectedEntryForTap.classList.remove(
@@ -510,6 +564,13 @@
                     );
                 }
                 selectedParticipantForTap = null;
+
+                if (selectedPieceForTap) {
+                    selectedPieceForTap.classList.remove(
+                        "entry-tap-selecting"
+                    );
+                }
+                selectedPieceForTap = null;
             }
 
             const editPairDialog = document.getElementById(
@@ -744,6 +805,21 @@
                         return;
                     }
 
+                    if (
+                        entry
+                        && data
+                        && data.type === "piece"
+                    ) {
+                        event.preventDefault();
+                        setDropHighlight(null);
+                        assignPieceToEntry(
+                            entry,
+                            data.sourceGroupId,
+                            data.sourceRank
+                        );
+                        return;
+                    }
+
                     if (entry && data && data.type === "entry") {
                         event.preventDefault();
                         setDropHighlight(null);
@@ -837,6 +913,60 @@
                         return;
                     }
 
+                    const unassignPieceTrigger = event.target.closest(
+                        ".unassign-piece-trigger"
+                    );
+                    if (unassignPieceTrigger) {
+                        const entry = unassignPieceTrigger.closest(
+                            "[data-entry-id]"
+                        );
+                        if (entry && entry.dataset.unassignUrl) {
+                            fetch(entry.dataset.unassignUrl, {
+                                method: "POST",
+                                headers: {
+                                    "X-CSRFToken": csrfToken,
+                                },
+                            })
+                                .then(function(response) {
+                                    return response.json().then(
+                                        function(data) {
+                                            return {
+                                                ok: response.ok,
+                                                data: data,
+                                            };
+                                        }
+                                    );
+                                })
+                                .then(function(result) {
+                                    if (
+                                        !result.ok
+                                        || !result.data.success
+                                    ) {
+                                        alert(
+                                            result.data.error
+                                            || (
+                                                "進出元の割当を解除"
+                                                + "できませんでした。"
+                                            )
+                                        );
+                                        return;
+                                    }
+
+                                    window.location.hash = (
+                                        "group-" + entry.dataset.groupId
+                                    );
+                                    window.location.reload();
+                                })
+                                .catch(function() {
+                                    alert(
+                                        "進出元の割当を解除"
+                                        + "できませんでした。"
+                                    );
+                                });
+                        }
+                        return;
+                    }
+
                     if (event.target.closest("a, button")) {
                         return;
                     }
@@ -864,6 +994,18 @@
                         );
                         clearTapSelection();
                         assignParticipantToEntry(entry, participantId);
+                        return;
+                    }
+
+                    if (selectedPieceForTap) {
+                        const sourceGroupId = (
+                            selectedPieceForTap.dataset.sourceGroupId
+                        );
+                        const sourceRank = (
+                            selectedPieceForTap.dataset.sourceRank
+                        );
+                        clearTapSelection();
+                        assignPieceToEntry(entry, sourceGroupId, sourceRank);
                         return;
                     }
 
@@ -913,12 +1055,15 @@
                             if (!result.ok || !result.data.success) {
                                 alert(
                                     result.data.error
-                                    || "参加者割当を解除できませんでした。"
+                                    || "割当を解除できませんでした。"
                                 );
                                 return;
                             }
 
-                            if (result.data.slot_removed) {
+                            if (
+                                unassignedList.dataset.mode === "piece"
+                                || result.data.slot_removed
+                            ) {
                                 window.location.hash = (
                                     "group-" + result.data.group_id
                                 );
@@ -949,7 +1094,7 @@
                             );
                         })
                         .catch(function() {
-                            alert("参加者割当を解除できませんでした。");
+                            alert("割当を解除できませんでした。");
                         });
                 });
 
@@ -957,28 +1102,47 @@
                     const participant = event.target.closest(
                         "[data-participant-id]"
                     );
-                    if (!participant) {
+                    const piece = event.target.closest(
+                        "[data-source-group-id]"
+                    );
+                    const poolItem = participant || piece;
+                    if (!poolItem) {
                         return;
                     }
 
                     if (selectedEntryForTap) {
                         const entry = selectedEntryForTap;
                         clearTapSelection();
-                        assignParticipantToEntry(
-                            entry,
-                            participant.dataset.participantId
-                        );
+                        if (participant) {
+                            assignParticipantToEntry(
+                                entry,
+                                participant.dataset.participantId
+                            );
+                        } else {
+                            assignPieceToEntry(
+                                entry,
+                                piece.dataset.sourceGroupId,
+                                piece.dataset.sourceRank
+                            );
+                        }
                         return;
                     }
 
-                    if (selectedParticipantForTap === participant) {
+                    if (
+                        selectedParticipantForTap === poolItem
+                        || selectedPieceForTap === poolItem
+                    ) {
                         clearTapSelection();
                         return;
                     }
 
                     clearTapSelection();
-                    selectedParticipantForTap = participant;
-                    participant.classList.add("entry-tap-selecting");
+                    if (participant) {
+                        selectedParticipantForTap = poolItem;
+                    } else {
+                        selectedPieceForTap = poolItem;
+                    }
+                    poolItem.classList.add("entry-tap-selecting");
                 });
             }
 

@@ -14028,7 +14028,7 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         pool = re.search(
-            r'<ul id="unassigned-participant-list">[\s\S]*?</ul>',
+            r'<ul id="unassigned-participant-list"[^>]*>[\s\S]*?</ul>',
             content,
         )
         self.assertContains(response, "未割当の進出元ピース")
