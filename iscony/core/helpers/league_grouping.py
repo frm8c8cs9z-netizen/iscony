@@ -11,25 +11,17 @@ def build_group_size_candidates(pair_count):
         return []
 
     candidates = []
-    seen = set()
 
     for group_size in range(3, pair_count + 1):
-        group_count = max(1, round(pair_count / group_size))
-        base, remainder = divmod(pair_count, group_count)
+        group_count, remainder = divmod(pair_count, group_size)
+
+        if remainder >= group_count:
+            continue
+
         group_sizes = (
-            [base + 1] * remainder
-            + [base] * (group_count - remainder)
+            [group_size + 1] * remainder
+            + [group_size] * (group_count - remainder)
         )
-
-        if min(group_sizes) < 3:
-            continue
-
-        key = (
-            group_count,
-            tuple(sorted(group_sizes)),
-        )
-        if key in seen:
-            continue
 
         total_matches = sum(
             size * (size - 1) // 2
@@ -41,7 +33,6 @@ def build_group_size_candidates(pair_count):
             "group_sizes": group_sizes,
             "total_matches": total_matches,
         })
-        seen.add(key)
 
     return candidates
 

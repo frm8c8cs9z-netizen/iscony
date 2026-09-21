@@ -216,43 +216,27 @@
             }
 
             const candidates = [];
-            const seen = new Set();
 
             for (
                 let groupSize = 3;
                 groupSize <= pairCount;
                 groupSize += 1
             ) {
-                const groupCount = Math.max(
-                    1,
-                    Math.round(pairCount / groupSize)
-                );
-                const base = Math.floor(pairCount / groupCount);
-                const remainder = pairCount % groupCount;
+                const groupCount = Math.floor(pairCount / groupSize);
+                const remainder = pairCount % groupSize;
+
+                if (remainder >= groupCount) {
+                    continue;
+                }
+
                 const groupSizes = [];
 
                 for (let i = 0; i < remainder; i += 1) {
-                    groupSizes.push(base + 1);
+                    groupSizes.push(groupSize + 1);
                 }
                 for (let i = 0; i < groupCount - remainder; i += 1) {
-                    groupSizes.push(base);
+                    groupSizes.push(groupSize);
                 }
-
-                if (Math.min.apply(null, groupSizes) < 3) {
-                    continue;
-                }
-
-                const key = (
-                    groupCount
-                    + ":"
-                    + groupSizes.slice().sort(function(a, b) {
-                        return a - b;
-                    }).join(",")
-                );
-                if (seen.has(key)) {
-                    continue;
-                }
-                seen.add(key);
 
                 const totalMatches = groupSizes.reduce(
                     function(sum, size) {
