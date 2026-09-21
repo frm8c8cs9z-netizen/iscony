@@ -350,6 +350,14 @@ class Stage(models.Model):
         default=0
     )
 
+    advancement_source_stage = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        related_name="advancement_target_stages",
+        on_delete=models.SET_NULL,
+    )
+
     class Meta:
         unique_together = (
             ("category", "name"),

@@ -39,7 +39,7 @@
             </p>
         {% endif %}
         <div class="stage-slot-setup">
-            <p>
+            <p id="pair-count-field">
                 {{ slot_form.pair_count.label_tag }}
                 {{ slot_form.pair_count }}
                 {{ slot_form.pair_count.errors }}
@@ -47,23 +47,37 @@
 
             <div id="league-slot-setup"{% if stage and stage.stage_type != "league" %} hidden{% endif %}>
                 <p>
-                    <label for="id_group_size">1グループあたりのペア数:</label>
-                    {% if group_size_candidates %}
-                        <select name="group_size" id="id_group_size"{% if slot_form.group_size.field.widget.attrs.disabled %} disabled{% endif %}>
-                            <option value="">選択してください</option>
-                            {% for candidate in group_size_candidates %}
-                                {% with candidate_value=candidate.group_size|stringformat:"s" %}
-                                    <option value="{{ candidate.group_size }}"{% if candidate_value == selected_group_size %} selected{% endif %}>
-                                        {{ candidate.group_size }}ペア/グループ → 内訳: {{ candidate.group_sizes|join:", " }} → 総試合数: {{ candidate.total_matches }}試合
-                                    </option>
-                                {% endwith %}
-                            {% endfor %}
-                        </select>
-                    {% else %}
-                        3ペア以上でグループを作れる組み合わせがありません。
-                    {% endif %}
-                    {{ slot_form.group_size.errors }}
+                    {{ slot_form.advancement_mode.label_tag }}
+                    {{ slot_form.advancement_mode }}
+                    {{ slot_form.advancement_mode.errors }}
                 </p>
+
+                <p id="advancement-source-stage-field" hidden>
+                    {{ slot_form.advancement_source_stage.label_tag }}
+                    {{ slot_form.advancement_source_stage }}
+                    {{ slot_form.advancement_source_stage.errors }}
+                </p>
+
+                <div id="league-group-size-setup">
+                    <p>
+                        <label for="id_group_size">1グループあたりのペア数:</label>
+                        {% if group_size_candidates %}
+                            <select name="group_size" id="id_group_size"{% if slot_form.group_size.field.widget.attrs.disabled %} disabled{% endif %}>
+                                <option value="">選択してください</option>
+                                {% for candidate in group_size_candidates %}
+                                    {% with candidate_value=candidate.group_size|stringformat:"s" %}
+                                        <option value="{{ candidate.group_size }}"{% if candidate_value == selected_group_size %} selected{% endif %}>
+                                            {{ candidate.group_size }}ペア/グループ → 内訳: {{ candidate.group_sizes|join:", " }} → 総試合数: {{ candidate.total_matches }}試合
+                                        </option>
+                                    {% endwith %}
+                                {% endfor %}
+                            </select>
+                        {% else %}
+                            3ペア以上でグループを作れる組み合わせがありません。
+                        {% endif %}
+                        {{ slot_form.group_size.errors }}
+                    </p>
+                </div>
             </div>
 
             <div id="tournament-slot-setup"{% if stage and stage.stage_type != "tournament" %} hidden{% endif %}>
@@ -99,13 +113,54 @@
             const stageType = document.getElementById("id_stage_type");
             const leagueSetup = document.getElementById("league-slot-setup");
             const tournamentSetup = document.getElementById("tournament-slot-setup");
+            const sourceStageField = document.getElementById(
+                "advancement-source-stage-field"
+            );
+            const pairCountField = document.getElementById("pair-count-field");
+            const groupSizeSetup = document.getElementById(
+                "league-group-size-setup"
+            );
+            const sourceStageSelect = document.getElementById(
+                "id_advancement_source_stage"
+            );
+            const advancementModeInputs = document.querySelectorAll(
+                'input[name="advancement_mode"]'
+            );
 
-            if (!stageType || !leagueSetup || !tournamentSetup) {
+            if (
+                !stageType
+                || !leagueSetup
+                || !tournamentSetup
+                || !sourceStageField
+                || !pairCountField
+                || !groupSizeSetup
+            ) {
                 return;
             }
 
-            leagueSetup.hidden = stageType.value !== "league";
-            tournamentSetup.hidden = stageType.value !== "tournament";
+            const isLeague = stageType.value === "league";
+            leagueSetup.hidden = !isLeague;
+            tournamentSetup.hidden = isLeague;
+
+            let advancementMode = "direct";
+            advancementModeInputs.forEach(function(input) {
+                if (input.checked) {
+                    advancementMode = input.value;
+                }
+            });
+            const isSourceMode = advancementMode === "source";
+
+            sourceStageField.hidden = !(isLeague && isSourceMode);
+
+            const hasSourceStage = Boolean(
+                sourceStageSelect && sourceStageSelect.value
+            );
+            const showPairCount = (
+                !isLeague || !isSourceMode || hasSourceStage
+            );
+
+            pairCountField.hidden = !showPairCount;
+            groupSizeSetup.hidden = !(isLeague && showPairCount);
         }
 
         function bracketSizeFor(pairCount) {
@@ -139,9 +194,26 @@
         document.addEventListener("DOMContentLoaded", function() {
             const stageType = document.getElementById("id_stage_type");
             const pairCountInput = document.getElementById("id_pair_count");
+            const advancementModeInputs = document.querySelectorAll(
+                'input[name="advancement_mode"]'
+            );
+            const sourceStageSelect = document.getElementById(
+                "id_advancement_source_stage"
+            );
 
             if (stageType) {
                 stageType.addEventListener("change", toggleStageSlotSetup);
+            }
+
+            advancementModeInputs.forEach(function(input) {
+                input.addEventListener("change", toggleStageSlotSetup);
+            });
+
+            if (sourceStageSelect) {
+                sourceStageSelect.addEventListener(
+                    "change",
+                    toggleStageSlotSetup
+                );
             }
 
             if (pairCountInput) {

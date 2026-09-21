@@ -91,6 +91,14 @@ class StageEditForm(StageUniqueFormMixin, forms.ModelForm):
 class StageSlotSetupForm(forms.Form):
     """Stage追加時の枠数決定を扱う補助フォーム。"""
 
+    ADVANCEMENT_MODE_DIRECT = "direct"
+    ADVANCEMENT_MODE_SOURCE = "source"
+
+    ADVANCEMENT_MODE_CHOICES = [
+        (ADVANCEMENT_MODE_DIRECT, "参加者を直接割り当てる"),
+        (ADVANCEMENT_MODE_SOURCE, "他のStageの結果を使う"),
+    ]
+
     pair_count = forms.IntegerField(
         min_value=1,
         label="参加ペア数",
@@ -111,6 +119,35 @@ class StageSlotSetupForm(forms.Form):
         required=False,
         label="ゲーム数",
     )
+    advancement_mode = forms.ChoiceField(
+        choices=ADVANCEMENT_MODE_CHOICES,
+        required=False,
+        initial=ADVANCEMENT_MODE_DIRECT,
+        widget=forms.RadioSelect,
+        label="枠の決め方",
+    )
+    advancement_source_stage = forms.ModelChoiceField(
+        queryset=Stage.objects.none(),
+        required=False,
+        label="進出元Stage",
+    )
+
+    def __init__(self, *args, category=None, exclude_stage_id=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if category is not None:
+            queryset = Stage.objects.filter(
+                category=category,
+                stage_type=Stage.TYPE_LEAGUE,
+            )
+
+            if exclude_stage_id is not None:
+                queryset = queryset.exclude(id=exclude_stage_id)
+
+            self.fields["advancement_source_stage"].queryset = queryset.order_by(
+                "display_order",
+                "name",
+            )
 
 
 class ParticipantForm(forms.ModelForm):

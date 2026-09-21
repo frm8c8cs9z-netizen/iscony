@@ -70,14 +70,24 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
 
         initial["match_games"] = existing_match_games or 7
 
+    if stage.advancement_source_stage_id:
+        initial["advancement_mode"] = StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+        initial["advancement_source_stage"] = stage.advancement_source_stage_id
+    else:
+        initial["advancement_mode"] = StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT
+
     slot_form = StageSlotSetupForm(
         initial=initial,
+        category=stage.category,
+        exclude_stage_id=stage.id,
     )
 
     if disabled:
         slot_form.fields["pair_count"].widget.attrs["disabled"] = True
         slot_form.fields["group_size"].widget.attrs["disabled"] = True
         slot_form.fields["match_games"].widget.attrs["disabled"] = True
+        slot_form.fields["advancement_mode"].widget.attrs["disabled"] = True
+        slot_form.fields["advancement_source_stage"].widget.attrs["disabled"] = True
 
     return slot_form, initial["pair_count"]
 
@@ -582,6 +592,21 @@ def _validate_stage_slot_setup(stage_type, slot_form):
             )
             return False
 
+        advancement_mode = slot_form.cleaned_data.get("advancement_mode")
+        advancement_source_stage = slot_form.cleaned_data.get(
+            "advancement_source_stage"
+        )
+
+        if (
+            advancement_mode == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+            and not advancement_source_stage
+        ):
+            slot_form.add_error(
+                "advancement_source_stage",
+                "「他のStageの結果を使う」を選んだ場合は、進出元Stageを選択してください。",
+            )
+            return False
+
     if stage_type == Stage.TYPE_TOURNAMENT:
 
         if pair_count < 1:
@@ -630,6 +655,7 @@ def add_stage(request, code, category_id):
         )
         slot_form = StageSlotSetupForm(
             request.POST,
+            category=category,
         )
         form.instance.category = category
 
@@ -659,6 +685,13 @@ def add_stage(request, code, category_id):
                     pair_count,
                     group_size,
                 )
+                if (
+                    slot_form.cleaned_data.get("advancement_mode")
+                    == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+                ):
+                    stage.advancement_source_stage = slot_form.cleaned_data.get(
+                        "advancement_source_stage"
+                    )
                 with transaction.atomic():
                     stage.save()
                     create_league_stage_groups(
@@ -713,7 +746,9 @@ def add_stage(request, code, category_id):
         slot_form = StageSlotSetupForm(
             initial={
                 "pair_count": initial_pair_count,
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
             },
+            category=category,
         )
         preview_pair_count = initial_pair_count
 
@@ -800,6 +835,8 @@ def edit_stage(request, code, category_id, stage_id):
         else:
             slot_form = StageSlotSetupForm(
                 request.POST,
+                category=category,
+                exclude_stage_id=stage.id,
             )
             form_valid = form.is_valid()
             slot_form_valid = slot_form.is_valid()
@@ -826,6 +863,20 @@ def edit_stage(request, code, category_id, stage_id):
                         candidate = find_group_size_candidate(
                             pair_count,
                             group_size,
+                        )
+                        if (
+                            slot_form.cleaned_data.get("advancement_mode")
+                            == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+                        ):
+                            stage.advancement_source_stage = (
+                                slot_form.cleaned_data.get(
+                                    "advancement_source_stage"
+                                )
+                            )
+                        else:
+                            stage.advancement_source_stage = None
+                        stage.save(
+                            update_fields=["advancement_source_stage"],
                         )
                         create_league_stage_groups(
                             stage,
