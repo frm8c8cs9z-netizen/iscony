@@ -75,6 +75,24 @@ class StageForm(StageUniqueFormMixin, forms.ModelForm):
             "display_order",
         ]
 
+        labels = {
+            "name": "名前",
+            "stage_type": "種別",
+            "display_order": "表示順",
+        }
+
+        error_messages = {
+            "name": {
+                "required": "名前を入力してください。",
+            },
+            "stage_type": {
+                "required": "種別を選択してください。",
+            },
+            "display_order": {
+                "required": "表示順を入力してください。",
+            },
+        }
+
 
 class StageEditForm(StageUniqueFormMixin, forms.ModelForm):
 
@@ -86,6 +104,20 @@ class StageEditForm(StageUniqueFormMixin, forms.ModelForm):
             "name",
             "display_order",
         ]
+
+        labels = {
+            "name": "名前",
+            "display_order": "表示順",
+        }
+
+        error_messages = {
+            "name": {
+                "required": "名前を入力してください。",
+            },
+            "display_order": {
+                "required": "表示順を入力してください。",
+            },
+        }
 
 
 class StageSlotSetupForm(forms.Form):

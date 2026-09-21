@@ -39,6 +39,7 @@
             </p>
         {% endif %}
         <div class="stage-slot-setup">
+            <span id="pair-count-anchor" hidden></span>
             <p id="pair-count-field">
                 {{ slot_form.pair_count.label_tag }}
                 {{ slot_form.pair_count }}
@@ -117,6 +118,9 @@
                 "advancement-source-stage-field"
             );
             const pairCountField = document.getElementById("pair-count-field");
+            const pairCountAnchor = document.getElementById(
+                "pair-count-anchor"
+            );
             const groupSizeSetup = document.getElementById(
                 "league-group-size-setup"
             );
@@ -133,6 +137,7 @@
                 || !tournamentSetup
                 || !sourceStageField
                 || !pairCountField
+                || !pairCountAnchor
                 || !groupSizeSetup
             ) {
                 return;
@@ -141,6 +146,20 @@
             const isLeague = stageType.value === "league";
             leagueSetup.hidden = !isLeague;
             tournamentSetup.hidden = isLeague;
+
+            if (isLeague) {
+                if (groupSizeSetup.parentNode) {
+                    groupSizeSetup.parentNode.insertBefore(
+                        pairCountField,
+                        groupSizeSetup
+                    );
+                }
+            } else if (pairCountAnchor.parentNode) {
+                pairCountAnchor.parentNode.insertBefore(
+                    pairCountField,
+                    pairCountAnchor.nextSibling
+                );
+            }
 
             let advancementMode = "direct";
             advancementModeInputs.forEach(function(input) {
@@ -191,6 +210,112 @@
             previewText.textContent = bracketSize + "枠(不戦勝" + byeCount + "回)";
         }
 
+        function buildGroupSizeCandidates(pairCount) {
+            if (!pairCount || pairCount < 3) {
+                return [];
+            }
+
+            const candidates = [];
+            const seen = new Set();
+
+            for (
+                let groupSize = 3;
+                groupSize <= pairCount;
+                groupSize += 1
+            ) {
+                const groupCount = Math.max(
+                    1,
+                    Math.round(pairCount / groupSize)
+                );
+                const base = Math.floor(pairCount / groupCount);
+                const remainder = pairCount % groupCount;
+                const groupSizes = [];
+
+                for (let i = 0; i < remainder; i += 1) {
+                    groupSizes.push(base + 1);
+                }
+                for (let i = 0; i < groupCount - remainder; i += 1) {
+                    groupSizes.push(base);
+                }
+
+                if (Math.min.apply(null, groupSizes) < 3) {
+                    continue;
+                }
+
+                const key = (
+                    groupCount
+                    + ":"
+                    + groupSizes.slice().sort(function(a, b) {
+                        return a - b;
+                    }).join(",")
+                );
+                if (seen.has(key)) {
+                    continue;
+                }
+                seen.add(key);
+
+                const totalMatches = groupSizes.reduce(
+                    function(sum, size) {
+                        return sum + (size * (size - 1)) / 2;
+                    },
+                    0
+                );
+
+                candidates.push({
+                    groupSize: groupSize,
+                    groupCount: groupCount,
+                    groupSizes: groupSizes,
+                    totalMatches: totalMatches,
+                });
+            }
+
+            return candidates;
+        }
+
+        function updateGroupSizeOptions() {
+            const pairCountInput = document.getElementById("id_pair_count");
+            const groupSizeSelect = document.getElementById("id_group_size");
+
+            if (!pairCountInput || !groupSizeSelect) {
+                return;
+            }
+
+            const pairCount = parseInt(pairCountInput.value, 10);
+            const candidates = buildGroupSizeCandidates(pairCount || 0);
+            const previousValue = groupSizeSelect.value;
+
+            groupSizeSelect.innerHTML = "";
+
+            const blankOption = document.createElement("option");
+            blankOption.value = "";
+            blankOption.textContent = "選択してください";
+            groupSizeSelect.appendChild(blankOption);
+
+            let matchedPreviousValue = false;
+
+            candidates.forEach(function(candidate) {
+                const option = document.createElement("option");
+                option.value = String(candidate.groupSize);
+                option.textContent = (
+                    candidate.groupSize
+                    + "ペア/グループ → 内訳: "
+                    + candidate.groupSizes.join(", ")
+                    + " → 総試合数: "
+                    + candidate.totalMatches
+                    + "試合"
+                );
+                if (String(candidate.groupSize) === previousValue) {
+                    option.selected = true;
+                    matchedPreviousValue = true;
+                }
+                groupSizeSelect.appendChild(option);
+            });
+
+            if (!matchedPreviousValue) {
+                groupSizeSelect.value = "";
+            }
+        }
+
         document.addEventListener("DOMContentLoaded", function() {
             const stageType = document.getElementById("id_stage_type");
             const pairCountInput = document.getElementById("id_pair_count");
@@ -218,6 +343,7 @@
 
             if (pairCountInput) {
                 pairCountInput.addEventListener("input", updateTournamentSlotPreview);
+                pairCountInput.addEventListener("input", updateGroupSizeOptions);
             }
 
             const regenerateForm = document.querySelector(

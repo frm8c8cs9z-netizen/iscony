@@ -9232,6 +9232,34 @@ class CategoryManagementTests(TestCase):
             1,
         )
 
+    def test_add_stage_requires_name_with_japanese_error_message(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "4",
+                "group_size": "3",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "名前を入力してください。")
+        self.assertNotContains(response, "This field is required.")
+
     def test_category_stage_management_shows_stage_specific_entries(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -14153,6 +14181,10 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(get_response.status_code, 200)
         self.assertTrue(get_response.context["stage_type_locked"])
+        self.assertContains(get_response, "名前")
+        self.assertContains(get_response, "表示順")
+        self.assertNotContains(get_response, "Name:")
+        self.assertNotContains(get_response, "Display order:")
         self.assertNotContains(
             get_response,
             'data-confirm-regenerate="true"',
@@ -14365,6 +14397,12 @@ class CategoryManagementTests(TestCase):
         self.assertContains(add_response, "Stage追加")
         self.assertContains(add_response, "保存")
         self.assertContains(add_response, "stage_type")
+        self.assertContains(add_response, "名前")
+        self.assertContains(add_response, "種別")
+        self.assertContains(add_response, "表示順")
+        self.assertNotContains(add_response, "Name:")
+        self.assertNotContains(add_response, "Stage type:")
+        self.assertNotContains(add_response, "Display order:")
         self.assertContains(add_response, 'name="advancement_mode"')
         self.assertContains(add_response, 'value="direct"')
         self.assertContains(add_response, 'value="source"')
@@ -14388,6 +14426,12 @@ class CategoryManagementTests(TestCase):
         self.assertContains(edit_response, "Stage編集")
         self.assertContains(edit_response, "更新")
         self.assertContains(edit_response, "stage_type")
+        self.assertContains(edit_response, "名前")
+        self.assertContains(edit_response, "種別")
+        self.assertContains(edit_response, "表示順")
+        self.assertNotContains(edit_response, "Name:")
+        self.assertNotContains(edit_response, "Stage type:")
+        self.assertNotContains(edit_response, "Display order:")
         self.assertContains(edit_response, 'name="advancement_mode"')
         self.assertContains(edit_response, 'value="direct"')
         self.assertContains(edit_response, 'value="source"')
