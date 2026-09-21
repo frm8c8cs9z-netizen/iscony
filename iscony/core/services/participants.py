@@ -486,6 +486,11 @@ def move_empty_league_entry_slot(source_entry, target_group):
             "この枠には参加者が割り当てられています。"
         )
 
+    if hasattr(source_entry, "advancement_source"):
+        raise ValidationError(
+            "この枠には進出元が割り当てられています。"
+        )
+
     group = source_entry.group
 
     if group.id == target_group.id:

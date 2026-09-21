@@ -23,6 +23,7 @@ from ..helpers.display import (
 )
 from ..forms import ExtraRoundRobinMatchForm, LeagueEntryEditForm
 from ..models import (
+    AdvancementSource,
     Category,
     Group,
     GroupRanking,
@@ -38,6 +39,7 @@ from ..models import (
 from ..services import (
     cancel_pair_retirement,
     add_league_entry_slot,
+    assign_league_entry_advancement_piece,
     assign_participant_to_league_entry,
     assign_participant_with_shift,
     create_extra_round_robin_match,
@@ -45,11 +47,13 @@ from ..services import (
     insert_round_robin_schedule,
     group_base_size,
     consume_stage_advancement_result,
+    move_league_entry_advancement_piece,
     move_league_entry_participant,
     move_empty_league_entry_slot,
     move_league_entry_participant_to_new_slot,
     save_round_robin_score,
     undo_schedule_replacement,
+    unassign_league_entry_advancement_piece,
     unassign_league_entry_participant,
     update_group_ranking,
 )
@@ -1445,6 +1449,192 @@ def unassign_league_entry_participant_view(request, entry_id):
     return redirect(
         "pair_maintenance",
         category_id=category_id,
+    )
+
+
+def assign_league_entry_advancement_piece_api(request, entry_id):
+    """POSTで呼ばれ、指定リーグ枠へ進出元ピースを割り当てるJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    entry = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+    source_group_id = request.POST.get("source_group_id")
+    source_rank = request.POST.get("source_rank")
+
+    if not source_group_id or not source_rank:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "進出元グループと順位を指定してください。",
+            },
+            status=400,
+        )
+
+    source_group = get_object_or_404(
+        Group,
+        id=source_group_id,
+        category=entry.category,
+    )
+
+    try:
+        source_rank = int(source_rank)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "順位は数値で指定してください。",
+            },
+            status=400,
+        )
+
+    try:
+        source = assign_league_entry_advancement_piece(
+            entry,
+            source_group,
+            source_rank,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": entry.id,
+            "group_id": entry.group_id,
+            "source_id": source.id,
+            "source_group_id": source_group.id,
+            "source_group_name": source_group.name,
+            "source_rank": source_rank,
+        }
+    )
+
+
+def unassign_league_entry_advancement_piece_api(request, entry_id):
+    """POSTで呼ばれ、指定リーグ枠の進出元割当を解除するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    entry = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+
+    try:
+        source = entry.advancement_source
+    except AdvancementSource.DoesNotExist:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "この枠には進出元が割り当てられていません。",
+            },
+            status=400,
+        )
+
+    source_group_id = source.source_group_id
+    source_rank = source.source_rank
+    group_id = entry.group_id
+
+    try:
+        unassign_league_entry_advancement_piece(entry)
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": entry.id,
+            "group_id": group_id,
+            "source_group_id": source_group_id,
+            "source_rank": source_rank,
+        }
+    )
+
+
+def move_league_entry_advancement_piece_api(request, entry_id):
+    """POSTで呼ばれ、指定リーグ枠の進出元を別枠へ移動/入れ替えするJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    source_entry = get_object_or_404(
+        LeagueEntry,
+        id=entry_id,
+    )
+    target_entry_id = request.POST.get("target_entry_id")
+
+    if not target_entry_id:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "移動先を指定してください。",
+            },
+            status=400,
+        )
+
+    target_entry = get_object_or_404(
+        LeagueEntry,
+        id=target_entry_id,
+        category=source_entry.category,
+    )
+    source_group_id = source_entry.group_id
+    target_group_id = target_entry.group_id
+
+    try:
+        result = move_league_entry_advancement_piece(
+            source_entry,
+            target_entry,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "mode": result["mode"],
+            "source_group_id": source_group_id,
+            "target_group_id": target_group_id,
+        }
     )
 
 

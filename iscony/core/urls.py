@@ -434,6 +434,24 @@ urlpatterns = [
     ),
 
     path(
+        "pair/<int:entry_id>/assign-advancement-piece/",
+        league.assign_league_entry_advancement_piece_api,
+        name="assign_league_entry_advancement_piece_api",
+    ),
+
+    path(
+        "pair/<int:entry_id>/unassign-advancement-piece/",
+        league.unassign_league_entry_advancement_piece_api,
+        name="unassign_league_entry_advancement_piece_api",
+    ),
+
+    path(
+        "pair/<int:entry_id>/move-advancement-piece/",
+        league.move_league_entry_advancement_piece_api,
+        name="move_league_entry_advancement_piece_api",
+    ),
+
+    path(
         "pair/<int:entry_id>/edit-api/",
         league.edit_league_entry_api,
         name="edit_league_entry_api",
