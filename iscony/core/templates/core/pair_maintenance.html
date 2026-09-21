@@ -165,12 +165,49 @@
         <div>
             {% if is_advancement_source_stage %}
                 <h3>未割当の進出元ピース</h3>
+                <div class="advancement-piece-filter">
+                    <div class="advancement-piece-rank-filter">
+                        <button type="button" class="rank-filter-button is-active" data-rank="all">
+                            すべて
+                        </button>
+                        {% for rank in piece_ranks %}
+                            <button type="button" class="rank-filter-button" data-rank="{{ rank }}">
+                                {{ rank }}位
+                            </button>
+                        {% endfor %}
+                    </div>
+                    <p>
+                        <label for="advancement-piece-group-search">グループ検索</label>
+                        <input
+                            type="text"
+                            id="advancement-piece-group-search"
+                            placeholder="スペース区切りで複数指定可(部分一致)"
+                        >
+                    </p>
+                    <div class="advancement-piece-sort-toggle">
+                        <label>
+                            <input
+                                type="radio"
+                                name="advancement-piece-sort"
+                                value="group"
+                                checked
+                            >
+                            グループ順
+                        </label>
+                        <label>
+                            <input type="radio" name="advancement-piece-sort" value="rank">
+                            順位順
+                        </label>
+                    </div>
+                </div>
                 <ul id="unassigned-participant-list" data-mode="piece">
                     {% for piece in unassigned_pieces %}
                         <li
                             class="participant-piece"
                             draggable="true"
                             data-source-group-id="{{ piece.source_group_id }}"
+                            data-source-group-name="{{ piece.source_group_name }}"
+                            data-source-group-order="{{ piece.source_group_order }}"
                             data-source-rank="{{ piece.source_rank }}"
                         >
                             {{ piece.label }}
@@ -258,6 +295,151 @@
             const unassignedList = document.querySelector(
                 "#unassigned-participant-list"
             );
+            const pieceFilter = document.querySelector(
+                ".advancement-piece-filter"
+            );
+            let activePieceRanks = new Set();
+            let activePieceSort = "group";
+
+            function applyPieceFilters() {
+                if (!unassignedList) {
+                    return;
+                }
+
+                const searchInput = document.getElementById(
+                    "advancement-piece-group-search"
+                );
+                const searchTokens = (
+                    searchInput && searchInput.value
+                        ? searchInput.value.trim().split(/\s+/)
+                        : []
+                ).filter(function(token) {
+                    return token.length > 0;
+                });
+
+                unassignedList.querySelectorAll(
+                    "[data-source-group-id]"
+                ).forEach(function(item) {
+                    const rank = item.dataset.sourceRank;
+                    const groupName = item.dataset.sourceGroupName || "";
+
+                    const rankMatches = (
+                        activePieceRanks.size === 0
+                        || activePieceRanks.has(rank)
+                    );
+                    const searchMatches = (
+                        searchTokens.length === 0
+                        || searchTokens.some(function(token) {
+                            return groupName.indexOf(token) !== -1;
+                        })
+                    );
+
+                    item.hidden = !(rankMatches && searchMatches);
+                });
+            }
+
+            function applyPieceSort() {
+                if (!unassignedList) {
+                    return;
+                }
+
+                const items = Array.from(
+                    unassignedList.querySelectorAll(
+                        "[data-source-group-id]"
+                    )
+                );
+
+                items.sort(function(a, b) {
+                    if (activePieceSort === "rank") {
+                        const rankDiff = (
+                            parseInt(a.dataset.sourceRank, 10)
+                            - parseInt(b.dataset.sourceRank, 10)
+                        );
+                        if (rankDiff !== 0) {
+                            return rankDiff;
+                        }
+                        return (
+                            parseInt(a.dataset.sourceGroupOrder, 10)
+                            - parseInt(b.dataset.sourceGroupOrder, 10)
+                        );
+                    }
+
+                    const groupDiff = (
+                        parseInt(a.dataset.sourceGroupOrder, 10)
+                        - parseInt(b.dataset.sourceGroupOrder, 10)
+                    );
+                    if (groupDiff !== 0) {
+                        return groupDiff;
+                    }
+                    return (
+                        parseInt(a.dataset.sourceRank, 10)
+                        - parseInt(b.dataset.sourceRank, 10)
+                    );
+                });
+
+                items.forEach(function(item) {
+                    unassignedList.appendChild(item);
+                });
+            }
+
+            if (pieceFilter) {
+                pieceFilter.querySelectorAll(".rank-filter-button").forEach(
+                    function(button) {
+                        button.addEventListener("click", function() {
+                            const rank = button.dataset.rank;
+
+                            if (rank === "all") {
+                                activePieceRanks = new Set();
+                            } else if (activePieceRanks.has(rank)) {
+                                activePieceRanks.delete(rank);
+                            } else {
+                                activePieceRanks.add(rank);
+                            }
+
+                            pieceFilter.querySelectorAll(
+                                ".rank-filter-button"
+                            ).forEach(function(otherButton) {
+                                const otherRank = otherButton.dataset.rank;
+                                const isActive = (
+                                    (
+                                        otherRank === "all"
+                                        && activePieceRanks.size === 0
+                                    )
+                                    || activePieceRanks.has(otherRank)
+                                );
+                                otherButton.classList.toggle(
+                                    "is-active",
+                                    isActive
+                                );
+                            });
+
+                            applyPieceFilters();
+                        });
+                    }
+                );
+
+                const groupSearchInput = document.getElementById(
+                    "advancement-piece-group-search"
+                );
+                if (groupSearchInput) {
+                    groupSearchInput.addEventListener(
+                        "input",
+                        applyPieceFilters
+                    );
+                }
+
+                pieceFilter.querySelectorAll(
+                    'input[name="advancement-piece-sort"]'
+                ).forEach(function(radio) {
+                    radio.addEventListener("change", function() {
+                        if (radio.checked) {
+                            activePieceSort = radio.value;
+                            applyPieceSort();
+                        }
+                    });
+                });
+            }
+
             let selectedEntryForTap = null;
             let selectedParticipantForTap = null;
             let selectedPieceForTap = null;

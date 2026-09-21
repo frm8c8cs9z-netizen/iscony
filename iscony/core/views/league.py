@@ -1196,6 +1196,7 @@ def pair_maintenance(request, category_id, stage_id=None):
         )
 
         unassigned_pieces = []
+        piece_ranks = []
 
         if is_advancement_source_stage:
             source_groups = list(
@@ -1225,9 +1226,16 @@ def pair_maintenance(request, category_id, stage_id=None):
 
                     unassigned_pieces.append({
                         "source_group_id": source_group.id,
+                        "source_group_name": source_group.name,
+                        "source_group_order": source_group.display_order,
                         "source_rank": rank,
                         "label": f"{source_group.name}－{rank}位",
                     })
+
+            piece_ranks = sorted({
+                piece["source_rank"]
+                for piece in unassigned_pieces
+            })
 
         empty_slot_count = LeagueEntry.objects.filter(
             group__stage=stage,
@@ -1294,6 +1302,7 @@ def pair_maintenance(request, category_id, stage_id=None):
             ],
             "unassigned_participants": unassigned_participants,
             "unassigned_pieces": unassigned_pieces,
+            "piece_ranks": piece_ranks,
             "category_participants": category_participants,
             "empty_slot_count": empty_slot_count,
             "unassigned_count": unassigned_count,

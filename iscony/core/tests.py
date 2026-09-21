@@ -13506,8 +13506,28 @@ class CategoryManagementTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
         self.assertContains(response, "未割当の参加者")
         self.assertNotContains(response, "未割当の進出元ピース")
+        self.assertNotContains(response, 'class="advancement-piece-filter"')
+        self.assertNotIn(
+            '<button type="button" class="rank-filter-button',
+            content,
+        )
+        self.assertIsNone(
+            re.search(
+                r'<input[^>]+id="advancement-piece-group-search"',
+                content,
+                re.S,
+            )
+        )
+        self.assertIsNone(
+            re.search(
+                r'<input[^>]+name="advancement-piece-sort"',
+                content,
+                re.S,
+            )
+        )
         self.assertContains(response, "未割当4A・未割当4B")
         self.assertContains(response, "(○○クラブ)")
         self.assertContains(response, f'id="group-{group_a.id}"')
@@ -14040,7 +14060,31 @@ class CategoryManagementTests(TestCase):
         self.assertIn("B－1位", pool.group(0))
         self.assertIn("B－2位", pool.group(0))
         self.assertContains(response, 'data-source-group-id="')
+        self.assertContains(response, 'data-source-group-name="A"')
+        self.assertContains(response, 'data-source-group-name="B"')
+        self.assertContains(
+            response,
+            f'data-source-group-order="{source_group_a.display_order}"',
+        )
+        self.assertContains(
+            response,
+            f'data-source-group-order="{source_group_b.display_order}"',
+        )
         self.assertContains(response, 'data-source-rank="')
+        self.assertEqual(
+            len(re.findall(r'<button[^>]+class="rank-filter-button', content)),
+            3,
+        )
+        self.assertContains(response, 'data-rank="all"')
+        self.assertContains(response, 'data-rank="1"')
+        self.assertContains(response, 'data-rank="2"')
+        self.assertContains(response, 'id="advancement-piece-group-search"')
+        self.assertEqual(
+            len(re.findall(r'<input[^>]+name="advancement-piece-sort"', content)),
+            2,
+        )
+        self.assertContains(response, 'value="group"')
+        self.assertContains(response, 'value="rank"')
         self.assertContains(
             response,
             reverse(
