@@ -369,6 +369,21 @@ class Stage(models.Model):
             "name",
         ]
 
+    def unique_error_message(self, model_class, unique_check):
+        if model_class is Stage and set(unique_check) == {"category", "name"}:
+            return ValidationError(
+                "同じカテゴリ内に、同じ名前のStageが既に存在します。",
+                code="unique_together",
+            )
+
+        if model_class is Stage and set(unique_check) == {"category", "code"}:
+            return ValidationError(
+                "同じカテゴリ内に、同じコードのStageが既に存在します。",
+                code="unique_together",
+            )
+
+        return super().unique_error_message(model_class, unique_check)
+
     def save(self, *args, **kwargs):
         if not self.code and self.category_id:
             number = 1

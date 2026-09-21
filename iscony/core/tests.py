@@ -9296,6 +9296,43 @@ class CategoryManagementTests(TestCase):
             1,
         )
 
+    def test_add_stage_with_duplicate_name_shows_japanese_error_message(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "display_order": "2",
+                "code": "STG2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "同じカテゴリ内に、同じ名前のStageが既に存在します。",
+        )
+        self.assertNotContains(response, "already exists")
+
     def test_add_stage_requires_name_with_japanese_error_message(self):
         category = Category.objects.create(
             tournament=self.tournament,
