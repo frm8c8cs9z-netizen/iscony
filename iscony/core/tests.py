@@ -13507,6 +13507,7 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "未割当の参加者")
+        self.assertNotContains(response, "未割当の進出元ピース")
         self.assertContains(response, "未割当4A・未割当4B")
         self.assertContains(response, "(○○クラブ)")
         self.assertContains(response, f'id="group-{group_a.id}"')
@@ -13940,6 +13941,121 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, "<th>リーグ</th>", html=True)
         self.assertContains(response, "対象1")
         self.assertContains(response, "編集")
+        self.assertNotContains(response, "未割当の参加者")
+        self.assertNotContains(response, "+1枠を追加")
+
+    def test_stage_pair_maintenance_shows_unassigned_advancement_pieces(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            code="SRC",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group_a = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+            display_order=1,
+        )
+        source_group_b = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="B",
+            display_order=2,
+        )
+        for group_index, group in enumerate(
+            [source_group_a, source_group_b],
+            start=0,
+        ):
+            for display_order in range(1, 3):
+                LeagueEntry.objects.create(
+                    category=category,
+                    group=group,
+                    pair_code=str(group_index * 2 + display_order),
+                    display_order=display_order,
+                )
+
+        target_stage = Stage.objects.create(
+            category=category,
+            code="DST",
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            advancement_source_stage=source_stage,
+            display_order=2,
+        )
+        target_group = Group.objects.create(
+            category=category,
+            stage=target_stage,
+            name="決勝",
+            display_order=1,
+        )
+        assigned_entry = LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="1",
+            display_order=1,
+        )
+        LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="2",
+            display_order=2,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=assigned_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group_a,
+            source_rank=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": target_stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        pool = re.search(
+            r'<ul id="unassigned-participant-list">[\s\S]*?</ul>',
+            content,
+        )
+        self.assertContains(response, "未割当の進出元ピース")
+        self.assertContains(response, "未割当の進出元ピース: 3件")
+        self.assertContains(response, "A－1位")
+        self.assertIsNotNone(pool)
+        self.assertNotIn("A－1位", pool.group(0))
+        self.assertIn("A－2位", pool.group(0))
+        self.assertIn("B－1位", pool.group(0))
+        self.assertIn("B－2位", pool.group(0))
+        self.assertContains(response, 'data-source-group-id="')
+        self.assertContains(response, 'data-source-rank="')
+        self.assertContains(
+            response,
+            reverse(
+                "assign_league_entry_advancement_piece_api",
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "unassign_league_entry_advancement_piece_api",
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+        )
+        self.assertContains(response, 'class="unassign-piece-trigger"')
         self.assertNotContains(response, "未割当の参加者")
         self.assertNotContains(response, "+1枠を追加")
 

@@ -19,7 +19,11 @@
     </p>
 
     <p>
-        未割当participant: {{ unassigned_count }}人 /
+        {% if is_advancement_source_stage %}
+            未割当の進出元ピース: {{ unassigned_count }}件 /
+        {% else %}
+            未割当participant: {{ unassigned_count }}人 /
+        {% endif %}
         空き枠: {{ empty_slot_count }}件 →
         {% if slot_shortage %}
             残り約{{ slot_shortage }}枠の追加が必要です
@@ -55,16 +59,25 @@
                     <tr
                         data-entry-id="{{ pair.id }}"
                         data-group-id="{{ row.group.id }}"
-                        data-assigned="{{ pair.participant_id|yesno:'true,false' }}"
-                        data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
+                        data-assigned="{% if pair.participant_id or pair.advancement_source %}true{% else %}false{% endif %}"
+                        {% if is_advancement_source_stage %}
+                            data-assign-url="{% url 'assign_league_entry_advancement_piece_api' pair.id %}"
+                        {% else %}
+                            data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
+                        {% endif %}
                         data-edit-url="{% url 'edit_pair' pair.id %}"
                         data-edit-api-url="{% url 'edit_league_entry_api' pair.id %}"
                         data-participant-id="{{ pair.participant_id|default_if_none:'' }}"
                         data-pair-code="{{ pair.pair_code }}"
                         data-display-order="{{ pair.display_order }}"
-                        {% if pair.participant %}
-                            data-unassign-url="{% url 'unassign_league_entry_participant_api' pair.id %}"
-                            data-move-url="{% url 'move_league_entry_participant_api' pair.id %}"
+                        {% if pair.participant or pair.advancement_source %}
+                            {% if is_advancement_source_stage %}
+                                data-unassign-url="{% url 'unassign_league_entry_advancement_piece_api' pair.id %}"
+                                data-move-url="{% url 'move_league_entry_advancement_piece_api' pair.id %}"
+                            {% else %}
+                                data-unassign-url="{% url 'unassign_league_entry_participant_api' pair.id %}"
+                                data-move-url="{% url 'move_league_entry_participant_api' pair.id %}"
+                            {% endif %}
                             draggable="true"
                         {% endif %}
                     >
@@ -74,6 +87,8 @@
                         <td data-entry-participant-name>
                             {% if pair.participant %}
                                 {{ pair.display_name }}
+                            {% elif pair.advancement_source %}
+                                {{ pair.advancement_source.source_group.name }}－{{ pair.advancement_source.source_rank }}位
                             {% else %}
                                 未定
                             {% endif %}
@@ -90,7 +105,7 @@
                                 <button type="button" class="edit-pair-trigger">
                                     編集
                                 </button>
-                            {% else %}
+                            {% elif not pair.advancement_source %}
                                 <span class="subtle-text">タップして選択</span>
                             {% endif %}
                             {% if pair.participant %}
@@ -98,6 +113,10 @@
                                     {% csrf_token %}
                                     <button type="submit">未割当に戻す</button>
                                 </form>
+                            {% elif pair.advancement_source %}
+                                <button type="button" class="unassign-piece-trigger">
+                                    割当を解除
+                                </button>
                             {% endif %}
                             {# +1枠が割当済みの場合は、未割当に戻すボタンが同じ結果(参加者解除+枠削除)になるため、枠を解除は未割当のときだけ表示する #}
                             {% if forloop.last and row.can_remove_slot and not pair.participant %}
@@ -106,7 +125,7 @@
                                     <button type="submit">枠を解除</button>
                                 </form>
                             {% endif %}
-                            {% if forloop.last and row.can_give_up_slot and not pair.participant %}
+                            {% if forloop.last and row.can_give_up_slot and not pair.participant and not pair.advancement_source %}
                                 <button
                                     type="button"
                                     class="move-empty-slot-trigger"
@@ -144,24 +163,42 @@
         </div>
 
         <div>
-            <h3>未割当の参加者</h3>
-            <ul id="unassigned-participant-list">
-                {% for participant in unassigned_participants %}
-                    <li
-                        class="participant-piece"
-                        draggable="true"
-                        data-participant-id="{{ participant.id }}"
-                        data-participant-name="{{ participant.display_name }}"
-                    >
-                        {{ participant.display_name }}
-                        {% if participant.effective_organization %}
-                            ({{ participant.effective_organization }})
-                        {% endif %}
-                    </li>
-                {% empty %}
-                    <li>未割当の参加者はいません。</li>
-                {% endfor %}
-            </ul>
+            {% if is_advancement_source_stage %}
+                <h3>未割当の進出元ピース</h3>
+                <ul id="unassigned-participant-list">
+                    {% for piece in unassigned_pieces %}
+                        <li
+                            class="participant-piece"
+                            draggable="true"
+                            data-source-group-id="{{ piece.source_group_id }}"
+                            data-source-rank="{{ piece.source_rank }}"
+                        >
+                            {{ piece.label }}
+                        </li>
+                    {% empty %}
+                        <li>未使用の進出元ピースはありません。</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <h3>未割当の参加者</h3>
+                <ul id="unassigned-participant-list">
+                    {% for participant in unassigned_participants %}
+                        <li
+                            class="participant-piece"
+                            draggable="true"
+                            data-participant-id="{{ participant.id }}"
+                            data-participant-name="{{ participant.display_name }}"
+                        >
+                            {{ participant.display_name }}
+                            {% if participant.effective_organization %}
+                                ({{ participant.effective_organization }})
+                            {% endif %}
+                        </li>
+                    {% empty %}
+                        <li>未割当の参加者はいません。</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
         </div>
     </div>
 
