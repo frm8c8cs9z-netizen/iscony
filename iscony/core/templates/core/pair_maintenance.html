@@ -298,6 +298,9 @@
             const pieceFilter = document.querySelector(
                 ".advancement-piece-filter"
             );
+            const pieceFilterStateKey = (
+                "pair-maintenance-piece-filter:{{ stage.id|default_if_none:'' }}"
+            );
             let activePieceRanks = new Set();
             let activePieceSort = "group";
 
@@ -382,6 +385,85 @@
                 });
             }
 
+            function savePieceFilterState() {
+                if (!pieceFilter) {
+                    return;
+                }
+
+                const searchInput = document.getElementById(
+                    "advancement-piece-group-search"
+                );
+
+                try {
+                    sessionStorage.setItem(
+                        pieceFilterStateKey,
+                        JSON.stringify({
+                            ranks: Array.from(activePieceRanks),
+                            search: searchInput ? searchInput.value : "",
+                            sort: activePieceSort,
+                        })
+                    );
+                } catch (error) {
+                    // sessionStorageが使えない環境では何もしない
+                }
+            }
+
+            function restorePieceFilterState() {
+                if (!pieceFilter) {
+                    return;
+                }
+
+                let state = null;
+
+                try {
+                    const raw = sessionStorage.getItem(
+                        pieceFilterStateKey
+                    );
+                    if (raw) {
+                        state = JSON.parse(raw);
+                    }
+                } catch (error) {
+                    state = null;
+                }
+
+                if (!state) {
+                    return;
+                }
+
+                activePieceRanks = new Set(state.ranks || []);
+                activePieceSort = state.sort === "rank" ? "rank" : "group";
+
+                pieceFilter.querySelectorAll(".rank-filter-button").forEach(
+                    function(button) {
+                        const rank = button.dataset.rank;
+                        const isActive = (
+                            (
+                                rank === "all"
+                                && activePieceRanks.size === 0
+                            )
+                            || activePieceRanks.has(rank)
+                        );
+                        button.classList.toggle("is-active", isActive);
+                    }
+                );
+
+                const searchInput = document.getElementById(
+                    "advancement-piece-group-search"
+                );
+                if (searchInput && state.search) {
+                    searchInput.value = state.search;
+                }
+
+                pieceFilter.querySelectorAll(
+                    'input[name="advancement-piece-sort"]'
+                ).forEach(function(radio) {
+                    radio.checked = radio.value === activePieceSort;
+                });
+
+                applyPieceFilters();
+                applyPieceSort();
+            }
+
             if (pieceFilter) {
                 pieceFilter.querySelectorAll(".rank-filter-button").forEach(
                     function(button) {
@@ -414,6 +496,7 @@
                             });
 
                             applyPieceFilters();
+                            savePieceFilterState();
                         });
                     }
                 );
@@ -424,7 +507,10 @@
                 if (groupSearchInput) {
                     groupSearchInput.addEventListener(
                         "input",
-                        applyPieceFilters
+                        function() {
+                            applyPieceFilters();
+                            savePieceFilterState();
+                        }
                     );
                 }
 
@@ -435,9 +521,12 @@
                         if (radio.checked) {
                             activePieceSort = radio.value;
                             applyPieceSort();
+                            savePieceFilterState();
                         }
                     });
                 });
+
+                restorePieceFilterState();
             }
 
             let selectedEntryForTap = null;
