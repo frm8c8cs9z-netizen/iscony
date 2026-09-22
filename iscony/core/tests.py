@@ -3104,13 +3104,14 @@ class AdvancementPieceServiceTests(TestCase):
         fixture = self._create_fixture()
         entry = fixture["target_entries"][0]
         opponent = fixture["target_entries"][1]
-        RoundRobinMatch.objects.create(
+        match = RoundRobinMatch.objects.get(
             group=entry.group,
             pair1=entry,
             pair2=opponent,
-            pair1_games=1,
-            pair2_games=0,
         )
+        match.pair1_games = 1
+        match.pair2_games = 0
+        match.save()
 
         with self.assertRaises(ValidationError) as context:
             assign_league_entry_advancement_piece(
@@ -3160,13 +3161,14 @@ class AdvancementPieceServiceTests(TestCase):
             fixture["source_groups"][0],
             1,
         )
-        RoundRobinMatch.objects.create(
+        match = RoundRobinMatch.objects.get(
             group=entry.group,
             pair1=entry,
             pair2=opponent,
-            pair1_games=1,
-            pair2_games=0,
         )
+        match.pair1_games = 1
+        match.pair2_games = 0
+        match.save()
 
         with self.assertRaises(ValidationError) as context:
             unassign_league_entry_advancement_piece(entry)
@@ -9426,6 +9428,60 @@ class CategoryManagementTests(TestCase):
             ).exists()
         )
 
+    def test_add_stage_creates_round_robin_matches_for_each_group(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "7",
+                "group_size": "3",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="予選リーグ",
+        )
+        groups = list(
+            Group.objects.filter(stage=stage).order_by("display_order")
+        )
+
+        self.assertEqual(
+            [
+                RoundRobinMatch.objects.filter(group=group).count()
+                for group in groups
+            ],
+            [6, 3],
+        )
+        self.assertEqual(
+            RoundRobinMatch.objects.filter(group__stage=stage).count(),
+            9,
+        )
+
     def test_create_league_stage_groups_uses_candidate_group_sizes(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -14614,6 +14670,88 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(
             [entry.pair_code for entry in entries],
             ["1", "2", "3", "4", "5"],
+        )
+
+    def test_edit_stage_rebuilds_round_robin_matches_for_new_slots(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry_1 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+        )
+        entry_2 = LeagueEntry.objects.create(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+        )
+        old_match = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry_1,
+            pair2=entry_2,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "一次リーグ",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "pair_count": "7",
+                "group_size": "3",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        groups = list(
+            Group.objects.filter(stage=stage).order_by("display_order")
+        )
+
+        self.assertFalse(
+            RoundRobinMatch.objects.filter(id=old_match.id).exists()
+        )
+        self.assertEqual(
+            [
+                RoundRobinMatch.objects.filter(group=group).count()
+                for group in groups
+            ],
+            [6, 3],
+        )
+        self.assertEqual(
+            RoundRobinMatch.objects.filter(group__stage=stage).count(),
+            9,
         )
 
     def test_edit_stage_rebuild_deletes_downstream_advancement_sources(self):

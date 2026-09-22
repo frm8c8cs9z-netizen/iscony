@@ -4,6 +4,7 @@ Stage追加時に、参加者未割当のリーグ枠・トーナメント枠を
 """
 
 import string
+from itertools import combinations
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -15,6 +16,7 @@ from ..models import (
     Group,
     LeagueEntry,
     Participant,
+    RoundRobinMatch,
     TournamentBracket,
     TournamentEntry,
     TournamentMatch,
@@ -39,7 +41,10 @@ def _group_name(index):
 
 
 def create_league_stage_groups(stage, pair_count, group_size):
-    """Stage配下に空のGroupとLeagueEntryを作成する。"""
+    """
+    Stage配下に空のGroupとLeagueEntryを作成し、あわせて各グループの
+    総当たり試合(RoundRobinMatch)も作成する。
+    """
 
     with transaction.atomic():
         candidate = find_group_size_candidate(
@@ -67,15 +72,25 @@ def create_league_stage_groups(stage, pair_count, group_size):
             )
             groups.append(group)
 
+            entries = []
+
             for display_order in range(1, group_sizes[group_index] + 1):
-                LeagueEntry.objects.create(
+                entry = LeagueEntry.objects.create(
                     category=stage.category,
                     group=group,
                     participant=None,
                     pair_code=str(pair_number),
                     display_order=display_order,
                 )
+                entries.append(entry)
                 pair_number += 1
+
+            for pair1, pair2 in combinations(entries, 2):
+                RoundRobinMatch.objects.create(
+                    group=group,
+                    pair1=pair1,
+                    pair2=pair2,
+                )
 
         return groups
 
