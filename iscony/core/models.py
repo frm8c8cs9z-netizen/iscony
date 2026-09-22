@@ -355,7 +355,7 @@ class Stage(models.Model):
         null=True,
         blank=True,
         related_name="advancement_target_stages",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
     )
 
     class Meta:
@@ -775,7 +775,7 @@ class Group(models.Model):
         Stage,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.CASCADE
     )
 
     name = models.CharField(
@@ -1365,7 +1365,7 @@ class TournamentBracket(models.Model):
         Stage,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL
+        on_delete=models.CASCADE
     )
 
     name = models.CharField(
