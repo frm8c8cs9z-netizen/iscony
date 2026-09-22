@@ -300,9 +300,208 @@
             }
         }
 
+        const initialValues = {
+            name: "",
+            stageType: "",
+            displayOrder: "",
+            pairCount: "",
+            groupSize: "",
+            matchGames: "",
+            advancementMode: "direct",
+            advancementSourceStage: "",
+        };
+
+        function captureInitialValues() {
+            const nameInput = document.getElementById("id_name");
+            const stageTypeSelect = document.getElementById("id_stage_type");
+            const displayOrderInput = document.getElementById(
+                "id_display_order"
+            );
+            const pairCountInput = document.getElementById("id_pair_count");
+            const groupSizeSelect = document.getElementById("id_group_size");
+            const matchGamesInput = document.getElementById(
+                "id_match_games"
+            );
+            const sourceStageSelect = document.getElementById(
+                "id_advancement_source_stage"
+            );
+            const advancementModeInputs = document.querySelectorAll(
+                'input[name="advancement_mode"]'
+            );
+
+            initialValues.name = nameInput ? nameInput.value : "";
+            initialValues.stageType = (
+                stageTypeSelect ? stageTypeSelect.value : ""
+            );
+            initialValues.displayOrder = (
+                displayOrderInput ? displayOrderInput.value : ""
+            );
+            initialValues.pairCount = (
+                pairCountInput ? pairCountInput.value : ""
+            );
+            initialValues.groupSize = (
+                groupSizeSelect ? groupSizeSelect.value : ""
+            );
+            initialValues.matchGames = (
+                matchGamesInput ? matchGamesInput.value : ""
+            );
+            initialValues.advancementSourceStage = (
+                sourceStageSelect ? sourceStageSelect.value : ""
+            );
+
+            let currentMode = "direct";
+            advancementModeInputs.forEach(function(input) {
+                if (input.checked) {
+                    currentMode = input.value;
+                }
+            });
+            initialValues.advancementMode = currentMode;
+        }
+
+        function markChangedIfDifferent(input, originalValue) {
+            if (!input) {
+                return;
+            }
+
+            const wrapper = input.closest("p");
+            if (!wrapper) {
+                return;
+            }
+
+            wrapper.classList.toggle(
+                "field-changed",
+                input.value !== originalValue
+            );
+        }
+
+        function markAdvancementModeChanged() {
+            const advancementModeInputs = document.querySelectorAll(
+                'input[name="advancement_mode"]'
+            );
+            if (!advancementModeInputs.length) {
+                return;
+            }
+
+            let currentMode = "direct";
+            advancementModeInputs.forEach(function(input) {
+                if (input.checked) {
+                    currentMode = input.value;
+                }
+            });
+
+            const wrapper = advancementModeInputs[0].closest("p");
+            if (wrapper) {
+                wrapper.classList.toggle(
+                    "field-changed",
+                    currentMode !== initialValues.advancementMode
+                );
+            }
+        }
+
+        function refreshChangedHighlights() {
+            markChangedIfDifferent(
+                document.getElementById("id_name"),
+                initialValues.name
+            );
+            markChangedIfDifferent(
+                document.getElementById("id_stage_type"),
+                initialValues.stageType
+            );
+            markChangedIfDifferent(
+                document.getElementById("id_display_order"),
+                initialValues.displayOrder
+            );
+            markChangedIfDifferent(
+                document.getElementById("id_pair_count"),
+                initialValues.pairCount
+            );
+            markChangedIfDifferent(
+                document.getElementById("id_group_size"),
+                initialValues.groupSize
+            );
+            markChangedIfDifferent(
+                document.getElementById("id_match_games"),
+                initialValues.matchGames
+            );
+            markChangedIfDifferent(
+                document.getElementById("id_advancement_source_stage"),
+                initialValues.advancementSourceStage
+            );
+            markAdvancementModeChanged();
+        }
+
+        function computeNeedsRebuild() {
+            const stageType = document.getElementById("id_stage_type");
+            if (!stageType) {
+                return false;
+            }
+
+            if (stageType.value !== initialValues.stageType) {
+                return true;
+            }
+
+            const pairCountInput = document.getElementById("id_pair_count");
+            const currentPairCount = (
+                pairCountInput ? pairCountInput.value : ""
+            );
+            if (currentPairCount !== initialValues.pairCount) {
+                return true;
+            }
+
+            if (stageType.value !== "league") {
+                return false;
+            }
+
+            const advancementModeInputs = document.querySelectorAll(
+                'input[name="advancement_mode"]'
+            );
+            let currentMode = "direct";
+            advancementModeInputs.forEach(function(input) {
+                if (input.checked) {
+                    currentMode = input.value;
+                }
+            });
+            if (currentMode !== initialValues.advancementMode) {
+                return true;
+            }
+
+            if (currentMode === "source") {
+                const sourceStageSelect = document.getElementById(
+                    "id_advancement_source_stage"
+                );
+                const currentSourceStage = (
+                    sourceStageSelect ? sourceStageSelect.value : ""
+                );
+                if (
+                    currentSourceStage
+                    !== initialValues.advancementSourceStage
+                ) {
+                    return true;
+                }
+            }
+
+            const groupSizeSelect = document.getElementById("id_group_size");
+            const currentGroupSize = (
+                groupSizeSelect ? groupSizeSelect.value : ""
+            );
+            if (currentGroupSize !== initialValues.groupSize) {
+                return true;
+            }
+
+            return false;
+        }
+
         document.addEventListener("DOMContentLoaded", function() {
             const stageType = document.getElementById("id_stage_type");
+            const nameInput = document.getElementById("id_name");
+            const displayOrderInput = document.getElementById(
+                "id_display_order"
+            );
             const pairCountInput = document.getElementById("id_pair_count");
+            const groupSizeSelect = document.getElementById("id_group_size");
+            const matchGamesInput = document.getElementById(
+                "id_match_games"
+            );
             const advancementModeInputs = document.querySelectorAll(
                 'input[name="advancement_mode"]'
             );
@@ -335,6 +534,10 @@
             );
             if (regenerateForm) {
                 regenerateForm.addEventListener("submit", function(event) {
+                    if (!computeNeedsRebuild()) {
+                        return;
+                    }
+
                     let confirmMessage = (
                         "現在の枠構成を削除して作り直します。よろしいですか？"
                     );
@@ -358,6 +561,59 @@
                         event.preventDefault();
                     }
                 });
+
+                captureInitialValues();
+
+                if (nameInput) {
+                    nameInput.addEventListener(
+                        "input",
+                        refreshChangedHighlights
+                    );
+                }
+                if (stageType) {
+                    stageType.addEventListener(
+                        "change",
+                        refreshChangedHighlights
+                    );
+                }
+                if (displayOrderInput) {
+                    displayOrderInput.addEventListener(
+                        "input",
+                        refreshChangedHighlights
+                    );
+                }
+                if (pairCountInput) {
+                    pairCountInput.addEventListener(
+                        "input",
+                        refreshChangedHighlights
+                    );
+                }
+                if (groupSizeSelect) {
+                    groupSizeSelect.addEventListener(
+                        "change",
+                        refreshChangedHighlights
+                    );
+                }
+                if (matchGamesInput) {
+                    matchGamesInput.addEventListener(
+                        "input",
+                        refreshChangedHighlights
+                    );
+                }
+                advancementModeInputs.forEach(function(input) {
+                    input.addEventListener(
+                        "change",
+                        refreshChangedHighlights
+                    );
+                });
+                if (sourceStageSelect) {
+                    sourceStageSelect.addEventListener(
+                        "change",
+                        refreshChangedHighlights
+                    );
+                }
+
+                refreshChangedHighlights();
             }
 
             toggleStageSlotSetup();
