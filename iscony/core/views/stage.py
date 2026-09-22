@@ -2,7 +2,7 @@
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -47,34 +47,75 @@ def _target_stage(source):
     return None
 
 
-def _stage_slot_form_for_current_entries(stage, disabled=False):
-    """現在のStage枠数(・トーナメントの場合はゲーム数)を表示するためのStage枠フォームを作る。"""
+def _current_stage_slot_values(stage):
+    """
+    現在のStageの枠構成から、変更検知・フォーム初期値表示の両方に使う値を算出する。
 
-    initial = {}
+    参加ペア数・ゲーム数はモデルに直接保存された値ではなく、現在のGroup/
+    TournamentBracket構成から都度算出する。リーグの「1グループあたりの
+    ペア数」は、現在の各グループの最小エントリー数(あまりを受け持たない
+    グループの人数)から逆算する。
+    """
+
+    values = {
+        "advancement_mode": (
+            StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+            if stage.advancement_source_stage_id
+            else StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT
+        ),
+        "advancement_source_stage_id": stage.advancement_source_stage_id,
+    }
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
-        initial["pair_count"] = LeagueEntry.objects.filter(
+        values["pair_count"] = LeagueEntry.objects.filter(
             group__stage=stage,
         ).count()
+
+        group_sizes = list(
+            Group.objects.filter(
+                stage=stage,
+            ).annotate(
+                entry_count=Count("leagueentry"),
+            ).values_list(
+                "entry_count",
+                flat=True,
+            )
+        )
+        values["group_size"] = min(group_sizes) if group_sizes else None
+
     else:
-        initial["pair_count"] = TournamentEntry.objects.filter(
+        values["pair_count"] = TournamentEntry.objects.filter(
             bracket__stage=stage,
         ).count()
 
-        existing_match_games = TournamentMatch.objects.filter(
+        values["match_games"] = TournamentMatch.objects.filter(
             bracket__stage=stage,
         ).values_list(
             "match_games",
             flat=True,
-        ).first()
+        ).first() or 7
 
-        initial["match_games"] = existing_match_games or 7
+    return values
 
-    if stage.advancement_source_stage_id:
-        initial["advancement_mode"] = StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
-        initial["advancement_source_stage"] = stage.advancement_source_stage_id
+
+def _stage_slot_form_for_current_entries(stage, disabled=False):
+    """現在のStage枠数(・トーナメントの場合はゲーム数)を表示するためのStage枠フォームを作る。"""
+
+    current = _current_stage_slot_values(stage)
+    initial = {
+        "pair_count": current["pair_count"],
+        "advancement_mode": current["advancement_mode"],
+    }
+
+    if stage.stage_type == Stage.TYPE_LEAGUE:
+        initial["group_size"] = current.get("group_size")
     else:
-        initial["advancement_mode"] = StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT
+        initial["match_games"] = current.get("match_games")
+
+    if current["advancement_source_stage_id"]:
+        initial["advancement_source_stage"] = (
+            current["advancement_source_stage_id"]
+        )
 
     slot_form = StageSlotSetupForm(
         initial=initial,
@@ -852,53 +893,133 @@ def edit_stage(request, code, category_id, stage_id):
                     )
 
             if form_valid and slot_form_valid:
-                with transaction.atomic():
-                    Group.objects.filter(stage=stage).delete()
-                    TournamentBracket.objects.filter(stage=stage).delete()
-                    stage = form.save()
+                current_values = _current_stage_slot_values(stage)
+                new_stage_type = form.cleaned_data.get("stage_type")
+                new_pair_count = slot_form.cleaned_data["pair_count"]
+                new_advancement_mode = slot_form.cleaned_data.get(
+                    "advancement_mode"
+                )
+                new_advancement_source_stage = slot_form.cleaned_data.get(
+                    "advancement_source_stage"
+                )
+                new_advancement_source_stage_id = (
+                    new_advancement_source_stage.id
+                    if new_advancement_source_stage
+                    else None
+                )
 
-                    pair_count = slot_form.cleaned_data["pair_count"]
-                    if stage.stage_type == Stage.TYPE_LEAGUE:
-                        group_size = slot_form.cleaned_data["group_size"]
-                        candidate = find_group_size_candidate(
-                            pair_count,
-                            group_size,
-                        )
-                        if (
-                            slot_form.cleaned_data.get("advancement_mode")
-                            == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
-                        ):
-                            stage.advancement_source_stage = (
-                                slot_form.cleaned_data.get(
-                                    "advancement_source_stage"
-                                )
+                stage_type_changed = new_stage_type != stage.stage_type
+                pair_count_changed = (
+                    new_pair_count != current_values["pair_count"]
+                )
+                advancement_mode_changed = (
+                    new_advancement_mode
+                    != current_values["advancement_mode"]
+                )
+                advancement_source_changed = (
+                    new_advancement_mode
+                    == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+                    and new_advancement_source_stage_id
+                    != current_values["advancement_source_stage_id"]
+                )
+
+                new_group_size = None
+                new_match_games = None
+                match_games_only_change = False
+
+                if new_stage_type == Stage.TYPE_LEAGUE:
+                    new_group_size = slot_form.cleaned_data.get(
+                        "group_size"
+                    )
+                    group_size_changed = (
+                        new_group_size != current_values.get("group_size")
+                    )
+                    needs_slot_rebuild = (
+                        stage_type_changed
+                        or pair_count_changed
+                        or advancement_mode_changed
+                        or advancement_source_changed
+                        or group_size_changed
+                    )
+
+                else:
+                    new_match_games = (
+                        slot_form.cleaned_data.get("match_games") or 7
+                    )
+                    match_games_changed = (
+                        new_match_games
+                        != current_values.get("match_games")
+                    )
+                    needs_slot_rebuild = (
+                        stage_type_changed
+                        or pair_count_changed
+                    )
+                    match_games_only_change = (
+                        not needs_slot_rebuild and match_games_changed
+                    )
+
+                candidate = None
+                bracket_size = None
+
+                with transaction.atomic():
+                    if needs_slot_rebuild:
+                        Stage.objects.filter(
+                            advancement_source_stage=stage,
+                        ).delete()
+
+                        Group.objects.filter(stage=stage).delete()
+                        TournamentBracket.objects.filter(
+                            stage=stage,
+                        ).delete()
+                        stage = form.save()
+
+                        if stage.stage_type == Stage.TYPE_LEAGUE:
+                            candidate = find_group_size_candidate(
+                                new_pair_count,
+                                new_group_size,
                             )
+                            if (
+                                new_advancement_mode
+                                == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+                            ):
+                                stage.advancement_source_stage = (
+                                    new_advancement_source_stage
+                                )
+                            else:
+                                stage.advancement_source_stage = None
+                            stage.save(
+                                update_fields=["advancement_source_stage"],
+                            )
+                            create_league_stage_groups(
+                                stage,
+                                new_pair_count,
+                                new_group_size,
+                            )
+
                         else:
-                            stage.advancement_source_stage = None
-                        stage.save(
-                            update_fields=["advancement_source_stage"],
-                        )
-                        create_league_stage_groups(
-                            stage,
-                            pair_count,
-                            group_size,
-                        )
+                            bracket_size = get_bracket_size(new_pair_count)
+                            bracket = create_tournament_stage_bracket(
+                                stage,
+                                new_pair_count,
+                            )
+                            generate_tournament_bracket_matches(
+                                bracket,
+                                new_match_games,
+                            )
+
+                    elif match_games_only_change:
+                        stage = form.save()
+                        TournamentMatch.objects.filter(
+                            bracket__stage=stage,
+                        ).update(match_games=new_match_games)
 
                     else:
-                        bracket_size = get_bracket_size(pair_count)
-                        match_games = slot_form.cleaned_data.get(
-                            "match_games",
-                        ) or 7
-                        bracket = create_tournament_stage_bracket(
-                            stage,
-                            pair_count,
-                        )
-                        generate_tournament_bracket_matches(
-                            bracket,
-                            match_games,
-                        )
+                        stage = form.save()
 
-                if stage.stage_type == Stage.TYPE_LEAGUE:
+                if (
+                    needs_slot_rebuild
+                    and stage.stage_type == Stage.TYPE_LEAGUE
+                ):
                     messages.success(
                         request,
                         (
@@ -907,13 +1028,28 @@ def edit_stage(request, code, category_id, stage_id):
                         ),
                     )
 
-                else:
+                elif needs_slot_rebuild:
                     messages.success(
                         request,
                         (
                             f"{stage.name} を更新しました"
-                            f"({bracket_size}枠のトーナメント表、ゲーム数{match_games}に作り直しました)"
+                            f"({bracket_size}枠のトーナメント表、ゲーム数{new_match_games}に作り直しました)"
                         ),
+                    )
+
+                elif match_games_only_change:
+                    messages.success(
+                        request,
+                        (
+                            f"{stage.name} を更新しました"
+                            f"(ゲーム数を{new_match_games}に変更しました)"
+                        ),
+                    )
+
+                else:
+                    messages.success(
+                        request,
+                        f"{stage.name} を更新しました",
                     )
 
                 return redirect(
