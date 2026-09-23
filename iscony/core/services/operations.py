@@ -1538,13 +1538,9 @@ def delete_round_robin_score(match):
             reset_rank=True
         )
 
-        try:
-            auto_apply_stage_advancements_if_ready(
-                match.group.stage
-            )
-        except ValidationError as error:
-            transaction.set_rollback(True)
-            return " ".join(error.messages)
+        auto_apply_stage_advancements_if_ready(
+            match.group.stage
+        )
     
     return None
 
@@ -1672,13 +1668,9 @@ def save_round_robin_score(
             reset_rank=True
         )
 
-        try:
-            auto_apply_stage_advancements_if_ready(
-                match.group.stage
-            )
-        except ValidationError as error:
-            transaction.set_rollback(True)
-            return " ".join(error.messages)
+        auto_apply_stage_advancements_if_ready(
+            match.group.stage
+        )
     
     return None
 
