@@ -3537,6 +3537,39 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         self.assertContains(response, 'data-source-rank="2"')
         self.assertNotContains(response, 'data-mode="participant"')
 
+    def test_tournament_pair_maintenance_shows_advancement_piece_filter(self):
+        fixture = self._create_fixture(pair_count="4")
+        self._create_source_league_entries(fixture)
+        generate_tournament_bracket_matches(fixture["bracket"], 7)
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": fixture["bracket"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        filter_block = re.search(
+            r'(<div class="advancement-piece-filter">[\s\S]*?)\s*<ul id="unassigned-participant-list"',
+            content,
+        )
+        self.assertIsNotNone(filter_block)
+        filter_html = filter_block.group(1)
+        self.assertEqual(filter_html.count('class="rank-filter-button'), 3)
+        self.assertIn('data-rank="all"', filter_html)
+        self.assertIn('id="advancement-piece-group-search"', filter_html)
+        self.assertEqual(
+            filter_html.count('name="advancement-piece-sort"'),
+            2,
+        )
+        self.assertIn("グループ順", filter_html)
+        self.assertIn("順位順", filter_html)
+
     def test_tournament_pair_maintenance_advancement_slot_uses_piece_urls(self):
         fixture = self._create_fixture(pair_count="4")
         self._create_source_league_entries(fixture)
@@ -3668,6 +3701,7 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         )
         self.assertNotContains(response, 'data-mode="piece"')
         self.assertNotContains(response, "未使用の進出元ピース")
+        self.assertNotContains(response, 'class="advancement-piece-filter"')
 
     def test_assign_tournament_entry_advancement_piece_assigns_piece(self):
         fixture = self._create_fixture()
