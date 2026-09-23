@@ -9490,6 +9490,140 @@ class CategoryManagementTests(TestCase):
             9,
         )
 
+    def test_add_stage_creates_round_robin_matches_with_match_games(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "7",
+                "group_count": "2",
+                "match_games": "5",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="予選リーグ",
+        )
+        self.assertEqual(
+            set(
+                RoundRobinMatch.objects.filter(
+                    group__stage=stage,
+                ).values_list("match_games", flat=True)
+            ),
+            {5},
+        )
+
+    def test_add_stage_defaults_league_match_games_to_seven(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "7",
+                "group_count": "2",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="予選リーグ",
+        )
+        self.assertEqual(
+            set(
+                RoundRobinMatch.objects.filter(
+                    group__stage=stage,
+                ).values_list("match_games", flat=True)
+            ),
+            {7},
+        )
+
+    def test_add_stage_rejects_invalid_league_match_games(self):
+        for match_games in [4, 10, 2]:
+            with self.subTest(match_games=match_games):
+                category = Category.objects.create(
+                    tournament=self.tournament,
+                    name=f"男子A{match_games}",
+                    display_order=match_games,
+                )
+
+                response = self.client.post(
+                    reverse(
+                        "add_stage",
+                        kwargs={
+                            "code": self.tournament.code,
+                            "category_id": category.id,
+                        },
+                    ),
+                    {
+                        "name": "予選リーグ",
+                        "stage_type": Stage.TYPE_LEAGUE,
+                        "display_order": "1",
+                        "pair_count": "7",
+                        "group_count": "2",
+                        "match_games": str(match_games),
+                    },
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    "ゲーム数は3〜9の奇数で入力してください。",
+                    response.context["slot_form"].errors["match_games"],
+                )
+                self.assertFalse(
+                    Stage.objects.filter(
+                        category=category,
+                        name="予選リーグ",
+                    ).exists()
+                )
+
     def test_create_league_stage_groups_uses_candidate_group_counts(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -15495,6 +15629,119 @@ class CategoryManagementTests(TestCase):
             TournamentMatch.objects.filter(match_code="OLD").exists()
         )
 
+    def test_edit_stage_updates_only_league_match_games(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        create_league_stage_groups(stage, 7, 2, match_games=5)
+        group_state = list(
+            Group.objects.filter(stage=stage).order_by(
+                "display_order",
+            ).values_list(
+                "id",
+                "name",
+                "display_order",
+            )
+        )
+        entry_state = list(
+            LeagueEntry.objects.filter(group__stage=stage).order_by(
+                "group__display_order",
+                "display_order",
+            ).values_list(
+                "id",
+                "pair_code",
+                "display_order",
+                "group_id",
+            )
+        )
+        match_ids = set(
+            RoundRobinMatch.objects.filter(group__stage=stage).values_list(
+                "id",
+                flat=True,
+            )
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "pair_count": "7",
+                "group_count": "2",
+                "match_games": "9",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertEqual(
+            list(
+                Group.objects.filter(stage=stage).order_by(
+                    "display_order",
+                ).values_list(
+                    "id",
+                    "name",
+                    "display_order",
+                )
+            ),
+            group_state,
+        )
+        self.assertEqual(
+            list(
+                LeagueEntry.objects.filter(group__stage=stage).order_by(
+                    "group__display_order",
+                    "display_order",
+                ).values_list(
+                    "id",
+                    "pair_code",
+                    "display_order",
+                    "group_id",
+                )
+            ),
+            entry_state,
+        )
+        self.assertEqual(
+            set(
+                RoundRobinMatch.objects.filter(
+                    group__stage=stage,
+                ).values_list("id", flat=True)
+            ),
+            match_ids,
+        )
+        self.assertEqual(
+            set(
+                RoundRobinMatch.objects.filter(
+                    group__stage=stage,
+                ).values_list("match_games", flat=True)
+            ),
+            {9},
+        )
+
     def test_edit_stage_updates_only_tournament_match_games(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -16312,6 +16559,70 @@ class CategoryManagementTests(TestCase):
             set(
                 TournamentMatch.objects.filter(
                     bracket=new_bracket,
+                ).values_list("match_games", flat=True)
+            ),
+            {5},
+        )
+
+    def test_edit_stage_rebuilds_league_matches_with_posted_match_games(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        create_league_stage_groups(stage, 7, 2, match_games=7)
+        old_group_ids = set(
+            Group.objects.filter(stage=stage).values_list("id", flat=True)
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "予選リーグ",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "pair_count": "7",
+                "group_count": "1",
+                "match_games": "5",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertFalse(
+            Group.objects.filter(id__in=old_group_ids).exists()
+        )
+        self.assertEqual(Group.objects.filter(stage=stage).count(), 1)
+        self.assertEqual(
+            LeagueEntry.objects.filter(group__stage=stage).count(),
+            7,
+        )
+        self.assertEqual(
+            set(
+                RoundRobinMatch.objects.filter(
+                    group__stage=stage,
                 ).values_list("match_games", flat=True)
             ),
             {5},

@@ -45,6 +45,11 @@
                 {{ slot_form.pair_count }}
                 {{ slot_form.pair_count.errors }}
             </p>
+            <p id="match-games-field">
+                {{ slot_form.match_games.label_tag }}
+                {{ slot_form.match_games }}
+                {{ slot_form.match_games.errors }}
+            </p>
 
             <div id="league-slot-setup"{% if stage and stage.stage_type != "league" %} hidden{% endif %}>
                 <p>
@@ -91,11 +96,6 @@
                             {{ tournament_slot_preview.message }}
                         {% endif %}
                     </span>
-                </p>
-                <p>
-                    {{ slot_form.match_games.label_tag }}
-                    {{ slot_form.match_games }}
-                    {{ slot_form.match_games.errors }}
                 </p>
             </div>
         </div>

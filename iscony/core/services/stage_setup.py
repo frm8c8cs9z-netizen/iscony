@@ -40,7 +40,7 @@ def _group_name(index):
             return name
 
 
-def create_league_stage_groups(stage, pair_count, group_count):
+def create_league_stage_groups(stage, pair_count, group_count, match_games=7):
     """
     Stage配下に空のGroupとLeagueEntryを作成し、あわせて各グループの
     総当たり試合(RoundRobinMatch)も作成する。
@@ -90,6 +90,7 @@ def create_league_stage_groups(stage, pair_count, group_count):
                     group=group,
                     pair1=pair1,
                     pair2=pair2,
+                    match_games=match_games,
                 )
 
         return groups

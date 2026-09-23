@@ -73,6 +73,13 @@ def _current_stage_slot_values(stage):
             stage=stage,
         ).count() or None
 
+        values["match_games"] = RoundRobinMatch.objects.filter(
+            group__stage=stage,
+        ).values_list(
+            "match_games",
+            flat=True,
+        ).first() or 7
+
     else:
         values["pair_count"] = TournamentEntry.objects.filter(
             bracket__stage=stage,
@@ -95,12 +102,11 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
     initial = {
         "pair_count": current["pair_count"],
         "advancement_mode": current["advancement_mode"],
+        "match_games": current.get("match_games"),
     }
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
         initial["group_count"] = current.get("group_count")
-    else:
-        initial["match_games"] = current.get("match_games")
 
     if current["advancement_source_stage_id"]:
         initial["advancement_source_stage"] = (
@@ -606,6 +612,23 @@ def _validate_stage_slot_setup(stage_type, slot_form):
 
     pair_count = slot_form.cleaned_data["pair_count"]
 
+    match_games = slot_form.cleaned_data.get("match_games")
+
+    if match_games is None:
+        match_games = 7
+        slot_form.cleaned_data["match_games"] = match_games
+
+    if (
+        match_games < 3
+        or match_games > 9
+        or match_games % 2 == 0
+    ):
+        slot_form.add_error(
+            "match_games",
+            "ゲーム数は3〜9の奇数で入力してください。",
+        )
+        return False
+
     if stage_type == Stage.TYPE_LEAGUE:
         group_count = slot_form.cleaned_data.get("group_count")
         candidate = find_group_count_candidate(
@@ -644,23 +667,6 @@ def _validate_stage_slot_setup(stage_type, slot_form):
             slot_form.add_error(
                 "pair_count",
                 "参加ペア数は1以上で入力してください。",
-            )
-            return False
-
-        match_games = slot_form.cleaned_data.get("match_games")
-
-        if match_games is None:
-            match_games = 7
-            slot_form.cleaned_data["match_games"] = match_games
-
-        if (
-            match_games < 3
-            or match_games > 9
-            or match_games % 2 == 0
-        ):
-            slot_form.add_error(
-                "match_games",
-                "ゲーム数は3〜9の奇数で入力してください。",
             )
             return False
 
@@ -712,6 +718,7 @@ def add_stage(request, code, category_id):
             pair_count = slot_form.cleaned_data["pair_count"]
             if stage.stage_type == Stage.TYPE_LEAGUE:
                 group_count = slot_form.cleaned_data["group_count"]
+                match_games = slot_form.cleaned_data.get("match_games") or 7
                 candidate = find_group_count_candidate(
                     pair_count,
                     group_count,
@@ -729,13 +736,15 @@ def add_stage(request, code, category_id):
                         stage,
                         pair_count,
                         group_count,
+                        match_games,
                     )
 
                 messages.success(
                     request,
                     (
                         f"{stage.name} を追加しました"
-                        f"({candidate['group_count']}グループ・計{candidate['total_matches']}試合)"
+                        f"({candidate['group_count']}グループ・計{candidate['total_matches']}試合、"
+                        f"ゲーム数{match_games})"
                     ),
                 )
 
@@ -914,8 +923,12 @@ def edit_stage(request, code, category_id, stage_id):
                 )
 
                 new_group_count = None
-                new_match_games = None
-                match_games_only_change = False
+                new_match_games = (
+                    slot_form.cleaned_data.get("match_games") or 7
+                )
+                match_games_changed = (
+                    new_match_games != current_values.get("match_games")
+                )
 
                 if new_stage_type == Stage.TYPE_LEAGUE:
                     new_group_count = slot_form.cleaned_data.get(
@@ -933,20 +946,14 @@ def edit_stage(request, code, category_id, stage_id):
                     )
 
                 else:
-                    new_match_games = (
-                        slot_form.cleaned_data.get("match_games") or 7
-                    )
-                    match_games_changed = (
-                        new_match_games
-                        != current_values.get("match_games")
-                    )
                     needs_slot_rebuild = (
                         stage_type_changed
                         or pair_count_changed
                     )
-                    match_games_only_change = (
-                        not needs_slot_rebuild and match_games_changed
-                    )
+
+                match_games_only_change = (
+                    not needs_slot_rebuild and match_games_changed
+                )
 
                 candidate = None
                 bracket_size = None
@@ -984,6 +991,7 @@ def edit_stage(request, code, category_id, stage_id):
                                 stage,
                                 new_pair_count,
                                 new_group_count,
+                                new_match_games,
                             )
 
                         else:
@@ -999,9 +1007,14 @@ def edit_stage(request, code, category_id, stage_id):
 
                     elif match_games_only_change:
                         stage = form.save()
-                        TournamentMatch.objects.filter(
-                            bracket__stage=stage,
-                        ).update(match_games=new_match_games)
+                        if stage.stage_type == Stage.TYPE_LEAGUE:
+                            RoundRobinMatch.objects.filter(
+                                group__stage=stage,
+                            ).update(match_games=new_match_games)
+                        else:
+                            TournamentMatch.objects.filter(
+                                bracket__stage=stage,
+                            ).update(match_games=new_match_games)
 
                     else:
                         stage = form.save()
@@ -1014,7 +1027,8 @@ def edit_stage(request, code, category_id, stage_id):
                         request,
                         (
                             f"{stage.name} を更新しました"
-                            f"({candidate['group_count']}グループ・計{candidate['total_matches']}試合に作り直しました)"
+                            f"({candidate['group_count']}グループ・計{candidate['total_matches']}試合、"
+                            f"ゲーム数{new_match_games}に作り直しました)"
                         ),
                     )
 
