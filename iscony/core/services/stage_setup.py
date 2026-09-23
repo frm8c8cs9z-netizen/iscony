@@ -11,7 +11,7 @@ from django.db import transaction
 from django.db.models import Max
 
 from ..helpers.brackets import build_display_bracket_slots, get_bracket_size
-from ..helpers.league_grouping import find_group_size_candidate
+from ..helpers.league_grouping import find_group_count_candidate
 from ..models import (
     Group,
     LeagueEntry,
@@ -40,21 +40,21 @@ def _group_name(index):
             return name
 
 
-def create_league_stage_groups(stage, pair_count, group_size):
+def create_league_stage_groups(stage, pair_count, group_count):
     """
     Stage配下に空のGroupとLeagueEntryを作成し、あわせて各グループの
     総当たり試合(RoundRobinMatch)も作成する。
     """
 
     with transaction.atomic():
-        candidate = find_group_size_candidate(
+        candidate = find_group_count_candidate(
             pair_count,
-            group_size,
+            group_count,
         )
 
         if not candidate:
             raise ValidationError(
-                "入力した参加ペア数に対して無効なグループ内ペア数です。"
+                "入力した参加ペア数に対して無効なグループ数です。"
             )
 
         groups = []

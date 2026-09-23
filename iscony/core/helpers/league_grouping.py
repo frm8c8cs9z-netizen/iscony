@@ -4,23 +4,31 @@ DBに依存しない、参加ペア数からリーグ分割候補を計算する
 """
 
 
-def build_group_size_candidates(pair_count):
-    """参加ペア数から、1グループあたりのペア数候補を返す。"""
+def build_group_count_candidates(pair_count):
+    """
+    参加ペア数から、グループ数ごとの分割候補を返す。
+
+    グループ数を1つずつ試し、参加ペア数をそのグループ数で均等に割り、
+    あまりの数だけ基本人数+1のグループができる。グループの最小人数
+    (基本人数)が3未満になる場合は候補から除外する。グループ数の多い方
+    (グループ内人数が少ない方)から少ない方の順に並べる。
+    """
 
     if pair_count < 3:
         return []
 
     candidates = []
+    max_group_count = pair_count // 3
 
-    for group_size in range(3, pair_count + 1):
-        group_count, remainder = divmod(pair_count, group_size)
+    for group_count in range(max_group_count, 0, -1):
+        base, remainder = divmod(pair_count, group_count)
 
-        if remainder >= group_count:
+        if base < 3:
             continue
 
         group_sizes = (
-            [group_size + 1] * remainder
-            + [group_size] * (group_count - remainder)
+            [base + 1] * remainder
+            + [base] * (group_count - remainder)
         )
 
         total_matches = sum(
@@ -28,7 +36,6 @@ def build_group_size_candidates(pair_count):
             for size in group_sizes
         )
         candidates.append({
-            "group_size": group_size,
             "group_count": group_count,
             "group_sizes": group_sizes,
             "total_matches": total_matches,
@@ -37,11 +44,11 @@ def build_group_size_candidates(pair_count):
     return candidates
 
 
-def find_group_size_candidate(pair_count, group_size):
-    """参加ペア数とグループサイズに一致する候補を返す。"""
+def find_group_count_candidate(pair_count, group_count):
+    """参加ペア数とグループ数に一致する候補を返す。"""
 
-    for candidate in build_group_size_candidates(pair_count):
-        if candidate["group_size"] == group_size:
+    for candidate in build_group_count_candidates(pair_count):
+        if candidate["group_count"] == group_count:
             return candidate
 
     return None

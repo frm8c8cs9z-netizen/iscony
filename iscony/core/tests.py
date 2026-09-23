@@ -28,8 +28,8 @@ from .helpers.display import (
     resolve_entry_display_mode,
 )
 from .helpers.league_grouping import (
-    build_group_size_candidates,
-    find_group_size_candidate,
+    build_group_count_candidates,
+    find_group_count_candidate,
 )
 from .match_keys import format_match_key_display
 from .form_defs import (
@@ -119,12 +119,11 @@ from .services.snapshots import (
 
 class LeagueGroupingHelperTests(TestCase):
 
-    def test_build_group_size_candidates_returns_single_three_pair_group(self):
+    def test_build_group_count_candidates_returns_single_three_pair_group(self):
         self.assertEqual(
-            build_group_size_candidates(3),
+            build_group_count_candidates(3),
             [
                 {
-                    "group_size": 3,
                     "group_count": 1,
                     "group_sizes": [3],
                     "total_matches": 3,
@@ -132,103 +131,92 @@ class LeagueGroupingHelperTests(TestCase):
             ],
         )
 
-    def test_build_group_size_candidates_removes_duplicate_layouts(self):
-        candidates = build_group_size_candidates(4)
+    def test_build_group_count_candidates_for_four_pairs(self):
+        candidates = build_group_count_candidates(4)
 
         self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0]["group_size"], 4)
         self.assertEqual(candidates[0]["group_count"], 1)
         self.assertEqual(candidates[0]["group_sizes"], [4])
         self.assertEqual(candidates[0]["total_matches"], 6)
 
-    def test_build_group_size_candidates_for_seven_pairs(self):
-        candidates = build_group_size_candidates(7)
+    def test_build_group_count_candidates_for_seven_pairs(self):
+        candidates = build_group_count_candidates(7)
 
         self.assertEqual(
             candidates,
             [
                 {
-                    "group_size": 3,
                     "group_count": 2,
                     "group_sizes": [4, 3],
                     "total_matches": 9,
                 },
                 {
-                    "group_size": 7,
                     "group_count": 1,
                     "group_sizes": [7],
                     "total_matches": 21,
                 },
             ],
         )
-        self.assertNotIn(5, [candidate["group_size"] for candidate in candidates])
 
-    def test_build_group_size_candidates_for_fifteen_pairs(self):
-        candidates = build_group_size_candidates(15)
+    def test_build_group_count_candidates_for_fifteen_pairs(self):
+        candidates = build_group_count_candidates(15)
 
         self.assertEqual(
             candidates,
             [
                 {
-                    "group_size": 3,
                     "group_count": 5,
                     "group_sizes": [3, 3, 3, 3, 3],
                     "total_matches": 15,
                 },
                 {
-                    "group_size": 5,
+                    "group_count": 4,
+                    "group_sizes": [4, 4, 4, 3],
+                    "total_matches": 21,
+                },
+                {
                     "group_count": 3,
                     "group_sizes": [5, 5, 5],
                     "total_matches": 30,
                 },
                 {
-                    "group_size": 7,
                     "group_count": 2,
                     "group_sizes": [8, 7],
                     "total_matches": 49,
                 },
                 {
-                    "group_size": 15,
                     "group_count": 1,
                     "group_sizes": [15],
                     "total_matches": 105,
                 },
             ],
         )
-        group_sizes = [candidate["group_size"] for candidate in candidates]
-        self.assertNotIn(4, group_sizes)
-        self.assertNotIn(6, group_sizes)
 
-    def test_build_group_size_candidates_for_seventeen_pairs(self):
+    def test_build_group_count_candidates_for_seventeen_pairs(self):
         self.assertEqual(
-            build_group_size_candidates(17),
+            build_group_count_candidates(17),
             [
                 {
-                    "group_size": 3,
                     "group_count": 5,
                     "group_sizes": [4, 4, 3, 3, 3],
                     "total_matches": 21,
                 },
                 {
-                    "group_size": 4,
                     "group_count": 4,
                     "group_sizes": [5, 4, 4, 4],
                     "total_matches": 28,
                 },
                 {
-                    "group_size": 5,
                     "group_count": 3,
                     "group_sizes": [6, 6, 5],
                     "total_matches": 40,
                 },
                 {
-                    "group_size": 8,
                     "group_count": 2,
                     "group_sizes": [9, 8],
                     "total_matches": 64,
                 },
                 {
-                    "group_size": 17,
                     "group_count": 1,
                     "group_sizes": [17],
                     "total_matches": 136,
@@ -236,13 +224,33 @@ class LeagueGroupingHelperTests(TestCase):
             ],
         )
 
-    def test_build_group_size_candidates_excludes_too_small_groups(self):
-        group_sizes = [
-            candidate["group_size"]
-            for candidate in build_group_size_candidates(5)
+    def test_build_group_count_candidates_excludes_too_small_groups(self):
+        group_counts = [
+            candidate["group_count"]
+            for candidate in build_group_count_candidates(5)
         ]
 
-        self.assertNotIn(3, group_sizes)
+        self.assertNotIn(2, group_counts)
+
+    def test_build_group_count_candidates_for_thirty_four_pairs(self):
+        candidates = build_group_count_candidates(34)
+
+        self.assertIn(
+            {
+                "group_count": 7,
+                "group_sizes": [5, 5, 5, 5, 5, 5, 4],
+                "total_matches": 66,
+            },
+            candidates,
+        )
+        self.assertIn(
+            {
+                "group_count": 6,
+                "group_sizes": [6, 6, 6, 6, 5, 5],
+                "total_matches": 80,
+            },
+            candidates,
+        )
 
 
 class BracketGenerateFormTests(TestCase):
@@ -2935,7 +2943,7 @@ class AdvancementPieceServiceTests(TestCase):
         source_name="予選リーグ",
         target_name="決勝リーグ",
         pair_count="9",
-        group_size="4",
+        group_count="2",
     ):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -2971,7 +2979,7 @@ class AdvancementPieceServiceTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "2",
                 "pair_count": pair_count,
-                "group_size": group_size,
+                "group_count": group_count,
                 "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
                 "advancement_source_stage": str(source_stage.id),
             },
@@ -9337,7 +9345,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "1",
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
             },
         )
 
@@ -9381,7 +9389,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "1",
                 "pair_count": "17",
-                "group_size": "4",
+                "group_count": "4",
             },
         )
 
@@ -9448,7 +9456,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "1",
                 "pair_count": "7",
-                "group_size": "3",
+                "group_count": "2",
             },
         )
 
@@ -9482,7 +9490,7 @@ class CategoryManagementTests(TestCase):
             9,
         )
 
-    def test_create_league_stage_groups_uses_candidate_group_sizes(self):
+    def test_create_league_stage_groups_uses_candidate_group_counts(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -9494,7 +9502,7 @@ class CategoryManagementTests(TestCase):
             stage_type=Stage.TYPE_LEAGUE,
             display_order=1,
         )
-        candidate = find_group_size_candidate(17, 4)
+        candidate = find_group_count_candidate(17, 4)
 
         groups = create_league_stage_groups(stage, 17, 4)
 
@@ -9622,7 +9630,7 @@ class CategoryManagementTests(TestCase):
             [4, 4, 4, 4],
         )
 
-    def test_add_stage_with_invalid_group_size_does_not_create_stage(self):
+    def test_add_stage_with_invalid_group_count_does_not_create_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -9642,7 +9650,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "1",
                 "pair_count": "17",
-                "group_size": "6",
+                "group_count": "6",
             },
         )
 
@@ -9655,7 +9663,7 @@ class CategoryManagementTests(TestCase):
         )
         self.assertContains(
             response,
-            "選択したグループ内ペア数は、入力した参加ペア数に対して無効です。",
+            "選択したグループ数は、入力した参加ペア数に対して無効です。",
         )
 
     def test_add_stage_creates_tournament_bracket_and_empty_entries(self):
@@ -9780,7 +9788,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "1",
                 "pair_count": "5",
-                "group_size": "5",
+                "group_count": "1",
             },
         )
 
@@ -9900,7 +9908,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "1",
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
             },
         )
 
@@ -14253,7 +14261,7 @@ class CategoryManagementTests(TestCase):
         slot_form = StageSlotSetupForm(
             {
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
                 "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
             },
             category=category,
@@ -14389,7 +14397,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "3",
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
             },
         )
 
@@ -14434,7 +14442,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "2",
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
                 "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
                 "advancement_source_stage": str(source_stage.id),
             },
@@ -14484,7 +14492,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "3",
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
                 "advancement_mode": advancement_mode,
             }
             if source_stage is not None:
@@ -14609,7 +14617,7 @@ class CategoryManagementTests(TestCase):
                 "stage_type": Stage.TYPE_LEAGUE,
                 "display_order": "3",
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
                 "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
                 "advancement_source_stage": str(second_source_stage.id),
             },
@@ -14719,7 +14727,7 @@ class CategoryManagementTests(TestCase):
                 "display_order": "1",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "5",
-                "group_size": "5",
+                "group_count": "1",
             },
         )
 
@@ -14802,7 +14810,7 @@ class CategoryManagementTests(TestCase):
                 "display_order": "1",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "7",
-                "group_size": "3",
+                "group_count": "2",
             },
         )
 
@@ -14901,7 +14909,7 @@ class CategoryManagementTests(TestCase):
                 "display_order": "3",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
                 "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
             },
         )
@@ -14935,7 +14943,7 @@ class CategoryManagementTests(TestCase):
             entry_state,
         )
 
-    def test_edit_stage_rebuilds_league_slots_when_group_size_changes(self):
+    def test_edit_stage_rebuilds_league_slots_when_group_count_changes(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -14976,7 +14984,7 @@ class CategoryManagementTests(TestCase):
                 "display_order": "1",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "6",
-                "group_size": "3",
+                "group_count": "2",
                 "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
             },
         )
@@ -15074,7 +15082,7 @@ class CategoryManagementTests(TestCase):
                 "display_order": "1",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
             },
         )
 
@@ -15151,7 +15159,7 @@ class CategoryManagementTests(TestCase):
                 "display_order": "1",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "4",
-                "group_size": "4",
+                "group_count": "1",
             },
         )
 
@@ -15613,7 +15621,7 @@ class CategoryManagementTests(TestCase):
                 "display_order": "2",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "5",
-                "group_size": "4",
+                "group_count": "1",
             },
         )
 
@@ -15838,7 +15846,7 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, "stage_type")
         self.assertContains(response, 'value="tournament"')
 
-    def test_edit_stage_get_selects_current_group_size_for_direct_stage(self):
+    def test_edit_stage_get_selects_current_group_count_for_direct_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -15882,10 +15890,10 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertRegex(
             content,
-            r'<option value="3"[^>]* selected>',
+            r'<option value="2"[^>]* selected>',
         )
 
-    def test_edit_stage_get_selects_current_group_size_for_source_stage(self):
+    def test_edit_stage_get_selects_current_group_count_for_source_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -15936,7 +15944,7 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertRegex(
             content,
-            r'<option value="3"[^>]* selected>',
+            r'<option value="2"[^>]* selected>',
         )
 
     def test_edit_stage_get_initializes_tournament_pair_count_when_unlocked(self):
@@ -16158,7 +16166,7 @@ class CategoryManagementTests(TestCase):
             {5},
         )
 
-    def test_edit_stage_invalid_group_size_keeps_existing_league_slots(self):
+    def test_edit_stage_invalid_group_count_keeps_existing_league_slots(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -16197,14 +16205,14 @@ class CategoryManagementTests(TestCase):
                 "display_order": "2",
                 "stage_type": Stage.TYPE_LEAGUE,
                 "pair_count": "5",
-                "group_size": "3",
+                "group_count": "3",
             },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "選択したグループ内ペア数は、入力した参加ペア数に対して無効です。",
+            "選択したグループ数は、入力した参加ペア数に対して無効です。",
         )
         stage.refresh_from_db()
         self.assertEqual(stage.name, "予選リーグ")

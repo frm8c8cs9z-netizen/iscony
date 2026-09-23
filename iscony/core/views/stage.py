@@ -2,7 +2,7 @@
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -10,8 +10,8 @@ from .league import build_category_group_data
 from ..forms import StageEditForm, StageForm, StageSlotSetupForm
 from ..helpers.brackets import get_bracket_size
 from ..helpers.league_grouping import (
-    build_group_size_candidates,
-    find_group_size_candidate,
+    build_group_count_candidates,
+    find_group_count_candidate,
 )
 from ..models import (
     AdvancementSource,
@@ -51,10 +51,8 @@ def _current_stage_slot_values(stage):
     """
     現在のStageの枠構成から、変更検知・フォーム初期値表示の両方に使う値を算出する。
 
-    参加ペア数・ゲーム数はモデルに直接保存された値ではなく、現在のGroup/
-    TournamentBracket構成から都度算出する。リーグの「1グループあたりの
-    ペア数」は、現在の各グループの最小エントリー数(あまりを受け持たない
-    グループの人数)から逆算する。
+    参加ペア数・ゲーム数・グループ数はモデルに直接保存された値ではなく、
+    現在のGroup/TournamentBracket構成から都度算出する。
     """
 
     values = {
@@ -71,17 +69,9 @@ def _current_stage_slot_values(stage):
             group__stage=stage,
         ).count()
 
-        group_sizes = list(
-            Group.objects.filter(
-                stage=stage,
-            ).annotate(
-                entry_count=Count("leagueentry"),
-            ).values_list(
-                "entry_count",
-                flat=True,
-            )
-        )
-        values["group_size"] = min(group_sizes) if group_sizes else None
+        values["group_count"] = Group.objects.filter(
+            stage=stage,
+        ).count() or None
 
     else:
         values["pair_count"] = TournamentEntry.objects.filter(
@@ -108,7 +98,7 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
     }
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
-        initial["group_size"] = current.get("group_size")
+        initial["group_count"] = current.get("group_count")
     else:
         initial["match_games"] = current.get("match_games")
 
@@ -125,7 +115,7 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
 
     if disabled:
         slot_form.fields["pair_count"].widget.attrs["disabled"] = True
-        slot_form.fields["group_size"].widget.attrs["disabled"] = True
+        slot_form.fields["group_count"].widget.attrs["disabled"] = True
         slot_form.fields["match_games"].widget.attrs["disabled"] = True
         slot_form.fields["advancement_mode"].widget.attrs["disabled"] = True
         slot_form.fields["advancement_source_stage"].widget.attrs["disabled"] = True
@@ -602,7 +592,7 @@ def _stage_setup_preview(pair_count):
         }
 
     return {
-        "group_size_candidates": build_group_size_candidates(pair_count or 0),
+        "group_count_candidates": build_group_count_candidates(pair_count or 0),
         "tournament_slot_preview": tournament_slot_preview,
     }
 
@@ -610,24 +600,24 @@ def _stage_setup_preview(pair_count):
 def _validate_stage_slot_setup(stage_type, slot_form):
     """
     slot_form が有効(is_valid())である前提で呼ぶ。
-    stage_type に応じて pair_count / group_size を検証し、無効なら
+    stage_type に応じて pair_count / group_count を検証し、無効なら
     slot_form.add_error() でエラーを追加して False を返す。
     """
 
     pair_count = slot_form.cleaned_data["pair_count"]
 
     if stage_type == Stage.TYPE_LEAGUE:
-        group_size = slot_form.cleaned_data.get("group_size")
-        candidate = find_group_size_candidate(
+        group_count = slot_form.cleaned_data.get("group_count")
+        candidate = find_group_count_candidate(
             pair_count,
-            group_size,
+            group_count,
         )
 
         if not candidate:
             slot_form.add_error(
-                "group_size",
+                "group_count",
                 (
-                    "選択したグループ内ペア数は、入力した参加ペア数に対して無効です。"
+                    "選択したグループ数は、入力した参加ペア数に対して無効です。"
                     "候補から選び直してください。"
                 ),
             )
@@ -721,10 +711,10 @@ def add_stage(request, code, category_id):
 
             pair_count = slot_form.cleaned_data["pair_count"]
             if stage.stage_type == Stage.TYPE_LEAGUE:
-                group_size = slot_form.cleaned_data["group_size"]
-                candidate = find_group_size_candidate(
+                group_count = slot_form.cleaned_data["group_count"]
+                candidate = find_group_count_candidate(
                     pair_count,
-                    group_size,
+                    group_count,
                 )
                 if (
                     slot_form.cleaned_data.get("advancement_mode")
@@ -738,7 +728,7 @@ def add_stage(request, code, category_id):
                     create_league_stage_groups(
                         stage,
                         pair_count,
-                        group_size,
+                        group_count,
                     )
 
                 messages.success(
@@ -804,7 +794,7 @@ def add_stage(request, code, category_id):
             "stage": None,
             "page_title": "Stage追加",
             "submit_label": "保存",
-            "selected_group_size": slot_form["group_size"].value(),
+            "selected_group_count": slot_form["group_count"].value(),
             **_stage_setup_preview(preview_pair_count),
         },
     )
@@ -923,23 +913,23 @@ def edit_stage(request, code, category_id, stage_id):
                     != current_values["advancement_source_stage_id"]
                 )
 
-                new_group_size = None
+                new_group_count = None
                 new_match_games = None
                 match_games_only_change = False
 
                 if new_stage_type == Stage.TYPE_LEAGUE:
-                    new_group_size = slot_form.cleaned_data.get(
-                        "group_size"
+                    new_group_count = slot_form.cleaned_data.get(
+                        "group_count"
                     )
-                    group_size_changed = (
-                        new_group_size != current_values.get("group_size")
+                    group_count_changed = (
+                        new_group_count != current_values.get("group_count")
                     )
                     needs_slot_rebuild = (
                         stage_type_changed
                         or pair_count_changed
                         or advancement_mode_changed
                         or advancement_source_changed
-                        or group_size_changed
+                        or group_count_changed
                     )
 
                 else:
@@ -974,9 +964,9 @@ def edit_stage(request, code, category_id, stage_id):
                         stage = form.save()
 
                         if stage.stage_type == Stage.TYPE_LEAGUE:
-                            candidate = find_group_size_candidate(
+                            candidate = find_group_count_candidate(
                                 new_pair_count,
-                                new_group_size,
+                                new_group_count,
                             )
                             if (
                                 new_advancement_mode
@@ -993,7 +983,7 @@ def edit_stage(request, code, category_id, stage_id):
                             create_league_stage_groups(
                                 stage,
                                 new_pair_count,
-                                new_group_size,
+                                new_group_count,
                             )
 
                         else:
@@ -1084,7 +1074,7 @@ def edit_stage(request, code, category_id, stage_id):
     if slot_form:
         context.update({
             "slot_form": slot_form,
-            "selected_group_size": slot_form["group_size"].value(),
+            "selected_group_count": slot_form["group_count"].value(),
             **_stage_setup_preview(preview_pair_count),
         })
 

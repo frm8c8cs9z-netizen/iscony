@@ -142,10 +142,10 @@ class StageSlotSetupForm(forms.Form):
             },
         ),
     )
-    group_size = forms.IntegerField(
+    group_count = forms.IntegerField(
         required=False,
-        min_value=3,
-        label="1グループあたりのペア数",
+        min_value=1,
+        label="グループ数",
     )
     match_games = forms.IntegerField(
         required=False,
