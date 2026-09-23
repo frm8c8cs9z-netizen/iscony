@@ -51,19 +51,19 @@
                 {{ slot_form.match_games.errors }}
             </p>
 
+            <p>
+                {{ slot_form.advancement_mode.label_tag }}
+                {{ slot_form.advancement_mode }}
+                {{ slot_form.advancement_mode.errors }}
+            </p>
+
+            <p id="advancement-source-stage-field" hidden>
+                {{ slot_form.advancement_source_stage.label_tag }}
+                {{ slot_form.advancement_source_stage }}
+                {{ slot_form.advancement_source_stage.errors }}
+            </p>
+
             <div id="league-slot-setup"{% if stage and stage.stage_type != "league" %} hidden{% endif %}>
-                <p>
-                    {{ slot_form.advancement_mode.label_tag }}
-                    {{ slot_form.advancement_mode }}
-                    {{ slot_form.advancement_mode.errors }}
-                </p>
-
-                <p id="advancement-source-stage-field" hidden>
-                    {{ slot_form.advancement_source_stage.label_tag }}
-                    {{ slot_form.advancement_source_stage }}
-                    {{ slot_form.advancement_source_stage.errors }}
-                </p>
-
                 <div id="league-group-count-setup">
                     <p>
                         <label for="id_group_count">グループ数:</label>
@@ -121,6 +121,9 @@
             const pairCountAnchor = document.getElementById(
                 "pair-count-anchor"
             );
+            const matchGamesField = document.getElementById(
+                "match-games-field"
+            );
             const groupCountSetup = document.getElementById(
                 "league-group-count-setup"
             );
@@ -138,6 +141,7 @@
                 || !sourceStageField
                 || !pairCountField
                 || !pairCountAnchor
+                || !matchGamesField
                 || !groupCountSetup
             ) {
                 return;
@@ -145,7 +149,6 @@
 
             const isLeague = stageType.value === "league";
             leagueSetup.hidden = !isLeague;
-            tournamentSetup.hidden = isLeague;
 
             if (isLeague) {
                 if (groupCountSetup.parentNode) {
@@ -169,17 +172,19 @@
             });
             const isSourceMode = advancementMode === "source";
 
-            sourceStageField.hidden = !(isLeague && isSourceMode);
+            sourceStageField.hidden = !isSourceMode;
 
             const hasSourceStage = Boolean(
                 sourceStageSelect && sourceStageSelect.value
             );
             const showPairCount = (
-                !isLeague || !isSourceMode || hasSourceStage
+                !isSourceMode || hasSourceStage
             );
 
             pairCountField.hidden = !showPairCount;
+            matchGamesField.hidden = !showPairCount;
             groupCountSetup.hidden = !(isLeague && showPairCount);
+            tournamentSetup.hidden = isLeague || !showPairCount;
         }
 
         function bracketSizeFor(pairCount) {

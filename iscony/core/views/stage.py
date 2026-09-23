@@ -629,6 +629,21 @@ def _validate_stage_slot_setup(stage_type, slot_form):
         )
         return False
 
+    advancement_mode = slot_form.cleaned_data.get("advancement_mode")
+    advancement_source_stage = slot_form.cleaned_data.get(
+        "advancement_source_stage"
+    )
+
+    if (
+        advancement_mode == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+        and not advancement_source_stage
+    ):
+        slot_form.add_error(
+            "advancement_source_stage",
+            "「他のStageの結果を使う」を選んだ場合は、進出元Stageを選択してください。",
+        )
+        return False
+
     if stage_type == Stage.TYPE_LEAGUE:
         group_count = slot_form.cleaned_data.get("group_count")
         candidate = find_group_count_candidate(
@@ -643,21 +658,6 @@ def _validate_stage_slot_setup(stage_type, slot_form):
                     "選択したグループ数は、入力した参加ペア数に対して無効です。"
                     "候補から選び直してください。"
                 ),
-            )
-            return False
-
-        advancement_mode = slot_form.cleaned_data.get("advancement_mode")
-        advancement_source_stage = slot_form.cleaned_data.get(
-            "advancement_source_stage"
-        )
-
-        if (
-            advancement_mode == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
-            and not advancement_source_stage
-        ):
-            slot_form.add_error(
-                "advancement_source_stage",
-                "「他のStageの結果を使う」を選んだ場合は、進出元Stageを選択してください。",
             )
             return False
 
@@ -751,6 +751,13 @@ def add_stage(request, code, category_id):
             else:
                 bracket_size = get_bracket_size(pair_count)
                 match_games = slot_form.cleaned_data.get("match_games") or 7
+                if (
+                    slot_form.cleaned_data.get("advancement_mode")
+                    == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+                ):
+                    stage.advancement_source_stage = slot_form.cleaned_data.get(
+                        "advancement_source_stage"
+                    )
                 with transaction.atomic():
                     stage.save()
                     bracket = create_tournament_stage_bracket(
@@ -949,6 +956,8 @@ def edit_stage(request, code, category_id, stage_id):
                     needs_slot_rebuild = (
                         stage_type_changed
                         or pair_count_changed
+                        or advancement_mode_changed
+                        or advancement_source_changed
                     )
 
                 match_games_only_change = (
@@ -995,6 +1004,18 @@ def edit_stage(request, code, category_id, stage_id):
                             )
 
                         else:
+                            if (
+                                new_advancement_mode
+                                == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+                            ):
+                                stage.advancement_source_stage = (
+                                    new_advancement_source_stage
+                                )
+                            else:
+                                stage.advancement_source_stage = None
+                            stage.save(
+                                update_fields=["advancement_source_stage"],
+                            )
                             bracket_size = get_bracket_size(new_pair_count)
                             bracket = create_tournament_stage_bracket(
                                 stage,
