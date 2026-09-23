@@ -19204,6 +19204,59 @@ class TournamentScheduleBehaviorTests(TestCase):
     def use_individual_bracket_settings(self):
         self.bracket.use_tournament_defaults = False
 
+    def create_league_match_with_unresolved_entry(self, *, use_advancement=False):
+        stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=self.category,
+            stage=stage,
+            name="A",
+        )
+        resolved_entry = create_league_entry_with_participant(
+            category=self.category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="リーグ1A",
+            player2_name="リーグ1B",
+        )
+        unresolved_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+        )
+
+        if use_advancement:
+            source_stage = Stage.objects.create(
+                category=self.category,
+                name="前段リーグ",
+                stage_type=Stage.TYPE_LEAGUE,
+                display_order=0,
+            )
+            source_group = Group.objects.create(
+                category=self.category,
+                stage=source_stage,
+                name="D",
+            )
+            AdvancementSource.objects.create(
+                target_league_entry=unresolved_entry,
+                source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+                source_stage=source_stage,
+                source_group=source_group,
+                source_rank=2,
+            )
+
+        return RoundRobinMatch.objects.create(
+            group=group,
+            pair1=resolved_entry,
+            pair2=unresolved_entry,
+        )
+
     def test_tournament_bracket_detail_links_back_to_stage_overview(self):
         response = self.client.get(
             reverse(
@@ -19339,6 +19392,49 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "disabled")
         self.assertNotContains(response, "採点票PDF")
 
+    def test_unresolved_direct_league_match_score_input_is_disabled(self):
+        match = self.create_league_match_with_unresolved_entry()
+
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={
+                    "match_id": match.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        self.assertContains(response, "disabled")
+        self.assertNotContains(response, 'onclick="setWinner')
+
+    def test_unresolved_advancement_league_match_score_input_is_disabled(self):
+        match = self.create_league_match_with_unresolved_entry(
+            use_advancement=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={
+                    "match_id": match.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        self.assertContains(response, "D2")
+        self.assertContains(response, "disabled")
+        self.assertNotContains(response, 'onclick="setWinner')
+
     def test_tournament_match_score_input_shows_score_sheet_pdf_button(self):
         match = TournamentMatch.objects.create(
             bracket=self.bracket,
@@ -19391,6 +19487,104 @@ class TournamentScheduleBehaviorTests(TestCase):
                     "match_id": match.id,
                 },
             ),
+            {
+                "action": "save",
+                "pair1_games": "4",
+                "pair2_games": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        match.refresh_from_db()
+        self.assertIsNone(match.pair1_games)
+        self.assertIsNone(match.pair2_games)
+        self.assertIsNone(match.winner)
+
+    def test_unresolved_league_match_rejects_score_post(self):
+        match = self.create_league_match_with_unresolved_entry(
+            use_advancement=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "input_match_score",
+                kwargs={
+                    "match_id": match.id,
+                },
+            ),
+            {
+                "action": "save",
+                "pair1_games": "4",
+                "pair2_games": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        match.refresh_from_db()
+        self.assertIsNone(match.pair1_games)
+        self.assertIsNone(match.pair2_games)
+        self.assertFalse(match.completed)
+
+    def test_first_round_tournament_match_with_unresolved_entry_rejects_score(self):
+        source_stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group = Group.objects.create(
+            category=self.category,
+            stage=source_stage,
+            name="D",
+        )
+        unresolved_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="D2",
+            display_order=3,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=unresolved_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group,
+            source_rank=2,
+        )
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=unresolved_entry,
+            pair2=self.entry2,
+        )
+        score_url = reverse(
+            "input_tournament_match_score",
+            kwargs={
+                "code": self.tournament.code,
+                "match_id": match.id,
+            },
+        )
+
+        response = self.client.get(score_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "対戦相手が確定していないため、この試合の結果は入力できません。",
+        )
+        self.assertContains(response, "disabled")
+        self.assertNotContains(response, 'onclick="setWinner')
+
+        response = self.client.post(
+            score_url,
             {
                 "action": "save",
                 "pair1_games": "4",

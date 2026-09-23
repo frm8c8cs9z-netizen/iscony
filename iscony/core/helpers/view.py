@@ -29,6 +29,20 @@ def safe_next_url(request):
 
     return None
 
+
+def match_pair_is_determined(entry):
+    """
+    試合の片方の枠(LeagueEntryまたはTournamentEntry)について、
+    対戦相手(参加者)が確定しているかどうかを返す。
+
+    枠自体が存在しない(entryがNone、トーナメントの後続ラウンド未到達)
+    場合も、枠は存在するが参加者未割当・進出元未確定で
+    participantがNoneの場合も、どちらも「未確定」として扱う。
+    """
+
+    return getattr(entry, "participant_id", None) is not None
+
+
 def render_score_input(
     request,
     match,
@@ -44,9 +58,9 @@ def render_score_input(
         "winning_games": winning_games,
         "mode": mode,
         "back_url": back_url,
-        "can_input_score": not (
-            mode == "tournament"
-            and (not match.pair1_id or not match.pair2_id)
+        "can_input_score": (
+            match_pair_is_determined(match.pair1)
+            and match_pair_is_determined(match.pair2)
         ),
     }
 

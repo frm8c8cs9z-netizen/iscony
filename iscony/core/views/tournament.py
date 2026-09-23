@@ -71,6 +71,7 @@ from ..helpers.brackets import (
 )
 from ..validators import validate_game_score
 from ..helpers.view import (
+    match_pair_is_determined,
     redirect_next_or_default,
     render_score_input,
 )
@@ -212,7 +213,10 @@ def input_tournament_match_score(request, code, match_id):
                 category_id=match.bracket.category.id,
             )
 
-        if not match.pair1_id or not match.pair2_id:
+        if not (
+            match_pair_is_determined(match.pair1)
+            and match_pair_is_determined(match.pair2)
+        ):
             return render_score_input(
                 request=request,
                 tournament=tournament,
@@ -220,7 +224,6 @@ def input_tournament_match_score(request, code, match_id):
                 winning_games=winning_games,
                 mode="tournament",
                 back_url=back_url,
-                error="対戦相手が確定していないため、この試合の結果は入力できません。",
             )
 
         if action in ["retire_pair1", "retire_pair2", "retire_both"]:

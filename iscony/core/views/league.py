@@ -60,6 +60,7 @@ from ..services import (
 )
 from ..validators import validate_game_score
 from ..helpers.view import (
+    match_pair_is_determined,
     redirect_next_or_url,
     render_score_input,
     safe_next_url,
@@ -801,6 +802,18 @@ def input_match_score(request, match_id):
                 return redirect_next_or_url(request, back_url)
 
             return redirect_next_or_url(request, back_url)
+
+        if not (
+            match_pair_is_determined(match.pair1)
+            and match_pair_is_determined(match.pair2)
+        ):
+            return render_score_input(
+                request=request,
+                match=match,
+                winning_games=match.winning_games(),
+                mode="round_robin",
+                back_url=back_url,
+            )
 
         try:
             pair1_games = int(
