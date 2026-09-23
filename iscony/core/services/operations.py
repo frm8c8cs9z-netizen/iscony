@@ -989,6 +989,136 @@ def move_league_entry_advancement_piece(source_entry, target_entry):
     }
 
 
+def assign_tournament_entry_advancement_piece(entry, source_group, source_rank):
+    """TournamentEntryに進出元ピース(グループ×順位)を割り当てる。"""
+
+    stage = entry.bracket.stage
+
+    if not stage or not stage.advancement_source_stage_id:
+        raise ValidationError(
+            "このStageは進出元Stageが設定されていません。"
+        )
+
+    if source_group.stage_id != stage.advancement_source_stage_id:
+        raise ValidationError(
+            "このStageの進出元Stageと一致しないグループです。"
+        )
+
+    if _target_has_score(entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、進出元を割り当てできません。"
+        )
+
+    if entry.participant_id is not None:
+        raise ValidationError(
+            "この枠には参加者が割り当てられています。"
+        )
+
+    if hasattr(entry, "advancement_source"):
+        raise ValidationError(
+            "この枠には既に進出元が割り当てられています。"
+        )
+
+    if _advancement_piece_conflict(source_group, source_rank):
+        raise ValidationError(
+            "この進出元は既に他の枠に割り当てられています。"
+        )
+
+    source = AdvancementSource(
+        target_tournament_entry=entry,
+        source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+        source_stage=source_group.stage,
+        source_group=source_group,
+        source_rank=source_rank,
+    )
+    source.full_clean()
+    source.save()
+
+    return source
+
+
+def unassign_tournament_entry_advancement_piece(entry):
+    """TournamentEntryの進出元割当を解除する。"""
+
+    try:
+        source = entry.advancement_source
+    except AdvancementSource.DoesNotExist:
+        raise ValidationError("この枠には進出元が割り当てられていません。")
+
+    if _target_has_score(entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、進出元の割当を解除できません。"
+        )
+
+    source.delete()
+
+
+def move_tournament_entry_advancement_piece(source_entry, target_entry):
+    """
+    source_entry に割り当てられている進出元を target_entry へ移動する。
+
+    target_entry が未割当なら、進出元をそこへ付け替える。target_entry に
+    既に別の進出元が割り当たっている場合は、swap_advancement_sources を
+    使って入れ替える(結果入力済みロックは同関数が確認する)。
+    """
+
+    if source_entry.id == target_entry.id:
+        raise ValidationError("移動元と移動先が同じ枠です。")
+
+    source_stage = source_entry.bracket.stage
+    target_stage = target_entry.bracket.stage
+
+    if (
+        not source_stage
+        or not target_stage
+        or source_stage.advancement_source_stage_id
+        != target_stage.advancement_source_stage_id
+    ):
+        raise ValidationError(
+            "異なる進出元Stageを参照する枠の間では移動できません。"
+        )
+
+    try:
+        source = source_entry.advancement_source
+    except AdvancementSource.DoesNotExist:
+        raise ValidationError("この枠には進出元が割り当てられていません。")
+
+    if target_entry.participant_id is not None:
+        raise ValidationError(
+            "移動先の枠には参加者が割り当てられています。"
+        )
+
+    try:
+        target_source = target_entry.advancement_source
+    except AdvancementSource.DoesNotExist:
+        target_source = None
+
+    if target_source is not None:
+        swap_advancement_sources(source, target_source)
+
+        return {
+            "mode": "swap",
+            "source_entry": source_entry,
+            "target_entry": target_entry,
+        }
+
+    if _target_has_score(source_entry) or _target_has_score(target_entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、移動できません。"
+        )
+
+    with transaction.atomic():
+        source.target_tournament_entry = target_entry
+        source.full_clean()
+        source.save(update_fields=["target_tournament_entry"])
+
+    return {
+        "mode": "move",
+        "source_entry": source_entry,
+        "target_entry": target_entry,
+    }
+
+
 def swap_advancement_sources(source_a, source_b):
     """2つの進出元設定が紐づく枠を入れ替える。"""
 
@@ -2110,5 +2240,4 @@ def validate_tournament_score_change(
         return "次の試合に結果が入力されているため、勝敗が変わる修正はできません。"
 
     return None
-
 

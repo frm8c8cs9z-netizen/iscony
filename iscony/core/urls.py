@@ -563,6 +563,24 @@ urlpatterns = [
     ),
 
     path(
+        "tournament-entry/<int:entry_id>/assign-advancement-piece/",
+        tournament.assign_tournament_entry_advancement_piece_api,
+        name="assign_tournament_entry_advancement_piece_api",
+    ),
+
+    path(
+        "tournament-entry/<int:entry_id>/unassign-advancement-piece/",
+        tournament.unassign_tournament_entry_advancement_piece_api,
+        name="unassign_tournament_entry_advancement_piece_api",
+    ),
+
+    path(
+        "tournament-entry/<int:entry_id>/move-advancement-piece/",
+        tournament.move_tournament_entry_advancement_piece_api,
+        name="move_tournament_entry_advancement_piece_api",
+    ),
+
+    path(
         "tournament/<str:code>/bracket/<int:bracket_id>/generate/",
         tournament.generate_tournament_matches,
         name="generate_tournament_matches",
