@@ -88,6 +88,7 @@ from .services import (
     assign_tournament_entry_advancement_piece,
     create_league_stage_groups,
     create_extra_round_robin_match,
+    generate_tournament_bracket_matches,
     group_base_size,
     group_slot_reference_total,
     consume_stage_advancement_result,
@@ -3473,6 +3474,200 @@ class TournamentAdvancementPieceServiceTests(TestCase):
             pair1_games=1,
             pair2_games=0,
         )
+
+    def _create_source_league_entries(self, fixture, entries_per_group=2):
+        for group_index, group in enumerate(
+            fixture["source_groups"],
+            start=0,
+        ):
+            for display_order in range(1, entries_per_group + 1):
+                LeagueEntry.objects.create(
+                    category=fixture["category"],
+                    group=group,
+                    pair_code=str(group_index * entries_per_group + display_order),
+                    display_order=display_order,
+                )
+
+    def test_tournament_pair_maintenance_shows_unassigned_advancement_pieces(self):
+        fixture = self._create_fixture(pair_count="4")
+        self._create_source_league_entries(fixture)
+        assigned_entry = fixture["target_entries"][0]
+        source_group_a = fixture["source_groups"][0]
+        source_group_b = fixture["source_groups"][1]
+        assign_tournament_entry_advancement_piece(
+            assigned_entry,
+            source_group_a,
+            1,
+        )
+        generate_tournament_bracket_matches(fixture["bracket"], 7)
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": fixture["bracket"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        pool = re.search(
+            r'<ul id="unassigned-participant-list"[^>]*>[\s\S]*?</ul>',
+            content,
+        )
+        self.assertIsNotNone(pool)
+        self.assertContains(response, 'data-mode="piece"')
+        self.assertContains(response, "A－2位")
+        self.assertContains(response, "B－1位")
+        self.assertContains(response, "B－2位")
+        self.assertNotIn("A－1位", pool.group(0))
+        self.assertContains(
+            response,
+            f'data-source-group-id="{source_group_a.id}"',
+        )
+        self.assertContains(
+            response,
+            f'data-source-group-id="{source_group_b.id}"',
+        )
+        self.assertContains(response, 'data-source-group-name="A"')
+        self.assertContains(response, 'data-source-group-name="B"')
+        self.assertContains(response, 'data-source-rank="1"')
+        self.assertContains(response, 'data-source-rank="2"')
+        self.assertNotContains(response, 'data-mode="participant"')
+
+    def test_tournament_pair_maintenance_advancement_slot_uses_piece_urls(self):
+        fixture = self._create_fixture(pair_count="4")
+        self._create_source_league_entries(fixture)
+        assigned_entry = fixture["target_entries"][0]
+        assign_tournament_entry_advancement_piece(
+            assigned_entry,
+            fixture["source_groups"][0],
+            1,
+        )
+        generate_tournament_bracket_matches(fixture["bracket"], 7)
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": fixture["bracket"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        assigned_slot = re.search(
+            rf"<div[^>]*data-entry-id=\"{assigned_entry.id}\"[^>]*>",
+            content,
+        ).group(0)
+        self.assertIn('data-assigned="true"', assigned_slot)
+        self.assertIn(
+            reverse(
+                "assign_tournament_entry_advancement_piece_api",
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+            assigned_slot,
+        )
+        self.assertIn(
+            reverse(
+                "unassign_tournament_entry_advancement_piece_api",
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+            assigned_slot,
+        )
+        self.assertIn(
+            reverse(
+                "move_tournament_entry_advancement_piece_api",
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+            assigned_slot,
+        )
+        self.assertIn('draggable="true"', assigned_slot)
+
+    def test_tournament_pair_maintenance_direct_assignment_keeps_participant_mode(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        entries = [
+            create_tournament_entry(
+                bracket=bracket,
+                pair_code=str(index),
+                display_order=index,
+                player1_name=f"参加者{index}A",
+                player2_name=f"参加者{index}B",
+            )
+            for index in range(1, 5)
+        ]
+        unassigned_participant = Participant.objects.create(
+            category=category,
+            entry_code="P5",
+            player1_name="未割当A",
+            player2_name="未割当B",
+            display_order=5,
+        )
+        generate_tournament_bracket_matches(bracket, 7)
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": bracket.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        assigned_slot = re.search(
+            rf"<div[^>]*data-entry-id=\"{entries[0].id}\"[^>]*>",
+            content,
+        ).group(0)
+        self.assertContains(response, 'data-mode="participant"')
+        self.assertContains(
+            response,
+            f'data-participant-id="{unassigned_participant.id}"',
+        )
+        self.assertIn(
+            reverse(
+                "assign_tournament_entry_participant",
+                kwargs={"entry_id": entries[0].id},
+            ),
+            assigned_slot,
+        )
+        self.assertIn(
+            reverse(
+                "unassign_tournament_entry_participant_api",
+                kwargs={"entry_id": entries[0].id},
+            ),
+            assigned_slot,
+        )
+        self.assertIn(
+            reverse(
+                "move_tournament_entry_participant_api",
+                kwargs={"entry_id": entries[0].id},
+            ),
+            assigned_slot,
+        )
+        self.assertNotContains(response, 'data-mode="piece"')
+        self.assertNotContains(response, "未使用の進出元ピース")
 
     def test_assign_tournament_entry_advancement_piece_assigns_piece(self):
         fixture = self._create_fixture()

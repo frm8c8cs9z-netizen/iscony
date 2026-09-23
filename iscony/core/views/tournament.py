@@ -12,6 +12,7 @@ import io
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -661,6 +662,52 @@ def tournament_pair_maintenance(request, code, bracket_id):
 
     slots.sort(key=lambda slot: slot["y"])
 
+    is_advancement_source_stage = bool(
+        bracket.stage and bracket.stage.advancement_source_stage_id
+    )
+
+    unassigned_pieces = []
+    piece_ranks = []
+
+    if is_advancement_source_stage:
+        source_groups = list(
+            Group.objects.filter(
+                stage=bracket.stage.advancement_source_stage,
+            ).annotate(
+                entry_count=Count("leagueentry"),
+            ).order_by(
+                "display_order",
+                "name",
+            )
+        )
+        used_piece_keys = set(
+            AdvancementSource.objects.filter(
+                source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+                source_group__in=source_groups,
+            ).values_list(
+                "source_group_id",
+                "source_rank",
+            )
+        )
+
+        for source_group in source_groups:
+            for rank in range(1, source_group.entry_count + 1):
+                if (source_group.id, rank) in used_piece_keys:
+                    continue
+
+                unassigned_pieces.append({
+                    "source_group_id": source_group.id,
+                    "source_group_name": source_group.name,
+                    "source_group_order": source_group.display_order,
+                    "source_rank": rank,
+                    "label": f"{source_group.name}－{rank}位",
+                })
+
+        piece_ranks = sorted({
+            piece["source_rank"]
+            for piece in unassigned_pieces
+        })
+
     assigned_participant_ids = TournamentEntry.objects.filter(
         bracket__stage=bracket.stage,
         participant__isnull=False,
@@ -684,6 +731,9 @@ def tournament_pair_maintenance(request, code, bracket_id):
             "svg_bracket": svg_bracket,
             "slots": slots,
             "unassigned_participants": unassigned_participants,
+            "is_advancement_source_stage": is_advancement_source_stage,
+            "unassigned_pieces": unassigned_pieces,
+            "piece_ranks": piece_ranks,
         },
     )
 

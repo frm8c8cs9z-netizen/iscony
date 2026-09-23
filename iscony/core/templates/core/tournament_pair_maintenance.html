@@ -13,23 +13,42 @@
 <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
 
 <div class="pair-assignment-layout pair-assignment-layout--tournament">
-    <ul id="unassigned-participant-list" class="tournament-assign-participants">
-        {% for participant in unassigned_participants %}
-            <li
-                class="participant-piece"
-                draggable="true"
-                data-participant-id="{{ participant.id }}"
-                data-participant-name="{{ participant.display_name }}"
-            >
-                {{ participant.display_name }}
-                {% if participant.effective_organization %}
-                    ({{ participant.effective_organization }})
-                {% endif %}
-            </li>
-        {% empty %}
-            <li class="subtle-text">未割当の参加者はいません。</li>
-        {% endfor %}
-    </ul>
+    {% if is_advancement_source_stage %}
+        <ul id="unassigned-participant-list" class="tournament-assign-participants" data-mode="piece">
+            {% for piece in unassigned_pieces %}
+                <li
+                    class="participant-piece"
+                    draggable="true"
+                    data-source-group-id="{{ piece.source_group_id }}"
+                    data-source-group-name="{{ piece.source_group_name }}"
+                    data-source-group-order="{{ piece.source_group_order }}"
+                    data-source-rank="{{ piece.source_rank }}"
+                >
+                    {{ piece.label }}
+                </li>
+            {% empty %}
+                <li class="subtle-text">未使用の進出元ピースはありません。</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <ul id="unassigned-participant-list" class="tournament-assign-participants" data-mode="participant">
+            {% for participant in unassigned_participants %}
+                <li
+                    class="participant-piece"
+                    draggable="true"
+                    data-participant-id="{{ participant.id }}"
+                    data-participant-name="{{ participant.display_name }}"
+                >
+                    {{ participant.display_name }}
+                    {% if participant.effective_organization %}
+                        ({{ participant.effective_organization }})
+                    {% endif %}
+                </li>
+            {% empty %}
+                <li class="subtle-text">未割当の参加者はいません。</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
 
     <div class="tournament-assign-board">
         <div class="svg-bracket-wrap svg-bracket-wrap--with-slots">
@@ -39,15 +58,27 @@
             >
                 {% for slot in slots %}
                     <div
-                        class="tournament-slot-row{% if slot.entry.participant %} tournament-slot-row--assigned{% endif %}"
+                        class="tournament-slot-row{% if slot.entry.participant or slot.entry.advancement_source %} tournament-slot-row--assigned{% endif %}"
                         style="position:absolute; top:{{ slot.y }}px; left:0; right:0; transform:translateY(-50%);"
                         data-entry-id="{{ slot.entry.id }}"
-                        data-assign-url="{% url 'assign_tournament_entry_participant' slot.entry.id %}"
-                        data-unassign-url="{% url 'unassign_tournament_entry_participant_api' slot.entry.id %}"
-                        {% if slot.entry.participant %}data-assigned="true"{% else %}data-assigned="false"{% endif %}
-                        {% if slot.entry.participant %}draggable="true" data-move-url="{% url 'move_tournament_entry_participant_api' slot.entry.id %}"{% endif %}
+                        {% if is_advancement_source_stage %}
+                            data-assign-url="{% url 'assign_tournament_entry_advancement_piece_api' slot.entry.id %}"
+                            data-unassign-url="{% url 'unassign_tournament_entry_advancement_piece_api' slot.entry.id %}"
+                        {% else %}
+                            data-assign-url="{% url 'assign_tournament_entry_participant' slot.entry.id %}"
+                            data-unassign-url="{% url 'unassign_tournament_entry_participant_api' slot.entry.id %}"
+                        {% endif %}
+                        {% if slot.entry.participant or slot.entry.advancement_source %}data-assigned="true"{% else %}data-assigned="false"{% endif %}
+                        {% if slot.entry.participant or slot.entry.advancement_source %}
+                            draggable="true"
+                            {% if is_advancement_source_stage %}
+                                data-move-url="{% url 'move_tournament_entry_advancement_piece_api' slot.entry.id %}"
+                            {% else %}
+                                data-move-url="{% url 'move_tournament_entry_participant_api' slot.entry.id %}"
+                            {% endif %}
+                        {% endif %}
                     >
-                        {% if slot.entry.participant %}
+                        {% if slot.entry.participant or slot.entry.advancement_source %}
                             <button type="button" class="tournament-slot-empty">割当済</button>
                             <button type="button" class="tournament-slot-empty" data-role="unassign">割当解除</button>
                         {% else %}
@@ -78,6 +109,7 @@
             "#unassigned-participant-list"
         );
         let selectedParticipantForTap = null;
+        let selectedPieceForTap = null;
         let selectedEntrySlotForTap = null;
         let highlightedDropTarget = null;
 
@@ -131,6 +163,12 @@
                 );
             }
             selectedParticipantForTap = null;
+            if (selectedPieceForTap) {
+                selectedPieceForTap.classList.remove(
+                    "entry-tap-selecting"
+                );
+            }
+            selectedPieceForTap = null;
             if (selectedEntrySlotForTap) {
                 selectedEntrySlotForTap.classList.remove(
                     "entry-tap-selecting"
@@ -193,6 +231,37 @@
                 })
                 .catch(function() {
                     alert("参加者を割り当てられませんでした。");
+                });
+        }
+
+        function assignPieceToSlot(slot, sourceGroupId, sourceRank) {
+            const body = new URLSearchParams();
+            body.append("source_group_id", sourceGroupId);
+            body.append("source_rank", sourceRank);
+
+            fetch(slot.dataset.assignUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: body,
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(
+                            result.data.error
+                            || "進出元を割り当てられませんでした。"
+                        );
+                        return;
+                    }
+
+                    rememberScrollAnchor(slot.dataset.entryId);
+                    location.reload();
+                })
+                .catch(function() {
+                    alert("進出元を割り当てられませんでした。");
                 });
         }
 
@@ -283,6 +352,21 @@
                 return;
             }
 
+            const piece = event.target.closest(
+                "#unassigned-participant-list [data-source-group-id]"
+            );
+            if (piece) {
+                event.dataTransfer.setData(
+                    "text/plain",
+                    JSON.stringify({
+                        type: "piece",
+                        sourceGroupId: piece.dataset.sourceGroupId,
+                        sourceRank: piece.dataset.sourceRank,
+                    })
+                );
+                return;
+            }
+
             const slot = event.target.closest(
                 ".tournament-slot-row[data-assigned=\"true\"]"
             );
@@ -327,6 +411,15 @@
                 setDropHighlight(null);
                 if (data.type === "participant") {
                     assignParticipantToSlot(slot, data.participantId);
+                    return;
+                }
+
+                if (data.type === "piece") {
+                    assignPieceToSlot(
+                        slot,
+                        data.sourceGroupId,
+                        data.sourceRank
+                    );
                     return;
                 }
 
@@ -378,6 +471,18 @@
                     return;
                 }
 
+                if (selectedPieceForTap) {
+                    const sourceGroupId = (
+                        selectedPieceForTap.dataset.sourceGroupId
+                    );
+                    const sourceRank = (
+                        selectedPieceForTap.dataset.sourceRank
+                    );
+                    clearTapSelection();
+                    assignPieceToSlot(slot, sourceGroupId, sourceRank);
+                    return;
+                }
+
                 clearTapSelection();
                 selectedEntrySlotForTap = slot;
                 slot.classList.add("entry-tap-selecting");
@@ -389,26 +494,56 @@
                 const participant = event.target.closest(
                     "[data-participant-id]"
                 );
-                if (!participant) {
+                if (participant) {
+                    if (selectedParticipantForTap === participant) {
+                        clearTapSelection();
+                        return;
+                    }
+
+                    if (selectedEntrySlotForTap) {
+                        const selectedSlot = selectedEntrySlotForTap;
+                        const participantId = (
+                            participant.dataset.participantId
+                        );
+                        clearTapSelection();
+                        assignParticipantToSlot(selectedSlot, participantId);
+                        return;
+                    }
+
+                    clearTapSelection();
+                    selectedParticipantForTap = participant;
+                    participant.classList.add("entry-tap-selecting");
                     return;
                 }
 
-                if (selectedParticipantForTap === participant) {
+                const piece = event.target.closest(
+                    "[data-source-group-id]"
+                );
+                if (!piece) {
+                    return;
+                }
+
+                if (selectedPieceForTap === piece) {
                     clearTapSelection();
                     return;
                 }
 
                 if (selectedEntrySlotForTap) {
                     const selectedSlot = selectedEntrySlotForTap;
-                    const participantId = participant.dataset.participantId;
+                    const sourceGroupId = piece.dataset.sourceGroupId;
+                    const sourceRank = piece.dataset.sourceRank;
                     clearTapSelection();
-                    assignParticipantToSlot(selectedSlot, participantId);
+                    assignPieceToSlot(
+                        selectedSlot,
+                        sourceGroupId,
+                        sourceRank
+                    );
                     return;
                 }
 
                 clearTapSelection();
-                selectedParticipantForTap = participant;
-                participant.classList.add("entry-tap-selecting");
+                selectedPieceForTap = piece;
+                piece.classList.add("entry-tap-selecting");
             });
         }
 
