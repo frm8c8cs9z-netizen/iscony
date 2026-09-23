@@ -16,39 +16,45 @@
 
     {% csrf_token %}
 
-    <h3>リーグ表示順</h3>
+    {% for entry in grouped_rows %}
+        <h3>
+            {% if category %}
+                {{ entry.stage.name|default:"Stage未設定" }}
+            {% else %}
+                {{ entry.category.name }} / {{ entry.stage.name|default:"Stage未設定" }}
+            {% endif %}
+        </h3>
 
-    <table>
-        <tr>
-            <th>カテゴリ</th>
-            <th>表示順</th>
-            <th>リーグ</th>
-        </tr>
+        <table>
+            <tr>
+                <th>表示順</th>
+                <th>リーグ</th>
+            </tr>
 
-        {% for group in groups %}
-        <tr>
-            <td>
-                {{ group.category.name }}
-            </td>
-            <td>
-                <input
-                    type="number"
-                    name="group_order_{{ group.id }}"
-                    value="{{ group.display_order }}"
-                    style="width:70px;"
-                >
-            </td>
-            <td>
-                <input
-                    type="text"
-                    name="group_name_{{ group.id }}"
-                    value="{{ group.name }}"
-                    style="width:100px;"
-                >リーグ
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
+            {% for group in entry.groups %}
+            <tr>
+                <td>
+                    <input
+                        type="number"
+                        name="group_order_{{ group.id }}"
+                        value="{{ group.display_order }}"
+                        style="width:70px;"
+                    >
+                </td>
+                <td>
+                    <input
+                        type="text"
+                        name="group_name_{{ group.id }}"
+                        value="{{ group.name }}"
+                        style="width:100px;"
+                    >リーグ
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% empty %}
+        <p>対象のリーグがありません。</p>
+    {% endfor %}
 
     <button type="submit">
         保存

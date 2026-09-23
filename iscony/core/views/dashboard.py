@@ -1796,10 +1796,13 @@ def order_maintenance(request, code, category_id=None, stage_id=None):
     groups = Group.objects.filter(
         category__tournament=tournament
     ).select_related(
-        "category"
+        "category",
+        "stage",
     ).order_by(
         "category__display_order",
         "category__name",
+        "stage__display_order",
+        "stage__name",
         "display_order",
         "name"
     )
@@ -1905,6 +1908,24 @@ def order_maintenance(request, code, category_id=None, stage_id=None):
             request.path
         )
 
+    grouped_rows = []
+    current_key = None
+    current_entry = None
+
+    for group in groups:
+        key = (group.category_id, group.stage_id)
+
+        if key != current_key:
+            current_entry = {
+                "category": group.category,
+                "stage": group.stage,
+                "groups": [],
+            }
+            grouped_rows.append(current_entry)
+            current_key = key
+
+        current_entry["groups"].append(group)
+
     return render(
         request,
         "core/order_maintenance.html",
@@ -1912,7 +1933,7 @@ def order_maintenance(request, code, category_id=None, stage_id=None):
             "tournament": tournament,
             "category": category,
             "stage": stage,
-            "groups": groups,
+            "grouped_rows": grouped_rows,
         }
     )
 

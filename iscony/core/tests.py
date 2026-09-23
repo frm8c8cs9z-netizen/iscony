@@ -5066,6 +5066,61 @@ class OrderMaintenanceTests(TestCase):
         self.assertEqual(other_stage_group.name, "C")
         self.assertEqual(other_category_group.name, "C")
 
+    def test_get_shows_group_tables_by_stage(self):
+        other_stage_group = Group.objects.create(
+            category=self.category,
+            stage=self.other_stage,
+            name="A",
+            display_order=1,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "男子A / 予選")
+        self.assertContains(response, "男子A / 順位戦")
+
+        content = response.content.decode()
+        group_a_input = content.index(
+            f'name="group_order_{self.group_a.id}"'
+        )
+        group_b_input = content.index(
+            f'name="group_order_{self.group_b.id}"'
+        )
+        other_stage_input = content.index(
+            f'name="group_order_{other_stage_group.id}"'
+        )
+        self.assertLess(group_a_input, other_stage_input)
+        self.assertLess(group_b_input, other_stage_input)
+
+    def test_category_scoped_get_shows_stage_heading_only(self):
+        response = self.client.get(
+            reverse(
+                "category_group_order_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "予選")
+        self.assertNotContains(response, "男子A / 予選")
+
+    def test_get_shows_unset_stage_heading(self):
+        Group.objects.create(
+            category=self.category,
+            stage=None,
+            name="未設定",
+            display_order=1,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Stage未設定")
+
     def test_category_scoped_post_updates_only_category_groups(self):
         other_category_group = Group.objects.create(
             category=self.other_category,
