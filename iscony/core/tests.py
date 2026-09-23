@@ -10040,6 +10040,42 @@ class CategoryManagementTests(TestCase):
             display_order=display_order,
         )
 
+    def test_edit_pair_shows_back_link_to_pair_maintenance(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        _stage, groups = self._create_league_stage(category, 1)
+        entry = self._create_entry(
+            category,
+            groups[0],
+            "A1",
+            1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_pair",
+                kwargs={"pair_id": entry.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "リーグ枠編集へ戻る")
+        self.assertContains(
+            response,
+            (
+                '<a class="button-link" href="'
+                + reverse(
+                    "pair_maintenance",
+                    kwargs={"category_id": category.id},
+                )
+                + '">リーグ枠編集へ戻る</a>'
+            ),
+            html=True,
+        )
+
     def _create_tournament_stage_with_brackets(
         self,
         category,
@@ -20730,6 +20766,43 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "category_stage_overview",
                 kwargs={"category_id": self.category.id},
             ),
+        )
+
+    def test_edit_schedule_shows_back_link_to_schedule_maintenance(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        schedule = Schedule.objects.create(
+            court=self.court,
+            order=1,
+            tournament_match=match,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_schedule",
+                kwargs={"schedule_id": schedule.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "進行メンテナンスへ戻る")
+        self.assertContains(
+            response,
+            (
+                '<a class="button-link" href="'
+                + reverse(
+                    "schedule_maintenance",
+                    kwargs={"code": self.tournament.code},
+                )
+                + '">進行メンテナンスへ戻る</a>'
+            ),
+            html=True,
         )
 
     def test_unresolved_advancement_entry_svg_label_aligns_with_number(self):

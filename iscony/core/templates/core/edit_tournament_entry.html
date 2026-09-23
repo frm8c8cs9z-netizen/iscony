@@ -53,11 +53,11 @@
 
 <p>
     {% if next_url %}
-        <a href="{{ next_url }}">
+        <a class="button-link" href="{{ next_url }}">
             戻る
         </a>
     {% else %}
-        <a href="{% url 'tournament_match_maintenance' tournament.code entry.bracket.id %}">
+        <a class="button-link" href="{% url 'tournament_match_maintenance' tournament.code entry.bracket.id %}">
             戻る
         </a>
     {% endif %}
