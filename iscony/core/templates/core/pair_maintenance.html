@@ -67,7 +67,7 @@
                         {% endif %}
                         data-edit-url="{% url 'edit_pair' pair.id %}"
                         data-edit-api-url="{% url 'edit_league_entry_api' pair.id %}"
-                        data-participant-id="{{ pair.participant_id|default_if_none:'' }}"
+                        {% if pair.participant_id %}data-participant-id="{{ pair.participant_id }}"{% endif %}
                         data-pair-code="{{ pair.pair_code }}"
                         data-display-order="{{ pair.display_order }}"
                         {% if pair.participant or pair.advancement_source %}

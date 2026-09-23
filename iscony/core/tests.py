@@ -13861,7 +13861,7 @@ class CategoryManagementTests(TestCase):
             ),
             empty_row.group(0),
         )
-        self.assertIn('data-participant-id=""', empty_row.group(0))
+        self.assertNotIn("data-participant-id", empty_row.group(0))
         self.assertIn(
             f'data-pair-code="{empty_entry.pair_code}"',
             empty_row.group(0),
@@ -14166,6 +14166,157 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, 'class="unassign-piece-trigger"')
         self.assertNotContains(response, "未割当の参加者")
         self.assertNotContains(response, "+1枠を追加")
+
+    def test_stage_pair_maintenance_advancement_piece_row_has_entry_drag_data(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            code="SRC",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        source_group_a = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="A",
+            display_order=1,
+        )
+        source_group_b = Group.objects.create(
+            category=category,
+            stage=source_stage,
+            name="B",
+            display_order=2,
+        )
+        for group_index, group in enumerate(
+            [source_group_a, source_group_b],
+            start=0,
+        ):
+            for display_order in range(1, 3):
+                LeagueEntry.objects.create(
+                    category=category,
+                    group=group,
+                    pair_code=str(group_index * 2 + display_order),
+                    display_order=display_order,
+                )
+
+        target_stage = Stage.objects.create(
+            category=category,
+            code="DST",
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            advancement_source_stage=source_stage,
+            display_order=2,
+        )
+        target_group = Group.objects.create(
+            category=category,
+            stage=target_stage,
+            name="決勝",
+            display_order=1,
+        )
+        assigned_entry = LeagueEntry.objects.create(
+            category=category,
+            group=target_group,
+            pair_code="1",
+            display_order=1,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=assigned_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=source_stage,
+            source_group=source_group_a,
+            source_rank=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": target_stage.id,
+                },
+            )
+        )
+
+        content = response.content.decode()
+        row = re.search(
+            (
+                r"<tr(?=[^>]*data-entry-id=\""
+                + str(assigned_entry.id)
+                + r"\")[\s\S]*?</tr>"
+            ),
+            content,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(row)
+        self.assertNotIn("data-participant-id", row.group(0))
+        self.assertIn('data-assigned="true"', row.group(0))
+        self.assertIn(
+            reverse(
+                "move_league_entry_advancement_piece_api",
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+            row.group(0),
+        )
+
+    def test_stage_pair_maintenance_participant_row_keeps_participant_drag_data(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            code="STG1",
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="山田",
+            player2_name="田中",
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+
+        content = response.content.decode()
+        row = re.search(
+            (
+                r"<tr(?=[^>]*data-entry-id=\""
+                + str(entry.id)
+                + r"\")[\s\S]*?</tr>"
+            ),
+            content,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(row)
+        self.assertIn(
+            f'data-participant-id="{entry.participant_id}"',
+            row.group(0),
+        )
 
     def test_stage_pair_maintenance_shows_slot_shortage(self):
         category = Category.objects.create(
