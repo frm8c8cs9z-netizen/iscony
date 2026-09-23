@@ -2003,7 +2003,7 @@ class AdvancementSource(models.Model):
 
             return (
                 f"{self.source_group.name}"
-                f"{self.source_rank}"
+                f"－{self.source_rank}位"
             )
 
         if self.source_type == self.SOURCE_TOURNAMENT_RESULT:

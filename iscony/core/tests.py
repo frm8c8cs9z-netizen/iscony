@@ -2595,8 +2595,8 @@ class AdvancementSourceModelTests(TestCase):
             self.tournament_entry.advancement_source,
             source,
         )
-        self.assertEqual(source.label, "A1")
-        self.assertEqual(self.tournament_entry.display_name, "A1")
+        self.assertEqual(source.label, "A－1位")
+        self.assertEqual(self.tournament_entry.display_name, "A－1位")
 
     def test_tournament_result_source_can_target_league_entry(self):
         match = TournamentMatch.objects.create(
@@ -2748,8 +2748,8 @@ class AdvancementSourceModelTests(TestCase):
             source_rank=2,
         )
 
-        self.assertEqual(entry_a4.display_name, "D2")
-        self.assertEqual(entry_b2.display_name, "F2")
+        self.assertEqual(entry_a4.display_name, "D－2位")
+        self.assertEqual(entry_b2.display_name, "F－2位")
 
         swap_advancement_sources(
             source_d2,
@@ -2763,10 +2763,10 @@ class AdvancementSourceModelTests(TestCase):
 
         self.assertEqual(source_d2.target_league_entry, entry_b2)
         self.assertEqual(source_f2.target_league_entry, entry_a4)
-        self.assertEqual(entry_a4.advancement_source.label, "F2")
-        self.assertEqual(entry_b2.advancement_source.label, "D2")
-        self.assertEqual(entry_a4.display_name, "F2")
-        self.assertEqual(entry_b2.display_name, "D2")
+        self.assertEqual(entry_a4.advancement_source.label, "F－2位")
+        self.assertEqual(entry_b2.advancement_source.label, "D－2位")
+        self.assertEqual(entry_a4.display_name, "F－2位")
+        self.assertEqual(entry_b2.display_name, "D－2位")
 
     def test_advancement_sources_cannot_be_swapped_after_league_score(self):
         entry_2 = LeagueEntry.objects.create(
@@ -7270,7 +7270,7 @@ class ImportStageSlotsCsvTests(TestCase):
         )
 
         self.assertIsNone(final_entry.participant)
-        self.assertEqual(final_entry.display_name, "A1")
+        self.assertEqual(final_entry.display_name, "A－1位")
         self.assertEqual(
             final_entry.advancement_source.source_group,
             preliminary_group_a,
@@ -7302,7 +7302,7 @@ class ImportStageSlotsCsvTests(TestCase):
             pair_code="1",
         )
 
-        self.assertEqual(tournament_entry.display_name, "A1")
+        self.assertEqual(tournament_entry.display_name, "A－1位")
 
     def test_stage_slots_reject_unavailable_league_rank_source(self):
         response = self._post_csv(
@@ -8700,7 +8700,7 @@ class AdvancementSourceListViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "決勝リーグ")
         self.assertContains(response, "1位リーグ")
-        self.assertContains(response, "A1")
+        self.assertContains(response, "A－1位")
         self.assertContains(response, "予選リーグ / A / 1位")
 
     def test_tournament_result_source_detail_includes_bracket(self):
@@ -8827,8 +8827,8 @@ class AdvancementSourceListViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "進出元の入れ替え")
-        self.assertContains(response, "A / 4 / D2")
-        self.assertContains(response, "B / 2 / F2")
+        self.assertContains(response, "A / 4 / D－2位")
+        self.assertContains(response, "B / 2 / F－2位")
         self.assertContains(response, "advancement-sources/swap")
 
     def test_advancement_sources_can_be_swapped_from_view(self):
@@ -8915,8 +8915,8 @@ class AdvancementSourceListViewTests(TestCase):
         entry_a4.refresh_from_db()
         entry_b2.refresh_from_db()
 
-        self.assertEqual(entry_a4.advancement_source.label, "F2")
-        self.assertEqual(entry_b2.advancement_source.label, "D2")
+        self.assertEqual(entry_a4.advancement_source.label, "F－2位")
+        self.assertEqual(entry_b2.advancement_source.label, "D－2位")
 
 
 class ApplyStageAdvancementsTests(TestCase):
@@ -20665,7 +20665,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             content,
             re.compile(
                 r'<text[^>]*class="advancement-source-text"[^>]*'
-                r'text-anchor="end"[^>]*>.*?予選2.*?</text>',
+                r'text-anchor="end"[^>]*>.*?予選－2位.*?</text>',
                 re.S,
             ),
         )
@@ -20756,7 +20756,7 @@ class TournamentScheduleBehaviorTests(TestCase):
             response,
             "対戦相手が確定していないため、この試合の結果は入力できません。",
         )
-        self.assertContains(response, "D2")
+        self.assertContains(response, "D－2位")
         self.assertContains(response, "disabled")
         self.assertNotContains(response, 'onclick="setWinner')
 
