@@ -5093,6 +5093,22 @@ class OrderMaintenanceTests(TestCase):
         self.assertLess(group_a_input, other_stage_input)
         self.assertLess(group_b_input, other_stage_input)
 
+    def test_global_get_shows_back_link_to_maintenance_menu(self):
+        back_url = reverse(
+            "maintenance_menu",
+            kwargs={"code": self.tournament.code},
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<a class="button-link" href="{back_url}">',
+        )
+        self.assertContains(response, "管理メニューへ戻る")
+        self.assertNotContains(response, "Stage管理へ戻る")
+
     def test_category_scoped_get_shows_stage_heading_only(self):
         response = self.client.get(
             reverse(
@@ -5205,6 +5221,33 @@ class OrderMaintenanceTests(TestCase):
             "男子A のリーグ名称・表示順メンテナンス",
         )
 
+    def test_category_scoped_get_shows_back_link_to_stage_management(self):
+        back_url = reverse(
+            "category_stage_management",
+            kwargs={
+                "code": self.tournament.code,
+                "category_id": self.category.id,
+            },
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_group_order_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<a class="button-link" href="{back_url}">',
+        )
+        self.assertContains(response, "Stage管理へ戻る")
+        self.assertNotContains(response, "管理メニューへ戻る")
+
 
 class CategoryOrderMaintenanceTests(TestCase):
 
@@ -5227,6 +5270,21 @@ class CategoryOrderMaintenanceTests(TestCase):
             "category_order_maintenance",
             kwargs={"code": self.tournament.code},
         )
+
+    def test_get_shows_back_link_to_category_management(self):
+        back_url = reverse(
+            "category_management",
+            kwargs={"code": self.tournament.code},
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<a class="button-link" href="{back_url}">',
+        )
+        self.assertContains(response, "カテゴリ管理へ戻る")
 
     def test_category_name_can_be_updated(self):
         response = self.client.post(
