@@ -535,6 +535,14 @@
             let highlightedDropTarget = null;
 
             function buildDragData(event) {
+                const entry = event.target.closest("[data-entry-id]");
+                if (entry && entry.dataset.assigned === "true") {
+                    return {
+                        type: "entry",
+                        entryId: entry.dataset.entryId,
+                    };
+                }
+
                 const participant = event.target.closest(
                     "[data-participant-id]"
                 );
@@ -553,14 +561,6 @@
                         type: "piece",
                         sourceGroupId: piece.dataset.sourceGroupId,
                         sourceRank: piece.dataset.sourceRank,
-                    };
-                }
-
-                const entry = event.target.closest("[data-entry-id]");
-                if (entry && entry.dataset.assigned === "true") {
-                    return {
-                        type: "entry",
-                        entryId: entry.dataset.entryId,
                     };
                 }
 
