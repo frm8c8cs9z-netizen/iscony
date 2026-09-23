@@ -1138,6 +1138,8 @@ def import_participants(request, tournament_code):
                 category__in=categories
             ).delete()
 
+            next_display_order = {}
+
             for row in rows:
 
                 category_name = row["category"].strip()
@@ -1145,6 +1147,9 @@ def import_participants(request, tournament_code):
                 category = Category.objects.get(
                     tournament=tournament,
                     name=category_name
+                )
+                next_display_order[category_name] = (
+                    next_display_order.get(category_name, 0) + 1
                 )
 
                 entry_code = row["entry_code"].strip()
@@ -1163,6 +1168,7 @@ def import_participants(request, tournament_code):
                 participant = Participant.objects.create(
                     category=category,
                     entry_code=entry_code,
+                    display_order=next_display_order[category_name],
                     organization=legacy_organization,
                     player1_name=player1_name,
                     player2_name=player2_name,

@@ -7131,6 +7131,77 @@ class ImportParticipantsCsvTests(TestCase):
         self.assertFalse(Category.objects.exists())
         self.assertFalse(Participant.objects.exists())
 
+    def test_display_order_follows_csv_row_order_in_category(self):
+        response = self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name\n"
+            "男子A,E010,テスト所属,参加者10A,参加者10B\n"
+            "男子A,E002,テスト所属,参加者2A,参加者2B\n"
+            "男子A,E001,テスト所属,参加者1A,参加者1B\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        category = Category.objects.get(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        display_orders = list(
+            Participant.objects.filter(category=category)
+            .order_by("display_order")
+            .values_list("entry_code", "display_order")
+        )
+        self.assertEqual(
+            display_orders,
+            [
+                ("E010", 1),
+                ("E002", 2),
+                ("E001", 3),
+            ],
+        )
+
+    def test_display_order_is_numbered_independently_per_category(self):
+        response = self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name\n"
+            "男子A,A001,テスト所属,参加者A1,参加者A1B\n"
+            "男子B,B001,テスト所属,参加者B1,参加者B1B\n"
+            "男子A,A002,テスト所属,参加者A2,参加者A2B\n"
+            "男子B,B002,テスト所属,参加者B2,参加者B2B\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        categories = {
+            category.name: category
+            for category in Category.objects.filter(
+                tournament=self.tournament,
+                name__in=["男子A", "男子B"],
+            )
+        }
+        category_a_orders = list(
+            Participant.objects.filter(category=categories["男子A"])
+            .order_by("display_order")
+            .values_list("entry_code", "display_order")
+        )
+        category_b_orders = list(
+            Participant.objects.filter(category=categories["男子B"])
+            .order_by("display_order")
+            .values_list("entry_code", "display_order")
+        )
+        self.assertEqual(
+            category_a_orders,
+            [
+                ("A001", 1),
+                ("A002", 2),
+            ],
+        )
+        self.assertEqual(
+            category_b_orders,
+            [
+                ("B001", 1),
+                ("B002", 2),
+            ],
+        )
+
 
 class ImportStageSlotsCsvTests(TestCase):
 
