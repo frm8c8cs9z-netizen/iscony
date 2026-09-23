@@ -87,7 +87,7 @@
             </div>
 
             <div id="tournament-slot-setup"{% if stage and stage.stage_type != "tournament" %} hidden{% endif %}>
-                <p>
+                <p id="tournament-single-bracket-preview">
                     トーナメント枠:
                     <span id="tournament-slot-preview-text">
                         {% if tournament_slot_preview.bracket_size %}
@@ -97,6 +97,33 @@
                         {% endif %}
                     </span>
                 </p>
+
+                <p>
+                    <label>
+                        {{ slot_form.use_multi_bracket }}
+                        {{ slot_form.use_multi_bracket.label }}
+                    </label>
+                    {{ slot_form.use_multi_bracket.errors }}
+                </p>
+
+                <div id="tournament-bracket-list-setup" hidden>
+                    {{ slot_form.bracket_list }}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ブラケット名</th>
+                                <th>参加ペア数</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="tournament-bracket-rows-body">
+                        </tbody>
+                    </table>
+                    <button type="button" id="tournament-bracket-add-row">
+                        +ブラケットを追加
+                    </button>
+                    {{ slot_form.bracket_list.errors }}
+                </div>
             </div>
         </div>
     {% endif %}
@@ -132,6 +159,15 @@
             );
             const advancementModeInputs = document.querySelectorAll(
                 'input[name="advancement_mode"]'
+            );
+            const useMultiBracketCheckbox = document.getElementById(
+                "id_use_multi_bracket"
+            );
+            const singleBracketPreview = document.getElementById(
+                "tournament-single-bracket-preview"
+            );
+            const bracketListSetup = document.getElementById(
+                "tournament-bracket-list-setup"
             );
 
             if (
@@ -181,10 +217,23 @@
                 !isSourceMode || hasSourceStage
             );
 
-            pairCountField.hidden = !showPairCount;
+            const useMultiBracket = Boolean(
+                !isLeague
+                && useMultiBracketCheckbox
+                && useMultiBracketCheckbox.checked
+            );
+
+            pairCountField.hidden = !showPairCount || useMultiBracket;
             matchGamesField.hidden = !showPairCount;
             groupCountSetup.hidden = !(isLeague && showPairCount);
             tournamentSetup.hidden = isLeague || !showPairCount;
+
+            if (singleBracketPreview) {
+                singleBracketPreview.hidden = useMultiBracket;
+            }
+            if (bracketListSetup) {
+                bracketListSetup.hidden = !useMultiBracket;
+            }
         }
 
         function bracketSizeFor(pairCount) {
@@ -305,6 +354,209 @@
             }
         }
 
+        function readBracketRowsFromInput() {
+            const bracketListInput = document.getElementById(
+                "id_bracket_list"
+            );
+            if (!bracketListInput || !bracketListInput.value) {
+                return [];
+            }
+            try {
+                const parsed = JSON.parse(bracketListInput.value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function currentBracketPairCounts() {
+            const useMultiBracketCheckbox = document.getElementById(
+                "id_use_multi_bracket"
+            );
+            if (useMultiBracketCheckbox && useMultiBracketCheckbox.checked) {
+                return readBracketRowsFromInput().map(function(row) {
+                    return parseInt(row.pair_count, 10) || 0;
+                });
+            }
+
+            const pairCountInput = document.getElementById("id_pair_count");
+            return [
+                parseInt(
+                    pairCountInput ? pairCountInput.value : "",
+                    10
+                ) || 0,
+            ];
+        }
+
+        function writeBracketRows(rows) {
+            const bracketListInput = document.getElementById(
+                "id_bracket_list"
+            );
+            if (bracketListInput) {
+                bracketListInput.value = JSON.stringify(rows);
+            }
+
+            const useMultiBracketCheckbox = document.getElementById(
+                "id_use_multi_bracket"
+            );
+            const pairCountInput = document.getElementById("id_pair_count");
+            if (
+                useMultiBracketCheckbox
+                && useMultiBracketCheckbox.checked
+                && pairCountInput
+            ) {
+                const total = rows.reduce(function(sum, row) {
+                    return sum + (parseInt(row.pair_count, 10) || 0);
+                }, 0);
+                pairCountInput.value = total > 0 ? String(total) : "";
+            }
+        }
+
+        function renderBracketRows(rows) {
+            const bracketRowsBody = document.getElementById(
+                "tournament-bracket-rows-body"
+            );
+            if (!bracketRowsBody) {
+                return;
+            }
+
+            bracketRowsBody.innerHTML = "";
+
+            rows.forEach(function(row) {
+                const tr = document.createElement("tr");
+
+                const nameTd = document.createElement("td");
+                const nameInput = document.createElement("input");
+                nameInput.type = "text";
+                nameInput.value = row.name || "";
+                nameInput.dataset.role = "bracket-name";
+                nameTd.appendChild(nameInput);
+
+                const countTd = document.createElement("td");
+                const countInput = document.createElement("input");
+                countInput.type = "number";
+                countInput.min = "1";
+                countInput.inputMode = "numeric";
+                countInput.value = (
+                    row.pair_count === undefined
+                    || row.pair_count === null
+                        ? ""
+                        : row.pair_count
+                );
+                countInput.dataset.role = "bracket-pair-count";
+                countTd.appendChild(countInput);
+
+                const removeTd = document.createElement("td");
+                const removeButton = document.createElement("button");
+                removeButton.type = "button";
+                removeButton.textContent = "削除";
+                removeButton.dataset.role = "bracket-remove";
+                removeTd.appendChild(removeButton);
+
+                tr.appendChild(nameTd);
+                tr.appendChild(countTd);
+                tr.appendChild(removeTd);
+                bracketRowsBody.appendChild(tr);
+            });
+        }
+
+        function syncBracketRowsFromDom() {
+            const bracketRowsBody = document.getElementById(
+                "tournament-bracket-rows-body"
+            );
+            if (!bracketRowsBody) {
+                return [];
+            }
+
+            const rows = [];
+            bracketRowsBody.querySelectorAll("tr").forEach(function(tr) {
+                const nameInput = tr.querySelector(
+                    '[data-role="bracket-name"]'
+                );
+                const countInput = tr.querySelector(
+                    '[data-role="bracket-pair-count"]'
+                );
+                rows.push({
+                    name: nameInput ? nameInput.value : "",
+                    pair_count: (
+                        countInput && countInput.value
+                            ? parseInt(countInput.value, 10)
+                            : null
+                    ),
+                });
+            });
+            return rows;
+        }
+
+        function setupBracketRowEditing() {
+            const bracketRowsBody = document.getElementById(
+                "tournament-bracket-rows-body"
+            );
+            const addBracketRowButton = document.getElementById(
+                "tournament-bracket-add-row"
+            );
+            const useMultiBracketCheckbox = document.getElementById(
+                "id_use_multi_bracket"
+            );
+
+            if (!bracketRowsBody) {
+                return;
+            }
+
+            const initialRows = readBracketRowsFromInput();
+            renderBracketRows(initialRows);
+            writeBracketRows(initialRows);
+
+            if (addBracketRowButton) {
+                addBracketRowButton.addEventListener("click", function() {
+                    const rows = syncBracketRowsFromDom();
+                    rows.push({ name: "", pair_count: null });
+                    renderBracketRows(rows);
+                    writeBracketRows(rows);
+                });
+            }
+
+            bracketRowsBody.addEventListener("input", function() {
+                writeBracketRows(syncBracketRowsFromDom());
+            });
+
+            bracketRowsBody.addEventListener("click", function(event) {
+                const removeButton = event.target.closest(
+                    '[data-role="bracket-remove"]'
+                );
+                if (!removeButton) {
+                    return;
+                }
+                const tr = removeButton.closest("tr");
+                const rows = syncBracketRowsFromDom();
+                const index = Array.from(
+                    bracketRowsBody.children
+                ).indexOf(tr);
+                if (index !== -1) {
+                    rows.splice(index, 1);
+                }
+                renderBracketRows(rows);
+                writeBracketRows(rows);
+            });
+
+            if (useMultiBracketCheckbox) {
+                useMultiBracketCheckbox.addEventListener(
+                    "change",
+                    function() {
+                        if (
+                            useMultiBracketCheckbox.checked
+                            && bracketRowsBody.children.length === 0
+                        ) {
+                            const rows = [{ name: "", pair_count: null }];
+                            renderBracketRows(rows);
+                            writeBracketRows(rows);
+                        }
+                        toggleStageSlotSetup();
+                    }
+                );
+            }
+        }
+
         const initialValues = {
             name: "",
             stageType: "",
@@ -314,6 +566,8 @@
             matchGames: "",
             advancementMode: "direct",
             advancementSourceStage: "",
+            useMultiBracket: false,
+            bracketPairCounts: [],
         };
 
         function captureInitialValues() {
@@ -332,6 +586,9 @@
             );
             const advancementModeInputs = document.querySelectorAll(
                 'input[name="advancement_mode"]'
+            );
+            const useMultiBracketCheckbox = document.getElementById(
+                "id_use_multi_bracket"
             );
 
             initialValues.name = nameInput ? nameInput.value : "";
@@ -361,6 +618,11 @@
                 }
             });
             initialValues.advancementMode = currentMode;
+
+            initialValues.useMultiBracket = Boolean(
+                useMultiBracketCheckbox && useMultiBracketCheckbox.checked
+            );
+            initialValues.bracketPairCounts = currentBracketPairCounts();
         }
 
         function markChangedIfDifferent(input, originalValue) {
@@ -403,6 +665,36 @@
             }
         }
 
+        function markBracketListChanged() {
+            const useMultiBracketCheckbox = document.getElementById(
+                "id_use_multi_bracket"
+            );
+            if (!useMultiBracketCheckbox) {
+                return;
+            }
+
+            const wrapper = useMultiBracketCheckbox.closest("p");
+            if (wrapper) {
+                wrapper.classList.toggle(
+                    "field-changed",
+                    useMultiBracketCheckbox.checked
+                        !== initialValues.useMultiBracket
+                );
+            }
+
+            const bracketListSetup = document.getElementById(
+                "tournament-bracket-list-setup"
+            );
+            if (bracketListSetup) {
+                bracketListSetup.classList.toggle(
+                    "field-changed",
+                    useMultiBracketCheckbox.checked
+                    && JSON.stringify(currentBracketPairCounts())
+                        !== JSON.stringify(initialValues.bracketPairCounts)
+                );
+            }
+        }
+
         function refreshChangedHighlights() {
             markChangedIfDifferent(
                 document.getElementById("id_name"),
@@ -433,6 +725,7 @@
                 initialValues.advancementSourceStage
             );
             markAdvancementModeChanged();
+            markBracketListChanged();
         }
 
         function computeNeedsRebuild() {
@@ -443,18 +736,6 @@
 
             if (stageType.value !== initialValues.stageType) {
                 return true;
-            }
-
-            const pairCountInput = document.getElementById("id_pair_count");
-            const currentPairCount = (
-                pairCountInput ? pairCountInput.value : ""
-            );
-            if (currentPairCount !== initialValues.pairCount) {
-                return true;
-            }
-
-            if (stageType.value !== "league") {
-                return false;
             }
 
             const advancementModeInputs = document.querySelectorAll(
@@ -485,11 +766,34 @@
                 }
             }
 
-            const groupCountSelect = document.getElementById("id_group_count");
-            const currentGroupCount = (
-                groupCountSelect ? groupCountSelect.value : ""
-            );
-            if (currentGroupCount !== initialValues.groupCount) {
+            if (stageType.value === "league") {
+                const pairCountInput = document.getElementById(
+                    "id_pair_count"
+                );
+                const currentPairCount = (
+                    pairCountInput ? pairCountInput.value : ""
+                );
+                if (currentPairCount !== initialValues.pairCount) {
+                    return true;
+                }
+
+                const groupCountSelect = document.getElementById(
+                    "id_group_count"
+                );
+                const currentGroupCount = (
+                    groupCountSelect ? groupCountSelect.value : ""
+                );
+                if (currentGroupCount !== initialValues.groupCount) {
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (
+                JSON.stringify(currentBracketPairCounts())
+                !== JSON.stringify(initialValues.bracketPairCounts)
+            ) {
                 return true;
             }
 
@@ -513,6 +817,14 @@
             const sourceStageSelect = document.getElementById(
                 "id_advancement_source_stage"
             );
+            const useMultiBracketCheckbox = document.getElementById(
+                "id_use_multi_bracket"
+            );
+            const bracketRowsBody = document.getElementById(
+                "tournament-bracket-rows-body"
+            );
+
+            setupBracketRowEditing();
 
             if (stageType) {
                 stageType.addEventListener("change", toggleStageSlotSetup);
@@ -614,6 +926,22 @@
                 if (sourceStageSelect) {
                     sourceStageSelect.addEventListener(
                         "change",
+                        refreshChangedHighlights
+                    );
+                }
+                if (useMultiBracketCheckbox) {
+                    useMultiBracketCheckbox.addEventListener(
+                        "change",
+                        refreshChangedHighlights
+                    );
+                }
+                if (bracketRowsBody) {
+                    bracketRowsBody.addEventListener(
+                        "input",
+                        refreshChangedHighlights
+                    );
+                    bracketRowsBody.addEventListener(
+                        "click",
                         refreshChangedHighlights
                     );
                 }
