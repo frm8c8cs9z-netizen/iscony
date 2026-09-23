@@ -151,6 +151,14 @@ class StageSlotSetupForm(forms.Form):
         required=False,
         label="ゲーム数",
     )
+    use_multi_bracket = forms.BooleanField(
+        required=False,
+        label="複数ブラケットに分ける",
+    )
+    bracket_list = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
     advancement_mode = forms.ChoiceField(
         choices=ADVANCEMENT_MODE_CHOICES,
         required=False,

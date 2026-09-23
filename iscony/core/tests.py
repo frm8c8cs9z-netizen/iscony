@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import os
 import re
 from urllib.parse import urlencode
@@ -87,6 +88,7 @@ from .services import (
     assign_participant_to_tournament_entry_with_swap,
     assign_tournament_entry_advancement_piece,
     create_league_stage_groups,
+    create_tournament_stage_brackets,
     create_extra_round_robin_match,
     generate_tournament_bracket_matches,
     group_base_size,
@@ -9854,6 +9856,25 @@ class CategoryManagementTests(TestCase):
             display_order=display_order,
         )
 
+    def _create_tournament_stage_with_brackets(
+        self,
+        category,
+        bracket_specs,
+        match_games=7,
+    ):
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        brackets = create_tournament_stage_brackets(stage, bracket_specs)
+
+        for bracket in brackets:
+            generate_tournament_bracket_matches(bracket, match_games)
+
+        return stage, brackets
+
     def _create_empty_slot_move_fixture(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -10521,6 +10542,144 @@ class CategoryManagementTests(TestCase):
                 participant__isnull=False,
             ).exists()
         )
+
+    def test_add_stage_creates_multiple_tournament_brackets(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        bracket_specs = [
+            {"name": "決勝1-2位T", "pair_count": 4},
+            {"name": "決勝3-4位T", "pair_count": 3},
+        ]
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "決勝トーナメント",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "display_order": "1",
+                "pair_count": "7",
+                "match_games": "5",
+                "use_multi_bracket": "on",
+                "bracket_list": json.dumps(bracket_specs),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(
+            category=category,
+            name="決勝トーナメント",
+        )
+        brackets = list(
+            TournamentBracket.objects.filter(stage=stage).order_by(
+                "display_order",
+            )
+        )
+
+        self.assertEqual(
+            [(bracket.name, bracket.display_order) for bracket in brackets],
+            [("決勝1-2位T", 1), ("決勝3-4位T", 2)],
+        )
+        self.assertEqual(
+            [
+                TournamentEntry.objects.filter(bracket=bracket).count()
+                for bracket in brackets
+            ],
+            [4, 3],
+        )
+        self.assertEqual(
+            [
+                TournamentMatch.objects.filter(bracket=bracket).count()
+                for bracket in brackets
+            ],
+            [3, 3],
+        )
+        self.assertEqual(
+            set(
+                TournamentMatch.objects.filter(
+                    bracket__stage=stage,
+                ).values_list("match_games", flat=True)
+            ),
+            {5},
+        )
+
+    def test_add_stage_rejects_invalid_bracket_list(self):
+        cases = [
+            (
+                "empty_list",
+                [],
+                "ブラケットを1件以上入力してください。",
+            ),
+            (
+                "blank_name",
+                [{"name": " ", "pair_count": 4}],
+                "ブラケット名を入力してください。",
+            ),
+            (
+                "zero_pair_count",
+                [{"name": "決勝1-2位T", "pair_count": 0}],
+                "決勝1-2位T: 参加ペア数は1以上で入力してください。",
+            ),
+        ]
+
+        for index, (case_name, bracket_specs, message) in enumerate(
+            cases,
+            start=1,
+        ):
+            with self.subTest(case_name=case_name):
+                category = Category.objects.create(
+                    tournament=self.tournament,
+                    name=f"男子A{index}",
+                    display_order=index,
+                )
+
+                response = self.client.post(
+                    reverse(
+                        "add_stage",
+                        kwargs={
+                            "code": self.tournament.code,
+                            "category_id": category.id,
+                        },
+                    ),
+                    {
+                        "name": "決勝トーナメント",
+                        "stage_type": Stage.TYPE_TOURNAMENT,
+                        "display_order": "1",
+                        "pair_count": "4",
+                        "match_games": "5",
+                        "use_multi_bracket": "on",
+                        "bracket_list": json.dumps(bracket_specs),
+                    },
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    message,
+                    response.context["slot_form"].errors["bracket_list"],
+                )
+                self.assertFalse(
+                    Stage.objects.filter(
+                        category=category,
+                        name="決勝トーナメント",
+                    ).exists()
+                )
 
     def test_add_stage_get_uses_participant_count_as_pair_count_initial(self):
         category = Category.objects.create(
@@ -16438,6 +16597,270 @@ class CategoryManagementTests(TestCase):
             TournamentMatch.objects.filter(match_code="OLD").exists()
         )
 
+    def test_edit_stage_switches_single_to_multiple_tournament_brackets(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, brackets = self._create_tournament_stage_with_brackets(
+            category,
+            [{"name": "本戦", "pair_count": 4}],
+            match_games=5,
+        )
+        old_bracket_id = brackets[0].id
+        old_entry_ids = set(
+            TournamentEntry.objects.filter(
+                bracket=brackets[0],
+            ).values_list("id", flat=True)
+        )
+        old_match_ids = set(
+            TournamentMatch.objects.filter(
+                bracket=brackets[0],
+            ).values_list("id", flat=True)
+        )
+        new_specs = [
+            {"name": "決勝1-2位T", "pair_count": 3},
+            {"name": "決勝3-4位T", "pair_count": 2},
+        ]
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "決勝トーナメント",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "pair_count": "5",
+                "match_games": "7",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
+                "use_multi_bracket": "on",
+                "bracket_list": json.dumps(new_specs),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        new_brackets = list(
+            TournamentBracket.objects.filter(stage=stage).order_by(
+                "display_order",
+            )
+        )
+        self.assertFalse(
+            TournamentBracket.objects.filter(id=old_bracket_id).exists()
+        )
+        self.assertFalse(
+            TournamentEntry.objects.filter(id__in=old_entry_ids).exists()
+        )
+        self.assertFalse(
+            TournamentMatch.objects.filter(id__in=old_match_ids).exists()
+        )
+        self.assertEqual(
+            [bracket.name for bracket in new_brackets],
+            ["決勝1-2位T", "決勝3-4位T"],
+        )
+        self.assertEqual(
+            [
+                TournamentEntry.objects.filter(bracket=bracket).count()
+                for bracket in new_brackets
+            ],
+            [3, 2],
+        )
+
+    def test_edit_stage_keeps_ids_when_tournament_bracket_sizes_match(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, brackets = self._create_tournament_stage_with_brackets(
+            category,
+            [
+                {"name": "決勝1-2位T", "pair_count": 4},
+                {"name": "決勝3-4位T", "pair_count": 3},
+            ],
+            match_games=5,
+        )
+        bracket_ids = [bracket.id for bracket in brackets]
+        entry_ids = set(
+            TournamentEntry.objects.filter(
+                bracket__stage=stage,
+            ).values_list("id", flat=True)
+        )
+        match_ids = set(
+            TournamentMatch.objects.filter(
+                bracket__stage=stage,
+            ).values_list("id", flat=True)
+        )
+        new_specs = [
+            {"name": "決勝1-2位T", "pair_count": 4},
+            {"name": "決勝3-4位T", "pair_count": 3},
+        ]
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "決勝トーナメント",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "pair_count": "7",
+                "match_games": "5",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
+                "use_multi_bracket": "on",
+                "bracket_list": json.dumps(new_specs),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertEqual(
+            list(
+                TournamentBracket.objects.filter(stage=stage).order_by(
+                    "display_order",
+                ).values_list("id", flat=True)
+            ),
+            bracket_ids,
+        )
+        self.assertEqual(
+            set(
+                TournamentEntry.objects.filter(
+                    bracket__stage=stage,
+                ).values_list("id", flat=True)
+            ),
+            entry_ids,
+        )
+        self.assertEqual(
+            set(
+                TournamentMatch.objects.filter(
+                    bracket__stage=stage,
+                ).values_list("id", flat=True)
+            ),
+            match_ids,
+        )
+
+    def test_edit_stage_updates_tournament_bracket_names_without_rebuild(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, brackets = self._create_tournament_stage_with_brackets(
+            category,
+            [
+                {"name": "決勝1-2位T", "pair_count": 4},
+                {"name": "決勝3-4位T", "pair_count": 3},
+            ],
+            match_games=5,
+        )
+        bracket_ids = [bracket.id for bracket in brackets]
+        entry_ids = set(
+            TournamentEntry.objects.filter(
+                bracket__stage=stage,
+            ).values_list("id", flat=True)
+        )
+        match_ids = set(
+            TournamentMatch.objects.filter(
+                bracket__stage=stage,
+            ).values_list("id", flat=True)
+        )
+        new_specs = [
+            {"name": "上位トーナメント", "pair_count": 4},
+            {"name": "下位トーナメント", "pair_count": 3},
+        ]
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            ),
+            {
+                "name": "決勝トーナメント",
+                "display_order": "1",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "pair_count": "7",
+                "match_games": "5",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_DIRECT,
+                "use_multi_bracket": "on",
+                "bracket_list": json.dumps(new_specs),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        self.assertEqual(
+            list(
+                TournamentBracket.objects.filter(stage=stage).order_by(
+                    "display_order",
+                ).values_list("id", flat=True)
+            ),
+            bracket_ids,
+        )
+        self.assertEqual(
+            list(
+                TournamentBracket.objects.filter(stage=stage).order_by(
+                    "display_order",
+                ).values_list("name", flat=True)
+            ),
+            ["上位トーナメント", "下位トーナメント"],
+        )
+        self.assertEqual(
+            set(
+                TournamentEntry.objects.filter(
+                    bracket__stage=stage,
+                ).values_list("id", flat=True)
+            ),
+            entry_ids,
+        )
+        self.assertEqual(
+            set(
+                TournamentMatch.objects.filter(
+                    bracket__stage=stage,
+                ).values_list("id", flat=True)
+            ),
+            match_ids,
+        )
+
     def test_edit_stage_updates_only_league_match_games(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -17195,6 +17618,43 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.context["slot_form"].initial["pair_count"], 4)
         self.assertEqual(response.context["slot_form"].initial["match_games"], 7)
         self.assertContains(response, 'name="match_games"')
+
+    def test_edit_stage_get_initializes_multiple_tournament_bracket_list(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage, _ = self._create_tournament_stage_with_brackets(
+            category,
+            [
+                {"name": "決勝1-2位T", "pair_count": 4},
+                {"name": "決勝3-4位T", "pair_count": 3},
+            ],
+            match_games=5,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+        slot_form = response.context["slot_form"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(slot_form.initial["use_multi_bracket"])
+        self.assertEqual(
+            json.loads(slot_form.initial["bracket_list"]),
+            [
+                {"name": "決勝1-2位T", "pair_count": 4},
+                {"name": "決勝3-4位T", "pair_count": 3},
+            ],
+        )
 
     def test_edit_stage_shows_match_games_without_generation_tool(self):
         category = Category.objects.create(

@@ -291,27 +291,51 @@ def add_league_entry_slot(group):
         return _create_empty_league_entry_slot(group)
 
 
-def create_tournament_stage_bracket(stage, pair_count):
-    """Stage配下に空のTournamentBracketとTournamentEntryを作成する。"""
+def create_tournament_stage_brackets(stage, bracket_specs):
+    """
+    Stage配下に、bracket_specsで指定した複数のTournamentBracketと
+    TournamentEntryを作成する。
+
+    bracket_specsは [{"name": str, "pair_count": int}, ...] の形式。
+    display_orderは渡された順に1から振る。
+    """
 
     with transaction.atomic():
-        get_bracket_size(pair_count)
-        bracket = TournamentBracket.objects.create(
-            category=stage.category,
-            stage=stage,
-            name="本戦",
-            display_order=1,
-        )
+        brackets = []
 
-        for display_order in range(1, pair_count + 1):
-            TournamentEntry.objects.create(
-                bracket=bracket,
-                participant=None,
-                pair_code=str(display_order),
+        for display_order, spec in enumerate(bracket_specs, start=1):
+            pair_count = spec["pair_count"]
+            get_bracket_size(pair_count)
+
+            bracket = TournamentBracket.objects.create(
+                category=stage.category,
+                stage=stage,
+                name=spec["name"],
                 display_order=display_order,
             )
 
-        return bracket
+            for entry_display_order in range(1, pair_count + 1):
+                TournamentEntry.objects.create(
+                    bracket=bracket,
+                    participant=None,
+                    pair_code=str(entry_display_order),
+                    display_order=entry_display_order,
+                )
+
+            brackets.append(bracket)
+
+        return brackets
+
+
+def create_tournament_stage_bracket(stage, pair_count):
+    """Stage配下に空のTournamentBracketとTournamentEntryを1つ作成する。"""
+
+    brackets = create_tournament_stage_brackets(
+        stage,
+        [{"name": "本戦", "pair_count": pair_count}],
+    )
+
+    return brackets[0]
 
 
 def generate_tournament_bracket_matches(bracket, match_games):

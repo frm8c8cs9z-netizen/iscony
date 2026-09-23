@@ -1,5 +1,7 @@
 """カテゴリ内のリーグ・トーナメントをStage順に扱う運用画面。"""
 
+import json
+
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Q
@@ -31,6 +33,7 @@ from ..models import (
 from ..services import (
     create_league_stage_groups,
     create_tournament_stage_bracket,
+    create_tournament_stage_brackets,
     generate_tournament_bracket_matches,
     inspect_stage_advancement_readiness,
 )
@@ -92,6 +95,16 @@ def _current_stage_slot_values(stage):
             flat=True,
         ).first() or 7
 
+        values["bracket_list"] = [
+            {
+                "name": bracket.name,
+                "pair_count": bracket.tournamententry_set.count(),
+            }
+            for bracket in TournamentBracket.objects.filter(
+                stage=stage,
+            ).order_by("display_order", "name")
+        ]
+
     return values
 
 
@@ -107,6 +120,10 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
         initial["group_count"] = current.get("group_count")
+    else:
+        bracket_list = current.get("bracket_list") or []
+        initial["use_multi_bracket"] = len(bracket_list) > 1
+        initial["bracket_list"] = json.dumps(bracket_list)
 
     if current["advancement_source_stage_id"]:
         initial["advancement_source_stage"] = (
@@ -125,6 +142,8 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
         slot_form.fields["match_games"].widget.attrs["disabled"] = True
         slot_form.fields["advancement_mode"].widget.attrs["disabled"] = True
         slot_form.fields["advancement_source_stage"].widget.attrs["disabled"] = True
+        slot_form.fields["use_multi_bracket"].widget.attrs["disabled"] = True
+        slot_form.fields["bracket_list"].widget.attrs["disabled"] = True
 
     return slot_form, initial["pair_count"]
 
@@ -603,6 +622,67 @@ def _stage_setup_preview(pair_count):
     }
 
 
+def _parse_bracket_list(slot_form):
+    """
+    複数ブラケット入力欄(bracket_list、JSON文字列)をパースし、
+    [{"name": str, "pair_count": int}, ...] を返す。
+
+    内容が無効な場合は slot_form.add_error() でエラーを追加してNoneを返す。
+    """
+
+    raw = slot_form.cleaned_data.get("bracket_list") or ""
+
+    try:
+        data = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        data = None
+
+    if not isinstance(data, list) or not data:
+        slot_form.add_error(
+            "bracket_list",
+            "ブラケットを1件以上入力してください。",
+        )
+        return None
+
+    bracket_specs = []
+
+    for item in data:
+        if not isinstance(item, dict):
+            slot_form.add_error(
+                "bracket_list",
+                "ブラケットの内容を正しく取得できませんでした。",
+            )
+            return None
+
+        name = str(item.get("name", "")).strip()
+
+        try:
+            pair_count = int(item.get("pair_count"))
+        except (TypeError, ValueError):
+            pair_count = None
+
+        if not name:
+            slot_form.add_error(
+                "bracket_list",
+                "ブラケット名を入力してください。",
+            )
+            return None
+
+        if not pair_count or pair_count < 1:
+            slot_form.add_error(
+                "bracket_list",
+                f"{name}: 参加ペア数は1以上で入力してください。",
+            )
+            return None
+
+        bracket_specs.append({
+            "name": name,
+            "pair_count": pair_count,
+        })
+
+    return bracket_specs
+
+
 def _validate_stage_slot_setup(stage_type, slot_form):
     """
     slot_form が有効(is_valid())である前提で呼ぶ。
@@ -663,7 +743,15 @@ def _validate_stage_slot_setup(stage_type, slot_form):
 
     if stage_type == Stage.TYPE_TOURNAMENT:
 
-        if pair_count < 1:
+        if slot_form.cleaned_data.get("use_multi_bracket"):
+            bracket_specs = _parse_bracket_list(slot_form)
+
+            if bracket_specs is None:
+                return False
+
+            slot_form.cleaned_data["bracket_specs"] = bracket_specs
+
+        elif pair_count < 1:
             slot_form.add_error(
                 "pair_count",
                 "参加ペア数は1以上で入力してください。",
@@ -749,7 +837,6 @@ def add_stage(request, code, category_id):
                 )
 
             else:
-                bracket_size = get_bracket_size(pair_count)
                 match_games = slot_form.cleaned_data.get("match_games") or 7
                 if (
                     slot_form.cleaned_data.get("advancement_mode")
@@ -758,24 +845,55 @@ def add_stage(request, code, category_id):
                     stage.advancement_source_stage = slot_form.cleaned_data.get(
                         "advancement_source_stage"
                     )
-                with transaction.atomic():
-                    stage.save()
-                    bracket = create_tournament_stage_bracket(
-                        stage,
-                        pair_count,
+
+                bracket_specs = slot_form.cleaned_data.get("bracket_specs")
+
+                if bracket_specs:
+                    with transaction.atomic():
+                        stage.save()
+                        brackets = create_tournament_stage_brackets(
+                            stage,
+                            bracket_specs,
+                        )
+                        for bracket in brackets:
+                            generate_tournament_bracket_matches(
+                                bracket,
+                                match_games,
+                            )
+
+                    bracket_summary = "、".join(
+                        f"{spec['name']}({get_bracket_size(spec['pair_count'])}枠)"
+                        for spec in bracket_specs
                     )
-                    generate_tournament_bracket_matches(
-                        bracket,
-                        match_games,
+                    messages.success(
+                        request,
+                        (
+                            f"{stage.name} を追加しました"
+                            f"({len(bracket_specs)}ブラケット: {bracket_summary}、"
+                            f"ゲーム数{match_games})"
+                        ),
                     )
 
-                messages.success(
-                    request,
-                    (
-                        f"{stage.name} を追加しました"
-                        f"({bracket_size}枠のトーナメント表、ゲーム数{match_games})"
-                    ),
-                )
+                else:
+                    bracket_size = get_bracket_size(pair_count)
+                    with transaction.atomic():
+                        stage.save()
+                        bracket = create_tournament_stage_bracket(
+                            stage,
+                            pair_count,
+                        )
+                        generate_tournament_bracket_matches(
+                            bracket,
+                            match_games,
+                        )
+
+                    messages.success(
+                        request,
+                        (
+                            f"{stage.name} を追加しました"
+                            f"({bracket_size}枠のトーナメント表、ゲーム数{match_games})"
+                        ),
+                    )
 
             return redirect(
                 "category_stage_management",
@@ -930,6 +1048,9 @@ def edit_stage(request, code, category_id, stage_id):
                 )
 
                 new_group_count = None
+                new_bracket_specs = None
+                new_bracket_rows = None
+                bracket_names_changed = False
                 new_match_games = (
                     slot_form.cleaned_data.get("match_games") or 7
                 )
@@ -953,11 +1074,43 @@ def edit_stage(request, code, category_id, stage_id):
                     )
 
                 else:
+                    new_bracket_specs = slot_form.cleaned_data.get(
+                        "bracket_specs"
+                    )
+                    current_bracket_rows = current_values.get(
+                        "bracket_list", []
+                    )
+
+                    if new_bracket_specs:
+                        new_bracket_rows = new_bracket_specs
+                    else:
+                        current_single_name = (
+                            current_bracket_rows[0]["name"]
+                            if current_bracket_rows
+                            else "本戦"
+                        )
+                        new_bracket_rows = [{
+                            "name": current_single_name,
+                            "pair_count": new_pair_count,
+                        }]
+
+                    bracket_sizes_changed = (
+                        [row["pair_count"] for row in new_bracket_rows]
+                        != [
+                            row["pair_count"]
+                            for row in current_bracket_rows
+                        ]
+                    )
+                    bracket_names_changed = (
+                        not bracket_sizes_changed
+                        and [row["name"] for row in new_bracket_rows]
+                        != [row["name"] for row in current_bracket_rows]
+                    )
                     needs_slot_rebuild = (
                         stage_type_changed
-                        or pair_count_changed
                         or advancement_mode_changed
                         or advancement_source_changed
+                        or bracket_sizes_changed
                     )
 
                 match_games_only_change = (
@@ -1016,29 +1169,57 @@ def edit_stage(request, code, category_id, stage_id):
                             stage.save(
                                 update_fields=["advancement_source_stage"],
                             )
-                            bracket_size = get_bracket_size(new_pair_count)
-                            bracket = create_tournament_stage_bracket(
-                                stage,
-                                new_pair_count,
-                            )
-                            generate_tournament_bracket_matches(
-                                bracket,
-                                new_match_games,
-                            )
 
-                    elif match_games_only_change:
-                        stage = form.save()
-                        if stage.stage_type == Stage.TYPE_LEAGUE:
-                            RoundRobinMatch.objects.filter(
-                                group__stage=stage,
-                            ).update(match_games=new_match_games)
-                        else:
-                            TournamentMatch.objects.filter(
-                                bracket__stage=stage,
-                            ).update(match_games=new_match_games)
+                            if new_bracket_specs:
+                                new_brackets = create_tournament_stage_brackets(
+                                    stage,
+                                    new_bracket_specs,
+                                )
+                                for new_bracket in new_brackets:
+                                    generate_tournament_bracket_matches(
+                                        new_bracket,
+                                        new_match_games,
+                                    )
+                            else:
+                                bracket_size = get_bracket_size(
+                                    new_pair_count
+                                )
+                                bracket = create_tournament_stage_bracket(
+                                    stage,
+                                    new_pair_count,
+                                )
+                                generate_tournament_bracket_matches(
+                                    bracket,
+                                    new_match_games,
+                                )
 
                     else:
                         stage = form.save()
+
+                        if match_games_only_change:
+                            if stage.stage_type == Stage.TYPE_LEAGUE:
+                                RoundRobinMatch.objects.filter(
+                                    group__stage=stage,
+                                ).update(match_games=new_match_games)
+                            else:
+                                TournamentMatch.objects.filter(
+                                    bracket__stage=stage,
+                                ).update(match_games=new_match_games)
+
+                        if bracket_names_changed:
+                            existing_brackets = list(
+                                TournamentBracket.objects.filter(
+                                    stage=stage,
+                                ).order_by("display_order", "name")
+                            )
+                            for existing_bracket, row in zip(
+                                existing_brackets, new_bracket_rows
+                            ):
+                                if existing_bracket.name != row["name"]:
+                                    existing_bracket.name = row["name"]
+                                    existing_bracket.save(
+                                        update_fields=["name"],
+                                    )
 
                 if (
                     needs_slot_rebuild
@@ -1053,12 +1234,36 @@ def edit_stage(request, code, category_id, stage_id):
                         ),
                     )
 
+                elif needs_slot_rebuild and new_bracket_specs:
+                    bracket_summary = "、".join(
+                        f"{spec['name']}({get_bracket_size(spec['pair_count'])}枠)"
+                        for spec in new_bracket_specs
+                    )
+                    messages.success(
+                        request,
+                        (
+                            f"{stage.name} を更新しました"
+                            f"({len(new_bracket_specs)}ブラケット: {bracket_summary}、"
+                            f"ゲーム数{new_match_games}に作り直しました)"
+                        ),
+                    )
+
                 elif needs_slot_rebuild:
                     messages.success(
                         request,
                         (
                             f"{stage.name} を更新しました"
                             f"({bracket_size}枠のトーナメント表、ゲーム数{new_match_games}に作り直しました)"
+                        ),
+                    )
+
+                elif match_games_only_change and bracket_names_changed:
+                    messages.success(
+                        request,
+                        (
+                            f"{stage.name} を更新しました"
+                            f"(ゲーム数を{new_match_games}に変更し、"
+                            "ブラケット名を更新しました)"
                         ),
                     )
 
@@ -1069,6 +1274,12 @@ def edit_stage(request, code, category_id, stage_id):
                             f"{stage.name} を更新しました"
                             f"(ゲーム数を{new_match_games}に変更しました)"
                         ),
+                    )
+
+                elif bracket_names_changed:
+                    messages.success(
+                        request,
+                        f"{stage.name} を更新しました(ブラケット名を更新しました)",
                     )
 
                 else:
