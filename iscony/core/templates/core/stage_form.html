@@ -67,7 +67,7 @@
                                 <option value="">選択してください</option>
                                 {% for candidate in group_size_candidates %}
                                     {% with candidate_value=candidate.group_size|stringformat:"s" %}
-                                        <option value="{{ candidate.group_size }}"{% if candidate_value == selected_group_size %} selected{% endif %}>
+                                        <option value="{{ candidate.group_size }}"{% if candidate_value == selected_group_size|stringformat:"s" %} selected{% endif %}>
                                             {{ candidate.group_size }}ペア/グループ → 内訳: {{ candidate.group_sizes|join:", " }} → 総試合数: {{ candidate.total_matches }}試合
                                         </option>
                                     {% endwith %}

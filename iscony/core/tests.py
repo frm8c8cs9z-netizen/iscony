@@ -15838,6 +15838,107 @@ class CategoryManagementTests(TestCase):
         self.assertContains(response, "stage_type")
         self.assertContains(response, 'value="tournament"')
 
+    def test_edit_stage_get_selects_current_group_size_for_direct_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+
+        for group_number in range(1, 3):
+            group = Group.objects.create(
+                category=category,
+                stage=stage,
+                name=chr(ord("A") + group_number - 1),
+                display_order=group_number,
+            )
+            for pair_number in range(1, 4):
+                display_order = ((group_number - 1) * 3) + pair_number
+                LeagueEntry.objects.create(
+                    category=category,
+                    group=group,
+                    pair_code=str(display_order),
+                    display_order=pair_number,
+                )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            content,
+            r'<option value="3"[^>]* selected>',
+        )
+
+    def test_edit_stage_get_selects_current_group_size_for_source_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+            advancement_source_stage=source_stage,
+        )
+
+        for group_number in range(1, 3):
+            group = Group.objects.create(
+                category=category,
+                stage=stage,
+                name=chr(ord("A") + group_number - 1),
+                display_order=group_number,
+            )
+            for pair_number in range(1, 4):
+                display_order = ((group_number - 1) * 3) + pair_number
+                LeagueEntry.objects.create(
+                    category=category,
+                    group=group,
+                    pair_code=str(display_order),
+                    display_order=pair_number,
+                )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            content,
+            r'<option value="3"[^>]* selected>',
+        )
+
     def test_edit_stage_get_initializes_tournament_pair_count_when_unlocked(self):
         category = Category.objects.create(
             tournament=self.tournament,
