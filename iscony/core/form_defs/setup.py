@@ -178,7 +178,10 @@ class StageSlotSetupForm(forms.Form):
         if category is not None:
             queryset = Stage.objects.filter(
                 category=category,
-                stage_type=Stage.TYPE_LEAGUE,
+                stage_type__in=[
+                    Stage.TYPE_LEAGUE,
+                    Stage.TYPE_TOURNAMENT,
+                ],
             )
 
             if exclude_stage_id is not None:

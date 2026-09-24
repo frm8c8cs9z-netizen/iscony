@@ -15689,7 +15689,7 @@ class CategoryManagementTests(TestCase):
             str(slot_form.errors["advancement_source_stage"]),
         )
 
-    def test_stage_slot_setup_source_queryset_filters_league_stages(self):
+    def test_stage_slot_setup_source_queryset_includes_league_and_tournament_stages(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -15732,13 +15732,13 @@ class CategoryManagementTests(TestCase):
 
         self.assertEqual(
             list(slot_form.fields["advancement_source_stage"].queryset),
-            [source_stage],
+            [source_stage, tournament_stage],
         )
         self.assertNotIn(
             target_stage,
             slot_form.fields["advancement_source_stage"].queryset,
         )
-        self.assertNotIn(
+        self.assertIn(
             tournament_stage,
             slot_form.fields["advancement_source_stage"].queryset,
         )
@@ -15915,6 +15915,96 @@ class CategoryManagementTests(TestCase):
         stage = Stage.objects.get(name="決勝トーナメント")
         self.assertEqual(stage.advancement_source_stage, source_stage)
 
+    def test_add_stage_with_tournament_source_saves_advancement_source_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "決勝リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "2",
+                "pair_count": "4",
+                "group_count": "1",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
+                "advancement_source_stage": str(source_stage.id),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(name="決勝リーグ")
+        self.assertEqual(stage.advancement_source_stage_id, source_stage.id)
+
+    def test_add_tournament_stage_with_tournament_source_saves_advancement_source_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": "決勝トーナメント",
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "display_order": "2",
+                "pair_count": "4",
+                "match_games": "7",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
+                "advancement_source_stage": str(source_stage.id),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        stage = Stage.objects.get(name="決勝トーナメント")
+        self.assertEqual(stage.advancement_source_stage_id, source_stage.id)
+
     def test_add_tournament_stage_source_mode_requires_source_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -16053,6 +16143,43 @@ class CategoryManagementTests(TestCase):
         )
         target_stage.refresh_from_db()
         self.assertIsNone(target_stage.advancement_source_stage)
+
+    def test_edit_stage_get_initializes_tournament_advancement_source_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name="予選トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        target_stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+            advancement_source_stage=source_stage,
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": target_stage.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["slot_form"].initial["advancement_source_stage"],
+            source_stage.id,
+        )
 
     def test_edit_stage_rebuilds_when_advancement_source_stage_changes(self):
         category = Category.objects.create(
