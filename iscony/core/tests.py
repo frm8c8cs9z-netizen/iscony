@@ -7356,6 +7356,14 @@ class ImportStageSlotsCsvTests(TestCase):
         self.assertEqual(preliminary_stage.display_order, 1)
         self.assertEqual(final_league_stage.display_order, 2)
         self.assertEqual(final_tournament_stage.display_order, 3)
+        self.assertEqual(
+            final_league_stage.advancement_source_stage_id,
+            preliminary_stage.id,
+        )
+        self.assertEqual(
+            final_tournament_stage.advancement_source_stage_id,
+            final_league_stage.id,
+        )
 
         preliminary_group_a = Group.objects.get(
             category=category,
@@ -7451,6 +7459,89 @@ class ImportStageSlotsCsvTests(TestCase):
         self.assertFalse(
             Stage.objects.filter(
                 name="５位リーグ",
+            ).exists()
+        )
+
+    def test_stage_slots_reject_mixed_source_stages_in_same_stage(self):
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選A,L,A,,1,1,,,,,,\n"
+            "男子B,予選A,L,A,,2,2,,,,,,\n"
+            "男子B,予選B,L,A,,1,1,,,,,,\n"
+            "男子B,予選B,L,A,,2,2,,,,,,\n"
+            "男子B,決勝リーグ,L,A,,1,1,,LR,予選A,A,1,,\n"
+            "男子B,決勝リーグ,L,A,,2,2,,LR,予選B,A,1,,\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "男子B / 決勝リーグ: 1つのStage内で複数の進出元Stageが指定されています。",
+        )
+        self.assertFalse(
+            Stage.objects.filter(
+                category__tournament=self.tournament,
+                name="決勝リーグ",
+            ).exists()
+        )
+        self.assertFalse(
+            AdvancementSource.objects.filter(
+                target_league_entry__group__stage__category__tournament=(
+                    self.tournament
+                )
+            ).exists()
+        )
+
+    def test_stage_slots_reimport_without_sources_clears_source_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+
+        for entry_code in [
+            "E001",
+            "E002",
+            "E003",
+        ]:
+            self._create_participant(
+                category,
+                entry_code,
+            )
+
+        import_response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選リーグ,L,A,,1,1,E001,,,,,\n"
+            "男子B,予選リーグ,L,A,,2,2,E002,,,,,\n"
+            "男子B,決勝リーグ,L,A,,1,1,,LR,予選リーグ,A,1,,\n"
+        )
+        self.assertEqual(import_response.status_code, 302)
+
+        preliminary_stage = Stage.objects.get(
+            category=category,
+            name="予選リーグ",
+        )
+        final_stage = Stage.objects.get(
+            category=category,
+            name="決勝リーグ",
+        )
+        self.assertEqual(
+            final_stage.advancement_source_stage_id,
+            preliminary_stage.id,
+        )
+
+        reimport_response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,予選リーグ,L,A,,1,1,E001,,,,,\n"
+            "男子B,予選リーグ,L,A,,2,2,E002,,,,,\n"
+            "男子B,決勝リーグ,L,A,,1,1,E003,,,,,\n"
+        )
+
+        self.assertEqual(reimport_response.status_code, 302)
+        final_stage.refresh_from_db()
+        self.assertIsNone(final_stage.advancement_source_stage_id)
+        self.assertFalse(
+            AdvancementSource.objects.filter(
+                target_league_entry__group__stage=final_stage,
             ).exists()
         )
 

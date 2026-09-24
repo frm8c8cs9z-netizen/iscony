@@ -762,6 +762,8 @@ def _create_advancement_source(row_data, target_entry):
     source.full_clean()
     source.save()
 
+    return source
+
 
 def _stage_reimport_protection_messages(stages):
     """Stage再取込で失われる運用データが残っていないか確認する。"""
@@ -1965,6 +1967,7 @@ def import_stage_slots(request, tournament_code):
                                 (
                                     row,
                                     entry,
+                                    stage,
                                 )
                             )
 
@@ -2012,11 +2015,52 @@ def import_stage_slots(request, tournament_code):
                             match_games=match_games,
                         )
 
-                    for row, entry in source_rows:
-                        _create_advancement_source(
+                    stage_source_stage_ids = {}
+
+                    for row, entry, stage in source_rows:
+                        source = _create_advancement_source(
                             row,
                             entry,
                         )
+
+                        if source.source_stage_id is None:
+                            continue
+
+                        seen = stage_source_stage_ids.setdefault(
+                            stage.id,
+                            set(),
+                        )
+                        seen.add(source.source_stage_id)
+
+                        if len(seen) > 1:
+                            raise Exception(
+                                f"{stage.category.name} / {stage.name}: "
+                                "1つのStage内で複数の進出元Stageが指定されています。"
+                                "同じStage内の進出元Stageは1つに揃えてください。"
+                            )
+
+                    for stage in stages_by_key.values():
+                        source_stage_ids = stage_source_stage_ids.get(
+                            stage.id
+                        )
+                        new_source_stage_id = (
+                            next(iter(source_stage_ids))
+                            if source_stage_ids
+                            else None
+                        )
+
+                        if (
+                            stage.advancement_source_stage_id
+                            != new_source_stage_id
+                        ):
+                            stage.advancement_source_stage_id = (
+                                new_source_stage_id
+                            )
+                            stage.save(
+                                update_fields=[
+                                    "advancement_source_stage_id",
+                                ]
+                            )
 
             except Exception as exc:
                 return render(
