@@ -83,10 +83,12 @@ from .services import (
     clone_tournament_without_results,
     add_league_entry_slot,
     assign_league_entry_advancement_piece,
+    assign_league_entry_advancement_piece_from_tournament_result,
     assign_participant_with_shift,
     assign_participant_to_tournament_entry,
     assign_participant_to_tournament_entry_with_swap,
     assign_tournament_entry_advancement_piece,
+    assign_tournament_entry_advancement_piece_from_tournament_result,
     create_league_stage_groups,
     create_tournament_stage_brackets,
     create_extra_round_robin_match,
@@ -3025,6 +3027,100 @@ class AdvancementPieceServiceTests(TestCase):
             "target_entries": target_entries,
         }
 
+    def _create_tournament_result_fixture(
+        self,
+        *,
+        category_name="男子T",
+        source_name="予選トーナメント",
+        target_name="決勝リーグ",
+        pair_count="9",
+        group_count="2",
+    ):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name=category_name,
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name=source_name,
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        source_bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=source_stage,
+            name="予選",
+        )
+        source_entries = [
+            create_tournament_entry(
+                bracket=source_bracket,
+                pair_code=str(index),
+                display_order=index,
+                player1_name=f"予選{index}A",
+                player2_name=f"予選{index}B",
+            )
+            for index in range(1, 3)
+        ]
+        source_match = TournamentMatch.objects.create(
+            bracket=source_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=source_entries[0],
+            pair2=source_entries[1],
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": target_name,
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "2",
+                "pair_count": pair_count,
+                "group_count": group_count,
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
+                "advancement_source_stage": str(source_stage.id),
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        target_stage = Stage.objects.get(
+            category=category,
+            name=target_name,
+        )
+        target_entries = list(
+            LeagueEntry.objects.filter(
+                group__stage=target_stage,
+            ).order_by(
+                "group__display_order",
+                "display_order",
+            )
+        )
+
+        return {
+            "category": category,
+            "source_stage": source_stage,
+            "source_bracket": source_bracket,
+            "source_match": source_match,
+            "target_stage": target_stage,
+            "target_entries": target_entries,
+        }
+
     def test_assign_league_entry_advancement_piece_assigns_piece(self):
         fixture = self._create_fixture()
         entry = fixture["target_entries"][0]
@@ -3044,6 +3140,172 @@ class AdvancementPieceServiceTests(TestCase):
                 id=source.id,
                 target_league_entry=entry,
             ).exists()
+        )
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_assigns_winner(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        source_match = fixture["source_match"]
+
+        source = assign_league_entry_advancement_piece_from_tournament_result(
+            entry,
+            source_match,
+            AdvancementSource.RESULT_WINNER,
+        )
+
+        self.assertEqual(source.target_league_entry, entry)
+        self.assertEqual(source.source_type, AdvancementSource.SOURCE_TOURNAMENT_RESULT)
+        self.assertEqual(source.source_stage, fixture["source_stage"])
+        self.assertEqual(source.source_match, source_match)
+        self.assertEqual(source.source_result, AdvancementSource.RESULT_WINNER)
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_assigns_loser(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        source_match = fixture["source_match"]
+
+        source = assign_league_entry_advancement_piece_from_tournament_result(
+            entry,
+            source_match,
+            AdvancementSource.RESULT_LOSER,
+        )
+
+        self.assertEqual(source.target_league_entry, entry)
+        self.assertEqual(source.source_match, source_match)
+        self.assertEqual(source.source_result, AdvancementSource.RESULT_LOSER)
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_rejects_wrong_source_stage(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        other_stage = Stage.objects.create(
+            category=fixture["category"],
+            name="別予選トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=3,
+        )
+        other_bracket = TournamentBracket.objects.create(
+            category=fixture["category"],
+            stage=other_stage,
+            name="別予選",
+        )
+        other_match = TournamentMatch.objects.create(
+            bracket=other_bracket,
+            round_number=1,
+            match_number=1,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            assign_league_entry_advancement_piece_from_tournament_result(
+                fixture["target_entries"][0],
+                other_match,
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "このStageの進出元Stageと一致しない試合です。",
+            context.exception.messages,
+        )
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_rejects_participant_entry(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        entry.participant = Participant.objects.create(
+            category=fixture["category"],
+            entry_code="P1",
+            player1_name="割当済みA",
+            player2_name="割当済みB",
+        )
+        entry.save()
+
+        with self.assertRaises(ValidationError) as context:
+            assign_league_entry_advancement_piece_from_tournament_result(
+                entry,
+                fixture["source_match"],
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "この枠には参加者が割り当てられています。",
+            context.exception.messages,
+        )
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_rejects_occupied_source(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        assign_league_entry_advancement_piece_from_tournament_result(
+            entry,
+            fixture["source_match"],
+            AdvancementSource.RESULT_WINNER,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            assign_league_entry_advancement_piece_from_tournament_result(
+                entry,
+                fixture["source_match"],
+                AdvancementSource.RESULT_LOSER,
+            )
+
+        self.assertIn(
+            "この枠には既に進出元が割り当てられています。",
+            context.exception.messages,
+        )
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_rejects_conflicting_piece(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        assign_league_entry_advancement_piece_from_tournament_result(
+            fixture["target_entries"][0],
+            fixture["source_match"],
+            AdvancementSource.RESULT_WINNER,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            assign_league_entry_advancement_piece_from_tournament_result(
+                fixture["target_entries"][1],
+                fixture["source_match"],
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "この進出元は既に他の枠に割り当てられています。",
+            context.exception.messages,
+        )
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_rejects_scored_entry(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        opponent = fixture["target_entries"][1]
+        match = RoundRobinMatch.objects.get(
+            group=entry.group,
+            pair1=entry,
+            pair2=opponent,
+        )
+        match.pair1_games = 1
+        match.pair2_games = 0
+        match.save()
+
+        with self.assertRaises(ValidationError) as context:
+            assign_league_entry_advancement_piece_from_tournament_result(
+                entry,
+                fixture["source_match"],
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "結果入力済みの試合があるため、進出元を割り当てできません。",
+            context.exception.messages,
         )
 
     def test_assign_league_entry_advancement_piece_rejects_wrong_source_stage(self):
@@ -3317,6 +3579,70 @@ class AdvancementPieceServiceTests(TestCase):
             },
         )
 
+    def test_assign_league_entry_advancement_piece_from_tournament_result_api_assigns_piece(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        source_match = fixture["source_match"]
+
+        response = self.client.post(
+            reverse(
+                (
+                    "assign_league_entry_advancement_piece_"
+                    "from_tournament_result_api"
+                ),
+                kwargs={"entry_id": entry.id},
+            ),
+            {
+                "source_match_id": str(source_match.id),
+                "source_result": AdvancementSource.RESULT_WINNER,
+            },
+        )
+
+        source = AdvancementSource.objects.get(target_league_entry=entry)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "entry_id": entry.id,
+                "group_id": entry.group_id,
+                "source_id": source.id,
+                "source_match_id": source_match.id,
+                "source_result": AdvancementSource.RESULT_WINNER,
+            },
+        )
+
+    def test_assign_league_entry_advancement_piece_from_tournament_result_api_rejects_missing_match(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+
+        response = self.client.post(
+            reverse(
+                (
+                    "assign_league_entry_advancement_piece_"
+                    "from_tournament_result_api"
+                ),
+                kwargs={"entry_id": entry.id},
+            ),
+            {
+                "source_match_id": "999999",
+                "source_result": AdvancementSource.RESULT_WINNER,
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": False,
+                "error": "指定された進出元試合が見つかりません。",
+            },
+        )
+
     def test_unassign_league_entry_advancement_piece_api_unassigns_piece(self):
         fixture = self._create_fixture()
         entry = fixture["target_entries"][0]
@@ -3461,6 +3787,97 @@ class TournamentAdvancementPieceServiceTests(TestCase):
             "category": category,
             "source_stage": source_stage,
             "source_groups": source_groups,
+            "target_stage": target_stage,
+            "bracket": bracket,
+            "target_entries": target_entries,
+        }
+
+    def _create_tournament_result_fixture(
+        self,
+        *,
+        category_name="男子T",
+        source_name="予選トーナメント",
+        target_name="決勝トーナメント",
+        pair_count="9",
+    ):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name=category_name,
+            display_order=1,
+        )
+        source_stage = Stage.objects.create(
+            category=category,
+            name=source_name,
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        source_bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=source_stage,
+            name="予選",
+        )
+        source_entries = [
+            create_tournament_entry(
+                bracket=source_bracket,
+                pair_code=str(index),
+                display_order=index,
+                player1_name=f"予選{index}A",
+                player2_name=f"予選{index}B",
+            )
+            for index in range(1, 3)
+        ]
+        source_match = TournamentMatch.objects.create(
+            bracket=source_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=source_entries[0],
+            pair2=source_entries[1],
+        )
+
+        response = self.client.post(
+            reverse(
+                "add_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+            {
+                "name": target_name,
+                "stage_type": Stage.TYPE_TOURNAMENT,
+                "display_order": "2",
+                "pair_count": pair_count,
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
+                "advancement_source_stage": str(source_stage.id),
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                },
+            ),
+        )
+        target_stage = Stage.objects.get(
+            category=category,
+            name=target_name,
+        )
+        bracket = TournamentBracket.objects.get(stage=target_stage)
+        target_entries = list(
+            TournamentEntry.objects.filter(bracket=bracket).order_by(
+                "display_order",
+            )
+        )
+
+        return {
+            "category": category,
+            "source_stage": source_stage,
+            "source_bracket": source_bracket,
+            "source_match": source_match,
             "target_stage": target_stage,
             "bracket": bracket,
             "target_entries": target_entries,
@@ -3726,6 +4143,165 @@ class TournamentAdvancementPieceServiceTests(TestCase):
             ).exists()
         )
 
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_assigns_winner(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        source_match = fixture["source_match"]
+
+        source = assign_tournament_entry_advancement_piece_from_tournament_result(
+            entry,
+            source_match,
+            AdvancementSource.RESULT_WINNER,
+        )
+
+        self.assertEqual(source.target_tournament_entry, entry)
+        self.assertEqual(source.source_type, AdvancementSource.SOURCE_TOURNAMENT_RESULT)
+        self.assertEqual(source.source_stage, fixture["source_stage"])
+        self.assertEqual(source.source_match, source_match)
+        self.assertEqual(source.source_result, AdvancementSource.RESULT_WINNER)
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_assigns_loser(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        source_match = fixture["source_match"]
+
+        source = assign_tournament_entry_advancement_piece_from_tournament_result(
+            entry,
+            source_match,
+            AdvancementSource.RESULT_LOSER,
+        )
+
+        self.assertEqual(source.target_tournament_entry, entry)
+        self.assertEqual(source.source_match, source_match)
+        self.assertEqual(source.source_result, AdvancementSource.RESULT_LOSER)
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_rejects_wrong_source_stage(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        other_stage = Stage.objects.create(
+            category=fixture["category"],
+            name="別予選トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=3,
+        )
+        other_bracket = TournamentBracket.objects.create(
+            category=fixture["category"],
+            stage=other_stage,
+            name="別予選",
+        )
+        other_match = TournamentMatch.objects.create(
+            bracket=other_bracket,
+            round_number=1,
+            match_number=1,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            assign_tournament_entry_advancement_piece_from_tournament_result(
+                fixture["target_entries"][0],
+                other_match,
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "このStageの進出元Stageと一致しない試合です。",
+            context.exception.messages,
+        )
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_rejects_participant_entry(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        entry.participant = Participant.objects.create(
+            category=fixture["category"],
+            entry_code="P1",
+            player1_name="割当済みA",
+            player2_name="割当済みB",
+        )
+        entry.save()
+
+        with self.assertRaises(ValidationError) as context:
+            assign_tournament_entry_advancement_piece_from_tournament_result(
+                entry,
+                fixture["source_match"],
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "この枠には参加者が割り当てられています。",
+            context.exception.messages,
+        )
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_rejects_occupied_source(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        assign_tournament_entry_advancement_piece_from_tournament_result(
+            entry,
+            fixture["source_match"],
+            AdvancementSource.RESULT_WINNER,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            assign_tournament_entry_advancement_piece_from_tournament_result(
+                entry,
+                fixture["source_match"],
+                AdvancementSource.RESULT_LOSER,
+            )
+
+        self.assertIn(
+            "この枠には既に進出元が割り当てられています。",
+            context.exception.messages,
+        )
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_rejects_conflicting_piece(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        assign_tournament_entry_advancement_piece_from_tournament_result(
+            fixture["target_entries"][0],
+            fixture["source_match"],
+            AdvancementSource.RESULT_WINNER,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            assign_tournament_entry_advancement_piece_from_tournament_result(
+                fixture["target_entries"][1],
+                fixture["source_match"],
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "この進出元は既に他の枠に割り当てられています。",
+            context.exception.messages,
+        )
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_rejects_scored_entry(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        opponent = fixture["target_entries"][1]
+        self._create_scored_match(fixture["bracket"], entry, opponent)
+
+        with self.assertRaises(ValidationError) as context:
+            assign_tournament_entry_advancement_piece_from_tournament_result(
+                entry,
+                fixture["source_match"],
+                AdvancementSource.RESULT_WINNER,
+            )
+
+        self.assertIn(
+            "結果入力済みの試合があるため、進出元を割り当てできません。",
+            context.exception.messages,
+        )
+
     def test_assign_tournament_entry_advancement_piece_rejects_wrong_source_stage(self):
         fixture = self._create_fixture()
         other_stage = Stage.objects.create(
@@ -3964,6 +4540,72 @@ class TournamentAdvancementPieceServiceTests(TestCase):
                 "source_group_id": source_group.id,
                 "source_group_name": source_group.name,
                 "source_rank": 1,
+            },
+        )
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_api_assigns_piece(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+        source_match = fixture["source_match"]
+
+        response = self.client.post(
+            reverse(
+                (
+                    "assign_tournament_entry_advancement_piece_"
+                    "from_tournament_result_api"
+                ),
+                kwargs={"entry_id": entry.id},
+            ),
+            {
+                "source_match_id": str(source_match.id),
+                "source_result": AdvancementSource.RESULT_WINNER,
+            },
+        )
+
+        source = AdvancementSource.objects.get(
+            target_tournament_entry=entry
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "entry_id": entry.id,
+                "bracket_id": entry.bracket_id,
+                "source_id": source.id,
+                "source_match_id": source_match.id,
+                "source_result": AdvancementSource.RESULT_WINNER,
+            },
+        )
+
+    def test_assign_tournament_entry_advancement_piece_from_tournament_result_api_rejects_missing_match(
+        self,
+    ):
+        fixture = self._create_tournament_result_fixture()
+        entry = fixture["target_entries"][0]
+
+        response = self.client.post(
+            reverse(
+                (
+                    "assign_tournament_entry_advancement_piece_"
+                    "from_tournament_result_api"
+                ),
+                kwargs={"entry_id": entry.id},
+            ),
+            {
+                "source_match_id": "999999",
+                "source_result": AdvancementSource.RESULT_WINNER,
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": False,
+                "error": "指定された進出元試合が見つかりません。",
             },
         )
 

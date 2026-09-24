@@ -859,6 +859,26 @@ def _advancement_piece_conflict(source_group, source_rank, *, exclude_id=None):
     return conflicts.first()
 
 
+def _advancement_piece_conflict_for_tournament_result(
+    source_match,
+    source_result,
+    *,
+    exclude_id=None,
+):
+    """指定した進出元ピース(試合×勝者/敗者)が既に使われているかを返す。"""
+
+    conflicts = AdvancementSource.objects.filter(
+        source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+        source_match=source_match,
+        source_result=source_result,
+    )
+
+    if exclude_id:
+        conflicts = conflicts.exclude(id=exclude_id)
+
+    return conflicts.first()
+
+
 def assign_league_entry_advancement_piece(entry, source_group, source_rank):
     """LeagueEntryに進出元ピース(グループ×順位)を割り当てる。"""
 
@@ -900,6 +920,61 @@ def assign_league_entry_advancement_piece(entry, source_group, source_rank):
         source_stage=source_group.stage,
         source_group=source_group,
         source_rank=source_rank,
+    )
+    source.full_clean()
+    source.save()
+
+    return source
+
+
+def assign_league_entry_advancement_piece_from_tournament_result(
+    entry,
+    source_match,
+    source_result,
+):
+    """LeagueEntryに進出元ピース(トーナメント試合×勝者/敗者)を割り当てる。"""
+
+    stage = entry.group.stage
+
+    if not stage or not stage.advancement_source_stage_id:
+        raise ValidationError(
+            "このStageは進出元Stageが設定されていません。"
+        )
+
+    if source_match.bracket.stage_id != stage.advancement_source_stage_id:
+        raise ValidationError(
+            "このStageの進出元Stageと一致しない試合です。"
+        )
+
+    if _target_has_score(entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、進出元を割り当てできません。"
+        )
+
+    if entry.participant_id is not None:
+        raise ValidationError(
+            "この枠には参加者が割り当てられています。"
+        )
+
+    if hasattr(entry, "advancement_source"):
+        raise ValidationError(
+            "この枠には既に進出元が割り当てられています。"
+        )
+
+    if _advancement_piece_conflict_for_tournament_result(
+        source_match,
+        source_result,
+    ):
+        raise ValidationError(
+            "この進出元は既に他の枠に割り当てられています。"
+        )
+
+    source = AdvancementSource(
+        target_league_entry=entry,
+        source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+        source_stage=source_match.bracket.stage,
+        source_match=source_match,
+        source_result=source_result,
     )
     source.full_clean()
     source.save()
@@ -1030,6 +1105,61 @@ def assign_tournament_entry_advancement_piece(entry, source_group, source_rank):
         source_stage=source_group.stage,
         source_group=source_group,
         source_rank=source_rank,
+    )
+    source.full_clean()
+    source.save()
+
+    return source
+
+
+def assign_tournament_entry_advancement_piece_from_tournament_result(
+    entry,
+    source_match,
+    source_result,
+):
+    """TournamentEntryに進出元ピース(トーナメント試合×勝者/敗者)を割り当てる。"""
+
+    stage = entry.bracket.stage
+
+    if not stage or not stage.advancement_source_stage_id:
+        raise ValidationError(
+            "このStageは進出元Stageが設定されていません。"
+        )
+
+    if source_match.bracket.stage_id != stage.advancement_source_stage_id:
+        raise ValidationError(
+            "このStageの進出元Stageと一致しない試合です。"
+        )
+
+    if _target_has_score(entry):
+        raise ValidationError(
+            "結果入力済みの試合があるため、進出元を割り当てできません。"
+        )
+
+    if entry.participant_id is not None:
+        raise ValidationError(
+            "この枠には参加者が割り当てられています。"
+        )
+
+    if hasattr(entry, "advancement_source"):
+        raise ValidationError(
+            "この枠には既に進出元が割り当てられています。"
+        )
+
+    if _advancement_piece_conflict_for_tournament_result(
+        source_match,
+        source_result,
+    ):
+        raise ValidationError(
+            "この進出元は既に他の枠に割り当てられています。"
+        )
+
+    source = AdvancementSource(
+        target_tournament_entry=entry,
+        source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+        source_stage=source_match.bracket.stage,
+        source_match=source_match,
+        source_result=source_result,
     )
     source.full_clean()
     source.save()
@@ -2240,4 +2370,3 @@ def validate_tournament_score_change(
         return "次の試合に結果が入力されているため、勝敗が変わる修正はできません。"
 
     return None
-

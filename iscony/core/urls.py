@@ -440,6 +440,18 @@ urlpatterns = [
     ),
 
     path(
+        (
+            "pair/<int:entry_id>/"
+            "assign-advancement-piece-from-tournament-result/"
+        ),
+        league.assign_league_entry_advancement_piece_from_tournament_result_api,
+        name=(
+            "assign_league_entry_advancement_piece_"
+            "from_tournament_result_api"
+        ),
+    ),
+
+    path(
         "pair/<int:entry_id>/unassign-advancement-piece/",
         league.unassign_league_entry_advancement_piece_api,
         name="unassign_league_entry_advancement_piece_api",
@@ -566,6 +578,18 @@ urlpatterns = [
         "tournament-entry/<int:entry_id>/assign-advancement-piece/",
         tournament.assign_tournament_entry_advancement_piece_api,
         name="assign_tournament_entry_advancement_piece_api",
+    ),
+
+    path(
+        (
+            "tournament-entry/<int:entry_id>/"
+            "assign-advancement-piece-from-tournament-result/"
+        ),
+        tournament.assign_tournament_entry_advancement_piece_from_tournament_result_api,
+        name=(
+            "assign_tournament_entry_advancement_piece_"
+            "from_tournament_result_api"
+        ),
     ),
 
     path(

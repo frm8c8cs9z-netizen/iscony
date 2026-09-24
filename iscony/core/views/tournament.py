@@ -58,6 +58,7 @@ from ..services import (
     assign_participant_to_tournament_entry,
     assign_participant_to_tournament_entry_with_swap,
     assign_tournament_entry_advancement_piece,
+    assign_tournament_entry_advancement_piece_from_tournament_result,
     auto_apply_stage_advancements_if_ready,
     consume_stage_advancement_result,
     delete_tournament_score,
@@ -807,6 +808,78 @@ def assign_tournament_entry_advancement_piece_api(request, entry_id):
             "source_group_id": source_group.id,
             "source_group_name": source_group.name,
             "source_rank": source_rank,
+        }
+    )
+
+
+def assign_tournament_entry_advancement_piece_from_tournament_result_api(
+    request,
+    entry_id,
+):
+    """POSTで呼ばれ、指定トーナメント枠へトーナメント結果ピースを割り当てるJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "POSTで送信してください。",
+            },
+            status=405,
+        )
+
+    entry = get_object_or_404(
+        TournamentEntry,
+        id=entry_id,
+    )
+    source_match_id = request.POST.get("source_match_id")
+    source_result = request.POST.get("source_result")
+
+    if not source_match_id or not source_result:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "進出元試合と結果を指定してください。",
+            },
+            status=400,
+        )
+
+    try:
+        source_match = TournamentMatch.objects.get(
+            id=source_match_id,
+            bracket__category=entry.bracket.category,
+        )
+    except TournamentMatch.DoesNotExist:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "指定された進出元試合が見つかりません。",
+            },
+            status=404,
+        )
+
+    try:
+        source = assign_tournament_entry_advancement_piece_from_tournament_result(
+            entry,
+            source_match,
+            source_result,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": " ".join(error.messages),
+            },
+            status=400,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "entry_id": entry.id,
+            "bracket_id": entry.bracket_id,
+            "source_id": source.id,
+            "source_match_id": source_match.id,
+            "source_result": source_result,
         }
     )
 
