@@ -35,6 +35,7 @@ from ..models import (
     ScheduleReplacementHistory,
     Stage,
     Tournament,
+    TournamentEntry,
     TournamentMatch,
 )
 from ..services import (
@@ -66,6 +67,11 @@ from ..helpers.view import (
     redirect_next_or_url,
     render_score_input,
     safe_next_url,
+)
+from ..helpers.brackets import (
+    get_best_n,
+    get_best_n_label,
+    get_bracket_size,
 )
 
 
@@ -1216,6 +1222,8 @@ def pair_maintenance(request, category_id, stage_id=None):
 
         unassigned_pieces = []
         piece_ranks = []
+        piece_round_options = []
+        advancement_source_has_multiple_brackets = False
 
         if is_advancement_source_stage:
             if advancement_source_is_tournament:
@@ -1241,8 +1249,19 @@ def pair_maintenance(request, category_id, stage_id=None):
                         "source_result",
                     )
                 )
+                bracket_sizes = {}
 
                 for match in source_matches:
+                    if match.bracket_id not in bracket_sizes:
+                        entry_count = TournamentEntry.objects.filter(
+                            bracket_id=match.bracket_id,
+                        ).count()
+                        bracket_sizes[match.bracket_id] = get_bracket_size(
+                            entry_count,
+                        )
+
+                    bracket_size = bracket_sizes[match.bracket_id]
+
                     for result in (
                         AdvancementSource.RESULT_WINNER,
                         AdvancementSource.RESULT_LOSER,
@@ -1256,6 +1275,14 @@ def pair_maintenance(request, category_id, stage_id=None):
                             "source_bracket_id": match.bracket_id,
                             "source_bracket_name": match.bracket.name,
                             "source_bracket_order": match.bracket.display_order,
+                            "round_best_n": get_best_n(
+                                match.round_number,
+                                bracket_size,
+                            ),
+                            "round_label": get_best_n_label(
+                                match.round_number,
+                                bracket_size,
+                            ),
                             "label": AdvancementSource.tournament_result_piece_label(
                                 match,
                                 result,
@@ -1299,6 +1326,31 @@ def pair_maintenance(request, category_id, stage_id=None):
                     piece["source_rank"]
                     for piece in unassigned_pieces
                 })
+
+            if advancement_source_is_tournament:
+                piece_round_options = [
+                    {
+                        "best_n": best_n,
+                        "label": next(
+                            piece["round_label"]
+                            for piece in unassigned_pieces
+                            if piece["round_best_n"] == best_n
+                        ),
+                    }
+                    for best_n in sorted(
+                        {
+                            piece["round_best_n"]
+                            for piece in unassigned_pieces
+                        },
+                        reverse=True,
+                    )
+                ]
+                advancement_source_has_multiple_brackets = (
+                    len({
+                        piece["source_bracket_id"]
+                        for piece in unassigned_pieces
+                    }) >= 2
+                )
 
         empty_slot_count = LeagueEntry.objects.filter(
             group__stage=stage,
@@ -1367,6 +1419,10 @@ def pair_maintenance(request, category_id, stage_id=None):
             "unassigned_participants": unassigned_participants,
             "unassigned_pieces": unassigned_pieces,
             "piece_ranks": piece_ranks,
+            "piece_round_options": piece_round_options,
+            "advancement_source_has_multiple_brackets": (
+                advancement_source_has_multiple_brackets
+            ),
             "category_participants": category_participants,
             "empty_slot_count": empty_slot_count,
             "unassigned_count": unassigned_count,

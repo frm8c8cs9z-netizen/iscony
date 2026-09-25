@@ -130,3 +130,16 @@ def get_round_label(round_number, bracket_size):
     return f"{round_number}回戦"
 
 
+def get_best_n(round_number, bracket_size):
+
+    total_rounds = int(
+        math.log2(bracket_size)
+    )
+
+    return 2 ** (total_rounds - round_number + 1)
+
+
+def get_best_n_label(round_number, bracket_size):
+
+    return f"ベスト{get_best_n(round_number, bracket_size)}決定戦"
+

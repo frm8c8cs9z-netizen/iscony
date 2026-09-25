@@ -75,6 +75,8 @@ from ..services import (
 )
 from ..helpers.brackets import (
     build_display_bracket_slots,
+    get_best_n,
+    get_best_n_label,
     get_bracket_size,
 )
 from ..validators import validate_game_score
@@ -675,6 +677,8 @@ def tournament_pair_maintenance(request, code, bracket_id):
 
     unassigned_pieces = []
     piece_ranks = []
+    piece_round_options = []
+    advancement_source_has_multiple_brackets = False
 
     if is_advancement_source_stage:
         if advancement_source_is_tournament:
@@ -700,8 +704,19 @@ def tournament_pair_maintenance(request, code, bracket_id):
                     "source_result",
                 )
             )
+            bracket_sizes = {}
 
             for match in source_matches:
+                if match.bracket_id not in bracket_sizes:
+                    entry_count = TournamentEntry.objects.filter(
+                        bracket_id=match.bracket_id,
+                    ).count()
+                    bracket_sizes[match.bracket_id] = get_bracket_size(
+                        entry_count,
+                    )
+
+                bracket_size = bracket_sizes[match.bracket_id]
+
                 for result in (
                     AdvancementSource.RESULT_WINNER,
                     AdvancementSource.RESULT_LOSER,
@@ -715,6 +730,14 @@ def tournament_pair_maintenance(request, code, bracket_id):
                         "source_bracket_id": match.bracket_id,
                         "source_bracket_name": match.bracket.name,
                         "source_bracket_order": match.bracket.display_order,
+                        "round_best_n": get_best_n(
+                            match.round_number,
+                            bracket_size,
+                        ),
+                        "round_label": get_best_n_label(
+                            match.round_number,
+                            bracket_size,
+                        ),
                         "label": AdvancementSource.tournament_result_piece_label(
                             match,
                             result,
@@ -759,6 +782,31 @@ def tournament_pair_maintenance(request, code, bracket_id):
                 for piece in unassigned_pieces
             })
 
+        if advancement_source_is_tournament:
+            piece_round_options = [
+                {
+                    "best_n": best_n,
+                    "label": next(
+                        piece["round_label"]
+                        for piece in unassigned_pieces
+                        if piece["round_best_n"] == best_n
+                    ),
+                }
+                for best_n in sorted(
+                    {
+                        piece["round_best_n"]
+                        for piece in unassigned_pieces
+                    },
+                    reverse=True,
+                )
+            ]
+            advancement_source_has_multiple_brackets = (
+                len({
+                    piece["source_bracket_id"]
+                    for piece in unassigned_pieces
+                }) >= 2
+            )
+
     assigned_participant_ids = TournamentEntry.objects.filter(
         bracket__stage=bracket.stage,
         participant__isnull=False,
@@ -786,6 +834,10 @@ def tournament_pair_maintenance(request, code, bracket_id):
             "advancement_source_is_tournament": advancement_source_is_tournament,
             "unassigned_pieces": unassigned_pieces,
             "piece_ranks": piece_ranks,
+            "piece_round_options": piece_round_options,
+            "advancement_source_has_multiple_brackets": (
+                advancement_source_has_multiple_brackets
+            ),
         },
     )
 

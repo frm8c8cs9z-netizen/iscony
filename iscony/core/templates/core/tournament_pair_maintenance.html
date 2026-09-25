@@ -15,7 +15,7 @@
 <div class="pair-assignment-layout pair-assignment-layout--tournament">
     {% if is_advancement_source_stage %}
         {% if not advancement_source_is_tournament %}
-            <div class="advancement-piece-filter">
+            <div class="advancement-piece-filter advancement-piece-filter--league-rank">
                 <div class="advancement-piece-rank-filter">
                     <button type="button" class="rank-filter-button is-active" data-rank="all">
                         すべて
@@ -51,6 +51,56 @@
                 </div>
             </div>
         {% endif %}
+        {% if advancement_source_is_tournament %}
+            <div class="advancement-piece-filter advancement-piece-filter--tournament-result">
+                <div class="advancement-piece-rank-filter">
+                    <button type="button" class="round-filter-button is-active" data-round="all">
+                        すべて
+                    </button>
+                    {% for option in piece_round_options %}
+                        <button type="button" class="round-filter-button" data-round="{{ option.best_n }}">
+                            {{ option.label }}
+                        </button>
+                    {% endfor %}
+                </div>
+                <div class="advancement-piece-rank-filter">
+                    <button type="button" class="result-filter-button is-active" data-result="all">
+                        すべて
+                    </button>
+                    <button type="button" class="result-filter-button" data-result="winner">
+                        勝者
+                    </button>
+                    <button type="button" class="result-filter-button" data-result="loser">
+                        敗者
+                    </button>
+                </div>
+                {% if advancement_source_has_multiple_brackets %}
+                    <p>
+                        <label for="advancement-piece-bracket-search">ブラケット検索</label>
+                        <input
+                            type="text"
+                            id="advancement-piece-bracket-search"
+                            placeholder="スペース区切りで複数指定可(部分一致)"
+                        >
+                    </p>
+                {% endif %}
+                <div class="advancement-piece-sort-toggle">
+                    <label>
+                        <input
+                            type="radio"
+                            name="advancement-piece-tournament-sort"
+                            value="round"
+                            checked
+                        >
+                        ラウンド順
+                    </label>
+                    <label>
+                        <input type="radio" name="advancement-piece-tournament-sort" value="result">
+                        勝者/敗者順
+                    </label>
+                </div>
+            </div>
+        {% endif %}
         <ul id="unassigned-participant-list" class="tournament-assign-participants" data-mode="piece">
             {% for piece in unassigned_pieces %}
                 {% if advancement_source_is_tournament %}
@@ -63,8 +113,17 @@
                         data-source-bracket-id="{{ piece.source_bracket_id }}"
                         data-source-bracket-name="{{ piece.source_bracket_name }}"
                         data-source-bracket-order="{{ piece.source_bracket_order }}"
+                        data-round-best-n="{{ piece.round_best_n }}"
                     >
-                        {{ piece.label }}
+                        <span>{{ piece.label }}</span>
+                        <a
+                            href="{% url 'tournament_bracket_detail' tournament.code piece.source_bracket_id %}"
+                            target="_blank"
+                            rel="noopener"
+                            class="piece-view-bracket-link"
+                        >
+                            この試合を見る
+                        </a>
                     </li>
                 {% else %}
                     <li
@@ -166,13 +225,22 @@
             "#unassigned-participant-list"
         );
         const pieceFilter = document.querySelector(
-            ".advancement-piece-filter"
+            ".advancement-piece-filter--league-rank"
+        );
+        const tournamentResultPieceFilter = document.querySelector(
+            ".advancement-piece-filter--tournament-result"
         );
         const pieceFilterStateKey = (
             "tournament-pair-maintenance-piece-filter:{{ bracket.id }}"
         );
+        const tournamentResultPieceFilterStateKey = (
+            "tournament-pair-maintenance-tournament-piece-filter:{{ bracket.id }}"
+        );
         let activePieceRanks = new Set();
         let activePieceSort = "group";
+        let activeTournamentResultPieceRounds = new Set();
+        let activeTournamentResultPieceResults = new Set();
+        let activeTournamentResultPieceSort = "round";
 
         function applyPieceFilters() {
             if (!unassignedList) {
@@ -397,6 +465,319 @@
             });
 
             restorePieceFilterState();
+        }
+
+        function applyTournamentResultPieceFilters() {
+            if (!unassignedList) {
+                return;
+            }
+
+            const searchInput = document.getElementById(
+                "advancement-piece-bracket-search"
+            );
+            const searchTokens = (
+                searchInput && searchInput.value
+                    ? searchInput.value.trim().split(/\s+/)
+                    : []
+            ).filter(function(token) {
+                return token.length > 0;
+            });
+
+            unassignedList.querySelectorAll(
+                '[data-piece-kind="tournament_result"]'
+            ).forEach(function(item) {
+                const roundBestN = item.dataset.roundBestN;
+                const result = item.dataset.sourceResult;
+                const bracketName = item.dataset.sourceBracketName || "";
+
+                const roundMatches = (
+                    activeTournamentResultPieceRounds.size === 0
+                    || activeTournamentResultPieceRounds.has(roundBestN)
+                );
+                const resultMatches = (
+                    activeTournamentResultPieceResults.size === 0
+                    || activeTournamentResultPieceResults.has(result)
+                );
+                const searchMatches = (
+                    searchTokens.length === 0
+                    || searchTokens.some(function(token) {
+                        return bracketName.indexOf(token) !== -1;
+                    })
+                );
+
+                item.hidden = !(
+                    roundMatches
+                    && resultMatches
+                    && searchMatches
+                );
+            });
+        }
+
+        function tournamentResultOrder(result) {
+            return result === "winner" ? 0 : 1;
+        }
+
+        function applyTournamentResultPieceSort() {
+            if (!unassignedList) {
+                return;
+            }
+
+            const items = Array.from(
+                unassignedList.querySelectorAll(
+                    '[data-piece-kind="tournament_result"]'
+                )
+            );
+
+            items.sort(function(a, b) {
+                const roundDiff = (
+                    parseInt(b.dataset.roundBestN, 10)
+                    - parseInt(a.dataset.roundBestN, 10)
+                );
+                const bracketDiff = (
+                    parseInt(a.dataset.sourceBracketOrder, 10)
+                    - parseInt(b.dataset.sourceBracketOrder, 10)
+                );
+                const resultDiff = (
+                    tournamentResultOrder(a.dataset.sourceResult)
+                    - tournamentResultOrder(b.dataset.sourceResult)
+                );
+
+                if (activeTournamentResultPieceSort === "result") {
+                    if (resultDiff !== 0) {
+                        return resultDiff;
+                    }
+                    if (roundDiff !== 0) {
+                        return roundDiff;
+                    }
+                    return bracketDiff;
+                }
+
+                if (roundDiff !== 0) {
+                    return roundDiff;
+                }
+                if (bracketDiff !== 0) {
+                    return bracketDiff;
+                }
+                return resultDiff;
+            });
+
+            items.forEach(function(item) {
+                unassignedList.appendChild(item);
+            });
+        }
+
+        function saveTournamentResultPieceFilterState() {
+            if (!tournamentResultPieceFilter) {
+                return;
+            }
+
+            const searchInput = document.getElementById(
+                "advancement-piece-bracket-search"
+            );
+
+            try {
+                sessionStorage.setItem(
+                    tournamentResultPieceFilterStateKey,
+                    JSON.stringify({
+                        rounds: Array.from(
+                            activeTournamentResultPieceRounds
+                        ),
+                        results: Array.from(
+                            activeTournamentResultPieceResults
+                        ),
+                        search: searchInput ? searchInput.value : "",
+                        sort: activeTournamentResultPieceSort,
+                    })
+                );
+            } catch (error) {
+                // sessionStorageが使えない環境では何もしない
+            }
+        }
+
+        function restoreTournamentResultPieceFilterState() {
+            if (!tournamentResultPieceFilter) {
+                return;
+            }
+
+            let state = null;
+
+            try {
+                const raw = sessionStorage.getItem(
+                    tournamentResultPieceFilterStateKey
+                );
+                if (raw) {
+                    state = JSON.parse(raw);
+                }
+            } catch (error) {
+                state = null;
+            }
+
+            if (state) {
+                activeTournamentResultPieceRounds = new Set(
+                    state.rounds || []
+                );
+                activeTournamentResultPieceResults = new Set(
+                    state.results || []
+                );
+                activeTournamentResultPieceSort = (
+                    state.sort === "result" ? "result" : "round"
+                );
+            }
+
+            tournamentResultPieceFilter.querySelectorAll(
+                ".round-filter-button"
+            ).forEach(function(button) {
+                const round = button.dataset.round;
+                const isActive = (
+                    (
+                        round === "all"
+                        && activeTournamentResultPieceRounds.size === 0
+                    )
+                    || activeTournamentResultPieceRounds.has(round)
+                );
+                button.classList.toggle("is-active", isActive);
+            });
+
+            tournamentResultPieceFilter.querySelectorAll(
+                ".result-filter-button"
+            ).forEach(function(button) {
+                const result = button.dataset.result;
+                const isActive = (
+                    (
+                        result === "all"
+                        && activeTournamentResultPieceResults.size === 0
+                    )
+                    || activeTournamentResultPieceResults.has(result)
+                );
+                button.classList.toggle("is-active", isActive);
+            });
+
+            const searchInput = document.getElementById(
+                "advancement-piece-bracket-search"
+            );
+            if (searchInput && state && state.search) {
+                searchInput.value = state.search;
+            }
+
+            tournamentResultPieceFilter.querySelectorAll(
+                'input[name="advancement-piece-tournament-sort"]'
+            ).forEach(function(radio) {
+                radio.checked = (
+                    radio.value === activeTournamentResultPieceSort
+                );
+            });
+
+            applyTournamentResultPieceFilters();
+            applyTournamentResultPieceSort();
+        }
+
+        if (tournamentResultPieceFilter) {
+            tournamentResultPieceFilter.querySelectorAll(
+                ".round-filter-button"
+            ).forEach(function(button) {
+                button.addEventListener("click", function() {
+                    const round = button.dataset.round;
+
+                    if (round === "all") {
+                        activeTournamentResultPieceRounds = new Set();
+                    } else if (
+                        activeTournamentResultPieceRounds.has(round)
+                    ) {
+                        activeTournamentResultPieceRounds.delete(round);
+                    } else {
+                        activeTournamentResultPieceRounds.add(round);
+                    }
+
+                    tournamentResultPieceFilter.querySelectorAll(
+                        ".round-filter-button"
+                    ).forEach(function(otherButton) {
+                        const otherRound = otherButton.dataset.round;
+                        const isActive = (
+                            (
+                                otherRound === "all"
+                                && activeTournamentResultPieceRounds.size === 0
+                            )
+                            || activeTournamentResultPieceRounds.has(
+                                otherRound
+                            )
+                        );
+                        otherButton.classList.toggle(
+                            "is-active",
+                            isActive
+                        );
+                    });
+
+                    applyTournamentResultPieceFilters();
+                    saveTournamentResultPieceFilterState();
+                });
+            });
+
+            tournamentResultPieceFilter.querySelectorAll(
+                ".result-filter-button"
+            ).forEach(function(button) {
+                button.addEventListener("click", function() {
+                    const result = button.dataset.result;
+
+                    if (result === "all") {
+                        activeTournamentResultPieceResults = new Set();
+                    } else if (
+                        activeTournamentResultPieceResults.has(result)
+                    ) {
+                        activeTournamentResultPieceResults.delete(result);
+                    } else {
+                        activeTournamentResultPieceResults.add(result);
+                    }
+
+                    tournamentResultPieceFilter.querySelectorAll(
+                        ".result-filter-button"
+                    ).forEach(function(otherButton) {
+                        const otherResult = otherButton.dataset.result;
+                        const isActive = (
+                            (
+                                otherResult === "all"
+                                && activeTournamentResultPieceResults.size === 0
+                            )
+                            || activeTournamentResultPieceResults.has(
+                                otherResult
+                            )
+                        );
+                        otherButton.classList.toggle(
+                            "is-active",
+                            isActive
+                        );
+                    });
+
+                    applyTournamentResultPieceFilters();
+                    saveTournamentResultPieceFilterState();
+                });
+            });
+
+            const bracketSearchInput = document.getElementById(
+                "advancement-piece-bracket-search"
+            );
+            if (bracketSearchInput) {
+                bracketSearchInput.addEventListener(
+                    "input",
+                    function() {
+                        applyTournamentResultPieceFilters();
+                        saveTournamentResultPieceFilterState();
+                    }
+                );
+            }
+
+            tournamentResultPieceFilter.querySelectorAll(
+                'input[name="advancement-piece-tournament-sort"]'
+            ).forEach(function(radio) {
+                radio.addEventListener("change", function() {
+                    if (radio.checked) {
+                        activeTournamentResultPieceSort = radio.value;
+                        applyTournamentResultPieceSort();
+                        saveTournamentResultPieceFilterState();
+                    }
+                });
+            });
+
+            restoreTournamentResultPieceFilterState();
         }
 
         let selectedParticipantForTap = null;

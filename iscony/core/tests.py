@@ -3396,6 +3396,128 @@ class AdvancementPieceServiceTests(TestCase):
             ),
         )
 
+    def test_stage_pair_maintenance_adds_tournament_piece_round_context(self):
+        fixture = self._create_tournament_result_fixture()
+        extra_entries = [
+            create_tournament_entry(
+                bracket=fixture["source_bracket"],
+                pair_code=str(index),
+                display_order=index,
+                player1_name=f"追加{index}A",
+                player2_name=f"追加{index}B",
+            )
+            for index in range(3, 5)
+        ]
+        round1_match = TournamentMatch.objects.create(
+            bracket=fixture["source_bracket"],
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=extra_entries[0],
+            pair2=extra_entries[1],
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=fixture["source_bracket"],
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": fixture["category"].id,
+                    "stage_id": fixture["target_stage"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pieces_by_match = {
+            piece["source_match_id"]: piece
+            for piece in response.context["unassigned_pieces"]
+        }
+        self.assertEqual(
+            pieces_by_match[fixture["source_match"].id]["round_best_n"],
+            4,
+        )
+        self.assertEqual(
+            pieces_by_match[fixture["source_match"].id]["round_label"],
+            "ベスト4決定戦",
+        )
+        self.assertEqual(pieces_by_match[round1_match.id]["round_best_n"], 4)
+        self.assertEqual(pieces_by_match[final_match.id]["round_best_n"], 2)
+        self.assertEqual(
+            pieces_by_match[final_match.id]["round_label"],
+            "ベスト2決定戦",
+        )
+        self.assertEqual(
+            response.context["piece_round_options"],
+            [
+                {"best_n": 4, "label": "ベスト4決定戦"},
+                {"best_n": 2, "label": "ベスト2決定戦"},
+            ],
+        )
+        self.assertFalse(
+            response.context["advancement_source_has_multiple_brackets"]
+        )
+        content = response.content.decode()
+        detail_url = reverse(
+            "tournament_bracket_detail",
+            kwargs={
+                "code": self.tournament.code,
+                "bracket_id": fixture["source_bracket"].id,
+            },
+        )
+        self.assertIn('data-round-best-n="4"', content)
+        self.assertIn('data-round-best-n="2"', content)
+        self.assertIn("この試合を見る", content)
+        self.assertIn(f'href="{detail_url}"', content)
+
+    def test_stage_pair_maintenance_marks_multiple_source_brackets(self):
+        fixture = self._create_tournament_result_fixture()
+        second_bracket = TournamentBracket.objects.create(
+            category=fixture["category"],
+            stage=fixture["source_stage"],
+            name="予選B",
+            display_order=2,
+        )
+        second_entries = [
+            create_tournament_entry(
+                bracket=second_bracket,
+                pair_code=f"B{index}",
+                display_order=index,
+                player1_name=f"B{index}A",
+                player2_name=f"B{index}B",
+            )
+            for index in range(1, 3)
+        ]
+        TournamentMatch.objects.create(
+            bracket=second_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="B1",
+            pair1=second_entries[0],
+            pair2=second_entries[1],
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": fixture["category"].id,
+                    "stage_id": fixture["target_stage"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            response.context["advancement_source_has_multiple_brackets"]
+        )
+        self.assertContains(response, 'id="advancement-piece-bracket-search"')
+
     def test_assign_league_entry_advancement_piece_rejects_wrong_source_stage(self):
         fixture = self._create_fixture()
         other_stage = Stage.objects.create(
@@ -4117,6 +4239,130 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         )
         self.assertNotContains(response, 'data-mode="participant"')
 
+    def test_tournament_pair_maintenance_adds_tournament_piece_round_context(self):
+        fixture = self._create_tournament_result_fixture(pair_count="4")
+        extra_entries = [
+            create_tournament_entry(
+                bracket=fixture["source_bracket"],
+                pair_code=str(index),
+                display_order=index,
+                player1_name=f"追加{index}A",
+                player2_name=f"追加{index}B",
+            )
+            for index in range(3, 5)
+        ]
+        round1_match = TournamentMatch.objects.create(
+            bracket=fixture["source_bracket"],
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=extra_entries[0],
+            pair2=extra_entries[1],
+        )
+        final_match = TournamentMatch.objects.create(
+            bracket=fixture["source_bracket"],
+            round_number=2,
+            match_number=1,
+            match_code="M3",
+        )
+        generate_tournament_bracket_matches(fixture["bracket"], 7)
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": fixture["bracket"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pieces_by_match = {
+            piece["source_match_id"]: piece
+            for piece in response.context["unassigned_pieces"]
+        }
+        self.assertEqual(
+            pieces_by_match[fixture["source_match"].id]["round_best_n"],
+            4,
+        )
+        self.assertEqual(
+            pieces_by_match[fixture["source_match"].id]["round_label"],
+            "ベスト4決定戦",
+        )
+        self.assertEqual(pieces_by_match[round1_match.id]["round_best_n"], 4)
+        self.assertEqual(pieces_by_match[final_match.id]["round_best_n"], 2)
+        self.assertEqual(
+            pieces_by_match[final_match.id]["round_label"],
+            "ベスト2決定戦",
+        )
+        self.assertEqual(
+            response.context["piece_round_options"],
+            [
+                {"best_n": 4, "label": "ベスト4決定戦"},
+                {"best_n": 2, "label": "ベスト2決定戦"},
+            ],
+        )
+        self.assertFalse(
+            response.context["advancement_source_has_multiple_brackets"]
+        )
+        content = response.content.decode()
+        detail_url = reverse(
+            "tournament_bracket_detail",
+            kwargs={
+                "code": self.tournament.code,
+                "bracket_id": fixture["source_bracket"].id,
+            },
+        )
+        self.assertIn('data-round-best-n="4"', content)
+        self.assertIn('data-round-best-n="2"', content)
+        self.assertIn("この試合を見る", content)
+        self.assertIn(f'href="{detail_url}"', content)
+
+    def test_tournament_pair_maintenance_marks_multiple_source_brackets(self):
+        fixture = self._create_tournament_result_fixture(pair_count="4")
+        second_bracket = TournamentBracket.objects.create(
+            category=fixture["category"],
+            stage=fixture["source_stage"],
+            name="予選B",
+            display_order=2,
+        )
+        second_entries = [
+            create_tournament_entry(
+                bracket=second_bracket,
+                pair_code=f"B{index}",
+                display_order=index,
+                player1_name=f"B{index}A",
+                player2_name=f"B{index}B",
+            )
+            for index in range(1, 3)
+        ]
+        TournamentMatch.objects.create(
+            bracket=second_bracket,
+            round_number=1,
+            match_number=1,
+            match_code="B1",
+            pair1=second_entries[0],
+            pair2=second_entries[1],
+        )
+        generate_tournament_bracket_matches(fixture["bracket"], 7)
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": fixture["bracket"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            response.context["advancement_source_has_multiple_brackets"]
+        )
+        self.assertContains(response, 'id="advancement-piece-bracket-search"')
+
     def test_tournament_pair_maintenance_shows_advancement_piece_filter(self):
         fixture = self._create_fixture(pair_count="4")
         self._create_source_league_entries(fixture)
@@ -4135,7 +4381,11 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         filter_block = re.search(
-            r'(<div class="advancement-piece-filter">[\s\S]*?)\s*<ul id="unassigned-participant-list"',
+            (
+                r'(<div class="advancement-piece-filter '
+                r'advancement-piece-filter--league-rank">[\s\S]*?)'
+                r'\s*<ul id="unassigned-participant-list"'
+            ),
             content,
         )
         self.assertIsNotNone(filter_block)
