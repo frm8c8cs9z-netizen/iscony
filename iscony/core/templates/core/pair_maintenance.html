@@ -61,7 +61,11 @@
                         data-group-id="{{ row.group.id }}"
                         data-assigned="{% if pair.participant_id or pair.advancement_source %}true{% else %}false{% endif %}"
                         {% if is_advancement_source_stage %}
-                            data-assign-url="{% url 'assign_league_entry_advancement_piece_api' pair.id %}"
+                            {% if advancement_source_is_tournament %}
+                                data-assign-url="{% url 'assign_league_entry_advancement_piece_from_tournament_result_api' pair.id %}"
+                            {% else %}
+                                data-assign-url="{% url 'assign_league_entry_advancement_piece_api' pair.id %}"
+                            {% endif %}
                         {% else %}
                             data-assign-url="{% url 'assign_league_entry_participant' pair.id %}"
                         {% endif %}
@@ -88,7 +92,7 @@
                             {% if pair.participant %}
                                 {{ pair.display_name }}
                             {% elif pair.advancement_source %}
-                                {{ pair.advancement_source.source_group.name }}－{{ pair.advancement_source.source_rank }}位
+                                {{ pair.advancement_source.label }}
                             {% else %}
                                 未定
                             {% endif %}
@@ -165,53 +169,71 @@
         <div>
             {% if is_advancement_source_stage %}
                 <h3>未割当の進出元ピース</h3>
-                <div class="advancement-piece-filter">
-                    <div class="advancement-piece-rank-filter">
-                        <button type="button" class="rank-filter-button is-active" data-rank="all">
-                            すべて
-                        </button>
-                        {% for rank in piece_ranks %}
-                            <button type="button" class="rank-filter-button" data-rank="{{ rank }}">
-                                {{ rank }}位
+                {% if not advancement_source_is_tournament %}
+                    <div class="advancement-piece-filter">
+                        <div class="advancement-piece-rank-filter">
+                            <button type="button" class="rank-filter-button is-active" data-rank="all">
+                                すべて
                             </button>
-                        {% endfor %}
-                    </div>
-                    <p>
-                        <label for="advancement-piece-group-search">グループ検索</label>
-                        <input
-                            type="text"
-                            id="advancement-piece-group-search"
-                            placeholder="スペース区切りで複数指定可(部分一致)"
-                        >
-                    </p>
-                    <div class="advancement-piece-sort-toggle">
-                        <label>
+                            {% for rank in piece_ranks %}
+                                <button type="button" class="rank-filter-button" data-rank="{{ rank }}">
+                                    {{ rank }}位
+                                </button>
+                            {% endfor %}
+                        </div>
+                        <p>
+                            <label for="advancement-piece-group-search">グループ検索</label>
                             <input
-                                type="radio"
-                                name="advancement-piece-sort"
-                                value="group"
-                                checked
+                                type="text"
+                                id="advancement-piece-group-search"
+                                placeholder="スペース区切りで複数指定可(部分一致)"
                             >
-                            グループ順
-                        </label>
-                        <label>
-                            <input type="radio" name="advancement-piece-sort" value="rank">
-                            順位順
-                        </label>
+                        </p>
+                        <div class="advancement-piece-sort-toggle">
+                            <label>
+                                <input
+                                    type="radio"
+                                    name="advancement-piece-sort"
+                                    value="group"
+                                    checked
+                                >
+                                グループ順
+                            </label>
+                            <label>
+                                <input type="radio" name="advancement-piece-sort" value="rank">
+                                順位順
+                            </label>
+                        </div>
                     </div>
-                </div>
+                {% endif %}
                 <ul id="unassigned-participant-list" data-mode="piece">
                     {% for piece in unassigned_pieces %}
-                        <li
-                            class="participant-piece"
-                            draggable="true"
-                            data-source-group-id="{{ piece.source_group_id }}"
-                            data-source-group-name="{{ piece.source_group_name }}"
-                            data-source-group-order="{{ piece.source_group_order }}"
-                            data-source-rank="{{ piece.source_rank }}"
-                        >
-                            {{ piece.label }}
-                        </li>
+                        {% if advancement_source_is_tournament %}
+                            <li
+                                class="participant-piece"
+                                draggable="true"
+                                data-piece-kind="tournament_result"
+                                data-source-match-id="{{ piece.source_match_id }}"
+                                data-source-result="{{ piece.source_result }}"
+                                data-source-bracket-id="{{ piece.source_bracket_id }}"
+                                data-source-bracket-name="{{ piece.source_bracket_name }}"
+                                data-source-bracket-order="{{ piece.source_bracket_order }}"
+                            >
+                                {{ piece.label }}
+                            </li>
+                        {% else %}
+                            <li
+                                class="participant-piece"
+                                draggable="true"
+                                data-piece-kind="league_rank"
+                                data-source-group-id="{{ piece.source_group_id }}"
+                                data-source-group-name="{{ piece.source_group_name }}"
+                                data-source-group-order="{{ piece.source_group_order }}"
+                                data-source-rank="{{ piece.source_rank }}"
+                            >
+                                {{ piece.label }}
+                            </li>
+                        {% endif %}
                     {% empty %}
                         <li>未使用の進出元ピースはありません。</li>
                     {% endfor %}
@@ -554,11 +576,21 @@
                 }
 
                 const piece = event.target.closest(
-                    "[data-source-group-id]"
+                    "[data-piece-kind]"
                 );
                 if (piece) {
+                    if (piece.dataset.pieceKind === "tournament_result") {
+                        return {
+                            type: "piece",
+                            pieceKind: "tournament_result",
+                            sourceMatchId: piece.dataset.sourceMatchId,
+                            sourceResult: piece.dataset.sourceResult,
+                        };
+                    }
+
                     return {
                         type: "piece",
+                        pieceKind: "league_rank",
                         sourceGroupId: piece.dataset.sourceGroupId,
                         sourceRank: piece.dataset.sourceRank,
                     };
@@ -783,6 +815,52 @@
                 const body = new URLSearchParams();
                 body.append("source_group_id", sourceGroupId);
                 body.append("source_rank", sourceRank);
+
+                return fetch(entry.dataset.assignUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": (
+                            "application/x-www-form-urlencoded"
+                        ),
+                        "X-CSRFToken": csrfToken,
+                    },
+                    body: body,
+                })
+                    .then(function(response) {
+                        return response.json().then(function(data) {
+                            return {
+                                ok: response.ok,
+                                data: data,
+                            };
+                        });
+                    })
+                    .then(function(result) {
+                        if (!result.ok || !result.data.success) {
+                            alert(
+                                result.data.error
+                                || "進出元を割り当てられませんでした。"
+                            );
+                            return;
+                        }
+
+                        window.location.hash = (
+                            "group-" + entry.dataset.groupId
+                        );
+                        window.location.reload();
+                    })
+                    .catch(function() {
+                        alert("進出元を割り当てられませんでした。");
+                    });
+            }
+
+            function assignTournamentResultPieceToEntry(
+                entry,
+                sourceMatchId,
+                sourceResult
+            ) {
+                const body = new URLSearchParams();
+                body.append("source_match_id", sourceMatchId);
+                body.append("source_result", sourceResult);
 
                 return fetch(entry.dataset.assignUrl, {
                     method: "POST",
@@ -1083,11 +1161,20 @@
                     ) {
                         event.preventDefault();
                         setDropHighlight(null);
-                        assignPieceToEntry(
-                            entry,
-                            data.sourceGroupId,
-                            data.sourceRank
-                        );
+
+                        if (data.pieceKind === "tournament_result") {
+                            assignTournamentResultPieceToEntry(
+                                entry,
+                                data.sourceMatchId,
+                                data.sourceResult
+                            );
+                        } else {
+                            assignPieceToEntry(
+                                entry,
+                                data.sourceGroupId,
+                                data.sourceRank
+                            );
+                        }
                         return;
                     }
 
@@ -1269,14 +1356,24 @@
                     }
 
                     if (selectedPieceForTap) {
-                        const sourceGroupId = (
-                            selectedPieceForTap.dataset.sourceGroupId
-                        );
-                        const sourceRank = (
-                            selectedPieceForTap.dataset.sourceRank
-                        );
+                        const selectedPiece = selectedPieceForTap;
                         clearTapSelection();
-                        assignPieceToEntry(entry, sourceGroupId, sourceRank);
+                        if (
+                            selectedPiece.dataset.pieceKind
+                            === "tournament_result"
+                        ) {
+                            assignTournamentResultPieceToEntry(
+                                entry,
+                                selectedPiece.dataset.sourceMatchId,
+                                selectedPiece.dataset.sourceResult
+                            );
+                        } else {
+                            assignPieceToEntry(
+                                entry,
+                                selectedPiece.dataset.sourceGroupId,
+                                selectedPiece.dataset.sourceRank
+                            );
+                        }
                         return;
                     }
 
@@ -1374,7 +1471,7 @@
                         "[data-participant-id]"
                     );
                     const piece = event.target.closest(
-                        "[data-source-group-id]"
+                        "[data-piece-kind]"
                     );
                     const poolItem = participant || piece;
                     if (!poolItem) {
@@ -1390,11 +1487,19 @@
                                 participant.dataset.participantId
                             );
                         } else {
-                            assignPieceToEntry(
-                                entry,
-                                piece.dataset.sourceGroupId,
-                                piece.dataset.sourceRank
-                            );
+                            if (piece.dataset.pieceKind === "tournament_result") {
+                                assignTournamentResultPieceToEntry(
+                                    entry,
+                                    piece.dataset.sourceMatchId,
+                                    piece.dataset.sourceResult
+                                );
+                            } else {
+                                assignPieceToEntry(
+                                    entry,
+                                    piece.dataset.sourceGroupId,
+                                    piece.dataset.sourceRank
+                                );
+                            }
                         }
                         return;
                     }

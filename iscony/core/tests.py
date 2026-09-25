@@ -2624,6 +2624,22 @@ class AdvancementSourceModelTests(TestCase):
         self.assertEqual(source.label, "M1勝者")
         self.assertEqual(self.league_entry.display_name, "M1勝者")
 
+    def test_tournament_result_piece_label_keeps_existing_format(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+        )
+
+        self.assertEqual(
+            AdvancementSource.tournament_result_piece_label(
+                match,
+                AdvancementSource.RESULT_WINNER,
+            ),
+            "M1勝者",
+        )
+
     def test_source_group_delete_cascades_advancement_source(self):
         downstream_stage = Stage.objects.create(
             category=self.category,
@@ -3308,6 +3324,78 @@ class AdvancementPieceServiceTests(TestCase):
             context.exception.messages,
         )
 
+    def test_stage_pair_maintenance_shows_tournament_result_pieces(self):
+        fixture = self._create_tournament_result_fixture()
+        seed_entry = create_tournament_entry(
+            bracket=fixture["source_bracket"],
+            pair_code="S1",
+            display_order=3,
+            player1_name="シードA",
+            player2_name="シードB",
+        )
+        seed_match = TournamentMatch.objects.create(
+            bracket=fixture["source_bracket"],
+            round_number=1,
+            match_number=2,
+            match_code="S1",
+            pair1=seed_entry,
+        )
+        assigned_entry = fixture["target_entries"][0]
+        assign_league_entry_advancement_piece_from_tournament_result(
+            assigned_entry,
+            fixture["source_match"],
+            AdvancementSource.RESULT_WINNER,
+        )
+
+        response = self.client.get(
+            reverse(
+                "stage_pair_maintenance",
+                kwargs={
+                    "category_id": fixture["category"].id,
+                    "stage_id": fixture["target_stage"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["advancement_source_is_tournament"])
+        content = response.content.decode()
+        pool = re.search(
+            r'<ul id="unassigned-participant-list"[^>]*>[\s\S]*?</ul>',
+            content,
+        )
+        self.assertIsNotNone(pool)
+        self.assertContains(response, 'data-mode="piece"')
+        self.assertContains(response, "M1勝者")
+        self.assertNotIn("M1勝者", pool.group(0))
+        self.assertIn("M1敗者", pool.group(0))
+        self.assertNotIn("S1勝者", pool.group(0))
+        self.assertNotIn("S1敗者", pool.group(0))
+        self.assertNotIn(
+            f'data-source-match-id="{seed_match.id}"',
+            pool.group(0),
+        )
+        self.assertIn('data-piece-kind="tournament_result"', pool.group(0))
+        self.assertIn(
+            f'data-source-match-id="{fixture["source_match"].id}"',
+            pool.group(0),
+        )
+        self.assertIn(
+            f'data-source-result="{AdvancementSource.RESULT_LOSER}"',
+            pool.group(0),
+        )
+        self.assertNotIn('<div class="advancement-piece-filter">', content)
+        self.assertContains(
+            response,
+            reverse(
+                (
+                    "assign_league_entry_advancement_piece_"
+                    "from_tournament_result_api"
+                ),
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+        )
+
     def test_assign_league_entry_advancement_piece_rejects_wrong_source_stage(self):
         fixture = self._create_fixture()
         other_stage = Stage.objects.create(
@@ -3954,6 +4042,79 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         self.assertContains(response, 'data-source-group-name="B"')
         self.assertContains(response, 'data-source-rank="1"')
         self.assertContains(response, 'data-source-rank="2"')
+        self.assertNotContains(response, 'data-mode="participant"')
+
+    def test_tournament_pair_maintenance_shows_tournament_result_pieces(self):
+        fixture = self._create_tournament_result_fixture(pair_count="4")
+        seed_entry = create_tournament_entry(
+            bracket=fixture["source_bracket"],
+            pair_code="S1",
+            display_order=3,
+            player1_name="シードA",
+            player2_name="シードB",
+        )
+        seed_match = TournamentMatch.objects.create(
+            bracket=fixture["source_bracket"],
+            round_number=1,
+            match_number=2,
+            match_code="S1",
+            pair1=seed_entry,
+        )
+        assigned_entry = fixture["target_entries"][0]
+        assign_tournament_entry_advancement_piece_from_tournament_result(
+            assigned_entry,
+            fixture["source_match"],
+            AdvancementSource.RESULT_WINNER,
+        )
+        generate_tournament_bracket_matches(fixture["bracket"], 7)
+
+        response = self.client.get(
+            reverse(
+                "tournament_pair_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": fixture["bracket"].id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["advancement_source_is_tournament"])
+        content = response.content.decode()
+        pool = re.search(
+            r'<ul id="unassigned-participant-list"[^>]*>[\s\S]*?</ul>',
+            content,
+        )
+        self.assertIsNotNone(pool)
+        self.assertContains(response, 'data-mode="piece"')
+        self.assertNotIn("M1勝者", pool.group(0))
+        self.assertIn("M1敗者", pool.group(0))
+        self.assertNotIn("S1勝者", pool.group(0))
+        self.assertNotIn("S1敗者", pool.group(0))
+        self.assertNotIn(
+            f'data-source-match-id="{seed_match.id}"',
+            pool.group(0),
+        )
+        self.assertIn('data-piece-kind="tournament_result"', pool.group(0))
+        self.assertIn(
+            f'data-source-match-id="{fixture["source_match"].id}"',
+            pool.group(0),
+        )
+        self.assertIn(
+            f'data-source-result="{AdvancementSource.RESULT_LOSER}"',
+            pool.group(0),
+        )
+        self.assertNotIn('<div class="advancement-piece-filter">', content)
+        self.assertContains(
+            response,
+            reverse(
+                (
+                    "assign_tournament_entry_advancement_piece_"
+                    "from_tournament_result_api"
+                ),
+                kwargs={"entry_id": assigned_entry.id},
+            ),
+        )
         self.assertNotContains(response, 'data-mode="participant"')
 
     def test_tournament_pair_maintenance_shows_advancement_piece_filter(self):

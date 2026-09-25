@@ -1171,6 +1171,10 @@ def pair_maintenance(request, category_id, stage_id=None):
         is_advancement_source_stage = bool(
             stage.advancement_source_stage_id
         )
+        advancement_source_is_tournament = (
+            is_advancement_source_stage
+            and stage.advancement_source_stage.stage_type == Stage.TYPE_TOURNAMENT
+        )
         groups = list(
             Group.objects.filter(
                 stage=stage,
@@ -1214,43 +1218,87 @@ def pair_maintenance(request, category_id, stage_id=None):
         piece_ranks = []
 
         if is_advancement_source_stage:
-            source_groups = list(
-                Group.objects.filter(
-                    stage=stage.advancement_source_stage,
-                ).annotate(
-                    entry_count=Count("leagueentry"),
-                ).order_by(
-                    "display_order",
-                    "name",
+            if advancement_source_is_tournament:
+                source_matches = list(
+                    TournamentMatch.objects.filter(
+                        bracket__stage=stage.advancement_source_stage,
+                    ).exclude(
+                        match_code__startswith="S",
+                    ).select_related(
+                        "bracket",
+                    ).order_by(
+                        "bracket__display_order",
+                        "round_number",
+                        "match_number",
+                    )
                 )
-            )
-            used_piece_keys = set(
-                AdvancementSource.objects.filter(
-                    source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
-                    source_group__in=source_groups,
-                ).values_list(
-                    "source_group_id",
-                    "source_rank",
+                used_piece_keys = set(
+                    AdvancementSource.objects.filter(
+                        source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+                        source_match__in=source_matches,
+                    ).values_list(
+                        "source_match_id",
+                        "source_result",
+                    )
                 )
-            )
 
-            for source_group in source_groups:
-                for rank in range(1, source_group.entry_count + 1):
-                    if (source_group.id, rank) in used_piece_keys:
-                        continue
+                for match in source_matches:
+                    for result in (
+                        AdvancementSource.RESULT_WINNER,
+                        AdvancementSource.RESULT_LOSER,
+                    ):
+                        if (match.id, result) in used_piece_keys:
+                            continue
 
-                    unassigned_pieces.append({
-                        "source_group_id": source_group.id,
-                        "source_group_name": source_group.name,
-                        "source_group_order": source_group.display_order,
-                        "source_rank": rank,
-                        "label": f"{source_group.name}－{rank}位",
-                    })
+                        unassigned_pieces.append({
+                            "source_match_id": match.id,
+                            "source_result": result,
+                            "source_bracket_id": match.bracket_id,
+                            "source_bracket_name": match.bracket.name,
+                            "source_bracket_order": match.bracket.display_order,
+                            "label": AdvancementSource.tournament_result_piece_label(
+                                match,
+                                result,
+                            ),
+                        })
+            else:
+                source_groups = list(
+                    Group.objects.filter(
+                        stage=stage.advancement_source_stage,
+                    ).annotate(
+                        entry_count=Count("leagueentry"),
+                    ).order_by(
+                        "display_order",
+                        "name",
+                    )
+                )
+                used_piece_keys = set(
+                    AdvancementSource.objects.filter(
+                        source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+                        source_group__in=source_groups,
+                    ).values_list(
+                        "source_group_id",
+                        "source_rank",
+                    )
+                )
 
-            piece_ranks = sorted({
-                piece["source_rank"]
-                for piece in unassigned_pieces
-            })
+                for source_group in source_groups:
+                    for rank in range(1, source_group.entry_count + 1):
+                        if (source_group.id, rank) in used_piece_keys:
+                            continue
+
+                        unassigned_pieces.append({
+                            "source_group_id": source_group.id,
+                            "source_group_name": source_group.name,
+                            "source_group_order": source_group.display_order,
+                            "source_rank": rank,
+                            "label": f"{source_group.name}－{rank}位",
+                        })
+
+                piece_ranks = sorted({
+                    piece["source_rank"]
+                    for piece in unassigned_pieces
+                })
 
         empty_slot_count = LeagueEntry.objects.filter(
             group__stage=stage,
@@ -1306,6 +1354,7 @@ def pair_maintenance(request, category_id, stage_id=None):
 
         context.update({
             "is_advancement_source_stage": is_advancement_source_stage,
+            "advancement_source_is_tournament": advancement_source_is_tournament,
             "group_rows": group_rows,
             "movable_target_groups": [
                 {

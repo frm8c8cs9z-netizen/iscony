@@ -1995,6 +1995,19 @@ class AdvancementSource(models.Model):
             or self.target_tournament_entry
         )
 
+    @staticmethod
+    def tournament_result_piece_label(match, result):
+        match_label = (
+            match.match_label
+            or match.match_code
+            or f"M{match.match_number}"
+        )
+        result_label = dict(
+            AdvancementSource.SOURCE_RESULT_CHOICES
+        ).get(result, result)
+
+        return f"{match_label}{result_label}"
+
     @property
     def label(self):
         if self.source_type == self.SOURCE_LEAGUE_RANK:
@@ -2010,15 +2023,9 @@ class AdvancementSource(models.Model):
             if not self.source_match or not self.source_result:
                 return "未定"
 
-            match_label = (
-                self.source_match.match_label
-                or self.source_match.match_code
-                or f"M{self.source_match.match_number}"
-            )
-
-            return (
-                f"{match_label}"
-                f"{self.get_source_result_display()}"
+            return self.tournament_result_piece_label(
+                self.source_match,
+                self.source_result,
             )
 
         return "未定"
@@ -2302,6 +2309,5 @@ class OperationSnapshot(models.Model):
             f"{self.get_scope_type_display()} "
             f"{self.label}"
         )
-
 
 
