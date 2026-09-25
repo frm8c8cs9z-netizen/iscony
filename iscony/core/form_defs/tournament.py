@@ -9,7 +9,10 @@ by stronger permissions.
 from django import forms
 
 from ..models import Category, Participant, TournamentBracket, TournamentEntry, TournamentMatch
-from ..services.participants import find_conflicting_tournament_entry
+from ..services.participants import (
+    find_conflicting_tournament_entry,
+    tournament_entry_has_completed_match,
+)
 from .fields import TournamentEntryChoiceField
 
 
@@ -58,6 +61,22 @@ class TournamentEntryEditForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         participant = cleaned_data.get("participant")
+
+        if tournament_entry_has_completed_match(self.instance):
+            self.add_error(
+                "participant",
+                "結果入力済みの試合があるため、参加者を変更できません。",
+            )
+            return cleaned_data
+
+        if hasattr(self.instance, "advancement_source"):
+            self.add_error(
+                "participant",
+                "この枠には進出元ピースが割り当てられています。"
+                "参加者を直接編集する前に、進出元ピースの割当を"
+                "解除してください。",
+            )
+            return cleaned_data
 
         if participant:
             conflict = find_conflicting_tournament_entry(

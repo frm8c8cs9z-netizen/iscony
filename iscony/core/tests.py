@@ -17197,6 +17197,110 @@ class CategoryManagementTests(TestCase):
         target_stage.refresh_from_db()
         self.assertIsNone(target_stage.advancement_source_stage)
 
+    def test_edit_stage_rejects_three_stage_advancement_source_cycle(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage_a = Stage.objects.create(
+            category=category,
+            name="一次リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        stage_b = Stage.objects.create(
+            category=category,
+            name="二次リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+            advancement_source_stage=stage_a,
+        )
+        stage_c = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=3,
+            advancement_source_stage=stage_b,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage_a.id,
+                },
+            ),
+            {
+                "name": "一次リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "1",
+                "pair_count": "4",
+                "group_count": "1",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
+                "advancement_source_stage": str(stage_c.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "循環参照になります",
+            str(response.context["slot_form"].errors["advancement_source_stage"]),
+        )
+        stage_a.refresh_from_db()
+        self.assertIsNone(stage_a.advancement_source_stage)
+
+    def test_edit_stage_rejects_two_stage_advancement_source_cycle(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage_a = Stage.objects.create(
+            category=category,
+            name="一次リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        stage_b = Stage.objects.create(
+            category=category,
+            name="二次リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        stage_a.advancement_source_stage = stage_b
+        stage_a.save(update_fields=["advancement_source_stage"])
+
+        response = self.client.post(
+            reverse(
+                "edit_stage",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": category.id,
+                    "stage_id": stage_b.id,
+                },
+            ),
+            {
+                "name": "二次リーグ",
+                "stage_type": Stage.TYPE_LEAGUE,
+                "display_order": "2",
+                "pair_count": "4",
+                "group_count": "1",
+                "advancement_mode": StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE,
+                "advancement_source_stage": str(stage_a.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "循環参照になります",
+            str(response.context["slot_form"].errors["advancement_source_stage"]),
+        )
+        stage_b.refresh_from_db()
+        self.assertIsNone(stage_b.advancement_source_stage)
+
     def test_edit_stage_get_initializes_tournament_advancement_source_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,
@@ -25211,6 +25315,86 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(self.entry1.pair_code, "1")
         self.assertEqual(self.entry1.display_order, 1)
         self.assertEqual(match.pair1, self.entry1)
+
+    def test_tournament_entry_edit_rejects_completed_match_entry(self):
+        original_participant = self.entry1.participant
+        replacement = Participant.objects.create(
+            category=self.category,
+            entry_code="R1",
+            organization="差替所属",
+            player1_name="差替1",
+            player2_name="差替2",
+            display_order=3,
+        )
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+            pair1_games=4,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_tournament_entry",
+                kwargs={
+                    "code": self.tournament.code,
+                    "entry_id": self.entry1.id,
+                },
+            ),
+            {
+                "participant": replacement.id,
+            },
+        )
+
+        self.entry1.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "結果入力済みの試合があるため、参加者を変更できません。",
+        )
+        self.assertEqual(self.entry1.participant, original_participant)
+
+    def test_tournament_entry_edit_rejects_advancement_source_entry(self):
+        original_participant = self.entry1.participant
+        replacement = Participant.objects.create(
+            category=self.category,
+            entry_code="R1",
+            organization="差替所属",
+            player1_name="差替1",
+            player2_name="差替2",
+            display_order=3,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=self.entry1,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_rank=1,
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_tournament_entry",
+                kwargs={
+                    "code": self.tournament.code,
+                    "entry_id": self.entry1.id,
+                },
+            ),
+            {
+                "participant": replacement.id,
+            },
+        )
+
+        self.entry1.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "この枠には進出元ピースが割り当てられています。",
+        )
+        self.assertEqual(self.entry1.participant, original_participant)
 
     def test_tournament_match_edit_rejects_winner_outside_selected_pairs(self):
         other_entry = create_tournament_entry(

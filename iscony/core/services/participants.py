@@ -651,7 +651,7 @@ def find_conflicting_tournament_entry(participant, stage, *, exclude_id=None):
     ).first()
 
 
-def _tournament_entry_has_completed_match(entry):
+def tournament_entry_has_completed_match(entry):
     """TournamentEntryに結果入力済みの試合(byeを除く)があるかを返す。"""
 
     matches = TournamentMatch.objects.filter(
@@ -694,7 +694,7 @@ def assign_participant_to_tournament_entry_with_swap(entry, participant):
     if entry.participant is None:
         raise ValidationError("この枠は未割当です。")
 
-    if _tournament_entry_has_completed_match(entry):
+    if tournament_entry_has_completed_match(entry):
         raise ValidationError(
             "結果入力済みの試合があるため、参加者を変更できません。"
         )
@@ -721,7 +721,7 @@ def unassign_tournament_entry_participant(entry):
     if entry.participant is None:
         raise ValidationError("この枠は未割当です。")
 
-    if _tournament_entry_has_completed_match(entry):
+    if tournament_entry_has_completed_match(entry):
         raise ValidationError(
             "結果入力済みの試合があるため、参加者割当を解除できません。"
         )
@@ -749,8 +749,8 @@ def move_tournament_entry_participant(source_entry, target_entry):
 
     if target_entry.participant is not None:
         if (
-            _tournament_entry_has_completed_match(source_entry)
-            or _tournament_entry_has_completed_match(target_entry)
+            tournament_entry_has_completed_match(source_entry)
+            or tournament_entry_has_completed_match(target_entry)
         ):
             raise ValidationError(
                 "結果入力済みの試合があるため、入れ替えできません。"

@@ -683,11 +683,38 @@ def _parse_bracket_list(slot_form):
     return bracket_specs
 
 
-def _validate_stage_slot_setup(stage_type, slot_form):
+def _advancement_source_chain_contains(start_stage, target_stage):
+    """
+    start_stage から advancement_source_stage を遡っていったとき、
+    target_stage に到達するかどうかを返す。
+
+    Stage編集で「進出元Stage」を選ぶ際、選んだStageの進出元チェーンを
+    遡って編集対象のStage自身に戻ってきてしまう(循環参照になる)ことを
+    防ぐために使う。
+    """
+
+    visited = set()
+    current = start_stage
+
+    while current is not None:
+        if current.id == target_stage.id:
+            return True
+
+        if current.id in visited:
+            break
+
+        visited.add(current.id)
+        current = current.advancement_source_stage
+
+    return False
+
+
+def _validate_stage_slot_setup(stage_type, slot_form, *, current_stage=None):
     """
     slot_form が有効(is_valid())である前提で呼ぶ。
     stage_type に応じて pair_count / group_count を検証し、無効なら
     slot_form.add_error() でエラーを追加して False を返す。
+    current_stage は編集対象の既存Stage。新規作成(add_stage)ではNoneのままでよい。
     """
 
     pair_count = slot_form.cleaned_data["pair_count"]
@@ -721,6 +748,22 @@ def _validate_stage_slot_setup(stage_type, slot_form):
         slot_form.add_error(
             "advancement_source_stage",
             "「他のStageの結果を使う」を選んだ場合は、進出元Stageを選択してください。",
+        )
+        return False
+
+    if (
+        advancement_mode == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
+        and advancement_source_stage
+        and current_stage is not None
+        and _advancement_source_chain_contains(
+            advancement_source_stage,
+            current_stage,
+        )
+    ):
+        slot_form.add_error(
+            "advancement_source_stage",
+            "選んだ進出元Stageは、進出元を辿るとこのStage自身に戻って"
+            "くる関係にあるため設定できません(循環参照になります)。",
         )
         return False
 
@@ -1014,6 +1057,7 @@ def edit_stage(request, code, category_id, stage_id):
                     slot_form_valid = _validate_stage_slot_setup(
                         form.cleaned_data.get("stage_type"),
                         slot_form,
+                        current_stage=stage,
                     )
 
             if form_valid and slot_form_valid:
