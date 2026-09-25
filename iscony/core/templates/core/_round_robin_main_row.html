@@ -34,7 +34,7 @@
             >
                 {% if row_score_link_kind == 'input' and score.match %}
                     <a
-                        href="{% url row_score_link_view_name score.match.id %}?next={{ row_score_link_next_url }}#group-{{ data.group.id }}"
+                        href="{% url row_score_link_view_name score.match.id %}?next={{ row_score_link_next_url }}%23group-{{ data.group.id }}"
                         class="score-link"
                     >
                         {% if score.retired_self %}

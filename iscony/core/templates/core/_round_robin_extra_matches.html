@@ -12,7 +12,7 @@
             <tr>
                 <td>
                     {% if link_kind == "input" %}
-                        <a href="{% url input_url_name extra.match.id %}?next={{ next_url }}#group-{{ group_id }}">
+                        <a href="{% url input_url_name extra.match.id %}?next={{ next_url }}%23group-{{ group_id }}">
                             {{ extra.match.pair1.pair_code }}
                             {% for line in extra.pair1_display_lines %}
                                 {{ line.text }}{% if not forloop.last %}<br>{% endif %}
