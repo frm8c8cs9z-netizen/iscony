@@ -11,6 +11,10 @@ def build_tournament_round_data(bracket):
         "pair1",
         "pair2",
         "winner",
+        "pair1__advancement_source",
+        "pair2__advancement_source",
+        "winner__advancement_source",
+        "bracket__category__tournament",
     ).order_by(
         "round_number",
         "match_number"

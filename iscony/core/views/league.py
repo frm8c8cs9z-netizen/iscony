@@ -1153,6 +1153,8 @@ def pair_maintenance(request, category_id, stage_id=None):
         "group",
         "advancement_source",
         "advancement_source__source_group",
+        "advancement_source__source_match",
+        "advancement_source__source_match__bracket",
     )
 
     if stage is not None:

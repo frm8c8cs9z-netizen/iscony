@@ -643,6 +643,8 @@ def tournament_pair_maintenance(request, code, bracket_id):
     ).select_related(
         "pair1",
         "pair2",
+        "pair1__advancement_source",
+        "pair2__advancement_source",
     ).order_by(
         "match_number",
     )
