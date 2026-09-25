@@ -475,7 +475,7 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
                 }
                 stage_url = (
                     f"{reverse('category_stage_overview', kwargs={'category_id': category.id})}"
-                    f"#stage-{stage.id}"
+                    f"%23stage-{stage.id}"
                 )
 
                 svg_bracket = display_data.get("svg_bracket")

@@ -600,19 +600,24 @@ class Participant(models.Model):
         )
 
     def effective_organization_values(self, player_no):
-        values = []
-        qs = self.organization_values.select_related("field").filter(
-            player_no=player_no,
-            field__is_active=True,
-        ).order_by(
-            "field__display_order",
-            "field__code",
+        matched = [
+            value
+            for value in self.organization_values.all()
+            if value.player_no == player_no
+            and value.field.is_active
+        ]
+
+        matched.sort(
+            key=lambda value: (
+                value.field.display_order,
+                value.field.code,
+            )
         )
 
-        for value in qs:
-            values.append(value.original_value)
-
-        return values
+        return [
+            value.original_value
+            for value in matched
+        ]
 
     @property
     def effective_player1_organizations(self):

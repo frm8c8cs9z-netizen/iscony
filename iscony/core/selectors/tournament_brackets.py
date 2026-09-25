@@ -15,6 +15,13 @@ def build_tournament_round_data(bracket):
         "pair2__advancement_source",
         "winner__advancement_source",
         "bracket__category__tournament",
+        "pair1__participant",
+        "pair2__participant",
+        "winner__participant",
+    ).prefetch_related(
+        "pair1__participant__organization_values__field",
+        "pair2__participant__organization_values__field",
+        "winner__participant__organization_values__field",
     ).order_by(
         "round_number",
         "match_number"
