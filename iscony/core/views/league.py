@@ -1343,6 +1343,7 @@ def pair_maintenance(request, category_id, stage_id=None):
                         {
                             piece["round_best_n"]
                             for piece in unassigned_pieces
+                            if piece["round_best_n"] > 1
                         },
                         reverse=True,
                     )

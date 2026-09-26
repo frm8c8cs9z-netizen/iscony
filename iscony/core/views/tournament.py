@@ -787,6 +787,7 @@ def tournament_pair_maintenance(request, code, bracket_id):
                     {
                         piece["round_best_n"]
                         for piece in unassigned_pieces
+                        if piece["round_best_n"] > 1
                     },
                     reverse=True,
                 )

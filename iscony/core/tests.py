@@ -3441,22 +3441,21 @@ class AdvancementPieceServiceTests(TestCase):
         }
         self.assertEqual(
             pieces_by_match[fixture["source_match"].id]["round_best_n"],
-            4,
+            2,
         )
         self.assertEqual(
             pieces_by_match[fixture["source_match"].id]["round_label"],
-            "ベスト4決定戦",
+            "ベスト2決定戦",
         )
-        self.assertEqual(pieces_by_match[round1_match.id]["round_best_n"], 4)
-        self.assertEqual(pieces_by_match[final_match.id]["round_best_n"], 2)
+        self.assertEqual(pieces_by_match[round1_match.id]["round_best_n"], 2)
+        self.assertEqual(pieces_by_match[final_match.id]["round_best_n"], 1)
         self.assertEqual(
             pieces_by_match[final_match.id]["round_label"],
-            "ベスト2決定戦",
+            "ベスト1決定戦",
         )
         self.assertEqual(
             response.context["piece_round_options"],
             [
-                {"best_n": 4, "label": "ベスト4決定戦"},
                 {"best_n": 2, "label": "ベスト2決定戦"},
             ],
         )
@@ -3471,7 +3470,7 @@ class AdvancementPieceServiceTests(TestCase):
                 "bracket_id": fixture["source_bracket"].id,
             },
         )
-        self.assertIn('data-round-best-n="4"', content)
+        self.assertIn('data-round-best-n="1"', content)
         self.assertIn('data-round-best-n="2"', content)
         self.assertIn("この試合を見る", content)
         self.assertIn(f'href="{detail_url}"', content)
@@ -4285,22 +4284,21 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         }
         self.assertEqual(
             pieces_by_match[fixture["source_match"].id]["round_best_n"],
-            4,
+            2,
         )
         self.assertEqual(
             pieces_by_match[fixture["source_match"].id]["round_label"],
-            "ベスト4決定戦",
+            "ベスト2決定戦",
         )
-        self.assertEqual(pieces_by_match[round1_match.id]["round_best_n"], 4)
-        self.assertEqual(pieces_by_match[final_match.id]["round_best_n"], 2)
+        self.assertEqual(pieces_by_match[round1_match.id]["round_best_n"], 2)
+        self.assertEqual(pieces_by_match[final_match.id]["round_best_n"], 1)
         self.assertEqual(
             pieces_by_match[final_match.id]["round_label"],
-            "ベスト2決定戦",
+            "ベスト1決定戦",
         )
         self.assertEqual(
             response.context["piece_round_options"],
             [
-                {"best_n": 4, "label": "ベスト4決定戦"},
                 {"best_n": 2, "label": "ベスト2決定戦"},
             ],
         )
@@ -4315,7 +4313,7 @@ class TournamentAdvancementPieceServiceTests(TestCase):
                 "bracket_id": fixture["source_bracket"].id,
             },
         )
-        self.assertIn('data-round-best-n="4"', content)
+        self.assertIn('data-round-best-n="1"', content)
         self.assertIn('data-round-best-n="2"', content)
         self.assertIn("この試合を見る", content)
         self.assertIn(f'href="{detail_url}"', content)

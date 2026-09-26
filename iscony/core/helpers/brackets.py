@@ -136,10 +136,9 @@ def get_best_n(round_number, bracket_size):
         math.log2(bracket_size)
     )
 
-    return 2 ** (total_rounds - round_number + 1)
+    return 2 ** (total_rounds - round_number)
 
 
 def get_best_n_label(round_number, bracket_size):
 
     return f"ベスト{get_best_n(round_number, bracket_size)}決定戦"
-
