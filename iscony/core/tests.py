@@ -20773,6 +20773,34 @@ class ReceptionMatchSearchTests(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_tournament_score_save_defaults_back_to_match_anchor(self):
+        response = self.client.post(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            ),
+            {
+                "action": "save",
+                "pair1_games": "4",
+                "pair2_games": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            (
+                reverse(
+                    "category_stage_overview",
+                    kwargs={"category_id": self.category.id},
+                )
+                + f"#tournament-match-{self.tournament_match.id}"
+            ),
+            fetch_redirect_response=False,
+        )
+
     def test_result_input_next_rejects_external_url(self):
         response = self.client.get(
             (
@@ -21028,6 +21056,98 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, "決勝トーナメント")
         self.assertContains(response, "0/1枠反映済み")
         self.assertContains(response, "後続Stage")
+
+    def test_tournament_match_links_return_to_each_match_anchor(self):
+        tournament = Tournament.objects.create(
+            name="Stage試合アンカー大会",
+            code="STAGEMATCHANCHOR",
+        )
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        entries = [
+            create_tournament_entry(
+                bracket=bracket,
+                pair_code=str(index),
+                display_order=index,
+                player1_name=f"本戦{index}A",
+                player2_name=f"本戦{index}B",
+            )
+            for index in range(1, 5)
+        ]
+        match1 = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="1回戦1",
+            pair1=entries[0],
+            pair2=entries[1],
+        )
+        match2 = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            match_label="1回戦2",
+            pair1=entries[2],
+            pair2=entries[3],
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        overview_url = reverse(
+            "category_stage_overview",
+            kwargs={"category_id": category.id},
+        )
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "input_tournament_match_score",
+                    kwargs={
+                        "code": tournament.code,
+                        "match_id": match1.id,
+                    },
+                )
+                + f"?next={overview_url}%23tournament-match-{match1.id}"
+            ),
+        )
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "input_tournament_match_score",
+                    kwargs={
+                        "code": tournament.code,
+                        "match_id": match2.id,
+                    },
+                )
+                + f"?next={overview_url}%23tournament-match-{match2.id}"
+            ),
+        )
+        self.assertNotContains(
+            response,
+            f"?next={overview_url}%23stage-{stage.id}",
+        )
 
     def test_stage_overview_notice_waits_until_league_rank_is_known(self):
         tournament = Tournament.objects.create(

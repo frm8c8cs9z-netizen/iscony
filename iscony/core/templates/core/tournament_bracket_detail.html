@@ -170,7 +170,7 @@
                                             シード通過
                                         </span>
                                     {% elif match.pair1 and match.pair2 %}
-                                        <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={% url 'category_stage_overview' bracket.category.id %}%23stage-{{ bracket.stage.id }}">
+                                        <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={% url 'category_stage_overview' bracket.category.id %}%23tournament-match-{{ match.id }}">
                                             結果入力
                                         </a>
                                         <a

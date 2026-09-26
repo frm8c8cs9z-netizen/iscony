@@ -473,9 +473,9 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
                     )
                     for schedule in schedules
                 }
-                stage_url = (
-                    f"{reverse('category_stage_overview', kwargs={'category_id': category.id})}"
-                    f"%23stage-{stage.id}"
+                category_stage_overview_base_url = reverse(
+                    "category_stage_overview",
+                    kwargs={"category_id": category.id},
                 )
 
                 svg_bracket = display_data.get("svg_bracket")
@@ -488,9 +488,13 @@ def _build_category_stage_rows(category, *, request=None, include_public_links=F
                 elif svg_bracket:
                     for label in svg_bracket["labels"]:
                         if label.get("label_type") == "match_code" and label.get("match_id"):
+                            match_next_url = (
+                                f"{category_stage_overview_base_url}"
+                                f"%23tournament-match-{label['match_id']}"
+                            )
                             label["url"] = (
                                 f"{reverse('input_tournament_match_score', kwargs={'code': category.tournament.code, 'match_id': label['match_id']})}"
-                                f"?next={stage_url}"
+                                f"?next={match_next_url}"
                             )
 
                 display_brackets.append({

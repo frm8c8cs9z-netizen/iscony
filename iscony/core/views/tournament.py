@@ -82,7 +82,6 @@ from ..helpers.brackets import (
 from ..validators import validate_game_score
 from ..helpers.view import (
     match_pair_is_determined,
-    redirect_next_or_default,
     render_score_input,
 )
 
@@ -127,7 +126,7 @@ def _tournament_stage_overview_url(match):
     )
 
     if match.bracket.stage_id:
-        return f"{url}#stage-{match.bracket.stage.id}"
+        return f"{url}#tournament-match-{match.id}"
 
     return url
 
@@ -217,11 +216,7 @@ def input_tournament_match_score(request, code, match_id):
             if next_url:
                 return redirect(next_url)
 
-            return redirect_next_or_default(
-                request,
-                "category_stage_overview",
-                category_id=match.bracket.category.id,
-            )
+            return redirect(_tournament_stage_overview_url(match))
 
         if not (
             match_pair_is_determined(match.pair1)
@@ -266,10 +261,7 @@ def input_tournament_match_score(request, code, match_id):
             if next_url:
                 return redirect(next_url)
 
-            return redirect(
-                "category_stage_overview",
-                category_id=match.bracket.category.id,
-            )
+            return redirect(_tournament_stage_overview_url(match))
 
         try:
 
@@ -351,10 +343,7 @@ def input_tournament_match_score(request, code, match_id):
         if next_url:
             return redirect(next_url)
 
-        return redirect(
-            "category_stage_overview",
-            category_id=match.bracket.category.id,
-        )
+        return redirect(_tournament_stage_overview_url(match))
 
     return render_score_input(
         request=request,
