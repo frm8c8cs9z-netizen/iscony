@@ -74,6 +74,7 @@ from .views.tournament import _resolve_svg_champion_orientation
 from .views.tournament import _svg_champion_text_lines
 from .views.tournament import build_tournament_bracket_display_data
 from .views.stage import _validate_stage_slot_setup
+from .rendering.tournament_svg_labels import estimate_svg_row_gap
 
 from .services import (
     advance_tournament_bye_winners,
@@ -19952,6 +19953,12 @@ class TournamentSettingsTests(TestCase):
                 "default_tournament_score_display_mode": (
                     Tournament.SCORE_DISPLAY_NONE
                 ),
+                "default_tournament_row_gap_density": (
+                    Tournament.ROW_GAP_DENSITY_COMPACT
+                ),
+                "default_tournament_score_anchor_clearance": (
+                    Tournament.SCORE_ANCHOR_CLEARANCE_TIGHT
+                ),
                 "default_tournament_score_color": (
                     "#D32F2F"
                 ),
@@ -20007,6 +20014,14 @@ class TournamentSettingsTests(TestCase):
             Tournament.SCORE_DISPLAY_NONE,
         )
         self.assertEqual(
+            tournament.default_tournament_row_gap_density,
+            Tournament.ROW_GAP_DENSITY_COMPACT,
+        )
+        self.assertEqual(
+            tournament.default_tournament_score_anchor_clearance,
+            Tournament.SCORE_ANCHOR_CLEARANCE_TIGHT,
+        )
+        self.assertEqual(
             tournament.default_tournament_score_color,
             "#D32F2F",
         )
@@ -20052,6 +20067,12 @@ class TournamentSettingsTests(TestCase):
                 ),
                 "default_tournament_score_display_mode": (
                     Tournament.SCORE_DISPLAY_NONE
+                ),
+                "default_tournament_row_gap_density": (
+                    Tournament.ROW_GAP_DENSITY_STANDARD
+                ),
+                "default_tournament_score_anchor_clearance": (
+                    Tournament.SCORE_ANCHOR_CLEARANCE_STANDARD
                 ),
                 "default_tournament_score_color": "#225588",
             },
@@ -20117,6 +20138,12 @@ class TournamentSettingsTests(TestCase):
                 ),
                 "default_tournament_score_display_mode": (
                     Tournament.SCORE_DISPLAY_LOSER
+                ),
+                "default_tournament_row_gap_density": (
+                    Tournament.ROW_GAP_DENSITY_STANDARD
+                ),
+                "default_tournament_score_anchor_clearance": (
+                    Tournament.SCORE_ANCHOR_CLEARANCE_STANDARD
                 ),
                 "default_tournament_score_color": "#D32F2F",
             },
@@ -22519,12 +22546,58 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(
+            self.bracket.row_gap_density,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.score_anchor_clearance,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
             self.bracket.champion_text_layout,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(
             self.bracket.entry_display_mode,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+
+    def test_tournament_bracket_effective_row_gap_density_uses_tournament_default(self):
+        self.tournament.default_tournament_row_gap_density = (
+            Tournament.ROW_GAP_DENSITY_COMPACT2
+        )
+        self.tournament.default_tournament_score_anchor_clearance = (
+            Tournament.SCORE_ANCHOR_CLEARANCE_LOOSE
+        )
+        self.tournament.save()
+        self.bracket.row_gap_density = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.score_anchor_clearance = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.save()
+
+        self.assertEqual(
+            self.bracket.effective_row_gap_density,
+            Tournament.ROW_GAP_DENSITY_COMPACT2,
+        )
+        self.assertEqual(
+            self.bracket.effective_score_anchor_clearance,
+            Tournament.SCORE_ANCHOR_CLEARANCE_LOOSE,
+        )
+
+    def test_tournament_bracket_effective_row_gap_density_can_be_overridden(self):
+        self.use_individual_bracket_settings()
+        self.bracket.row_gap_density = TournamentBracket.ROW_GAP_DENSITY_MINIMUM
+        self.bracket.score_anchor_clearance = (
+            TournamentBracket.SCORE_ANCHOR_CLEARANCE_NONE
+        )
+        self.bracket.save()
+
+        self.assertEqual(
+            self.bracket.effective_row_gap_density,
+            TournamentBracket.ROW_GAP_DENSITY_MINIMUM,
+        )
+        self.assertEqual(
+            self.bracket.effective_score_anchor_clearance,
+            TournamentBracket.SCORE_ANCHOR_CLEARANCE_NONE,
         )
 
     def test_bracket_list_shows_display_settings(self):
@@ -23046,15 +23119,15 @@ class TournamentScheduleBehaviorTests(TestCase):
         ]
 
         self.assertIn('class="loser-score"', svg_content)
-        self.assertIn('y="66"', svg_content)
+        self.assertIn('y="70"', svg_content)
         self.assertRegex(
             svg_content,
-            r'class="loser-score"[\s\S]*?y="66"[\s\S]*?>\s*4\s*</text>',
+            r'class="loser-score"[\s\S]*?y="70"[\s\S]*?>\s*4\s*</text>',
         )
-        self.assertIn('y="154"', svg_content)
+        self.assertIn('y="144"', svg_content)
         self.assertRegex(
             svg_content,
-            r'class="loser-score"[\s\S]*?y="154"[\s\S]*?>\s*2\s*</text>',
+            r'class="loser-score"[\s\S]*?y="144"[\s\S]*?>\s*2\s*</text>',
         )
 
     def test_tournament_bracket_detail_uses_tournament_default_score_color(self):
@@ -23159,6 +23232,34 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertNotIn('class="loser-score"', svg_content)
 
+    def test_estimate_svg_row_gap_uses_density_preset(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        round_data = [{"round_number": 1, "matches": [match]}]
+
+        self.assertEqual(
+            estimate_svg_row_gap(
+                round_data,
+                TournamentBracket.ENTRY_DISPLAY_SHORT_ORG_2LINE,
+                TournamentBracket.ROW_GAP_DENSITY_STANDARD,
+            ),
+            74,
+        )
+        self.assertEqual(
+            estimate_svg_row_gap(
+                round_data,
+                TournamentBracket.ENTRY_DISPLAY_SHORT_ORG_2LINE,
+                TournamentBracket.ROW_GAP_DENSITY_MINIMUM,
+            ),
+            36,
+        )
+
     def test_tournament_bracket_score_display_mode_can_be_edited(self):
         response = self.client.post(
             reverse(
@@ -23173,6 +23274,10 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "name": self.bracket.name,
                 "layout_type": TournamentBracket.LAYOUT_SINGLE,
                 "score_display_mode": TournamentBracket.SCORE_DISPLAY_BOTH,
+                "row_gap_density": TournamentBracket.ROW_GAP_DENSITY_COMPACT2,
+                "score_anchor_clearance": (
+                    TournamentBracket.SCORE_ANCHOR_CLEARANCE_TIGHT
+                ),
                 "entry_display_mode": (
                     TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
                 ),
@@ -23201,6 +23306,14 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.SCORE_DISPLAY_BOTH,
         )
         self.assertEqual(
+            self.bracket.row_gap_density,
+            TournamentBracket.ROW_GAP_DENSITY_COMPACT2,
+        )
+        self.assertEqual(
+            self.bracket.score_anchor_clearance,
+            TournamentBracket.SCORE_ANCHOR_CLEARANCE_TIGHT,
+        )
+        self.assertEqual(
             self.bracket.entry_display_mode,
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE,
         )
@@ -23217,6 +23330,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
+        self.bracket.row_gap_density = TournamentBracket.ROW_GAP_DENSITY_COMPACT
+        self.bracket.score_anchor_clearance = (
+            TournamentBracket.SCORE_ANCHOR_CLEARANCE_LOOSE
+        )
         self.bracket.entry_display_mode = (
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
@@ -23242,6 +23359,10 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "use_tournament_defaults": "on",
                 "layout_type": TournamentBracket.LAYOUT_SINGLE,
                 "score_display_mode": TournamentBracket.SCORE_DISPLAY_BOTH,
+                "row_gap_density": TournamentBracket.ROW_GAP_DENSITY_COMPACT,
+                "score_anchor_clearance": (
+                    TournamentBracket.SCORE_ANCHOR_CLEARANCE_LOOSE
+                ),
                 "entry_display_mode": (
                     TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
                 ),
@@ -23274,6 +23395,14 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(
+            self.bracket.row_gap_density,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.score_anchor_clearance,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
             self.bracket.entry_display_mode,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
@@ -23290,6 +23419,10 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.use_individual_bracket_settings()
         self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
         self.bracket.score_display_mode = TournamentBracket.SCORE_DISPLAY_BOTH
+        self.bracket.row_gap_density = TournamentBracket.ROW_GAP_DENSITY_COMPACT
+        self.bracket.score_anchor_clearance = (
+            TournamentBracket.SCORE_ANCHOR_CLEARANCE_LOOSE
+        )
         self.bracket.entry_display_mode = (
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
         )
@@ -23329,6 +23462,14 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertEqual(
             self.bracket.score_display_mode,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.row_gap_density,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.score_anchor_clearance,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(
@@ -23450,12 +23591,12 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertIn('y1="70"', svg_content)
         self.assertIn('x1="213"', svg_content)
-        self.assertIn('x2="255"', svg_content)
+        self.assertIn('x2="243"', svg_content)
         self.assertIn('y1="107.0"', svg_content)
-        self.assertIn('x1="255"', svg_content)
-        self.assertIn('x2="371"', svg_content)
-        self.assertIn('x1="413"', svg_content)
-        self.assertIn('x2="371"', svg_content)
+        self.assertIn('x1="243"', svg_content)
+        self.assertIn('x2="359"', svg_content)
+        self.assertIn('x1="433"', svg_content)
+        self.assertIn('x2="389"', svg_content)
         self.assertRegex(svg_content, r'x="\d+(?:\.\d+)?"')
         self.assertIn('y="107.0"', svg_content)
         self.assertIn('text-anchor="end"', svg_content)
@@ -23537,7 +23678,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertIn('y1="218"', svg_content)
         self.assertIn('x1="213"', svg_content)
         self.assertIn('y2="70.0"', svg_content)
-        self.assertIn('x2="255"', svg_content)
+        self.assertIn('x2="243"', svg_content)
         self.assertIn('y1="70.0"', svg_content)
         self.assertIn('y2="181.0"', svg_content)
         self.assertNotIn(">S1<", svg_content)
@@ -23674,7 +23815,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                 r'class="winner-line"\s+'
                 r'x1="213"\s+'
                 r'y1="181\.0"\s+'
-                r'x2="255"\s+'
+                r'x2="243"\s+'
                 r'y2="181\.0"'
             ),
         )
@@ -25023,10 +25164,10 @@ class TournamentScheduleBehaviorTests(TestCase):
             svg_content.index('class="winner-line"'),
         )
         self.assertIn('class="loser-score"', svg_content)
-        self.assertIn('x="223"', svg_content)
+        self.assertIn('x="219"', svg_content)
         self.assertRegex(
             svg_content,
-            re.compile(r'class="loser-score"\s+x="223"\s+y="154"'),
+            re.compile(r'class="loser-score"\s+x="219"\s+y="144"'),
         )
 
     def test_tournament_bracket_detail_uses_short_name_and_organization(self):

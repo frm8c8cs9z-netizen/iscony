@@ -41,6 +41,16 @@
             <td>{{ bracket.get_score_display_mode_display }}</td>
         </tr>
         <tr>
+            <td>行間密度</td>
+            <td>{{ bracket.effective_row_gap_density_label }}</td>
+            <td>{{ bracket.get_row_gap_density_display }}</td>
+        </tr>
+        <tr>
+            <td>得失ゲーム数のクリアランス</td>
+            <td>{{ bracket.effective_score_anchor_clearance_label }}</td>
+            <td>{{ bracket.get_score_anchor_clearance_display }}</td>
+        </tr>
+        <tr>
             <td>参加者表示</td>
             <td>{{ bracket.effective_entry_display_mode_label }}</td>
             <td>{{ bracket.get_entry_display_mode_display }}</td>
@@ -79,6 +89,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const individualFieldIds = [
         "id_layout_type",
         "id_score_display_mode",
+        "id_row_gap_density",
+        "id_score_anchor_clearance",
         "id_entry_display_mode",
         "id_champion_display_mode",
         "id_champion_text_layout",

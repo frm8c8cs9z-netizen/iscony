@@ -341,6 +341,8 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_split_champion_display_mode",
             "default_split_champion_text_layout",
             "default_tournament_score_display_mode",
+            "default_tournament_row_gap_density",
+            "default_tournament_score_anchor_clearance",
             "default_tournament_score_color",
         ]
 
@@ -356,6 +358,8 @@ class TournamentSettingsForm(forms.ModelForm):
             "default_split_champion_display_mode": "左右表示時の優勝者表示",
             "default_split_champion_text_layout": "左右表示時の優勝者文字組み",
             "default_tournament_score_display_mode": "トーナメントスコア表示",
+            "default_tournament_row_gap_density": "トーナメント行間密度",
+            "default_tournament_score_anchor_clearance": "得失ゲーム数のクリアランス",
         }
 
         help_texts = {
@@ -392,6 +396,14 @@ class TournamentSettingsForm(forms.ModelForm):
             ),
             "default_tournament_score_display_mode": (
                 "トーナメント表に勝敗ゲーム数を表示する範囲を指定します。"
+            ),
+            "default_tournament_row_gap_density": (
+                "トーナメント表の参加者行の縦間隔を指定します。"
+                "詰めるほど表全体の高さが低くなりますが、参加者名の行数によっては"
+                "この設定より広くなることがあります。"
+            ),
+            "default_tournament_score_anchor_clearance": (
+                "得失ゲーム数を、進出先へ向かう線からどれだけ離して表示するかを指定します。"
             ),
             "default_tournament_score_color": (
                 "色をクリックして選ぶか、カスタム色を使ってください。"

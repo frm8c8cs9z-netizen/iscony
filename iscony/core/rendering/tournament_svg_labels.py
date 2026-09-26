@@ -21,6 +21,7 @@ from .svg_text_blocks import (
     ENTRY_TEXT_BLOCK_LAYOUT,
     MATCH_CODE_TEXT_BLOCK_LAYOUT,
     MATCH_SCORE_TEXT_BLOCK_LAYOUT,
+    ROW_GAP_DENSITY_VALUES,
     _append_svg_text_block_label,
     _estimate_svg_text_width,
     _svg_display_lines,
@@ -30,8 +31,16 @@ from .svg_text_blocks import (
     _svg_single_text_line,
     _svg_text_block_spec,
 )
-from .tournament_svg_score import resolve_svg_score_text_style
+from .tournament_svg_score import (
+    entry_score_text,
+    resolve_svg_score_text_style,
+    should_show_svg_score,
+)
 from .tournament_svg_split import svg_match_display_entry
+
+
+MINIMUM_ROUND_GAP = 24
+ROUND_GAP_PADDING = 16
 
 
 def tournament_match_score_url(match):
@@ -357,8 +366,52 @@ def estimate_svg_number_width(round_data):
     )
 
 
-def estimate_svg_row_gap(round_data, entry_display_mode):
-    """表示行数に応じて、試合ごとの縦間隔を決める。"""
+def estimate_svg_round_gap(round_data):
+    """
+    回戦間の間隔を、試合ラベル・得失ゲーム数の文字幅から概算する。
+
+    MINIMUM_ROUND_GAP/ROUND_GAP_PADDING は見た目調整用の値。実際に
+    描画して詰まりすぎ・空きすぎと感じたら、この2つの値を調整する。
+    """
+
+    widths = []
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+
+            if not match.match_code.startswith("S"):
+                widths.append(
+                    _estimate_svg_text_width(
+                        match.match_label or match.match_code
+                    )
+                )
+
+            for side in ("pair1", "pair2"):
+                if not should_show_svg_score(match, side):
+                    continue
+
+                score = entry_score_text(match, side)
+
+                if score:
+                    widths.append(
+                        _estimate_svg_text_width(score)
+                    )
+
+    content_width = max(widths, default=0)
+
+    return max(
+        MINIMUM_ROUND_GAP,
+        content_width + ROUND_GAP_PADDING,
+    )
+
+
+def estimate_svg_row_gap(round_data, entry_display_mode, row_gap_density):
+    """表示行数とプリセット密度に応じて、試合ごとの縦間隔を決める。
+
+    プリセット値は見た目の目標値。ただし参加者名(所属込み)が複数行に
+    なる場合、文字が重ならないための最低限の高さ(content_minimum)を
+    下回らないようにする。
+    """
 
     max_lines = 1
 
@@ -381,9 +434,14 @@ def estimate_svg_row_gap(round_data, entry_display_mode):
                     ),
                 )
 
-    base_row_gap = 56
-    line_height = 18
-    return base_row_gap + ((max_lines - 1) * line_height)
+    line_height = ENTRY_LINE_HEIGHT
+    content_minimum = max_lines * line_height
+    preset_target = (
+        ROW_GAP_DENSITY_VALUES[row_gap_density]
+        + ((max_lines - 1) * line_height)
+    )
+
+    return max(content_minimum, preset_target)
 
 
 def effective_svg_layout_type(bracket, round_data):

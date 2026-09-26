@@ -9,7 +9,11 @@
 直接重複実装しない。必要な場合は tournament_svg_geometry や svg_text_blocks に戻す。
 """
 
-from .svg_text_blocks import _svg_side_text_anchor
+from ..models import TournamentBracket
+from .svg_text_blocks import (
+    SCORE_ANCHOR_CLEARANCE_VALUES,
+    _svg_side_text_anchor,
+)
 from .tournament_svg_geometry import (
     next_svg_line_start,
     svg_match_x_positions,
@@ -58,9 +62,22 @@ def add_svg_match(svg, match, *, round_number, side, index):
     number_x = x_positions["number_x"]
     text_x = x_positions["text_x"]
     code_x = x_positions["code_x"]
-    score_x = x_positions["score_x"]
     number_anchor = _svg_side_text_anchor(side)
     code_anchor = _svg_side_text_anchor(side)
+    is_pre_final_split_round = (
+        svg.get("layout_type") == TournamentBracket.LAYOUT_SPLIT
+        and round_number == svg.get("round_count", 0) - 1
+    )
+    score_clearance = SCORE_ANCHOR_CLEARANCE_VALUES[
+        match.bracket.effective_score_anchor_clearance
+    ]
+    score_x = (
+        join_x + score_clearance if side == "left" else join_x - score_clearance
+    )
+    if is_pre_final_split_round:
+        score_anchor = "bottom-left" if side == "left" else "bottom-right"
+    else:
+        score_anchor = "middle-left" if side == "left" else "middle-right"
 
     advance_x = next_svg_line_start(
         svg,
@@ -149,13 +166,13 @@ def add_svg_match(svg, match, *, round_number, side, index):
         )
 
         if score:
-            score_y = y - 4 if y <= center_y else y + 10
             append_svg_score_label(
                 svg,
                 match=match,
                 text=score,
                 base_x=score_x,
-                base_y=score_y,
+                base_y=y,
+                block_anchor=score_anchor,
             )
 
     should_draw_vertical = (

@@ -13,6 +13,7 @@ offset_x/offset_y は「基準座標からブロックのアンカー位置を�
 from dataclasses import dataclass
 
 from ..helpers.display import build_entry_display_lines
+from ..models import TournamentBracket
 
 
 CHAMPION_ORIENTATION_HORIZONTAL = "horizontal"
@@ -81,8 +82,21 @@ FINAL_MATCH_CODE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
 MATCH_SCORE_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
     offset_x=MATCH_SCORE_LABEL_OFFSET_X,
     offset_y=MATCH_SCORE_LABEL_OFFSET_Y,
-    baseline=None,
 )
+
+ROW_GAP_DENSITY_VALUES = {
+    TournamentBracket.ROW_GAP_DENSITY_STANDARD: 56,
+    TournamentBracket.ROW_GAP_DENSITY_COMPACT: 44,
+    TournamentBracket.ROW_GAP_DENSITY_COMPACT2: 30,
+    TournamentBracket.ROW_GAP_DENSITY_MINIMUM: 18,
+}
+
+SCORE_ANCHOR_CLEARANCE_VALUES = {
+    TournamentBracket.SCORE_ANCHOR_CLEARANCE_LOOSE: 9,
+    TournamentBracket.SCORE_ANCHOR_CLEARANCE_STANDARD: 6,
+    TournamentBracket.SCORE_ANCHOR_CLEARANCE_TIGHT: 3,
+    TournamentBracket.SCORE_ANCHOR_CLEARANCE_NONE: 0,
+}
 CHAMPION_SINGLE_HORIZONTAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
     orientation=CHAMPION_ORIENTATION_HORIZONTAL,
     block_anchor="middle-left",

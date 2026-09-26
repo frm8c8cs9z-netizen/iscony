@@ -45,6 +45,7 @@ from .tournament_svg_labels import (
     effective_svg_layout_type,
     estimate_svg_name_width,
     estimate_svg_number_width,
+    estimate_svg_round_gap,
     estimate_svg_row_gap,
 )
 from .tournament_svg_matches import add_svg_match
@@ -71,14 +72,18 @@ def build_svg_bracket_data(
     round_count = len(round_data)
     top = 70
     side_margin = 28
-    round_gap = 42
+    round_gap = estimate_svg_round_gap(round_data)
     entry_display_mode = resolve_entry_display_mode(
         explicit_mode=bracket.effective_entry_display_mode,
         tournament=bracket.category.tournament,
         target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
     )
     name_width = estimate_svg_name_width(round_data, entry_display_mode)
-    row_gap = estimate_svg_row_gap(round_data, entry_display_mode)
+    row_gap = estimate_svg_row_gap(
+        round_data,
+        entry_display_mode,
+        bracket.effective_row_gap_density,
+    )
     layout_type = (
         forced_layout_type
         if forced_layout_type is not None

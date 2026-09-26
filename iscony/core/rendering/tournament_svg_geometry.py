@@ -146,7 +146,6 @@ def svg_match_x_positions(svg, round_number, side):
                 - name_width
             ),
             "code_x": join_x + 8,
-            "score_x": join_x - 10,
         }
 
     first_join_x = (
@@ -171,7 +170,6 @@ def svg_match_x_positions(svg, round_number, side):
             + name_width
         ),
         "code_x": join_x - 8,
-        "score_x": join_x + 10,
     }
 
 

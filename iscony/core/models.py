@@ -76,6 +76,14 @@ class Tournament(models.Model):
     SCORE_DISPLAY_LOSER = "loser"
     SCORE_DISPLAY_BOTH = "both"
     SCORE_DISPLAY_NONE = "none"
+    ROW_GAP_DENSITY_STANDARD = "standard"
+    ROW_GAP_DENSITY_COMPACT = "compact"
+    ROW_GAP_DENSITY_COMPACT2 = "compact2"
+    ROW_GAP_DENSITY_MINIMUM = "minimum"
+    SCORE_ANCHOR_CLEARANCE_LOOSE = "loose"
+    SCORE_ANCHOR_CLEARANCE_STANDARD = "standard"
+    SCORE_ANCHOR_CLEARANCE_TIGHT = "tight"
+    SCORE_ANCHOR_CLEARANCE_NONE = "none"
     LEAGUE_SCORE_COLOR_COLORED = "colored"
     LEAGUE_SCORE_COLOR_NONE = "none"
     REFLECTED_ENTRY_CODE_ENTRY_CODE = "entry_code"
@@ -103,6 +111,20 @@ class Tournament(models.Model):
         (SCORE_DISPLAY_LOSER, "負けのみ"),
         (SCORE_DISPLAY_BOTH, "勝ち負け両方"),
         (SCORE_DISPLAY_NONE, "表示しない"),
+    ]
+
+    ROW_GAP_DENSITY_CHOICES = [
+        (ROW_GAP_DENSITY_STANDARD, "標準"),
+        (ROW_GAP_DENSITY_COMPACT, "やや詰める"),
+        (ROW_GAP_DENSITY_COMPACT2, "かなり詰める"),
+        (ROW_GAP_DENSITY_MINIMUM, "最大限詰める"),
+    ]
+
+    SCORE_ANCHOR_CLEARANCE_CHOICES = [
+        (SCORE_ANCHOR_CLEARANCE_LOOSE, "広め"),
+        (SCORE_ANCHOR_CLEARANCE_STANDARD, "標準"),
+        (SCORE_ANCHOR_CLEARANCE_TIGHT, "狭め"),
+        (SCORE_ANCHOR_CLEARANCE_NONE, "密着"),
     ]
 
     LEAGUE_SCORE_COLOR_CHOICES = [
@@ -203,6 +225,18 @@ class Tournament(models.Model):
         max_length=20,
         choices=SCORE_DISPLAY_CHOICES,
         default=SCORE_DISPLAY_LOSER
+    )
+
+    default_tournament_row_gap_density = models.CharField(
+        max_length=20,
+        choices=ROW_GAP_DENSITY_CHOICES,
+        default=ROW_GAP_DENSITY_STANDARD,
+    )
+
+    default_tournament_score_anchor_clearance = models.CharField(
+        max_length=20,
+        choices=SCORE_ANCHOR_CLEARANCE_CHOICES,
+        default=SCORE_ANCHOR_CLEARANCE_STANDARD,
     )
 
     default_tournament_score_color = models.CharField(
@@ -1314,6 +1348,14 @@ class TournamentBracket(models.Model):
     SCORE_DISPLAY_LOSER = "loser"
     SCORE_DISPLAY_BOTH = "both"
     SCORE_DISPLAY_NONE = "none"
+    ROW_GAP_DENSITY_STANDARD = "standard"
+    ROW_GAP_DENSITY_COMPACT = "compact"
+    ROW_GAP_DENSITY_COMPACT2 = "compact2"
+    ROW_GAP_DENSITY_MINIMUM = "minimum"
+    SCORE_ANCHOR_CLEARANCE_LOOSE = "loose"
+    SCORE_ANCHOR_CLEARANCE_STANDARD = "standard"
+    SCORE_ANCHOR_CLEARANCE_TIGHT = "tight"
+    SCORE_ANCHOR_CLEARANCE_NONE = "none"
     CHAMPION_DISPLAY_AUTO = "auto"
     CHAMPION_DISPLAY_HORIZONTAL_1LINE = "horizontal_1line"
     CHAMPION_DISPLAY_VERTICAL_1LINE = "vertical_1line"
@@ -1336,6 +1378,22 @@ class TournamentBracket(models.Model):
         (SCORE_DISPLAY_LOSER, "負けのみ"),
         (SCORE_DISPLAY_BOTH, "勝ち負け両方"),
         (SCORE_DISPLAY_NONE, "表示しない"),
+    ]
+
+    ROW_GAP_DENSITY_CHOICES = [
+        (DISPLAY_INHERIT, "大会デフォルトを使う"),
+        (ROW_GAP_DENSITY_STANDARD, "標準"),
+        (ROW_GAP_DENSITY_COMPACT, "やや詰める"),
+        (ROW_GAP_DENSITY_COMPACT2, "かなり詰める"),
+        (ROW_GAP_DENSITY_MINIMUM, "最大限詰める"),
+    ]
+
+    SCORE_ANCHOR_CLEARANCE_CHOICES = [
+        (DISPLAY_INHERIT, "大会デフォルトを使う"),
+        (SCORE_ANCHOR_CLEARANCE_LOOSE, "広め"),
+        (SCORE_ANCHOR_CLEARANCE_STANDARD, "標準"),
+        (SCORE_ANCHOR_CLEARANCE_TIGHT, "狭め"),
+        (SCORE_ANCHOR_CLEARANCE_NONE, "密着"),
     ]
 
     CHAMPION_DISPLAY_CHOICES = [
@@ -1397,6 +1455,18 @@ class TournamentBracket(models.Model):
         default=DISPLAY_INHERIT
     )
 
+    row_gap_density = models.CharField(
+        max_length=20,
+        choices=ROW_GAP_DENSITY_CHOICES,
+        default=DISPLAY_INHERIT,
+    )
+
+    score_anchor_clearance = models.CharField(
+        max_length=20,
+        choices=SCORE_ANCHOR_CLEARANCE_CHOICES,
+        default=DISPLAY_INHERIT,
+    )
+
     champion_display_mode = models.CharField(
         max_length=30,
         choices=CHAMPION_DISPLAY_CHOICES,
@@ -1434,6 +1504,8 @@ class TournamentBracket(models.Model):
         if self.use_tournament_defaults:
             self.layout_type = self.LAYOUT_INHERIT
             self.score_display_mode = self.ENTRY_DISPLAY_INHERIT
+            self.row_gap_density = self.ENTRY_DISPLAY_INHERIT
+            self.score_anchor_clearance = self.ENTRY_DISPLAY_INHERIT
             self.entry_display_mode = self.ENTRY_DISPLAY_INHERIT
             self.champion_display_mode = self.ENTRY_DISPLAY_INHERIT
             self.champion_text_layout = self.ENTRY_DISPLAY_INHERIT
@@ -1444,6 +1516,8 @@ class TournamentBracket(models.Model):
                 kwargs["update_fields"] = set(update_fields) | {
                     "layout_type",
                     "score_display_mode",
+                    "row_gap_density",
+                    "score_anchor_clearance",
                     "entry_display_mode",
                     "champion_display_mode",
                     "champion_text_layout",
@@ -1467,6 +1541,26 @@ class TournamentBracket(models.Model):
             return self.category.tournament.default_tournament_score_display_mode
 
         return self.score_display_mode
+
+    @property
+    def effective_row_gap_density(self):
+        if (
+            self.use_tournament_defaults
+            or self.row_gap_density == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_tournament_row_gap_density
+
+        return self.row_gap_density
+
+    @property
+    def effective_score_anchor_clearance(self):
+        if (
+            self.use_tournament_defaults
+            or self.score_anchor_clearance == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_tournament_score_anchor_clearance
+
+        return self.score_anchor_clearance
 
     @property
     def effective_entry_display_mode(self):
@@ -1528,6 +1622,20 @@ class TournamentBracket(models.Model):
         return dict(Tournament.SCORE_DISPLAY_CHOICES).get(
             self.effective_score_display_mode,
             self.effective_score_display_mode,
+        )
+
+    @property
+    def effective_row_gap_density_label(self):
+        return dict(Tournament.ROW_GAP_DENSITY_CHOICES).get(
+            self.effective_row_gap_density,
+            self.effective_row_gap_density,
+        )
+
+    @property
+    def effective_score_anchor_clearance_label(self):
+        return dict(Tournament.SCORE_ANCHOR_CLEARANCE_CHOICES).get(
+            self.effective_score_anchor_clearance,
+            self.effective_score_anchor_clearance,
         )
 
     @property
@@ -2314,5 +2422,3 @@ class OperationSnapshot(models.Model):
             f"{self.get_scope_type_display()} "
             f"{self.label}"
         )
-
-
