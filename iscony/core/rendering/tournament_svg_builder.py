@@ -24,6 +24,7 @@ from .svg_text_blocks import (
     CHAMPION_ORIENTATION_VERTICAL,
     ENTRY_CODE_TEXT_GAP,
     ENTRY_TEXT_LINE_GAP,
+    MATCH_CODE_CLEARANCE_VALUES,
     _estimate_svg_vertical_text_height,
     _svg_text_block_dimensions,
 )
@@ -309,6 +310,9 @@ def build_svg_bracket_data(
         "height": math.ceil(height),
         "top": top,
         "row_gap": row_gap,
+        "match_code_clearance": MATCH_CODE_CLEARANCE_VALUES[
+            bracket.effective_match_code_clearance
+        ],
         "round_gap": round_gap,
         "side_margin": side_margin,
         "name_width": name_width,

@@ -75,6 +75,7 @@ from .views.tournament import _svg_champion_text_lines
 from .views.tournament import build_tournament_bracket_display_data
 from .views.stage import _validate_stage_slot_setup
 from .rendering.tournament_svg_labels import estimate_svg_row_gap
+from .rendering.tournament_svg_score import resolve_svg_match_code_text_style
 
 from .services import (
     advance_tournament_bye_winners,
@@ -19957,6 +19958,12 @@ class TournamentSettingsTests(TestCase):
                 "default_tournament_score_anchor_clearance": (
                     Tournament.SCORE_ANCHOR_CLEARANCE_TIGHT
                 ),
+                "default_tournament_match_code_clearance": (
+                    Tournament.MATCH_CODE_CLEARANCE_TIGHTER
+                ),
+                "default_tournament_match_code_font_size": (
+                    Tournament.MATCH_CODE_FONT_SIZE_SMALLER
+                ),
                 "default_tournament_score_color": (
                     "#D32F2F"
                 ),
@@ -20020,6 +20027,14 @@ class TournamentSettingsTests(TestCase):
             Tournament.SCORE_ANCHOR_CLEARANCE_TIGHT,
         )
         self.assertEqual(
+            tournament.default_tournament_match_code_clearance,
+            Tournament.MATCH_CODE_CLEARANCE_TIGHTER,
+        )
+        self.assertEqual(
+            tournament.default_tournament_match_code_font_size,
+            Tournament.MATCH_CODE_FONT_SIZE_SMALLER,
+        )
+        self.assertEqual(
             tournament.default_tournament_score_color,
             "#D32F2F",
         )
@@ -20071,6 +20086,12 @@ class TournamentSettingsTests(TestCase):
                 ),
                 "default_tournament_score_anchor_clearance": (
                     Tournament.SCORE_ANCHOR_CLEARANCE_STANDARD
+                ),
+                "default_tournament_match_code_clearance": (
+                    Tournament.MATCH_CODE_CLEARANCE_STANDARD
+                ),
+                "default_tournament_match_code_font_size": (
+                    Tournament.MATCH_CODE_FONT_SIZE_STANDARD
                 ),
                 "default_tournament_score_color": "#225588",
             },
@@ -20142,6 +20163,12 @@ class TournamentSettingsTests(TestCase):
                 ),
                 "default_tournament_score_anchor_clearance": (
                     Tournament.SCORE_ANCHOR_CLEARANCE_STANDARD
+                ),
+                "default_tournament_match_code_clearance": (
+                    Tournament.MATCH_CODE_CLEARANCE_STANDARD
+                ),
+                "default_tournament_match_code_font_size": (
+                    Tournament.MATCH_CODE_FONT_SIZE_STANDARD
                 ),
                 "default_tournament_score_color": "#D32F2F",
             },
@@ -22672,6 +22699,14 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(
+            self.bracket.match_code_clearance,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.match_code_font_size,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
             self.bracket.champion_text_layout,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
@@ -22687,9 +22722,17 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.tournament.default_tournament_score_anchor_clearance = (
             Tournament.SCORE_ANCHOR_CLEARANCE_LOOSE
         )
+        self.tournament.default_tournament_match_code_clearance = (
+            Tournament.MATCH_CODE_CLEARANCE_TIGHTER
+        )
+        self.tournament.default_tournament_match_code_font_size = (
+            Tournament.MATCH_CODE_FONT_SIZE_SMALLER
+        )
         self.tournament.save()
         self.bracket.row_gap_density = TournamentBracket.ENTRY_DISPLAY_INHERIT
         self.bracket.score_anchor_clearance = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.match_code_clearance = TournamentBracket.ENTRY_DISPLAY_INHERIT
+        self.bracket.match_code_font_size = TournamentBracket.ENTRY_DISPLAY_INHERIT
         self.bracket.save()
 
         self.assertEqual(
@@ -22700,12 +22743,26 @@ class TournamentScheduleBehaviorTests(TestCase):
             self.bracket.effective_score_anchor_clearance,
             Tournament.SCORE_ANCHOR_CLEARANCE_LOOSE,
         )
+        self.assertEqual(
+            self.bracket.effective_match_code_clearance,
+            Tournament.MATCH_CODE_CLEARANCE_TIGHTER,
+        )
+        self.assertEqual(
+            self.bracket.effective_match_code_font_size,
+            Tournament.MATCH_CODE_FONT_SIZE_SMALLER,
+        )
 
     def test_tournament_bracket_effective_row_gap_density_can_be_overridden(self):
         self.use_individual_bracket_settings()
         self.bracket.row_gap_density = TournamentBracket.ROW_GAP_DENSITY_MINIMUM
         self.bracket.score_anchor_clearance = (
             TournamentBracket.SCORE_ANCHOR_CLEARANCE_NONE
+        )
+        self.bracket.match_code_clearance = (
+            TournamentBracket.MATCH_CODE_CLEARANCE_MINIMUM
+        )
+        self.bracket.match_code_font_size = (
+            TournamentBracket.MATCH_CODE_FONT_SIZE_MINIMUM
         )
         self.bracket.save()
 
@@ -22716,6 +22773,31 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(
             self.bracket.effective_score_anchor_clearance,
             TournamentBracket.SCORE_ANCHOR_CLEARANCE_NONE,
+        )
+        self.assertEqual(
+            self.bracket.effective_match_code_clearance,
+            TournamentBracket.MATCH_CODE_CLEARANCE_MINIMUM,
+        )
+        self.assertEqual(
+            self.bracket.effective_match_code_font_size,
+            TournamentBracket.MATCH_CODE_FONT_SIZE_MINIMUM,
+        )
+
+    def test_resolve_svg_match_code_text_style_uses_effective_font_size(self):
+        self.assertEqual(
+            resolve_svg_match_code_text_style(self.bracket),
+            "",
+        )
+
+        self.use_individual_bracket_settings()
+        self.bracket.match_code_font_size = (
+            TournamentBracket.MATCH_CODE_FONT_SIZE_SMALLER
+        )
+        self.bracket.save()
+
+        self.assertEqual(
+            resolve_svg_match_code_text_style(self.bracket),
+            "font-size: 10px;",
         )
 
     def test_bracket_list_shows_display_settings(self):
@@ -23396,6 +23478,12 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "score_anchor_clearance": (
                     TournamentBracket.SCORE_ANCHOR_CLEARANCE_TIGHT
                 ),
+                "match_code_clearance": (
+                    TournamentBracket.MATCH_CODE_CLEARANCE_TIGHTER
+                ),
+                "match_code_font_size": (
+                    TournamentBracket.MATCH_CODE_FONT_SIZE_SMALLER
+                ),
                 "entry_display_mode": (
                     TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
                 ),
@@ -23432,6 +23520,14 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.SCORE_ANCHOR_CLEARANCE_TIGHT,
         )
         self.assertEqual(
+            self.bracket.match_code_clearance,
+            TournamentBracket.MATCH_CODE_CLEARANCE_TIGHTER,
+        )
+        self.assertEqual(
+            self.bracket.match_code_font_size,
+            TournamentBracket.MATCH_CODE_FONT_SIZE_SMALLER,
+        )
+        self.assertEqual(
             self.bracket.entry_display_mode,
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE,
         )
@@ -23451,6 +23547,12 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.bracket.row_gap_density = TournamentBracket.ROW_GAP_DENSITY_COMPACT
         self.bracket.score_anchor_clearance = (
             TournamentBracket.SCORE_ANCHOR_CLEARANCE_LOOSE
+        )
+        self.bracket.match_code_clearance = (
+            TournamentBracket.MATCH_CODE_CLEARANCE_TIGHT
+        )
+        self.bracket.match_code_font_size = (
+            TournamentBracket.MATCH_CODE_FONT_SIZE_SMALL
         )
         self.bracket.entry_display_mode = (
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
@@ -23480,6 +23582,12 @@ class TournamentScheduleBehaviorTests(TestCase):
                 "row_gap_density": TournamentBracket.ROW_GAP_DENSITY_COMPACT,
                 "score_anchor_clearance": (
                     TournamentBracket.SCORE_ANCHOR_CLEARANCE_LOOSE
+                ),
+                "match_code_clearance": (
+                    TournamentBracket.MATCH_CODE_CLEARANCE_TIGHT
+                ),
+                "match_code_font_size": (
+                    TournamentBracket.MATCH_CODE_FONT_SIZE_SMALL
                 ),
                 "entry_display_mode": (
                     TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
@@ -23521,6 +23629,14 @@ class TournamentScheduleBehaviorTests(TestCase):
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(
+            self.bracket.match_code_clearance,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.match_code_font_size,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
             self.bracket.entry_display_mode,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
@@ -23540,6 +23656,12 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.bracket.row_gap_density = TournamentBracket.ROW_GAP_DENSITY_COMPACT
         self.bracket.score_anchor_clearance = (
             TournamentBracket.SCORE_ANCHOR_CLEARANCE_LOOSE
+        )
+        self.bracket.match_code_clearance = (
+            TournamentBracket.MATCH_CODE_CLEARANCE_TIGHT
+        )
+        self.bracket.match_code_font_size = (
+            TournamentBracket.MATCH_CODE_FONT_SIZE_SMALL
         )
         self.bracket.entry_display_mode = (
             TournamentBracket.ENTRY_DISPLAY_NAME_ORG_2LINE
@@ -23588,6 +23710,14 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertEqual(
             self.bracket.score_anchor_clearance,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.match_code_clearance,
+            TournamentBracket.ENTRY_DISPLAY_INHERIT,
+        )
+        self.assertEqual(
+            self.bracket.match_code_font_size,
             TournamentBracket.ENTRY_DISPLAY_INHERIT,
         )
         self.assertEqual(

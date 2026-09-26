@@ -84,6 +84,14 @@ class Tournament(models.Model):
     SCORE_ANCHOR_CLEARANCE_STANDARD = "standard"
     SCORE_ANCHOR_CLEARANCE_TIGHT = "tight"
     SCORE_ANCHOR_CLEARANCE_NONE = "none"
+    MATCH_CODE_CLEARANCE_STANDARD = "standard"
+    MATCH_CODE_CLEARANCE_TIGHT = "tight"
+    MATCH_CODE_CLEARANCE_TIGHTER = "tighter"
+    MATCH_CODE_CLEARANCE_MINIMUM = "minimum"
+    MATCH_CODE_FONT_SIZE_STANDARD = "standard"
+    MATCH_CODE_FONT_SIZE_SMALL = "small"
+    MATCH_CODE_FONT_SIZE_SMALLER = "smaller"
+    MATCH_CODE_FONT_SIZE_MINIMUM = "minimum"
     LEAGUE_SCORE_COLOR_COLORED = "colored"
     LEAGUE_SCORE_COLOR_NONE = "none"
     REFLECTED_ENTRY_CODE_ENTRY_CODE = "entry_code"
@@ -125,6 +133,20 @@ class Tournament(models.Model):
         (SCORE_ANCHOR_CLEARANCE_STANDARD, "標準"),
         (SCORE_ANCHOR_CLEARANCE_TIGHT, "狭め"),
         (SCORE_ANCHOR_CLEARANCE_NONE, "密着"),
+    ]
+
+    MATCH_CODE_CLEARANCE_CHOICES = [
+        (MATCH_CODE_CLEARANCE_STANDARD, "標準"),
+        (MATCH_CODE_CLEARANCE_TIGHT, "狭め"),
+        (MATCH_CODE_CLEARANCE_TIGHTER, "かなり狭め"),
+        (MATCH_CODE_CLEARANCE_MINIMUM, "最小"),
+    ]
+
+    MATCH_CODE_FONT_SIZE_CHOICES = [
+        (MATCH_CODE_FONT_SIZE_STANDARD, "標準"),
+        (MATCH_CODE_FONT_SIZE_SMALL, "やや小さく"),
+        (MATCH_CODE_FONT_SIZE_SMALLER, "小さく"),
+        (MATCH_CODE_FONT_SIZE_MINIMUM, "最小"),
     ]
 
     LEAGUE_SCORE_COLOR_CHOICES = [
@@ -237,6 +259,18 @@ class Tournament(models.Model):
         max_length=20,
         choices=SCORE_ANCHOR_CLEARANCE_CHOICES,
         default=SCORE_ANCHOR_CLEARANCE_STANDARD,
+    )
+
+    default_tournament_match_code_clearance = models.CharField(
+        max_length=20,
+        choices=MATCH_CODE_CLEARANCE_CHOICES,
+        default=MATCH_CODE_CLEARANCE_STANDARD,
+    )
+
+    default_tournament_match_code_font_size = models.CharField(
+        max_length=20,
+        choices=MATCH_CODE_FONT_SIZE_CHOICES,
+        default=MATCH_CODE_FONT_SIZE_STANDARD,
     )
 
     default_tournament_score_color = models.CharField(
@@ -1356,6 +1390,14 @@ class TournamentBracket(models.Model):
     SCORE_ANCHOR_CLEARANCE_STANDARD = "standard"
     SCORE_ANCHOR_CLEARANCE_TIGHT = "tight"
     SCORE_ANCHOR_CLEARANCE_NONE = "none"
+    MATCH_CODE_CLEARANCE_STANDARD = "standard"
+    MATCH_CODE_CLEARANCE_TIGHT = "tight"
+    MATCH_CODE_CLEARANCE_TIGHTER = "tighter"
+    MATCH_CODE_CLEARANCE_MINIMUM = "minimum"
+    MATCH_CODE_FONT_SIZE_STANDARD = "standard"
+    MATCH_CODE_FONT_SIZE_SMALL = "small"
+    MATCH_CODE_FONT_SIZE_SMALLER = "smaller"
+    MATCH_CODE_FONT_SIZE_MINIMUM = "minimum"
     CHAMPION_DISPLAY_AUTO = "auto"
     CHAMPION_DISPLAY_HORIZONTAL_1LINE = "horizontal_1line"
     CHAMPION_DISPLAY_VERTICAL_1LINE = "vertical_1line"
@@ -1394,6 +1436,22 @@ class TournamentBracket(models.Model):
         (SCORE_ANCHOR_CLEARANCE_STANDARD, "標準"),
         (SCORE_ANCHOR_CLEARANCE_TIGHT, "狭め"),
         (SCORE_ANCHOR_CLEARANCE_NONE, "密着"),
+    ]
+
+    MATCH_CODE_CLEARANCE_CHOICES = [
+        (DISPLAY_INHERIT, "大会デフォルトを使う"),
+        (MATCH_CODE_CLEARANCE_STANDARD, "標準"),
+        (MATCH_CODE_CLEARANCE_TIGHT, "狭め"),
+        (MATCH_CODE_CLEARANCE_TIGHTER, "かなり狭め"),
+        (MATCH_CODE_CLEARANCE_MINIMUM, "最小"),
+    ]
+
+    MATCH_CODE_FONT_SIZE_CHOICES = [
+        (DISPLAY_INHERIT, "大会デフォルトを使う"),
+        (MATCH_CODE_FONT_SIZE_STANDARD, "標準"),
+        (MATCH_CODE_FONT_SIZE_SMALL, "やや小さく"),
+        (MATCH_CODE_FONT_SIZE_SMALLER, "小さく"),
+        (MATCH_CODE_FONT_SIZE_MINIMUM, "最小"),
     ]
 
     CHAMPION_DISPLAY_CHOICES = [
@@ -1467,6 +1525,18 @@ class TournamentBracket(models.Model):
         default=DISPLAY_INHERIT,
     )
 
+    match_code_clearance = models.CharField(
+        max_length=20,
+        choices=MATCH_CODE_CLEARANCE_CHOICES,
+        default=DISPLAY_INHERIT,
+    )
+
+    match_code_font_size = models.CharField(
+        max_length=20,
+        choices=MATCH_CODE_FONT_SIZE_CHOICES,
+        default=DISPLAY_INHERIT,
+    )
+
     champion_display_mode = models.CharField(
         max_length=30,
         choices=CHAMPION_DISPLAY_CHOICES,
@@ -1506,6 +1576,8 @@ class TournamentBracket(models.Model):
             self.score_display_mode = self.ENTRY_DISPLAY_INHERIT
             self.row_gap_density = self.ENTRY_DISPLAY_INHERIT
             self.score_anchor_clearance = self.ENTRY_DISPLAY_INHERIT
+            self.match_code_clearance = self.ENTRY_DISPLAY_INHERIT
+            self.match_code_font_size = self.ENTRY_DISPLAY_INHERIT
             self.entry_display_mode = self.ENTRY_DISPLAY_INHERIT
             self.champion_display_mode = self.ENTRY_DISPLAY_INHERIT
             self.champion_text_layout = self.ENTRY_DISPLAY_INHERIT
@@ -1518,6 +1590,8 @@ class TournamentBracket(models.Model):
                     "score_display_mode",
                     "row_gap_density",
                     "score_anchor_clearance",
+                    "match_code_clearance",
+                    "match_code_font_size",
                     "entry_display_mode",
                     "champion_display_mode",
                     "champion_text_layout",
@@ -1561,6 +1635,26 @@ class TournamentBracket(models.Model):
             return self.category.tournament.default_tournament_score_anchor_clearance
 
         return self.score_anchor_clearance
+
+    @property
+    def effective_match_code_clearance(self):
+        if (
+            self.use_tournament_defaults
+            or self.match_code_clearance == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_tournament_match_code_clearance
+
+        return self.match_code_clearance
+
+    @property
+    def effective_match_code_font_size(self):
+        if (
+            self.use_tournament_defaults
+            or self.match_code_font_size == self.ENTRY_DISPLAY_INHERIT
+        ):
+            return self.category.tournament.default_tournament_match_code_font_size
+
+        return self.match_code_font_size
 
     @property
     def effective_entry_display_mode(self):
@@ -1636,6 +1730,20 @@ class TournamentBracket(models.Model):
         return dict(Tournament.SCORE_ANCHOR_CLEARANCE_CHOICES).get(
             self.effective_score_anchor_clearance,
             self.effective_score_anchor_clearance,
+        )
+
+    @property
+    def effective_match_code_clearance_label(self):
+        return dict(Tournament.MATCH_CODE_CLEARANCE_CHOICES).get(
+            self.effective_match_code_clearance,
+            self.effective_match_code_clearance,
+        )
+
+    @property
+    def effective_match_code_font_size_label(self):
+        return dict(Tournament.MATCH_CODE_FONT_SIZE_CHOICES).get(
+            self.effective_match_code_font_size,
+            self.effective_match_code_font_size,
         )
 
     @property

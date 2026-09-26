@@ -145,7 +145,7 @@ def svg_match_x_positions(svg, round_number, side):
                 - entry_gap
                 - name_width
             ),
-            "code_x": join_x + 8,
+            "code_x": join_x + svg["match_code_clearance"],
         }
 
     first_join_x = (
@@ -169,7 +169,7 @@ def svg_match_x_positions(svg, round_number, side):
             + entry_gap
             + name_width
         ),
-        "code_x": join_x - 8,
+        "code_x": join_x - svg["match_code_clearance"],
     }
 
 

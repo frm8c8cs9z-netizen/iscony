@@ -33,6 +33,7 @@ from .svg_text_blocks import (
 )
 from .tournament_svg_score import (
     entry_score_text,
+    resolve_svg_match_code_text_style,
     resolve_svg_score_text_style,
     should_show_svg_score,
 )
@@ -249,6 +250,7 @@ def svg_match_code_label_spec(
         baseline=layout.baseline,
         css_class="svg-match-code",
         url=tournament_match_score_url(match),
+        style=resolve_svg_match_code_text_style(match.bracket),
     )
 
 

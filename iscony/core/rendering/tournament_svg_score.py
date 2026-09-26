@@ -10,6 +10,7 @@ should_highlight_svg_winner / should_highlight_svg_advance の条件を慎重に
 """
 
 from ..models import TournamentBracket
+from .svg_text_blocks import MATCH_CODE_FONT_SIZE_VALUES
 
 
 def entry_score_text(match, side):
@@ -51,6 +52,19 @@ def resolve_svg_score_text_style(bracket):
 
     if color and color.upper() != "#000000":
         return f"fill: {color};"
+
+    return ""
+
+
+def resolve_svg_match_code_text_style(bracket):
+    """マッチコードのフォントサイズスタイルを返す。"""
+
+    font_size = MATCH_CODE_FONT_SIZE_VALUES[
+        bracket.effective_match_code_font_size
+    ]
+
+    if font_size != 12:
+        return f"font-size: {font_size}px;"
 
     return ""
 
