@@ -25187,6 +25187,60 @@ class TournamentScheduleBehaviorTests(TestCase):
             svg_content,
         )
 
+    def test_champion_split_horizontal_layout_keeps_clearance_above_line(self):
+        """
+        優勝者(両山・横書き1行)のテキストが、決定戦への接続線と
+        重ならないための最低限の余白が確保されていることを確認する。
+
+        このレイアウトは block_anchor="bottom-center" を宣言しているが、
+        横書き1行は block_anchor の上下成分を評価せず offset_y と
+        dominant-baseline だけで位置を決めるため、CHAMPION_LINE_HEIGHT や
+        offset_y、接続線の長さ(CHAMPION_SPLIT_CONNECTOR_LINE_LENGTH)の
+        いずれかを変更すると、余白が失われて線と重なる恐れがある。
+        このテストは、その余白が正であることだけを機械的に検証する
+        (実際のフォントレンダリングまでは検証できないため、
+        CHAMPION_LINE_HEIGHT を実際のフォント高さの目安として使う)。
+        """
+        from core.rendering.svg_text_blocks import (
+            CHAMPION_LINE_HEIGHT,
+            CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT,
+        )
+        from core.rendering.tournament_svg_champion import (
+            CHAMPION_SPLIT_CONNECTOR_LINE_LENGTH,
+        )
+
+        # final_y からどれだけ上(小さいy)に離れているかを、正の距離として
+        # 統一的に扱う。値が大きいほど final_y から遠い(=より上にある)。
+        layout = CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT
+        distance_of_line_top_from_final_y = (
+            CHAMPION_SPLIT_CONNECTOR_LINE_LENGTH
+        )
+        distance_of_text_center_from_final_y = (
+            CHAMPION_SPLIT_CONNECTOR_LINE_LENGTH - layout.offset_y
+        )
+        distance_of_text_bottom_from_final_y = (
+            distance_of_text_center_from_final_y
+            - (CHAMPION_LINE_HEIGHT / 2)
+        )
+        clearance = (
+            distance_of_text_bottom_from_final_y
+            - distance_of_line_top_from_final_y
+        )
+
+        self.assertGreater(
+            clearance,
+            0,
+            (
+                "優勝者(両山・横書き)のテキストが決定戦への接続線と"
+                "重ならないための余白が失われています。"
+                "CHAMPION_LINE_HEIGHT・"
+                "CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT.offset_y・"
+                "CHAMPION_SPLIT_CONNECTOR_LINE_LENGTH のいずれかを"
+                "変更した場合は、この余白がまだ正であることを"
+                "確認してください。"
+            ),
+        )
+
     def test_tournament_bracket_detail_does_not_repeat_advanced_entry_name(self):
         first_match = TournamentMatch.objects.create(
             bracket=self.bracket,

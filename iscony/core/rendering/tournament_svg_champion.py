@@ -29,6 +29,9 @@ from .svg_text_blocks import (
 from .tournament_svg_geometry import next_svg_line_start
 
 
+CHAMPION_SPLIT_CONNECTOR_LINE_LENGTH = 34
+
+
 def svg_entry_with_org(entry):
     """SVG内に表示する短い名前＋所属名を返す。"""
 
@@ -257,7 +260,7 @@ def svg_champion_block_spec(
     if final_y is None or center_x is None:
         return None
 
-    line_top = final_y - 34
+    line_top = final_y - CHAMPION_SPLIT_CONNECTOR_LINE_LENGTH
     line = {
         "x1": center_x,
         "y1": final_y,

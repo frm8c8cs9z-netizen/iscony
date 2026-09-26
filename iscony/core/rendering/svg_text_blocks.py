@@ -109,6 +109,14 @@ CHAMPION_SINGLE_VERTICAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
     block_anchor="middle-center",
     offset_x=CHAMPION_SINGLE_VERTICAL_OFFSET_X,
 )
+# 横書き1行のテキストブロックは block_anchor の上下成分(bottom-center の
+# "bottom")を評価せず、offset_y と dominant-baseline だけで位置を決める。
+# このレイアウトは block_anchor="bottom-center" だが実際には
+# offset_y=-12 で疑似的に「線の上」を再現しており、線との余白は
+# CHAMPION_LINE_HEIGHT が変わると容易に失われる。余白が失われていないかは
+# core.tests の
+# test_champion_split_horizontal_layout_keeps_clearance_above_line で
+# 検証している。
 CHAMPION_SPLIT_HORIZONTAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
     orientation=CHAMPION_ORIENTATION_HORIZONTAL,
     block_anchor="bottom-center",
@@ -525,6 +533,23 @@ def _svg_text_anchor_for_block_anchor(block_anchor):
     return "middle"
 
 
+def _svg_text_anchor_for_vertical_block_anchor(block_anchor):
+    """縦書きブロックアンカーから SVG の text-anchor を決める。
+
+    vertical-rl のブロック進行方向は上から下なので、block_anchor の
+    上下成分(top/middle/bottom)を text-anchor の start/middle/end に
+    対応させる。block_anchor と実際の描画が食い違うことがないよう、
+    text-anchor を個別指定させず、必ずここから導出する。
+    """
+
+    if block_anchor.startswith("top"):
+        return "start"
+    if block_anchor.startswith("bottom"):
+        return "end"
+
+    return "middle"
+
+
 def _svg_multiline_block_lines(
         lines,
         x,
@@ -649,7 +674,9 @@ def _append_svg_text_block_label(svg, spec):
             y=spec["bounds"]["y"],
             lines=spec["lines"],
             block_anchor=spec["block_anchor"],
-            anchor=spec["anchor"] or "middle",
+            anchor=_svg_text_anchor_for_vertical_block_anchor(
+                spec["block_anchor"],
+            ),
             baseline=spec["baseline"],
             padding_top=spec["padding_top"],
             padding_bottom=spec["padding_bottom"],
