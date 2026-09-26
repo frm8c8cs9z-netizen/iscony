@@ -120,7 +120,7 @@ CHAMPION_SPLIT_VERTICAL_TEXT_BLOCK_LAYOUT = SvgTextBlockLayout(
     block_anchor="bottom-center",
     offset_y=-CHAMPION_SPLIT_VERTICAL_OFFSET,
     padding_bottom=CHAMPION_SPLIT_VERTICAL_BOTTOM_PADDING,
-    anchor="middle",
+    anchor="end",
     baseline=None,
 )
 
