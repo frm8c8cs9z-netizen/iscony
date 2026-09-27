@@ -1,0 +1,137 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>{{ tournament.name }} {{ schedule_block.name }}</h2>
+
+<table>
+    <tr>
+        <th>コート</th>
+        <th>試合順</th>
+        <th>種別</th>
+        <th>カテゴリ</th>
+        <th>区分</th>
+        <th>対戦</th>
+        <th>スコア</th>
+        <th>状態</th>
+        <th>この試合以降を移動</th>
+    </tr>
+
+    {% for schedule in schedules %}
+        {% with match=schedule.match %}
+        <tr
+            class="
+                {% if schedule.finished %}
+                    finished-row
+                {% elif schedule.started %}
+                    started-row
+                {% elif schedule.called %}
+                    called-row
+                {% endif %}
+            "
+        >
+            <td>{{ schedule.court.name }}</td>
+            <td>{{ schedule.order }}</td>
+            <td>
+                {% if schedule.is_round_robin %}
+                    リーグ
+                {% elif schedule.is_tournament %}
+                    トーナメント
+                {% endif %}
+            </td>
+            <td>
+                {% if schedule.is_round_robin %}
+                    {{ schedule.round_robin_match.group.category.name }}
+                {% elif schedule.is_tournament %}
+                    {{ schedule.tournament_match.bracket.category.name }}
+                {% endif %}
+            </td>
+            <td>
+                {% if schedule.is_round_robin %}
+                    {{ schedule.round_robin_match.group.name }}
+                {% elif schedule.is_tournament %}
+                    {{ schedule.tournament_match.bracket.name }}
+                    /
+                    {{ schedule.tournament_match.round_number }}回戦
+                    <br>
+                    {{ schedule.tournament_match.match_code }}
+                    /
+                    {{ schedule.tournament_match.match_label }}
+                {% endif %}
+            </td>
+            <td>
+                <span class="{% if match.winner == match.pair1 %}winner-cell{% endif %}">
+                    {% if match.pair1 %}
+                        {{ match.pair1.code }}
+                        {{ match.pair1.display_name }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </span>
+
+                vs
+
+                <span class="{% if match.winner == match.pair2 %}winner-cell{% endif %}">
+                    {% if match.pair2 %}
+                        {{ match.pair2.code }}
+                        {{ match.pair2.display_name }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </span>
+            </td>
+            <td>
+                {{ match.pair1_games|default_if_none:"" }}
+                -
+                {{ match.pair2_games|default_if_none:"" }}
+            </td>
+            <td>
+                {% if schedule.finished %}
+                    <strong style="color:green;">完了</strong>
+                {% elif schedule.started %}
+                    <strong style="color:orange;">試合中</strong>
+                {% elif schedule.called %}
+                    <strong style="color:blue;">呼出済</strong>
+                {% else %}
+                    未着手
+                {% endif %}
+            </td>
+            <td>
+                {% if schedule.is_locked_for_move %}
+                    (移動不可)
+                {% else %}
+                    <form method="post" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="schedule_id" value="{{ schedule.id }}">
+                        <select name="target_block_choice">
+                            <option value="__new__">新規ブロックを作成</option>
+                            {% for other in other_blocks %}
+                                <option value="{{ other.id }}">{{ other.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <input
+                            type="text"
+                            name="new_block_name"
+                            placeholder="新規ブロック名(新規作成時のみ)"
+                            style="width:120px;"
+                        >
+                        <button type="submit">ここで分割</button>
+                    </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endwith %}
+    {% empty %}
+        <tr>
+            <td colspan="9">このブロックにはまだ試合が割り当てられていません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
+<p>
+    <a class="button-link" href="{% url 'schedule_block_maintenance' tournament.code %}">
+        日程区分管理へ戻る
+    </a>
+</p>
+
+{% endblock %}

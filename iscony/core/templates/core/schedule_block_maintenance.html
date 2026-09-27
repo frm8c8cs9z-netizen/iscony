@@ -26,6 +26,7 @@
     <tr>
         <th>表示順</th>
         <th>ブロック名</th>
+        <th>詳細</th>
         <th>削除</th>
     </tr>
 
@@ -51,6 +52,11 @@
                 >
             </td>
             <td>
+                <a href="{% url 'schedule_block_detail' tournament.code block.id %}">
+                    詳細
+                </a>
+            </td>
+            <td>
                 <form
                     method="post"
                     style="display:inline;"
@@ -65,7 +71,7 @@
         </tr>
     {% empty %}
         <tr>
-            <td colspan="3">日程区分が登録されていません。</td>
+            <td colspan="4">日程区分が登録されていません。</td>
         </tr>
     {% endfor %}
 </table>

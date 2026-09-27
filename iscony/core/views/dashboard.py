@@ -50,6 +50,7 @@ from ..match_keys import (
 from ..services import (
     clone_tournament_without_results,
     merge_schedule_blocks,
+    move_schedule_tail_to_block,
     move_schedule,
     participant_edit_impact_summary,
     participant_pair_organization_initials,
@@ -2717,5 +2718,141 @@ def schedule_block_maintenance(request, code):
         {
             "tournament": tournament,
             "schedule_blocks": schedule_blocks,
+        },
+    )
+
+
+def _schedule_block_split(request, tournament, block):
+    schedule_id = request.POST.get("schedule_id")
+    schedule = get_object_or_404(
+        Schedule,
+        id=schedule_id,
+        schedule_block=block,
+    )
+
+    target_choice = request.POST.get("target_block_choice")
+
+    if target_choice == "__new__":
+        new_name = request.POST.get("new_block_name", "").strip()
+
+        if not new_name:
+            messages.error(request, "新しいブロック名を入力してください。")
+            return redirect(
+                "schedule_block_detail",
+                code=tournament.code,
+                schedule_block_id=block.id,
+            )
+
+        if ScheduleBlock.objects.filter(
+            tournament=tournament, name=new_name,
+        ).exists():
+            messages.error(
+                request,
+                f"「{new_name}」という名前のブロックは既に存在します。",
+            )
+            return redirect(
+                "schedule_block_detail",
+                code=tournament.code,
+                schedule_block_id=block.id,
+            )
+
+        max_display_order = (
+            ScheduleBlock.objects.filter(tournament=tournament)
+            .order_by("-display_order")
+            .values_list("display_order", flat=True)
+            .first()
+        )
+
+        target_block = ScheduleBlock.objects.create(
+            tournament=tournament,
+            name=new_name,
+            display_order=(
+                0 if max_display_order is None else max_display_order + 1
+            ),
+            result_input_visible=block.result_input_visible,
+            result_input_selectable=block.result_input_selectable,
+        )
+    else:
+        target_block = get_object_or_404(
+            ScheduleBlock, id=target_choice, tournament=tournament,
+        )
+
+    try:
+        move_schedule_tail_to_block(schedule, target_block)
+    except ValidationError as error:
+        messages.error(request, "、".join(error.messages))
+        return redirect(
+            "schedule_block_detail",
+            code=tournament.code,
+            schedule_block_id=block.id,
+        )
+
+    messages.success(
+        request,
+        (
+            f"第{schedule.order}試合({schedule.court.name})以降を"
+            f"「{target_block.name}」へ移動しました。"
+        ),
+    )
+    return redirect(
+        "schedule_block_detail",
+        code=tournament.code,
+        schedule_block_id=block.id,
+    )
+
+
+def schedule_block_detail(request, code, schedule_block_id):
+    """1つのScheduleBlockの中身をコート別に確認し、分割操作を行う。"""
+
+    tournament = get_object_or_404(Tournament, code=code)
+    block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+
+    if request.method == "POST":
+        return _schedule_block_split(request, tournament, block)
+
+    schedules = Schedule.objects.filter(
+        schedule_block=block,
+    ).select_related(
+        "court",
+
+        "round_robin_match",
+        "round_robin_match__group",
+        "round_robin_match__group__stage",
+        "round_robin_match__group__category",
+        "round_robin_match__pair1",
+        "round_robin_match__pair2",
+
+        "tournament_match",
+        "tournament_match__bracket",
+        "tournament_match__bracket__stage",
+        "tournament_match__bracket__category",
+        "tournament_match__pair1",
+        "tournament_match__pair2",
+    ).order_by(
+        "court__display_order",
+        "court__name",
+        "order",
+    )
+
+    other_blocks = ScheduleBlock.objects.filter(
+        tournament=tournament,
+    ).exclude(
+        id=block.id,
+    ).order_by(
+        "display_order",
+        "name",
+    )
+
+    return render(
+        request,
+        "core/schedule_block_detail.html",
+        {
+            "tournament": tournament,
+            "block": block,
+            "schedule_block": block,
+            "schedules": schedules,
+            "other_blocks": other_blocks,
         },
     )

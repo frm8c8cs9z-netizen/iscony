@@ -7074,6 +7074,234 @@ class ScheduleBlockMaintenanceTests(TestCase):
         )
 
 
+class ScheduleBlockDetailTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="日程区分詳細テスト大会",
+            code="SCHEDULEBLOCKDETAIL",
+        )
+        self.court1 = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.court2 = Court.objects.create(
+            tournament=self.tournament,
+            name="2コート",
+            display_order=2,
+        )
+        self.block1 = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+            result_input_visible=False,
+            result_input_selectable=False,
+        )
+        self.block2 = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        self.url = reverse(
+            "schedule_block_detail",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": self.block1.id,
+            },
+        )
+
+    def test_split_to_new_block_moves_tail_in_same_court_only(self):
+        court1_first = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+        )
+        court1_second = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=2,
+        )
+        court1_third = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=3,
+        )
+        court2_first = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court2,
+            order=1,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "schedule_id": str(court1_second.id),
+                "target_block_choice": "__new__",
+                "new_block_name": "午後前半",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        new_block = ScheduleBlock.objects.get(
+            tournament=self.tournament,
+            name="午後前半",
+        )
+        self.assertFalse(new_block.result_input_visible)
+        self.assertFalse(new_block.result_input_selectable)
+        self.assertEqual(new_block.display_order, 3)
+
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block1,
+                    court=self.court1,
+                ).order_by("order").values_list("id", "order")
+            ),
+            [
+                (court1_first.id, 1),
+            ],
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=new_block,
+                    court=self.court1,
+                ).order_by("order").values_list("id", "order")
+            ),
+            [
+                (court1_second.id, 1),
+                (court1_third.id, 2),
+            ],
+        )
+        court2_first.refresh_from_db()
+        self.assertEqual(court2_first.schedule_block, self.block1)
+        self.assertEqual(court2_first.order, 1)
+
+    def test_split_to_existing_block_appends_after_existing_order(self):
+        target_first = Schedule.objects.create(
+            schedule_block=self.block2,
+            court=self.court1,
+            order=1,
+        )
+        target_second = Schedule.objects.create(
+            schedule_block=self.block2,
+            court=self.court1,
+            order=2,
+        )
+        source_first = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+        )
+        source_second = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=2,
+        )
+        source_third = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=3,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "schedule_id": str(source_second.id),
+                "target_block_choice": str(self.block2.id),
+                "new_block_name": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block2,
+                    court=self.court1,
+                ).order_by("order").values_list("id", "order")
+            ),
+            [
+                (target_first.id, 1),
+                (target_second.id, 2),
+                (source_second.id, 3),
+                (source_third.id, 4),
+            ],
+        )
+        source_first.refresh_from_db()
+        self.assertEqual(source_first.schedule_block, self.block1)
+        self.assertEqual(source_first.order, 1)
+
+    def test_split_is_rejected_when_tail_contains_locked_schedule(self):
+        first = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+        )
+        locked = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=2,
+            called=True,
+        )
+        third = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=3,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "schedule_id": str(first.id),
+                "target_block_choice": str(self.block2.id),
+                "new_block_name": "",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "呼出済み・進行中・完了済みの試合が含まれるため、移動できません。",
+        )
+        for schedule, order in (
+            (first, 1),
+            (locked, 2),
+            (third, 3),
+        ):
+            schedule.refresh_from_db()
+            self.assertEqual(schedule.schedule_block, self.block1)
+            self.assertEqual(schedule.order, order)
+        self.assertFalse(
+            Schedule.objects.filter(schedule_block=self.block2).exists()
+        )
+
+    def test_detail_page_shows_only_schedules_in_target_block(self):
+        in_block = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+        )
+        other_block = Schedule.objects.create(
+            schedule_block=self.block2,
+            court=self.court1,
+            order=1,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'name="schedule_id" value="{in_block.id}"',
+        )
+        self.assertNotContains(
+            response,
+            f'name="schedule_id" value="{other_block.id}"',
+        )
+
+
 class RoundRobinMeetingTests(TestCase):
 
     def setUp(self):

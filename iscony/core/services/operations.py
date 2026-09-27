@@ -1673,6 +1673,66 @@ def merge_schedule_blocks(source_block, target_block):
         source_block.delete()
 
 
+def move_schedule_tail_to_block(schedule, target_block):
+    """
+    schedule と、同じ(schedule_block, court)内でschedule以降(order>=)の
+    全Scheduleを、target_blockへ移す。
+    """
+
+    source_block = schedule.schedule_block
+    court = schedule.court
+
+    if source_block.id == target_block.id:
+        raise ValidationError("移動先には今のブロックとは別のブロックを選んでください。")
+
+    if source_block.tournament_id != target_block.tournament_id:
+        raise ValidationError("同じ大会内のブロックのみ指定できます。")
+
+    moving = list(
+        Schedule.objects.filter(
+            schedule_block=source_block,
+            court=court,
+            order__gte=schedule.order,
+        ).order_by(
+            "order"
+        )
+    )
+
+    if any(item.is_locked_for_move for item in moving):
+        raise ValidationError(
+            "呼出済み・進行中・完了済みの試合が含まれるため、移動できません。"
+        )
+
+    max_order_in_target = (
+        Schedule.objects.filter(
+            schedule_block=target_block,
+            court=court,
+        )
+        .order_by("-order")
+        .values_list("order", flat=True)
+        .first()
+        or 0
+    )
+
+    with transaction.atomic():
+        for offset, item in enumerate(moving):
+            item.order = 1000000 + offset
+
+        Schedule.objects.bulk_update(moving, ["order"])
+
+        for offset, item in enumerate(moving, start=1):
+            item.schedule_block = target_block
+            item.order = max_order_in_target + offset
+
+        Schedule.objects.bulk_update(
+            moving,
+            [
+                "schedule_block",
+                "order",
+            ],
+        )
+
+
 # =========================================================
 # 順位再計算
 # =========================================================
