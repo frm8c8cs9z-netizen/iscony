@@ -173,6 +173,15 @@
         <td>画面表示と進行表の並びを整えます。</td>
     </tr>
     <tr>
+        <td>日程区分管理</td>
+        <td>
+            <a href="{% url 'schedule_block_maintenance' tournament.code %}">
+                日程区分(ScheduleBlock)を管理する
+            </a>
+        </td>
+        <td>試合順を組む単位(開催日・時間帯など)を作成・整理します。</td>
+    </tr>
+    <tr>
         <td>大会設定</td>
         <td>
             <a href="{% url 'tournament_settings' tournament.code %}">

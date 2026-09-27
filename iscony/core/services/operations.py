@@ -1612,6 +1612,67 @@ def move_schedule(
         schedule.save()
 
 
+def merge_schedule_blocks(source_block, target_block):
+    """source_blockの全Scheduleをtarget_blockへ移し、source_blockを削除する。"""
+
+    if source_block.id == target_block.id:
+        raise ValidationError("統合元と統合先には別のブロックを選んでください。")
+
+    if source_block.tournament_id != target_block.tournament_id:
+        raise ValidationError("同じ大会内のブロック同士のみ統合できます。")
+
+    courts = Court.objects.filter(
+        schedule__schedule_block=source_block,
+    ).distinct()
+
+    with transaction.atomic():
+        for court in courts:
+            moving = list(
+                Schedule.objects.filter(
+                    schedule_block=source_block,
+                    court=court,
+                ).order_by(
+                    "order"
+                )
+            )
+
+            if any(item.is_locked_for_move for item in moving):
+                raise ValidationError(
+                    "呼出済み・進行中・完了済みの試合が含まれるため、"
+                    "統合できません。"
+                )
+
+            max_order_in_target = (
+                Schedule.objects.filter(
+                    schedule_block=target_block,
+                    court=court,
+                )
+                .order_by("-order")
+                .values_list("order", flat=True)
+                .first()
+                or 0
+            )
+
+            for offset, item in enumerate(moving):
+                item.order = 1000000 + offset
+
+            Schedule.objects.bulk_update(moving, ["order"])
+
+            for offset, item in enumerate(moving, start=1):
+                item.schedule_block = target_block
+                item.order = max_order_in_target + offset
+
+            Schedule.objects.bulk_update(
+                moving,
+                [
+                    "schedule_block",
+                    "order",
+                ],
+            )
+
+        source_block.delete()
+
+
 # =========================================================
 # 順位再計算
 # =========================================================

@@ -1,0 +1,109 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>{{ tournament.name }} 日程区分管理</h2>
+
+<section>
+    <h3>ブロックを1件追加</h3>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_single">
+        <input type="text" name="schedule_block_name" placeholder="日程区分名">
+        <button type="submit">追加</button>
+    </form>
+</section>
+
+<h3>表示順・ブロック名</h3>
+
+<form id="reorder-rename-form" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="reorder_rename">
+</form>
+
+<table>
+    <tr>
+        <th>表示順</th>
+        <th>ブロック名</th>
+        <th>削除</th>
+    </tr>
+
+    {% for block in schedule_blocks %}
+        <tr>
+            <td>
+                <input
+                    form="reorder-rename-form"
+                    type="number"
+                    min="0"
+                    name="schedule_block_order_{{ block.id }}"
+                    value="{{ block.display_order }}"
+                    style="width:70px;"
+                >
+            </td>
+            <td>
+                <input
+                    form="reorder-rename-form"
+                    type="text"
+                    name="schedule_block_name_{{ block.id }}"
+                    value="{{ block.name }}"
+                    style="width:120px;"
+                >
+            </td>
+            <td>
+                <form
+                    method="post"
+                    style="display:inline;"
+                    onsubmit="return confirm('「{{ block.name }}」を削除しますか？');"
+                >
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="schedule_block_id" value="{{ block.id }}">
+                    <button type="submit">削除</button>
+                </form>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="3">日程区分が登録されていません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
+{% if schedule_blocks %}
+    <button form="reorder-rename-form" type="submit">保存</button>
+{% endif %}
+
+<section>
+    <h3>ブロックを統合</h3>
+
+    <form method="post" onsubmit="return confirm('統合すると、統合元ブロックは削除されます。よろしいですか？');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="merge">
+        <label>
+            統合元(消える側)
+            <select name="source_block_id">
+                {% for block in schedule_blocks %}
+                    <option value="{{ block.id }}">{{ block.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            統合先(残る側)
+            <select name="target_block_id">
+                {% for block in schedule_blocks %}
+                    <option value="{{ block.id }}">{{ block.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit">統合する</button>
+    </form>
+</section>
+
+<p>
+    <a class="button-link" href="{% url 'maintenance_menu' tournament.code %}">
+        管理メニューへ戻る
+    </a>
+</p>
+
+{% endblock %}

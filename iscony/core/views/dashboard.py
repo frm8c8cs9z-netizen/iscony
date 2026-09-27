@@ -49,6 +49,7 @@ from ..match_keys import (
 
 from ..services import (
     clone_tournament_without_results,
+    merge_schedule_blocks,
     move_schedule,
     participant_edit_impact_summary,
     participant_pair_organization_initials,
@@ -2468,5 +2469,253 @@ def court_order_maintenance(request, code):
         {
             "tournament": tournament,
             "courts": courts,
+        },
+    )
+
+
+def _ordered_tournament_schedule_blocks(tournament):
+    return list(
+        ScheduleBlock.objects.filter(
+            tournament=tournament,
+        ).order_by(
+            "display_order",
+            "name",
+        )
+    )
+
+
+def _schedule_block_reorder_rename(request, tournament):
+    schedule_blocks = _ordered_tournament_schedule_blocks(tournament)
+    pending_orders = []
+
+    for block in schedule_blocks:
+        value = request.POST.get(
+            f"schedule_block_order_{block.id}",
+            "",
+        ).strip()
+
+        try:
+            display_order = int(value)
+        except (TypeError, ValueError):
+            messages.error(
+                request,
+                f"{block.name}: 表示順は整数で入力してください。",
+            )
+            return redirect(
+                "schedule_block_maintenance",
+                code=tournament.code,
+            )
+
+        if display_order < 0:
+            messages.error(
+                request,
+                f"{block.name}: 表示順は0以上で入力してください。",
+            )
+            return redirect(
+                "schedule_block_maintenance",
+                code=tournament.code,
+            )
+
+        pending_orders.append((block, display_order))
+
+    pending_renames = []
+    has_blank_name_error = False
+
+    for block in schedule_blocks:
+        new_name = request.POST.get(f"schedule_block_name_{block.id}")
+
+        if new_name is None:
+            continue
+
+        new_name = new_name.strip()
+
+        if not new_name:
+            messages.error(
+                request,
+                f"{block.name} の名前を空にすることはできません。",
+            )
+            has_blank_name_error = True
+            continue
+
+        if new_name != block.name:
+            pending_renames.append((block, new_name))
+
+    if has_blank_name_error:
+        return redirect(
+            "schedule_block_maintenance",
+            code=tournament.code,
+        )
+
+    if pending_renames:
+        final_names = {}
+
+        for block in schedule_blocks:
+            final_names[block.id] = block.name
+
+        for block, new_name in pending_renames:
+            final_names[block.id] = new_name
+
+        seen_names = set()
+        duplicate_names = set()
+
+        for name in final_names.values():
+            if name in seen_names:
+                duplicate_names.add(name)
+
+            seen_names.add(name)
+
+        if duplicate_names:
+            messages.error(
+                request,
+                (
+                    "同じ大会内で日程区分名が重複しています: "
+                    + "、".join(sorted(duplicate_names))
+                ),
+            )
+            return redirect(
+                "schedule_block_maintenance",
+                code=tournament.code,
+            )
+
+    with transaction.atomic():
+        for block, display_order in pending_orders:
+            block.display_order = display_order
+            block.save(update_fields=["display_order"])
+
+        for block, new_name in pending_renames:
+            block.name = f"__rename_tmp_schedule_block_{block.id}__"
+            block.save(update_fields=["name"])
+
+        for block, new_name in pending_renames:
+            block.name = new_name
+            block.save(update_fields=["name"])
+
+    return redirect(
+        "schedule_block_maintenance",
+        code=tournament.code,
+    )
+
+
+def _schedule_block_add_single(request, tournament):
+    name = request.POST.get("schedule_block_name", "").strip()
+
+    if not name:
+        messages.error(request, "日程区分名を入力してください。")
+        return redirect("schedule_block_maintenance", code=tournament.code)
+
+    if ScheduleBlock.objects.filter(tournament=tournament, name=name).exists():
+        messages.error(
+            request,
+            f"「{name}」という名前の日程区分は既に存在します。",
+        )
+        return redirect("schedule_block_maintenance", code=tournament.code)
+
+    max_display_order = (
+        ScheduleBlock.objects.filter(tournament=tournament)
+        .order_by("-display_order")
+        .values_list("display_order", flat=True)
+        .first()
+    )
+
+    if max_display_order is None:
+        display_order = 0
+    else:
+        display_order = max_display_order + 1
+
+    ScheduleBlock.objects.create(
+        tournament=tournament,
+        name=name,
+        display_order=display_order,
+    )
+
+    messages.success(request, f"「{name}」を追加しました。")
+    return redirect("schedule_block_maintenance", code=tournament.code)
+
+
+def _schedule_block_delete(request, tournament):
+    block_id = request.POST.get("schedule_block_id")
+    block = get_object_or_404(
+        ScheduleBlock,
+        id=block_id,
+        tournament=tournament,
+    )
+
+    if Schedule.objects.filter(schedule_block=block).exists():
+        messages.error(
+            request,
+            f"「{block.name}」は進行表で使用中のため削除できません。",
+        )
+        return redirect("schedule_block_maintenance", code=tournament.code)
+
+    block_name = block.name
+    block.delete()
+    messages.success(request, f"「{block_name}」を削除しました。")
+    return redirect("schedule_block_maintenance", code=tournament.code)
+
+
+def _schedule_block_merge(request, tournament):
+    source_id = request.POST.get("source_block_id")
+    target_id = request.POST.get("target_block_id")
+
+    source_block = get_object_or_404(
+        ScheduleBlock,
+        id=source_id,
+        tournament=tournament,
+    )
+    target_block = get_object_or_404(
+        ScheduleBlock,
+        id=target_id,
+        tournament=tournament,
+    )
+
+    source_name = source_block.name
+    target_name = target_block.name
+
+    try:
+        merge_schedule_blocks(source_block, target_block)
+    except ValidationError as error:
+        messages.error(request, "、".join(error.messages))
+        return redirect(
+            "schedule_block_maintenance",
+            code=tournament.code,
+        )
+
+    messages.success(
+        request,
+        f"「{source_name}」を「{target_name}」へ統合しました。",
+    )
+    return redirect("schedule_block_maintenance", code=tournament.code)
+
+
+def schedule_block_maintenance(request, code):
+    """大会内のScheduleBlockの表示順・名前・新規作成・削除・統合をまとめて編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+
+    if request.method == "POST":
+        action = request.POST.get("action", "reorder_rename")
+
+        if action == "add_single":
+            return _schedule_block_add_single(request, tournament)
+
+        if action == "delete":
+            return _schedule_block_delete(request, tournament)
+
+        if action == "merge":
+            return _schedule_block_merge(request, tournament)
+
+        return _schedule_block_reorder_rename(request, tournament)
+
+    schedule_blocks = _ordered_tournament_schedule_blocks(tournament)
+
+    return render(
+        request,
+        "core/schedule_block_maintenance.html",
+        {
+            "tournament": tournament,
+            "schedule_blocks": schedule_blocks,
         },
     )

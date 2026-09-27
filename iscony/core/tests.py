@@ -6762,6 +6762,318 @@ class CourtOrderMaintenanceTests(TestCase):
         self.assertEqual(self.court2.name, "2コート")
 
 
+class ScheduleBlockMaintenanceTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="日程区分テスト大会",
+            code="SCHEDULEBLOCK",
+        )
+        self.court1 = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.court2 = Court.objects.create(
+            tournament=self.tournament,
+            name="2コート",
+            display_order=2,
+        )
+        self.block1 = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        self.block2 = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        self.url = reverse(
+            "schedule_block_maintenance",
+            kwargs={"code": self.tournament.code},
+        )
+
+    def _reorder_rename_payload(self, block_names=None, block_orders=None):
+        block_names = block_names or {}
+        block_orders = block_orders or {}
+        payload = {
+            "action": "reorder_rename",
+        }
+
+        for block in ScheduleBlock.objects.filter(tournament=self.tournament):
+            payload[f"schedule_block_order_{block.id}"] = str(
+                block_orders.get(block.id, block.display_order)
+            )
+            payload[f"schedule_block_name_{block.id}"] = block_names.get(
+                block.id,
+                block.name,
+            )
+
+        return payload
+
+    def test_add_single_schedule_block_creates_next_display_order(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_single",
+                "schedule_block_name": "夕方",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        block = ScheduleBlock.objects.get(
+            tournament=self.tournament,
+            name="夕方",
+        )
+        self.assertEqual(block.display_order, 3)
+
+    def test_add_single_duplicate_name_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_single",
+                "schedule_block_name": "午前",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "「午前」という名前の日程区分は既に存在します。",
+        )
+        self.assertEqual(
+            ScheduleBlock.objects.filter(
+                tournament=self.tournament,
+                name="午前",
+            ).count(),
+            1,
+        )
+
+    def test_schedule_block_name_can_be_updated(self):
+        response = self.client.post(
+            self.url,
+            self._reorder_rename_payload(
+                block_names={
+                    self.block1.id: "第1日",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.block1.refresh_from_db()
+        self.assertEqual(self.block1.name, "第1日")
+
+    def test_schedule_block_names_can_be_swapped(self):
+        response = self.client.post(
+            self.url,
+            self._reorder_rename_payload(
+                block_names={
+                    self.block1.id: "午後",
+                    self.block2.id: "午前",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.block1.refresh_from_db()
+        self.block2.refresh_from_db()
+        self.assertEqual(self.block1.name, "午後")
+        self.assertEqual(self.block2.name, "午前")
+
+    def test_duplicate_schedule_block_name_in_same_tournament_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            self._reorder_rename_payload(
+                block_names={
+                    self.block1.id: "同名区分",
+                    self.block2.id: "同名区分",
+                },
+            ),
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "同じ大会内で日程区分名が重複しています: 同名区分",
+        )
+        self.block1.refresh_from_db()
+        self.block2.refresh_from_db()
+        self.assertEqual(self.block1.name, "午前")
+        self.assertEqual(self.block2.name, "午後")
+
+    def test_unused_schedule_block_can_be_deleted(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "delete",
+                "schedule_block_id": str(self.block2.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            ScheduleBlock.objects.filter(id=self.block2.id).exists()
+        )
+
+    def test_used_schedule_block_cannot_be_deleted(self):
+        Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "delete",
+                "schedule_block_id": str(self.block1.id),
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "「午前」は進行表で使用中のため削除できません。",
+        )
+        self.assertTrue(
+            ScheduleBlock.objects.filter(id=self.block1.id).exists()
+        )
+
+    def test_schedule_blocks_can_be_merged_with_orders_per_court(self):
+        target_court1_first = Schedule.objects.create(
+            schedule_block=self.block2,
+            court=self.court1,
+            order=1,
+        )
+        target_court1_second = Schedule.objects.create(
+            schedule_block=self.block2,
+            court=self.court1,
+            order=2,
+        )
+        target_court2_first = Schedule.objects.create(
+            schedule_block=self.block2,
+            court=self.court2,
+            order=1,
+        )
+        source_court1_first = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+        )
+        source_court1_second = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=2,
+        )
+        source_court2_first = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court2,
+            order=1,
+        )
+        source_court2_second = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court2,
+            order=2,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "merge",
+                "source_block_id": str(self.block1.id),
+                "target_block_id": str(self.block2.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            ScheduleBlock.objects.filter(id=self.block1.id).exists()
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block2,
+                    court=self.court1,
+                ).order_by("order").values_list("id", "order")
+            ),
+            [
+                (target_court1_first.id, 1),
+                (target_court1_second.id, 2),
+                (source_court1_first.id, 3),
+                (source_court1_second.id, 4),
+            ],
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block2,
+                    court=self.court2,
+                ).order_by("order").values_list("id", "order")
+            ),
+            [
+                (target_court2_first.id, 1),
+                (source_court2_first.id, 2),
+                (source_court2_second.id, 3),
+            ],
+        )
+
+    def test_merge_is_rejected_when_source_contains_locked_schedule(self):
+        locked = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+            called=True,
+        )
+        movable = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=2,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "merge",
+                "source_block_id": str(self.block1.id),
+                "target_block_id": str(self.block2.id),
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "呼出済み・進行中・完了済みの試合が含まれるため、統合できません。",
+        )
+        self.block1.refresh_from_db()
+        self.block2.refresh_from_db()
+        locked.refresh_from_db()
+        movable.refresh_from_db()
+        self.assertEqual(locked.schedule_block, self.block1)
+        self.assertEqual(locked.order, 1)
+        self.assertEqual(movable.schedule_block, self.block1)
+        self.assertEqual(movable.order, 2)
+
+    def test_merge_same_schedule_block_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "merge",
+                "source_block_id": str(self.block1.id),
+                "target_block_id": str(self.block1.id),
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "統合元と統合先には別のブロックを選んでください。",
+        )
+        self.assertTrue(
+            ScheduleBlock.objects.filter(id=self.block1.id).exists()
+        )
+
+
 class RoundRobinMeetingTests(TestCase):
 
     def setUp(self):
@@ -11326,6 +11638,8 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "参加者管理")
         self.assertContains(response, "表示順調整")
         self.assertContains(response, "リーグ表示順")
+        self.assertContains(response, "日程区分管理")
+        self.assertContains(response, "日程区分(ScheduleBlock)を管理する")
         self.assertNotContains(response, "カテゴリ・リーグ表示順")
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
