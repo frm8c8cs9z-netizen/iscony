@@ -6448,6 +6448,24 @@ class CourtOrderMaintenanceTests(TestCase):
             kwargs={"code": self.tournament.code},
         )
 
+    def _reorder_rename_payload(self, court_names=None, court_orders=None):
+        court_names = court_names or {}
+        court_orders = court_orders or {}
+        payload = {
+            "action": "reorder_rename",
+        }
+
+        for court in Court.objects.filter(tournament=self.tournament):
+            payload[f"court_order_{court.id}"] = str(
+                court_orders.get(court.id, court.display_order)
+            )
+            payload[f"court_name_{court.id}"] = court_names.get(
+                court.id,
+                court.name,
+            )
+
+        return payload
+
     def test_court_orders_can_be_updated_together(self):
         response = self.client.post(
             self.url,
@@ -6467,12 +6485,13 @@ class CourtOrderMaintenanceTests(TestCase):
         response = self.client.post(
             self.url,
             {
+                "action": "reorder_rename",
                 f"court_order_{self.court1.id}": "20",
                 f"court_order_{self.court2.id}": "invalid",
             },
+            follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
             "2コート: 表示順は整数で入力してください。",
@@ -6481,6 +6500,266 @@ class CourtOrderMaintenanceTests(TestCase):
         self.court2.refresh_from_db()
         self.assertEqual(self.court1.display_order, 1)
         self.assertEqual(self.court2.display_order, 2)
+
+    def test_add_single_court_creates_next_display_order(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_single",
+                "court_name": "3コート",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        court = Court.objects.get(
+            tournament=self.tournament,
+            name="3コート",
+        )
+        self.assertEqual(court.display_order, 3)
+
+    def test_add_single_duplicate_name_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_single",
+                "court_name": "1コート",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "「1コート」という名前のコートは既に存在します。",
+        )
+        self.assertEqual(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="1コート",
+            ).count(),
+            1,
+        )
+
+    def test_add_bulk_numeric_starts_after_existing_numeric_max(self):
+        Court.objects.create(
+            tournament=self.tournament,
+            name="1",
+            display_order=3,
+        )
+        Court.objects.create(
+            tournament=self.tournament,
+            name="2",
+            display_order=4,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_bulk",
+                "bulk_count": "3",
+                "bulk_naming": "numeric",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="3",
+            ).exists()
+        )
+        self.assertTrue(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="4",
+            ).exists()
+        )
+        self.assertTrue(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="5",
+            ).exists()
+        )
+
+    def test_add_bulk_alphabetic_starts_after_existing_alphabetic_max(self):
+        Court.objects.create(
+            tournament=self.tournament,
+            name="A",
+            display_order=3,
+        )
+        Court.objects.create(
+            tournament=self.tournament,
+            name="B",
+            display_order=4,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_bulk",
+                "bulk_count": "3",
+                "bulk_naming": "alphabetic",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="C",
+            ).exists()
+        )
+        self.assertTrue(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="D",
+            ).exists()
+        )
+        self.assertTrue(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="E",
+            ).exists()
+        )
+
+    def test_add_bulk_alphabetic_rolls_over_to_double_letters(self):
+        for index in range(26):
+            Court.objects.create(
+                tournament=self.tournament,
+                name=chr(ord("A") + index),
+                display_order=index + 3,
+            )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_bulk",
+                "bulk_count": "1",
+                "bulk_naming": "alphabetic",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            Court.objects.filter(
+                tournament=self.tournament,
+                name="AA",
+            ).exists()
+        )
+
+    def test_add_bulk_invalid_count_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_bulk",
+                "bulk_count": "51",
+                "bulk_naming": "numeric",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "作成するコート数は1〜50の整数で入力してください。",
+        )
+        self.assertEqual(
+            Court.objects.filter(tournament=self.tournament).count(),
+            2,
+        )
+
+    def test_unused_court_can_be_deleted(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "delete",
+                "court_id": str(self.court2.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            Court.objects.filter(id=self.court2.id).exists()
+        )
+
+    def test_used_court_cannot_be_deleted(self):
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="本日程",
+            display_order=1,
+        )
+        Schedule.objects.create(
+            schedule_block=block,
+            court=self.court1,
+            order=1,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "delete",
+                "court_id": str(self.court1.id),
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "「1コート」は進行表で使用中のため削除できません。",
+        )
+        self.assertTrue(
+            Court.objects.filter(id=self.court1.id).exists()
+        )
+
+    def test_court_name_can_be_updated(self):
+        response = self.client.post(
+            self.url,
+            self._reorder_rename_payload(
+                court_names={
+                    self.court1.id: "中央コート",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.court1.refresh_from_db()
+        self.assertEqual(self.court1.name, "中央コート")
+
+    def test_court_names_can_be_swapped(self):
+        response = self.client.post(
+            self.url,
+            self._reorder_rename_payload(
+                court_names={
+                    self.court1.id: "2コート",
+                    self.court2.id: "1コート",
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.court1.refresh_from_db()
+        self.court2.refresh_from_db()
+        self.assertEqual(self.court1.name, "2コート")
+        self.assertEqual(self.court2.name, "1コート")
+
+    def test_duplicate_court_name_in_same_tournament_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            self._reorder_rename_payload(
+                court_names={
+                    self.court1.id: "同名コート",
+                    self.court2.id: "同名コート",
+                },
+            ),
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "同じ大会内でコート名が重複しています: 同名コート",
+        )
+        self.court1.refresh_from_db()
+        self.court2.refresh_from_db()
+        self.assertEqual(self.court1.name, "1コート")
+        self.assertEqual(self.court2.name, "2コート")
 
 
 class RoundRobinMeetingTests(TestCase):

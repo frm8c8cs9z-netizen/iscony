@@ -2136,14 +2136,66 @@ def add_category(
     )
 
 
-def court_order_maintenance(request, code):
-    """大会内のコート表示順をまとめて編集する。"""
+def _next_numeric_court_names(existing_names, count):
+    """既存の数字コート名の最大値の次から、count個の数字名を返す。"""
 
-    tournament = get_object_or_404(
-        Tournament,
-        code=code,
-    )
-    courts = list(
+    max_value = 0
+
+    for name in existing_names:
+        if name.isdigit():
+            max_value = max(max_value, int(name))
+
+    return [
+        str(max_value + offset)
+        for offset in range(1, count + 1)
+    ]
+
+
+def _column_letters_to_number(letters):
+    """'A'->1, 'Z'->26, 'AA'->27 のように変換する。"""
+
+    value = 0
+
+    for char in letters:
+        value = (value * 26) + (ord(char) - ord("A") + 1)
+
+    return value
+
+
+def _number_to_column_letters(number):
+    """数値を 'A', 'B', ..., 'Z', 'AA', ... へ変換する。"""
+
+    letters = ""
+
+    while number > 0:
+        number, remainder = divmod(number - 1, 26)
+        letters = chr(ord("A") + remainder) + letters
+
+    return letters
+
+
+def _next_alphabetic_court_names(existing_names, count):
+    """既存のアルファベットコート名の最大値の次から返す。"""
+
+    max_value = 0
+
+    for name in existing_names:
+        upper_name = name.upper()
+
+        if upper_name.isalpha() and upper_name == name:
+            max_value = max(
+                max_value,
+                _column_letters_to_number(upper_name),
+            )
+
+    return [
+        _number_to_column_letters(max_value + offset)
+        for offset in range(1, count + 1)
+    ]
+
+
+def _ordered_tournament_courts(tournament):
+    return list(
         Court.objects.filter(
             tournament=tournament,
         ).order_by(
@@ -2151,38 +2203,264 @@ def court_order_maintenance(request, code):
             "name",
         )
     )
-    errors = []
 
-    if request.method == "POST":
-        for court in courts:
-            field_name = f"court_order_{court.id}"
-            value = request.POST.get(field_name, "").strip()
 
-            try:
-                display_order = int(value)
-            except (TypeError, ValueError):
-                errors.append(
-                    f"{court.name}: 表示順は整数で入力してください。"
-                )
-                continue
+def _court_reorder_rename(request, tournament):
+    courts = _ordered_tournament_courts(tournament)
+    pending_orders = []
 
-            if display_order < 0:
-                errors.append(
-                    f"{court.name}: 表示順は0以上で入力してください。"
-                )
-                continue
+    for court in courts:
+        value = request.POST.get(f"court_order_{court.id}", "").strip()
 
-            court.display_order = display_order
-
-        if not errors:
-            Court.objects.bulk_update(
-                courts,
-                ["display_order"],
+        try:
+            display_order = int(value)
+        except (TypeError, ValueError):
+            messages.error(
+                request,
+                f"{court.name}: 表示順は整数で入力してください。",
             )
             return redirect(
                 "court_order_maintenance",
                 code=tournament.code,
             )
+
+        if display_order < 0:
+            messages.error(
+                request,
+                f"{court.name}: 表示順は0以上で入力してください。",
+            )
+            return redirect(
+                "court_order_maintenance",
+                code=tournament.code,
+            )
+
+        pending_orders.append((court, display_order))
+
+    pending_renames = []
+    has_blank_name_error = False
+
+    for court in courts:
+        new_name = request.POST.get(f"court_name_{court.id}")
+
+        if new_name is None:
+            continue
+
+        new_name = new_name.strip()
+
+        if not new_name:
+            messages.error(
+                request,
+                f"{court.name} の名前を空にすることはできません。",
+            )
+            has_blank_name_error = True
+            continue
+
+        if new_name != court.name:
+            pending_renames.append((court, new_name))
+
+    if has_blank_name_error:
+        return redirect(
+            "court_order_maintenance",
+            code=tournament.code,
+        )
+
+    if pending_renames:
+        final_names = {}
+
+        for court in courts:
+            final_names[court.id] = court.name
+
+        for court, new_name in pending_renames:
+            final_names[court.id] = new_name
+
+        seen_names = set()
+        duplicate_names = set()
+
+        for name in final_names.values():
+            if name in seen_names:
+                duplicate_names.add(name)
+
+            seen_names.add(name)
+
+        if duplicate_names:
+            messages.error(
+                request,
+                (
+                    "同じ大会内でコート名が重複しています: "
+                    + "、".join(sorted(duplicate_names))
+                ),
+            )
+            return redirect(
+                "court_order_maintenance",
+                code=tournament.code,
+            )
+
+    with transaction.atomic():
+        for court, display_order in pending_orders:
+            court.display_order = display_order
+            court.save(update_fields=["display_order"])
+
+        for court, new_name in pending_renames:
+            court.name = f"__rename_tmp_court_{court.id}__"
+            court.save(update_fields=["name"])
+
+        for court, new_name in pending_renames:
+            court.name = new_name
+            court.save(update_fields=["name"])
+
+    return redirect(
+        "court_order_maintenance",
+        code=tournament.code,
+    )
+
+
+def _court_add_single(request, tournament):
+    name = request.POST.get("court_name", "").strip()
+
+    if not name:
+        messages.error(request, "コート名を入力してください。")
+        return redirect("court_order_maintenance", code=tournament.code)
+
+    if Court.objects.filter(tournament=tournament, name=name).exists():
+        messages.error(
+            request,
+            f"「{name}」という名前のコートは既に存在します。",
+        )
+        return redirect("court_order_maintenance", code=tournament.code)
+
+    max_display_order = (
+        Court.objects.filter(tournament=tournament)
+        .order_by("-display_order")
+        .values_list("display_order", flat=True)
+        .first()
+    )
+
+    if max_display_order is None:
+        display_order = 0
+    else:
+        display_order = max_display_order + 1
+
+    Court.objects.create(
+        tournament=tournament,
+        name=name,
+        display_order=display_order,
+    )
+
+    messages.success(request, f"「{name}」を追加しました。")
+    return redirect("court_order_maintenance", code=tournament.code)
+
+
+def _court_add_bulk(request, tournament):
+    bulk_count_raw = request.POST.get("bulk_count", "").strip()
+    bulk_naming = request.POST.get("bulk_naming")
+
+    try:
+        bulk_count = int(bulk_count_raw)
+    except (TypeError, ValueError):
+        bulk_count = None
+
+    if bulk_count is None or not (1 <= bulk_count <= 50):
+        messages.error(
+            request,
+            "作成するコート数は1〜50の整数で入力してください。",
+        )
+        return redirect("court_order_maintenance", code=tournament.code)
+
+    existing_names = list(
+        Court.objects.filter(tournament=tournament).values_list(
+            "name",
+            flat=True,
+        )
+    )
+
+    if bulk_naming == "alphabetic":
+        new_names = _next_alphabetic_court_names(existing_names, bulk_count)
+    elif bulk_naming == "numeric":
+        new_names = _next_numeric_court_names(existing_names, bulk_count)
+    else:
+        messages.error(request, "命名方式を選択してください。")
+        return redirect("court_order_maintenance", code=tournament.code)
+
+    duplicate_names = set(new_names) & set(existing_names)
+
+    if duplicate_names:
+        messages.error(
+            request,
+            (
+                "生成しようとした名前が既存のコート名と重複しています: "
+                + "、".join(sorted(duplicate_names))
+            ),
+        )
+        return redirect("court_order_maintenance", code=tournament.code)
+
+    max_display_order = (
+        Court.objects.filter(tournament=tournament)
+        .order_by("-display_order")
+        .values_list("display_order", flat=True)
+        .first()
+        or 0
+    )
+
+    Court.objects.bulk_create([
+        Court(
+            tournament=tournament,
+            name=name,
+            display_order=max_display_order + index,
+        )
+        for index, name in enumerate(new_names, start=1)
+    ])
+
+    messages.success(
+        request,
+        f"{bulk_count}件のコートを作成しました。",
+    )
+    return redirect("court_order_maintenance", code=tournament.code)
+
+
+def _court_delete(request, tournament):
+    court_id = request.POST.get("court_id")
+    court = get_object_or_404(
+        Court,
+        id=court_id,
+        tournament=tournament,
+    )
+
+    if Schedule.objects.filter(court=court).exists():
+        messages.error(
+            request,
+            f"「{court.name}」は進行表で使用中のため削除できません。",
+        )
+        return redirect("court_order_maintenance", code=tournament.code)
+
+    court_name = court.name
+    court.delete()
+    messages.success(request, f"「{court_name}」を削除しました。")
+    return redirect("court_order_maintenance", code=tournament.code)
+
+
+def court_order_maintenance(request, code):
+    """大会内のコートの表示順・名前・新規作成・削除をまとめて編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+
+    if request.method == "POST":
+        action = request.POST.get("action", "reorder_rename")
+
+        if action == "add_single":
+            return _court_add_single(request, tournament)
+
+        if action == "add_bulk":
+            return _court_add_bulk(request, tournament)
+
+        if action == "delete":
+            return _court_delete(request, tournament)
+
+        return _court_reorder_rename(request, tournament)
+
+    courts = _ordered_tournament_courts(tournament)
 
     return render(
         request,
@@ -2190,6 +2468,5 @@ def court_order_maintenance(request, code):
         {
             "tournament": tournament,
             "courts": courts,
-            "errors": errors,
         },
     )

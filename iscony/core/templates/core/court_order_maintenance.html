@@ -2,49 +2,99 @@
 
 {% block content %}
 
-<h2>{{ tournament.name }} コート表示順メンテナンス</h2>
+<h2>{{ tournament.name }} コート管理</h2>
 
-{% if errors %}
-    <ul style="color:red;">
-        {% for error in errors %}
-            <li>{{ error }}</li>
-        {% endfor %}
-    </ul>
-{% endif %}
+<section>
+    <h3>コートを1件追加</h3>
 
-<form method="post">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_single">
+        <input type="text" name="court_name" placeholder="コート名">
+        <button type="submit">追加</button>
+    </form>
+</section>
+
+<section>
+    <h3>コート数を指定して自動作成</h3>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_bulk">
+        <label>
+            コート数
+            <input type="number" name="bulk_count" min="1" max="50" value="1">
+        </label>
+        <label>
+            <input type="radio" name="bulk_naming" value="numeric" checked>
+            数字(1, 2, 3...)
+        </label>
+        <label>
+            <input type="radio" name="bulk_naming" value="alphabetic">
+            アルファベット(A, B, C...)
+        </label>
+        <button type="submit">まとめて作成</button>
+    </form>
+</section>
+
+<h3>表示順・コート名</h3>
+
+<form id="reorder-rename-form" method="post">
     {% csrf_token %}
-
-    <table>
-        <tr>
-            <th>表示順</th>
-            <th>コート</th>
-        </tr>
-
-        {% for court in courts %}
-            <tr>
-                <td>
-                    <input
-                        type="number"
-                        min="0"
-                        name="court_order_{{ court.id }}"
-                        value="{{ court.display_order }}"
-                        style="width:70px;"
-                    >
-                </td>
-                <td>{{ court.name }}</td>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="2">コートが登録されていません。</td>
-            </tr>
-        {% endfor %}
-    </table>
-
-    {% if courts %}
-        <button type="submit">保存</button>
-    {% endif %}
+    <input type="hidden" name="action" value="reorder_rename">
 </form>
+
+<table>
+    <tr>
+        <th>表示順</th>
+        <th>コート名</th>
+        <th>削除</th>
+    </tr>
+
+    {% for court in courts %}
+        <tr>
+            <td>
+                <input
+                    form="reorder-rename-form"
+                    type="number"
+                    min="0"
+                    name="court_order_{{ court.id }}"
+                    value="{{ court.display_order }}"
+                    style="width:70px;"
+                >
+            </td>
+            <td>
+                <input
+                    form="reorder-rename-form"
+                    type="text"
+                    name="court_name_{{ court.id }}"
+                    value="{{ court.name }}"
+                    style="width:100px;"
+                >
+            </td>
+            <td>
+                <form
+                    method="post"
+                    style="display:inline;"
+                    onsubmit="return confirm('「{{ court.name }}」を削除しますか？');"
+                >
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="court_id" value="{{ court.id }}">
+                    <button type="submit">削除</button>
+                </form>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="3">コートが登録されていません。</td>
+        </tr>
+    {% endfor %}
+</table>
+
+{% if courts %}
+    <button form="reorder-rename-form" type="submit">保存</button>
+{% endif %}
 
 <p>
     <a class="button-link" href="{% url 'maintenance_menu' tournament.code %}">
