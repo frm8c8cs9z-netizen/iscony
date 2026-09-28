@@ -111,12 +111,19 @@
         <input type="hidden" name="action" value="auto_assign_league">
 
         <fieldset>
-            <legend>グループを選択(2〜4個)</legend>
-            {% for group in league_groups %}
-                <label style="display:block;">
-                    <input type="checkbox" name="group_ids" value="{{ group.id }}">
-                    {{ group.category.name }} / {{ group.name }}
-                </label>
+            <legend>グループを選択(2〜4個、同じStageのグループのみ)</legend>
+            {% for section in league_group_sections %}
+                <p class="subtle-text" style="margin-bottom:2px;">
+                    {{ section.category.name }} / {{ section.stage.name }}
+                </p>
+                {% for group in section.groups %}
+                    <label style="display:block; margin-left:1em;">
+                        <input type="checkbox" name="group_ids" value="{{ group.id }}">
+                        {{ group.name }}
+                    </label>
+                {% endfor %}
+            {% empty %}
+                <p>リーグのグループがありません。</p>
             {% endfor %}
         </fieldset>
 

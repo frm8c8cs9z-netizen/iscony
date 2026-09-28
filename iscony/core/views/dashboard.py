@@ -2837,6 +2837,18 @@ def _schedule_block_auto_assign_league(request, tournament, block):
             schedule_block_id=block.id,
         )
 
+    stage_ids = {group.stage_id for group in groups}
+    if len(stage_ids) != 1:
+        messages.error(
+            request,
+            "同じStage(リーグ)のグループだけを選択してください。",
+        )
+        return redirect(
+            "schedule_block_detail",
+            code=tournament.code,
+            schedule_block_id=block.id,
+        )
+
     court_id = request.POST.get("court_id")
     court = get_object_or_404(Court, id=court_id, tournament=tournament)
 
@@ -3091,11 +3103,28 @@ def schedule_block_detail(request, code, schedule_block_id):
         stage__stage_type=Stage.TYPE_LEAGUE,
     ).select_related(
         "category",
+        "stage",
     ).order_by(
         "category__display_order",
+        "stage__display_order",
+        "stage__name",
         "display_order",
         "name",
     )
+    league_group_sections = []
+    for group in league_groups:
+        section_key = (group.category_id, group.stage_id)
+        if (
+            not league_group_sections
+            or league_group_sections[-1]["key"] != section_key
+        ):
+            league_group_sections.append({
+                "key": section_key,
+                "category": group.category,
+                "stage": group.stage,
+                "groups": [],
+            })
+        league_group_sections[-1]["groups"].append(group)
     tournament_brackets = TournamentBracket.objects.filter(
         category__tournament=tournament,
     ).select_related(
@@ -3135,7 +3164,7 @@ def schedule_block_detail(request, code, schedule_block_id):
             "schedules": schedules,
             "unassigned_matches": unassigned_matches,
             "courts": courts,
-            "league_groups": league_groups,
+            "league_group_sections": league_group_sections,
             "tournament_brackets": tournament_brackets,
             "schedules_by_court_id": schedules_by_court_id,
             "court_schedule_columns": court_schedule_columns,

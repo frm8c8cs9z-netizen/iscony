@@ -7579,18 +7579,22 @@ class ScheduleBlockDetailTests(TestCase):
             },
         )
 
-    def create_auto_assign_group(self, *, name, prefix, display_order):
-        category = Category.objects.create(
-            tournament=self.tournament,
-            name=f"カテゴリ{prefix}",
-            display_order=display_order,
-        )
-        stage = Stage.objects.create(
-            category=category,
-            name="予選リーグ",
-            stage_type=Stage.TYPE_LEAGUE,
-            display_order=1,
-        )
+    def create_auto_assign_group(
+        self, *, name, prefix, display_order, category=None, stage=None,
+    ):
+        if category is None:
+            category = Category.objects.create(
+                tournament=self.tournament,
+                name=f"カテゴリ{prefix}",
+                display_order=display_order,
+            )
+        if stage is None:
+            stage = Stage.objects.create(
+                category=category,
+                name="予選リーグ",
+                stage_type=Stage.TYPE_LEAGUE,
+                display_order=1,
+            )
         group = Group.objects.create(
             category=category,
             stage=stage,
@@ -7885,6 +7889,65 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertContains(response, self.court1.name)
         self.assertContains(response, self.court2.name)
 
+    def test_get_groups_league_choices_by_category_and_stage(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        preliminary_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        final_stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        preliminary_group = Group.objects.create(
+            category=category,
+            stage=preliminary_stage,
+            name="A",
+            display_order=1,
+        )
+        final_group = Group.objects.create(
+            category=category,
+            stage=final_stage,
+            name="A",
+            display_order=1,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "男子A / 予選リーグ")
+        self.assertContains(response, "男子A / 決勝リーグ")
+        self.assertEqual(
+            [
+                (
+                    section["category"].id,
+                    section["stage"].id,
+                    [group.id for group in section["groups"]],
+                )
+                for section in response.context["league_group_sections"]
+            ],
+            [
+                (
+                    category.id,
+                    preliminary_stage.id,
+                    [preliminary_group.id],
+                ),
+                (
+                    category.id,
+                    final_stage.id,
+                    [final_group.id],
+                ),
+            ],
+        )
+
     def test_auto_assign_league_rejects_too_few_groups(self):
         group = self.create_auto_assign_group(
             name="A",
@@ -7935,15 +7998,30 @@ class ScheduleBlockDetailTests(TestCase):
         )
 
     def test_auto_assign_league_assigns_selected_groups_from_view(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
         group_a = self.create_auto_assign_group(
             name="A",
             prefix="A",
             display_order=1,
+            category=category,
+            stage=stage,
         )
         group_b = self.create_auto_assign_group(
             name="B",
             prefix="B",
             display_order=2,
+            category=category,
+            stage=stage,
         )
 
         response = self.client.post(
@@ -7980,6 +8058,56 @@ class ScheduleBlockDetailTests(TestCase):
                 (group_b.id, 6),
             ],
         )
+
+    def test_auto_assign_league_rejects_groups_from_mixed_stages(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        preliminary_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        final_stage = Stage.objects.create(
+            category=category,
+            name="決勝リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        group_a = self.create_auto_assign_group(
+            name="A",
+            prefix="A",
+            display_order=1,
+            category=category,
+            stage=preliminary_stage,
+        )
+        group_b = self.create_auto_assign_group(
+            name="A",
+            prefix="B",
+            display_order=1,
+            category=category,
+            stage=final_stage,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "auto_assign_league",
+                "group_ids": [str(group_a.id), str(group_b.id)],
+                "court_id": str(self.court1.id),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "同じStage(リーグ)のグループだけを選択してください。",
+        )
+        self.assertFalse(Schedule.objects.exists())
 
     def test_split_to_new_block_moves_tail_in_same_court_only(self):
         court1_first = Schedule.objects.create(
