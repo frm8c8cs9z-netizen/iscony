@@ -11,6 +11,11 @@
 <section>
     <h3>未配置の試合</h3>
 
+    <p class="subtle-text">
+        下の一覧の試合をドラッグ、またはタップしてから配置先をタップすると、
+        コートへ割り付けられます。
+    </p>
+
     <input
         type="text"
         id="unassigned-match-search"
@@ -40,6 +45,13 @@
 
 <section>
     <h3>コートへ配置</h3>
+
+    <p class="subtle-text">
+        試合をコート欄へドラッグ&ドロップ(またはタップ→タップ)で移動できます。
+        すでに配置された試合の行へドロップするとその位置に割り込み、
+        「ここへ追加(最後尾)」へドロップするとそのコートの最後に追加されます。
+        配置済みの試合も同様にドラッグで並べ替え・他コートへの移動ができます。
+    </p>
 
     <div class="schedule-court-columns">
         {% for column in court_schedule_columns %}
