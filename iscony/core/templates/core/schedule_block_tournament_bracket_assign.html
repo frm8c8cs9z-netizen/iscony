@@ -1,0 +1,169 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    {{ tournament.name }} {{ schedule_block.name }} /
+    {{ bracket.category.name }} {{ bracket.name }}
+</h2>
+
+<p class="subtle-text">
+    1回戦の枠をクリックすると開始位置、別の枠をクリックすると終了位置に
+    なります(その間の1回戦の試合が対象です)。すでに配置済みの試合は
+    薄く表示されます(既に配置された試合は自動割り付けの対象から
+    自動的に除外されます)。もう一度別の枠をクリックすると選択がやり直せます。
+</p>
+
+<form id="tournament-range-assign-form" method="post">
+    {% csrf_token %}
+    <input type="hidden" id="start-match-index" name="start_match_index">
+    <input type="hidden" id="end-match-index" name="end_match_index">
+
+    <label>
+        割り付け先コート
+        <select name="court_id" required>
+            {% for court in courts %}
+                <option value="{{ court.id }}">{{ court.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <button type="submit" id="tournament-range-assign-submit" disabled>
+        自動割り付け
+    </button>
+    <button type="button" id="tournament-range-assign-clear">
+        選択をクリア
+    </button>
+</form>
+
+<div class="svg-bracket-wrap svg-bracket-wrap--with-slots">
+    <div
+        class="tournament-slot-column"
+        style="position:relative; width:150px; height:{{ svg_bracket.height }}px; flex:0 0 auto;"
+    >
+        {% for slot in slots %}
+            <div
+                class="tournament-slot-row{% if slot.is_scheduled %} tournament-slot-row--already-scheduled{% endif %}"
+                style="position:absolute; top:{{ slot.y }}px; left:0; right:0; transform:translateY(-50%);"
+                data-match-index="{{ slot.match_index }}"
+            >
+                <span class="tournament-slot-name">
+                    {% if slot.entry.participant %}
+                        {{ slot.entry.display_name }}
+                    {% elif slot.entry.advancement_source %}
+                        {{ slot.entry.advancement_source.label }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </span>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=bracket.name|add:" トーナメント表" %}
+</div>
+
+<p>
+    <a class="button-link" href="{% url 'schedule_block_detail' tournament.code schedule_block.id %}">
+        日程区分の詳細へ戻る
+    </a>
+</p>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const column = document.querySelector(".tournament-slot-column");
+        const startInput = document.querySelector("#start-match-index");
+        const endInput = document.querySelector("#end-match-index");
+        const submitButton = document.querySelector(
+            "#tournament-range-assign-submit"
+        );
+        const clearButton = document.querySelector(
+            "#tournament-range-assign-clear"
+        );
+
+        let startIndex = null;
+        let endIndex = null;
+
+        function applyHighlight() {
+            const rows = column.querySelectorAll(".tournament-slot-row");
+            const lo = startIndex === null || endIndex === null
+                ? null
+                : Math.min(startIndex, endIndex);
+            const hi = startIndex === null || endIndex === null
+                ? null
+                : Math.max(startIndex, endIndex);
+
+            rows.forEach(function(row) {
+                const index = parseInt(row.dataset.matchIndex, 10);
+                row.classList.remove(
+                    "entry-tap-selecting",
+                    "tournament-slot-row--range-selected"
+                );
+
+                if (lo === null) {
+                    if (startIndex !== null && index === startIndex) {
+                        row.classList.add("entry-tap-selecting");
+                    }
+                    return;
+                }
+
+                if (index >= lo && index <= hi) {
+                    row.classList.add(
+                        "tournament-slot-row--range-selected"
+                    );
+                }
+            });
+        }
+
+        function resetSelection() {
+            startIndex = null;
+            endIndex = null;
+            startInput.value = "";
+            endInput.value = "";
+            submitButton.disabled = true;
+            applyHighlight();
+        }
+
+        if (column) {
+            column.addEventListener("click", function(event) {
+                const row = event.target.closest(".tournament-slot-row");
+                if (!row) {
+                    return;
+                }
+
+                const index = parseInt(row.dataset.matchIndex, 10);
+                if (isNaN(index)) {
+                    return;
+                }
+
+                if (startIndex === null) {
+                    startIndex = index;
+                    endIndex = null;
+                } else if (endIndex === null) {
+                    endIndex = index;
+                } else {
+                    startIndex = index;
+                    endIndex = null;
+                }
+
+                if (startIndex !== null && endIndex !== null) {
+                    startInput.value = Math.min(startIndex, endIndex);
+                    endInput.value = Math.max(startIndex, endIndex);
+                    submitButton.disabled = false;
+                } else {
+                    startInput.value = "";
+                    endInput.value = "";
+                    submitButton.disabled = true;
+                }
+
+                applyHighlight();
+            });
+        }
+
+        if (clearButton) {
+            clearButton.addEventListener("click", resetSelection);
+        }
+    });
+</script>
+
+{% endblock %}

@@ -133,6 +133,28 @@
     </form>
 </section>
 
+<section>
+    <h3>トーナメントの自動割り付け</h3>
+    <p class="subtle-text">
+        ブラケットを選ぶと、トーナメント表をクリックして枠順の範囲を選び、
+        その範囲から育つ試合をまとめて1コートへ自動割り付けできる画面に
+        移動します。
+    </p>
+
+    <select
+        onchange="if (this.value) { location.href = this.value; }"
+    >
+        <option value="">ブラケットを選択してください</option>
+        {% for bracket in tournament_brackets %}
+            <option
+                value="{% url 'schedule_block_tournament_bracket_assign' tournament.code schedule_block.id bracket.id %}"
+            >
+                {{ bracket.category.name }} / {{ bracket.name }}
+            </option>
+        {% endfor %}
+    </select>
+</section>
+
 <table>
     <tr>
         <th>コート</th>

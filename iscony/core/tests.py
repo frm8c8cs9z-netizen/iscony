@@ -7617,6 +7617,125 @@ class ScheduleBlockDetailTests(TestCase):
                 )
         return group
 
+    def create_auto_assign_bracket(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+            display_order=1,
+        )
+        for order in range(1, 9):
+            create_tournament_entry(
+                bracket=bracket,
+                pair_code=str(order),
+                display_order=order,
+                player1_name=f"本戦{order}A",
+                player2_name=f"本戦{order}B",
+            )
+        generate_tournament_bracket_matches(bracket, 7)
+        return bracket
+
+    def tournament_range_assign_url(self, bracket):
+        return reverse(
+            "schedule_block_tournament_bracket_assign",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": self.block1.id,
+                "bracket_id": bracket.id,
+            },
+        )
+
+    def test_tournament_range_assign_get_shows_round1_slots(self):
+        bracket = self.create_auto_assign_bracket()
+
+        response = self.client.get(self.tournament_range_assign_url(bracket))
+
+        self.assertEqual(response.status_code, 200)
+        first_round_match_count = TournamentMatch.objects.filter(
+            bracket=bracket,
+            round_number=1,
+        ).count()
+        self.assertEqual(first_round_match_count, 4)
+        self.assertContains(response, 'data-match-index="0"', count=2)
+        self.assertContains(response, 'data-match-index="1"', count=2)
+        self.assertContains(response, 'data-match-index="2"', count=2)
+        self.assertContains(response, 'data-match-index="3"', count=2)
+        self.assertEqual(
+            {
+                slot["match_index"]
+                for slot in response.context["slots"]
+            },
+            set(range(first_round_match_count)),
+        )
+
+    def test_tournament_range_assign_post_assigns_and_redirects_to_same_screen(self):
+        bracket = self.create_auto_assign_bracket()
+        expected_matches = tournament_matches_in_round1_position_range(
+            bracket,
+            0,
+            1,
+        )
+        url = self.tournament_range_assign_url(bracket)
+
+        response = self.client.post(
+            url,
+            {
+                "start_match_index": "0",
+                "end_match_index": "1",
+                "court_id": str(self.court1.id),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            url,
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block1,
+                    court=self.court1,
+                ).order_by("order").values_list(
+                    "tournament_match_id",
+                    "order",
+                )
+            ),
+            [
+                (expected_matches[0].id, 1),
+                (expected_matches[1].id, 2),
+                (expected_matches[2].id, 3),
+            ],
+        )
+
+    def test_get_includes_tournament_range_assign_bracket_select(self):
+        bracket = self.create_auto_assign_bracket()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "トーナメントの自動割り付け")
+        self.assertContains(response, "ブラケットを選択してください")
+        self.assertContains(
+            response,
+            self.tournament_range_assign_url(bracket),
+        )
+        self.assertContains(
+            response,
+            f"{bracket.category.name} / {bracket.name}",
+        )
+
     def test_get_builds_unassigned_matches_and_court_columns(self):
         category = Category.objects.create(
             tournament=self.tournament,

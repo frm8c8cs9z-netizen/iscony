@@ -30,6 +30,7 @@ from ..models import (
     Court,
     ScheduleBlock,
     RoundRobinMatch,
+    TournamentBracket,
     TournamentMatch,
     Schedule,
 )
@@ -47,10 +48,13 @@ from ..forms import (
 from ..match_keys import (
     format_match_key_display,
 )
+from ..rendering.tournament_svg_builder import build_svg_bracket_data
+from ..selectors.tournament_brackets import build_tournament_round_data
 
 from ..services import (
     assign_match_to_schedule_slot,
     auto_assign_league_groups_to_court,
+    auto_assign_tournament_range_to_court,
     clone_tournament_without_results,
     merge_schedule_blocks,
     move_schedule_tail_to_block,
@@ -2849,6 +2853,130 @@ def _schedule_block_auto_assign_league(request, tournament, block):
     )
 
 
+def schedule_block_tournament_bracket_assign(
+    request, code, schedule_block_id, bracket_id,
+):
+    """トーナメント表で枠順範囲を選び、1コートへ自動割り付けする。"""
+
+    tournament = get_object_or_404(Tournament, code=code)
+    block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+    bracket = get_object_or_404(
+        TournamentBracket,
+        id=bracket_id,
+        category__tournament=tournament,
+    )
+
+    courts = list(
+        Court.objects.filter(
+            tournament=tournament,
+        ).order_by(
+            "display_order",
+            "name",
+        )
+    )
+
+    if request.method == "POST":
+        start_index = request.POST.get("start_match_index")
+        end_index = request.POST.get("end_match_index")
+        court_id = request.POST.get("court_id")
+
+        if start_index is None or end_index is None or not court_id:
+            messages.error(request, "範囲とコートを選択してください。")
+            return redirect(
+                "schedule_block_tournament_bracket_assign",
+                code=tournament.code,
+                schedule_block_id=block.id,
+                bracket_id=bracket.id,
+            )
+
+        court = get_object_or_404(Court, id=court_id, tournament=tournament)
+
+        assigned = auto_assign_tournament_range_to_court(
+            bracket,
+            int(start_index),
+            int(end_index),
+            block,
+            court,
+        )
+
+        messages.success(
+            request,
+            f"{len(assigned)}試合を「{court.name}」へ自動割り付けしました。",
+        )
+        return redirect(
+            "schedule_block_tournament_bracket_assign",
+            code=tournament.code,
+            schedule_block_id=block.id,
+            bracket_id=bracket.id,
+        )
+
+    round_data = build_tournament_round_data(bracket)
+    svg_bracket = build_svg_bracket_data(
+        bracket,
+        round_data,
+        forced_layout_type=TournamentBracket.LAYOUT_SINGLE,
+    )
+    match_positions = svg_bracket["match_positions"] if svg_bracket else {}
+
+    first_round_matches = TournamentMatch.objects.filter(
+        bracket=bracket,
+        round_number=1,
+    ).select_related(
+        "pair1",
+        "pair2",
+        "pair1__advancement_source",
+        "pair2__advancement_source",
+    ).order_by(
+        "match_number",
+    )
+
+    scheduled_match_ids = set(
+        Schedule.objects.filter(
+            tournament_match__bracket=bracket,
+        ).values_list("tournament_match_id", flat=True)
+    )
+
+    slots = []
+
+    for match_index, match in enumerate(first_round_matches):
+        position = match_positions.get(("left", match.id), {})
+        is_scheduled = match.id in scheduled_match_ids
+
+        if match.pair1_id:
+            slots.append({
+                "entry": match.pair1,
+                "y": position.get("y1", 0),
+                "match_index": match_index,
+                "is_scheduled": is_scheduled,
+            })
+
+        if match.pair2_id:
+            slots.append({
+                "entry": match.pair2,
+                "y": position.get("y2", 0),
+                "match_index": match_index,
+                "is_scheduled": is_scheduled,
+            })
+
+    slots.sort(key=lambda slot: slot["y"])
+
+    return render(
+        request,
+        "core/schedule_block_tournament_bracket_assign.html",
+        {
+            "tournament": tournament,
+            "block": block,
+            "schedule_block": block,
+            "bracket": bracket,
+            "svg_bracket": svg_bracket,
+            "slots": slots,
+            "courts": courts,
+        },
+    )
+
+
 def schedule_block_detail(request, code, schedule_block_id):
     """1つのScheduleBlockの中身をコート別に確認し、分割操作を行う。"""
 
@@ -2968,6 +3096,15 @@ def schedule_block_detail(request, code, schedule_block_id):
         "display_order",
         "name",
     )
+    tournament_brackets = TournamentBracket.objects.filter(
+        category__tournament=tournament,
+    ).select_related(
+        "category",
+    ).order_by(
+        "category__display_order",
+        "display_order",
+        "name",
+    )
     schedules_by_court_id = defaultdict(list)
     for schedule in schedules:
         schedules_by_court_id[schedule.court_id].append(schedule)
@@ -2999,6 +3136,7 @@ def schedule_block_detail(request, code, schedule_block_id):
             "unassigned_matches": unassigned_matches,
             "courts": courts,
             "league_groups": league_groups,
+            "tournament_brackets": tournament_brackets,
             "schedules_by_court_id": schedules_by_court_id,
             "court_schedule_columns": court_schedule_columns,
             "other_blocks": other_blocks,
