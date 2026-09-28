@@ -50,6 +50,7 @@ from ..match_keys import (
 
 from ..services import (
     assign_match_to_schedule_slot,
+    auto_assign_league_groups_to_court,
     clone_tournament_without_results,
     merge_schedule_blocks,
     move_schedule_tail_to_block,
@@ -2803,6 +2804,51 @@ def _schedule_block_split(request, tournament, block):
     )
 
 
+def _schedule_block_auto_assign_league(request, tournament, block):
+    group_ids = request.POST.getlist("group_ids")
+
+    if not (2 <= len(group_ids) <= 4):
+        messages.error(
+            request,
+            "グループは2〜4個選択してください。",
+        )
+        return redirect(
+            "schedule_block_detail",
+            code=tournament.code,
+            schedule_block_id=block.id,
+        )
+
+    groups = list(
+        Group.objects.filter(
+            id__in=group_ids,
+            category__tournament=tournament,
+        )
+    )
+
+    if len(groups) != len(group_ids):
+        messages.error(request, "不正なグループが指定されています。")
+        return redirect(
+            "schedule_block_detail",
+            code=tournament.code,
+            schedule_block_id=block.id,
+        )
+
+    court_id = request.POST.get("court_id")
+    court = get_object_or_404(Court, id=court_id, tournament=tournament)
+
+    assigned = auto_assign_league_groups_to_court(groups, block, court)
+
+    messages.success(
+        request,
+        f"{len(assigned)}試合を「{court.name}」へ自動割り付けしました。",
+    )
+    return redirect(
+        "schedule_block_detail",
+        code=tournament.code,
+        schedule_block_id=block.id,
+    )
+
+
 def schedule_block_detail(request, code, schedule_block_id):
     """1つのScheduleBlockの中身をコート別に確認し、分割操作を行う。"""
 
@@ -2812,6 +2858,10 @@ def schedule_block_detail(request, code, schedule_block_id):
     )
 
     if request.method == "POST":
+        if request.POST.get("action") == "auto_assign_league":
+            return _schedule_block_auto_assign_league(
+                request, tournament, block,
+            )
         return _schedule_block_split(request, tournament, block)
 
     schedules = Schedule.objects.filter(
@@ -2908,6 +2958,16 @@ def schedule_block_detail(request, code, schedule_block_id):
             "name",
         )
     )
+    league_groups = Group.objects.filter(
+        category__tournament=tournament,
+        stage__stage_type=Stage.TYPE_LEAGUE,
+    ).select_related(
+        "category",
+    ).order_by(
+        "category__display_order",
+        "display_order",
+        "name",
+    )
     schedules_by_court_id = defaultdict(list)
     for schedule in schedules:
         schedules_by_court_id[schedule.court_id].append(schedule)
@@ -2938,6 +2998,7 @@ def schedule_block_detail(request, code, schedule_block_id):
             "schedules": schedules,
             "unassigned_matches": unassigned_matches,
             "courts": courts,
+            "league_groups": league_groups,
             "schedules_by_court_id": schedules_by_court_id,
             "court_schedule_columns": court_schedule_columns,
             "other_blocks": other_blocks,

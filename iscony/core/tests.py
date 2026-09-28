@@ -79,6 +79,7 @@ from .rendering.tournament_svg_score import resolve_svg_match_code_text_style
 
 from .services import (
     advance_tournament_bye_winners,
+    auto_assign_league_groups_to_court,
     auto_apply_stage_advancements_if_ready,
     apply_stage_advancements,
     cancel_pair_retirement,
@@ -110,6 +111,7 @@ from .services import (
     save_round_robin_score,
     save_tournament_score,
     save_tournament_retirement,
+    sorted_round_robin_matches_for_group,
     swap_advancement_sources,
     undo_schedule_replacement,
     unassign_league_entry_advancement_piece,
@@ -7074,6 +7076,265 @@ class ScheduleBlockMaintenanceTests(TestCase):
         )
 
 
+class RoundRobinAutoScheduleAssignTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="リーグ自動割り付けテスト大会",
+            code="AUTOASSIGN",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        self.other_block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.other_court = Court.objects.create(
+            tournament=self.tournament,
+            name="2コート",
+            display_order=2,
+        )
+
+    def create_group_with_matches(self, *, name, prefix, pair_count=3):
+        group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name=name,
+            display_order=ord(prefix) - ord("A") + 1,
+        )
+        entries = [
+            create_league_entry_with_participant(
+                category=self.category,
+                group=group,
+                pair_code=f"{prefix}{order}",
+                display_order=order,
+                player1_name=f"{prefix}{order}A",
+                player2_name=f"{prefix}{order}B",
+            )
+            for order in range(1, pair_count + 1)
+        ]
+        matches = []
+        for first_index in range(pair_count):
+            for second_index in range(first_index + 1, pair_count):
+                matches.append(
+                    RoundRobinMatch.objects.create(
+                        group=group,
+                        pair1=entries[first_index],
+                        pair2=entries[second_index],
+                    )
+                )
+        return group, entries, matches
+
+    def test_sorted_round_robin_matches_for_group_uses_display_order_distance(self):
+        group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+            display_order=1,
+        )
+        entries = [
+            create_league_entry_with_participant(
+                category=self.category,
+                group=group,
+                pair_code=f"A{order}",
+                display_order=order,
+                player1_name=f"A{order}A",
+                player2_name=f"A{order}B",
+            )
+            for order in range(1, 5)
+        ]
+        for order1, order2 in (
+            (1, 4),
+            (2, 4),
+            (1, 3),
+            (3, 4),
+            (1, 2),
+            (2, 3),
+        ):
+            RoundRobinMatch.objects.create(
+                group=group,
+                pair1=entries[order1 - 1],
+                pair2=entries[order2 - 1],
+            )
+
+        self.assertEqual(
+            [
+                {
+                    match.pair1.display_order,
+                    match.pair2.display_order,
+                }
+                for match in sorted_round_robin_matches_for_group(group)
+            ],
+            [
+                {1, 2},
+                {3, 4},
+                {2, 3},
+                {1, 4},
+                {1, 3},
+                {2, 4},
+            ],
+        )
+
+    def test_sorted_round_robin_matches_for_group_keeps_three_pair_order(self):
+        group, _, _ = self.create_group_with_matches(
+            name="A",
+            prefix="A",
+            pair_count=3,
+        )
+
+        self.assertEqual(
+            [
+                {
+                    match.pair1.display_order,
+                    match.pair2.display_order,
+                }
+                for match in sorted_round_robin_matches_for_group(group)
+            ],
+            [
+                {1, 2},
+                {2, 3},
+                {1, 3},
+            ],
+        )
+
+    def test_sorted_round_robin_matches_for_group_minimizes_repeated_pairs(self):
+        group, _, _ = self.create_group_with_matches(
+            name="A",
+            prefix="A",
+            pair_count=7,
+        )
+
+        ordered_pair_sets = [
+            {
+                match.pair1.display_order,
+                match.pair2.display_order,
+            }
+            for match in sorted_round_robin_matches_for_group(group)
+        ]
+
+        self.assertEqual(
+            ordered_pair_sets,
+            [
+                {1, 2},
+                {6, 7},
+                {2, 3},
+                {5, 6},
+                {3, 4},
+                {5, 7},
+                {1, 3},
+                {4, 5},
+                {3, 6},
+                {2, 4},
+                {3, 5},
+                {4, 6},
+                {2, 5},
+                {1, 4},
+                {3, 7},
+                {1, 5},
+                {4, 7},
+                {2, 6},
+                {1, 7},
+                {1, 6},
+                {2, 7},
+            ],
+        )
+        repeated_count = sum(
+            bool(previous & current)
+            for previous, current in zip(
+                ordered_pair_sets,
+                ordered_pair_sets[1:],
+            )
+        )
+        self.assertEqual(repeated_count, 1)
+
+    def test_sorted_round_robin_matches_for_group_uses_all_pairs_within_first_five_matches(self):
+        group, entries, _ = self.create_group_with_matches(
+            name="A",
+            prefix="A",
+            pair_count=7,
+        )
+
+        first_five_pair_ids = set()
+        for match in sorted_round_robin_matches_for_group(group)[:5]:
+            first_five_pair_ids.update({match.pair1_id, match.pair2_id})
+
+        self.assertEqual(
+            first_five_pair_ids,
+            {entry.id for entry in entries},
+        )
+
+    def test_auto_assign_league_groups_to_court_interleaves_unscheduled_matches(self):
+        group_a, _, _ = self.create_group_with_matches(name="A", prefix="A")
+        group_b, _, _ = self.create_group_with_matches(name="B", prefix="B")
+        group_c, _, _ = self.create_group_with_matches(name="C", prefix="C")
+        group_a_matches = sorted_round_robin_matches_for_group(group_a)
+        group_b_matches = sorted_round_robin_matches_for_group(group_b)
+        group_c_matches = sorted_round_robin_matches_for_group(group_c)
+        existing = Schedule.objects.create(
+            schedule_block=self.other_block,
+            court=self.other_court,
+            order=1,
+            round_robin_match=group_a_matches[0],
+        )
+
+        assigned = auto_assign_league_groups_to_court(
+            [group_a, group_b, group_c],
+            self.block,
+            self.court,
+        )
+
+        self.assertEqual(
+            [schedule.round_robin_match_id for schedule in assigned],
+            [
+                group_a_matches[1].id,
+                group_b_matches[0].id,
+                group_c_matches[0].id,
+                group_a_matches[2].id,
+                group_b_matches[1].id,
+                group_c_matches[1].id,
+                group_b_matches[2].id,
+                group_c_matches[2].id,
+            ],
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block,
+                    court=self.court,
+                ).order_by("order").values_list(
+                    "round_robin_match_id",
+                    "order",
+                )
+            ),
+            [
+                (schedule.round_robin_match_id, index)
+                for index, schedule in enumerate(assigned, start=1)
+            ],
+        )
+        existing.refresh_from_db()
+        self.assertEqual(existing.round_robin_match_id, group_a_matches[0].id)
+
+
 class ScheduleBlockDetailTests(TestCase):
 
     def setUp(self):
@@ -7110,6 +7371,44 @@ class ScheduleBlockDetailTests(TestCase):
                 "schedule_block_id": self.block1.id,
             },
         )
+
+    def create_auto_assign_group(self, *, name, prefix, display_order):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name=f"カテゴリ{prefix}",
+            display_order=display_order,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name=name,
+            display_order=display_order,
+        )
+        entries = [
+            create_league_entry_with_participant(
+                category=category,
+                group=group,
+                pair_code=f"{prefix}{order}",
+                display_order=order,
+                player1_name=f"{prefix}{order}A",
+                player2_name=f"{prefix}{order}B",
+            )
+            for order in range(1, 4)
+        ]
+        for first_index in range(3):
+            for second_index in range(first_index + 1, 3):
+                RoundRobinMatch.objects.create(
+                    group=group,
+                    pair1=entries[first_index],
+                    pair2=entries[second_index],
+                )
+        return group
 
     def test_get_builds_unassigned_matches_and_court_columns(self):
         category = Category.objects.create(
@@ -7259,6 +7558,102 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertContains(response, group.name)
         self.assertContains(response, self.court1.name)
         self.assertContains(response, self.court2.name)
+
+    def test_auto_assign_league_rejects_too_few_groups(self):
+        group = self.create_auto_assign_group(
+            name="A",
+            prefix="A",
+            display_order=1,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "auto_assign_league",
+                "group_ids": [str(group.id)],
+                "court_id": str(self.court1.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Schedule.objects.exists())
+        self.assertIn(
+            "グループは2〜4個選択してください。",
+            [message.message for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_auto_assign_league_rejects_too_many_groups(self):
+        groups = [
+            self.create_auto_assign_group(
+                name=chr(ord("A") + index),
+                prefix=chr(ord("A") + index),
+                display_order=index + 1,
+            )
+            for index in range(5)
+        ]
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "auto_assign_league",
+                "group_ids": [str(group.id) for group in groups],
+                "court_id": str(self.court1.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Schedule.objects.exists())
+        self.assertIn(
+            "グループは2〜4個選択してください。",
+            [message.message for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_auto_assign_league_assigns_selected_groups_from_view(self):
+        group_a = self.create_auto_assign_group(
+            name="A",
+            prefix="A",
+            display_order=1,
+        )
+        group_b = self.create_auto_assign_group(
+            name="B",
+            prefix="B",
+            display_order=2,
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "auto_assign_league",
+                "group_ids": [str(group_a.id), str(group_b.id)],
+                "court_id": str(self.court1.id),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'6試合を「{self.court1.name}」へ自動割り付けしました。',
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block1,
+                    court=self.court1,
+                ).order_by("order").values_list(
+                    "round_robin_match__group_id",
+                    "order",
+                )
+            ),
+            [
+                (group_a.id, 1),
+                (group_b.id, 2),
+                (group_a.id, 3),
+                (group_b.id, 4),
+                (group_a.id, 5),
+                (group_b.id, 6),
+            ],
+        )
 
     def test_split_to_new_block_moves_tail_in_same_court_only(self):
         court1_first = Schedule.objects.create(

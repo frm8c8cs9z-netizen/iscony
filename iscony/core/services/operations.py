@@ -1785,6 +1785,121 @@ def assign_match_to_schedule_slot(match, schedule_block, court, position=None):
     return schedule
 
 
+def _round_robin_match_pair_display_orders(match):
+    return (
+        match.pair1.display_order,
+        match.pair2.display_order,
+    )
+
+
+def sorted_round_robin_matches_for_group(group):
+    """
+    グループ内の試合を、以下の考え方で並べて返す。
+
+    基本方針: pair1/pair2のdisplay_orderの差が小さい対戦を先に消化する
+    (強さが近い対戦を先に、というセオリーに合わせるため)。
+    同じ差の候補が複数ある場合は、グループ内のdisplay_orderの中心から
+    遠い組(両端に近い者同士の対戦)を優先し、端の枠の初出場が遅れすぎない
+    ようにする。
+
+    ただし単純に差の昇順で並べると、同じペアが2試合続けて出場する
+    (連続重複、休憩なしの連戦)ケースが多発するため、貪欲法で
+    「直前の試合とペアが重複しない候補があれば優先する」ようにする。
+    重複を避けられない場合(候補が尽きた場合)のみ、連続重複を許容する。
+
+    これは循環法などのラウンドロビン理論上の「回戦」ではない。
+    """
+
+    candidates = list(
+        RoundRobinMatch.objects.filter(
+            group=group,
+        ).select_related(
+            "pair1",
+            "pair2",
+        )
+    )
+    all_orders = [
+        entry.display_order
+        for entry in LeagueEntry.objects.filter(group=group)
+    ]
+    center = (
+        (min(all_orders) + max(all_orders)) / 2
+        if all_orders
+        else 0
+    )
+
+    def sort_key(match):
+        order1, order2 = _round_robin_match_pair_display_orders(match)
+        diff = abs(order1 - order2)
+        average = (order1 + order2) / 2
+        distance_from_center = abs(average - center)
+        return (diff, -distance_from_center, average)
+
+    candidates.sort(key=sort_key)
+
+    ordered = []
+    last_pair_ids = None
+
+    while candidates:
+        if last_pair_ids is None:
+            chosen = candidates[0]
+        else:
+            chosen = None
+
+            for candidate in candidates:
+                candidate_pair_ids = {
+                    candidate.pair1_id,
+                    candidate.pair2_id,
+                }
+
+                if not (candidate_pair_ids & last_pair_ids):
+                    chosen = candidate
+                    break
+
+            if chosen is None:
+                chosen = candidates[0]
+
+        candidates.remove(chosen)
+        ordered.append(chosen)
+        last_pair_ids = {chosen.pair1_id, chosen.pair2_id}
+
+    return ordered
+
+
+def auto_assign_league_groups_to_court(groups, schedule_block, court):
+    """
+    複数グループの試合を、各グループ内の出現順で交互に、指定した
+    コートへ自動割り付けする。既にScheduleが付いている試合は対象外。
+    """
+
+    group_match_lists = [
+        [
+            match
+            for match in sorted_round_robin_matches_for_group(group)
+            if not Schedule.objects.filter(round_robin_match=match).exists()
+        ]
+        for group in groups
+    ]
+
+    max_length = max((len(matches) for matches in group_match_lists), default=0)
+
+    assigned = []
+
+    for position in range(max_length):
+        for matches in group_match_lists:
+            if position >= len(matches):
+                continue
+
+            schedule = assign_match_to_schedule_slot(
+                matches[position],
+                schedule_block,
+                court,
+            )
+            assigned.append(schedule)
+
+    return assigned
+
+
 # =========================================================
 # 順位再計算
 # =========================================================
