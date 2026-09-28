@@ -49,6 +49,7 @@ from ..models import (
     TournamentEntry,
     TournamentMatch,
 )
+from ..selectors.tournament_brackets import build_tournament_round_data
 from .snapshots import create_stage_advancement_snapshot_once
 
 
@@ -1783,6 +1784,119 @@ def assign_match_to_schedule_slot(match, schedule_block, court, position=None):
         )
 
     return schedule
+
+
+def tournament_matches_in_round1_position_range(
+    bracket,
+    start_index,
+    end_index,
+):
+    """
+    1回戦の試合をmatch_number順に並べた配列のインデックス範囲
+    [start_index, end_index](0始まり、両端を含む、順序は問わない)から
+    出発し、そこから育つ部分木の試合を集めて返す。
+
+    上位ラウンドの試合は、それを生む下位ラウンドの試合(next_matchで
+    その試合を指している下位試合)が全て対象集合に含まれている場合のみ
+    対象に加える。境界にかかって一部の下位試合しか対象に含まれない
+    上位試合は対象外のままにする。
+
+    戻り値は、ラウンドごとに(1回戦から順)、ラウンド内はmatch_number順で
+    並んだTournamentMatchのリスト。
+    """
+
+    round_data = build_tournament_round_data(bracket)
+
+    if not round_data:
+        return []
+
+    round1_matches = list(round_data[0]["matches"])
+
+    if not round1_matches:
+        return []
+
+    lo, hi = sorted((start_index, end_index))
+    lo = max(lo, 0)
+    hi = min(hi, len(round1_matches) - 1)
+
+    if lo > hi:
+        return []
+
+    all_matches = [
+        match
+        for round_item in round_data
+        for match in round_item["matches"]
+    ]
+
+    feeders_by_next_match_id = {}
+    for match in all_matches:
+        if match.next_match_id:
+            feeders_by_next_match_id.setdefault(
+                match.next_match_id,
+                [],
+            ).append(match)
+
+    selected_ids = set()
+    result = []
+
+    for match in round1_matches[lo:hi + 1]:
+        selected_ids.add(match.id)
+        result.append(match)
+
+    for round_item in round_data[1:]:
+        newly_selected = []
+
+        for match in round_item["matches"]:
+            feeders = feeders_by_next_match_id.get(match.id, [])
+
+            if feeders and all(
+                feeder.id in selected_ids for feeder in feeders
+            ):
+                newly_selected.append(match)
+
+        if not newly_selected:
+            break
+
+        for match in newly_selected:
+            selected_ids.add(match.id)
+            result.append(match)
+
+    return result
+
+
+def auto_assign_tournament_range_to_court(
+    bracket,
+    start_index,
+    end_index,
+    schedule_block,
+    court,
+):
+    """
+    tournament_matches_in_round1_position_rangeで求めた試合を、
+    既にScheduleが付いている試合を除いて、指定コートの最後尾へ
+    match_number順に自動割り付けする。
+
+    assign_match_to_schedule_slotをpositionを指定せずに呼ぶため、
+    既にそのコートへ配置済みの試合がある場合は、その続き(最後尾)から
+    追加される。
+    """
+
+    matches = tournament_matches_in_round1_position_range(
+        bracket,
+        start_index,
+        end_index,
+    )
+
+    assigned = []
+
+    for match in matches:
+        if Schedule.objects.filter(tournament_match=match).exists():
+            continue
+
+        schedule = assign_match_to_schedule_slot(match, schedule_block, court)
+        assigned.append(schedule)
+
+    return assigned
 
 
 def _round_robin_match_pair_display_orders(match):

@@ -80,6 +80,7 @@ from .rendering.tournament_svg_score import resolve_svg_match_code_text_style
 from .services import (
     advance_tournament_bye_winners,
     auto_assign_league_groups_to_court,
+    auto_assign_tournament_range_to_court,
     auto_apply_stage_advancements_if_ready,
     apply_stage_advancements,
     cancel_pair_retirement,
@@ -113,6 +114,7 @@ from .services import (
     save_tournament_retirement,
     sorted_round_robin_matches_for_group,
     swap_advancement_sources,
+    tournament_matches_in_round1_position_range,
     undo_schedule_replacement,
     unassign_league_entry_advancement_piece,
     unassign_league_entry_participant,
@@ -7333,6 +7335,211 @@ class RoundRobinAutoScheduleAssignTests(TestCase):
         )
         existing.refresh_from_db()
         self.assertEqual(existing.round_robin_match_id, group_a_matches[0].id)
+
+
+class TournamentAutoScheduleAssignTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="トーナメント自動割り付けテスト大会",
+            code="TAUTOASSIGN",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="本戦",
+        )
+        for order in range(1, 9):
+            create_tournament_entry(
+                bracket=self.bracket,
+                pair_code=str(order),
+                display_order=order,
+                player1_name=f"選手{order}A",
+                player2_name=f"選手{order}B",
+            )
+        generate_tournament_bracket_matches(self.bracket, 7)
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        self.other_block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.other_court = Court.objects.create(
+            tournament=self.tournament,
+            name="2コート",
+            display_order=2,
+        )
+
+    def ordered_matches(self):
+        return list(
+            TournamentMatch.objects.filter(
+                bracket=self.bracket,
+            ).order_by(
+                "round_number",
+                "match_number",
+            )
+        )
+
+    def test_tournament_range_returns_partial_subtree_matches(self):
+        matches = self.ordered_matches()
+        selected = tournament_matches_in_round1_position_range(
+            self.bracket,
+            0,
+            1,
+        )
+
+        self.assertEqual(
+            [match.id for match in selected],
+            [
+                matches[0].id,
+                matches[1].id,
+                matches[4].id,
+            ],
+        )
+
+    def test_tournament_range_returns_all_matches_for_full_round1_range(self):
+        matches = self.ordered_matches()
+        selected = tournament_matches_in_round1_position_range(
+            self.bracket,
+            0,
+            3,
+        )
+
+        self.assertEqual(
+            [match.id for match in selected],
+            [match.id for match in matches],
+        )
+
+    def test_tournament_range_returns_only_round1_match_for_single_slot(self):
+        matches = self.ordered_matches()
+        selected = tournament_matches_in_round1_position_range(
+            self.bracket,
+            0,
+            0,
+        )
+
+        self.assertEqual(
+            [match.id for match in selected],
+            [matches[0].id],
+        )
+
+    def test_auto_assign_tournament_range_appends_partial_subtree_to_court(self):
+        matches = self.ordered_matches()
+        selected = tournament_matches_in_round1_position_range(
+            self.bracket,
+            0,
+            1,
+        )
+        existing = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=5,
+            tournament_match=matches[3],
+        )
+
+        assigned = auto_assign_tournament_range_to_court(
+            self.bracket,
+            0,
+            1,
+            self.block,
+            self.court,
+        )
+
+        self.assertEqual(
+            [schedule.tournament_match_id for schedule in assigned],
+            [match.id for match in selected],
+        )
+        self.assertEqual(
+            [schedule.order for schedule in assigned],
+            [6, 7, 8],
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block,
+                    court=self.court,
+                ).order_by("order").values_list(
+                    "tournament_match_id",
+                    "order",
+                )
+            ),
+            [
+                (existing.tournament_match_id, 5),
+                (selected[0].id, 6),
+                (selected[1].id, 7),
+                (selected[2].id, 8),
+            ],
+        )
+
+    def test_auto_assign_tournament_range_skips_already_scheduled_matches(self):
+        selected = tournament_matches_in_round1_position_range(
+            self.bracket,
+            0,
+            1,
+        )
+        Schedule.objects.create(
+            schedule_block=self.other_block,
+            court=self.other_court,
+            order=1,
+            tournament_match=selected[0],
+        )
+
+        assigned = auto_assign_tournament_range_to_court(
+            self.bracket,
+            0,
+            1,
+            self.block,
+            self.court,
+        )
+
+        self.assertEqual(
+            [schedule.tournament_match_id for schedule in assigned],
+            [
+                selected[1].id,
+                selected[2].id,
+            ],
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block,
+                    court=self.court,
+                ).order_by("order").values_list(
+                    "tournament_match_id",
+                    "order",
+                )
+            ),
+            [
+                (selected[1].id, 1),
+                (selected[2].id, 2),
+            ],
+        )
+        self.assertEqual(
+            Schedule.objects.filter(
+                tournament_match=selected[0],
+            ).count(),
+            1,
+        )
 
 
 class ScheduleBlockDetailTests(TestCase):
