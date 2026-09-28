@@ -2838,6 +2838,87 @@ def schedule_block_detail(request, code, schedule_block_id):
         "order",
     )
 
+    unscheduled_tournament_matches = TournamentMatch.objects.filter(
+        bracket__category__tournament=tournament,
+    ).exclude(
+        match_code__startswith="S",
+    ).exclude(
+        id__in=Schedule.objects.filter(
+            tournament_match__isnull=False,
+        ).values_list("tournament_match_id", flat=True),
+    ).select_related(
+        "bracket",
+        "bracket__category",
+        "pair1",
+        "pair2",
+    ).order_by(
+        "bracket__category__display_order",
+        "bracket__display_order",
+        "round_number",
+        "match_number",
+    )
+
+    unscheduled_round_robin_matches = RoundRobinMatch.objects.filter(
+        group__category__tournament=tournament,
+    ).exclude(
+        id__in=Schedule.objects.filter(
+            round_robin_match__isnull=False,
+        ).values_list("round_robin_match_id", flat=True),
+    ).select_related(
+        "group",
+        "group__category",
+        "pair1",
+        "pair2",
+    ).order_by(
+        "group__category__display_order",
+        "group__display_order",
+        "id",
+    )
+
+    unassigned_matches = [
+        {
+            "match_kind": "tournament",
+            "match_id": match.id,
+            "category_name": match.bracket.category.name,
+            "label": (
+                f"{match.bracket.name}/{match.round_number}回戦/"
+                f"{match.match_code}"
+            ),
+            "pair1_name": match.pair1.display_name if match.pair1 else "未定",
+            "pair2_name": match.pair2.display_name if match.pair2 else "未定",
+        }
+        for match in unscheduled_tournament_matches
+    ] + [
+        {
+            "match_kind": "round_robin",
+            "match_id": match.id,
+            "category_name": match.group.category.name,
+            "label": f"{match.group.name}",
+            "pair1_name": match.pair1.display_name if match.pair1 else "未定",
+            "pair2_name": match.pair2.display_name if match.pair2 else "未定",
+        }
+        for match in unscheduled_round_robin_matches
+    ]
+
+    courts = list(
+        Court.objects.filter(
+            tournament=tournament,
+        ).order_by(
+            "display_order",
+            "name",
+        )
+    )
+    schedules_by_court_id = defaultdict(list)
+    for schedule in schedules:
+        schedules_by_court_id[schedule.court_id].append(schedule)
+    court_schedule_columns = [
+        {
+            "court": court,
+            "schedules": schedules_by_court_id[court.id],
+        }
+        for court in courts
+    ]
+
     other_blocks = ScheduleBlock.objects.filter(
         tournament=tournament,
     ).exclude(
@@ -2855,6 +2936,10 @@ def schedule_block_detail(request, code, schedule_block_id):
             "block": block,
             "schedule_block": block,
             "schedules": schedules,
+            "unassigned_matches": unassigned_matches,
+            "courts": courts,
+            "schedules_by_court_id": schedules_by_court_id,
+            "court_schedule_columns": court_schedule_columns,
             "other_blocks": other_blocks,
         },
     )

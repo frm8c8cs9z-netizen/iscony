@@ -4,6 +4,88 @@
 
 <h2>{{ tournament.name }} {{ schedule_block.name }}</h2>
 
+<form style="display:none;">
+    {% csrf_token %}
+</form>
+
+<section>
+    <h3>未配置の試合</h3>
+
+    <input
+        type="text"
+        id="unassigned-match-search"
+        placeholder="カテゴリ名で絞り込み"
+    >
+
+    <ul id="unassigned-match-list" class="schedule-piece-list">
+        {% for piece in unassigned_matches %}
+            <li
+                class="schedule-piece"
+                draggable="true"
+                data-match-kind="{{ piece.match_kind }}"
+                data-match-id="{{ piece.match_id }}"
+                data-category-name="{{ piece.category_name }}"
+            >
+                <span class="schedule-piece-category">
+                    {{ piece.category_name }}
+                </span>
+                {{ piece.label }}:
+                {{ piece.pair1_name }} vs {{ piece.pair2_name }}
+            </li>
+        {% empty %}
+            <li>未配置の試合はありません。</li>
+        {% endfor %}
+    </ul>
+</section>
+
+<section>
+    <h3>コートへ配置</h3>
+
+    <div class="schedule-court-columns">
+        {% for column in court_schedule_columns %}
+            <div
+                class="schedule-court-column"
+                data-court-id="{{ column.court.id }}"
+                data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id column.court.id %}"
+            >
+                <h4>{{ column.court.name }}</h4>
+
+                {% for schedule in column.schedules %}
+                    <div
+                        class="schedule-slot-row schedule-slot-row--assigned"
+                        draggable="true"
+                        data-schedule-id="{{ schedule.id }}"
+                        data-order="{{ schedule.order }}"
+                        data-move-url="{% url 'move_schedule_slot_api' schedule.id %}"
+                    >
+                        第{{ schedule.order }}試合:
+                        {% if schedule.is_tournament %}
+                            {{ schedule.tournament_match.match_code }}
+                        {% else %}
+                            {{ schedule.round_robin_match.group.name }}
+                        {% endif %}
+                        <button
+                            type="button"
+                            class="schedule-slot-unassign"
+                            data-schedule-id="{{ schedule.id }}"
+                            data-unassign-url="{% url 'unassign_schedule_slot_api' schedule.id %}"
+                        >
+                            取り消す
+                        </button>
+                    </div>
+                {% endfor %}
+
+                <div
+                    class="schedule-slot-row schedule-slot-row--empty"
+                    data-court-id="{{ column.court.id }}"
+                >
+                    ここへ追加(最後尾)
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+
 <table>
     <tr>
         <th>コート</th>
@@ -133,5 +215,314 @@
         日程区分管理へ戻る
     </a>
 </p>
+
+<script>
+    function setupScheduleSlotAssignment() {
+        const csrfInput = document.querySelector(
+            "input[name=csrfmiddlewaretoken]"
+        );
+        const csrfToken = csrfInput ? csrfInput.value : "";
+        const unassignedList = document.querySelector(
+            "#unassigned-match-list"
+        );
+        const assignmentArea = document.querySelector(
+            ".schedule-court-columns"
+        );
+        const searchInput = document.querySelector(
+            "#unassigned-match-search"
+        );
+        let highlightedDropTarget = null;
+        let selectedSourceForTap = null;
+
+        function parseJsonResponse(response) {
+            return response.json().then(function(data) {
+                return {
+                    ok: response.ok,
+                    data: data,
+                };
+            });
+        }
+
+        function handleResult(result) {
+            if (result.ok && result.data.success) {
+                location.reload();
+                return;
+            }
+            alert(result.data.error || "操作に失敗しました。");
+        }
+
+        function handleFetchError() {
+            alert("操作に失敗しました。");
+        }
+
+        function postForm(url, body) {
+            return fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: body,
+            })
+                .then(parseJsonResponse)
+                .then(handleResult)
+                .catch(handleFetchError);
+        }
+
+        function getDragData(event) {
+            const value = event.dataTransfer.getData("text/plain");
+            if (!value) {
+                return null;
+            }
+
+            try {
+                return JSON.parse(value);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function setDropHighlight(target) {
+            if (highlightedDropTarget === target) {
+                return;
+            }
+
+            if (highlightedDropTarget) {
+                highlightedDropTarget.classList.remove(
+                    "drag-hover-target"
+                );
+            }
+
+            if (target) {
+                target.classList.add("drag-hover-target");
+            }
+
+            highlightedDropTarget = target;
+        }
+
+        function clearTapSelection() {
+            if (selectedSourceForTap) {
+                selectedSourceForTap.classList.remove(
+                    "entry-tap-selecting"
+                );
+            }
+            selectedSourceForTap = null;
+        }
+
+        function getPayloadFromSource(source) {
+            if (!source) {
+                return null;
+            }
+
+            if (source.dataset.matchKind) {
+                return {
+                    type: "piece",
+                    matchKind: source.dataset.matchKind,
+                    matchId: source.dataset.matchId,
+                };
+            }
+
+            if (source.dataset.scheduleId) {
+                return {
+                    type: "schedule",
+                    scheduleId: source.dataset.scheduleId,
+                    sourceOrder: source.dataset.order,
+                };
+            }
+
+            return null;
+        }
+
+        function getTargetCourtColumn(target) {
+            return target.closest(".schedule-court-column");
+        }
+
+        function getNextOrder(courtColumn) {
+            let maxOrder = 0;
+            courtColumn.querySelectorAll(
+                ".schedule-slot-row--assigned[data-order]"
+            ).forEach(function(row) {
+                const order = parseInt(row.dataset.order, 10);
+                if (!isNaN(order) && order > maxOrder) {
+                    maxOrder = order;
+                }
+            });
+            return maxOrder + 1;
+        }
+
+        function assignPieceToTarget(payload, target) {
+            const courtColumn = getTargetCourtColumn(target);
+            if (!courtColumn) {
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append("match_kind", payload.matchKind);
+            body.append("match_id", payload.matchId);
+
+            if (target.classList.contains("schedule-slot-row--assigned")) {
+                body.append("position", target.dataset.order);
+            }
+
+            postForm(courtColumn.dataset.assignUrl, body);
+        }
+
+        function moveScheduleToTarget(payload, target) {
+            const courtColumn = getTargetCourtColumn(target);
+            const source = document.querySelector(
+                '.schedule-slot-row--assigned[data-schedule-id="'
+                + payload.scheduleId
+                + '"]'
+            );
+            if (!courtColumn || !source) {
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append("target_court_id", courtColumn.dataset.courtId);
+            if (target.classList.contains("schedule-slot-row--assigned")) {
+                body.append("target_order", target.dataset.order);
+            } else {
+                body.append("target_order", getNextOrder(courtColumn));
+            }
+
+            postForm(source.dataset.moveUrl, body);
+        }
+
+        function applyPayloadToTarget(payload, target) {
+            if (!payload || !target) {
+                return;
+            }
+
+            if (payload.type === "piece") {
+                assignPieceToTarget(payload, target);
+            } else if (payload.type === "schedule") {
+                moveScheduleToTarget(payload, target);
+            }
+        }
+
+        document.addEventListener("dragstart", function(event) {
+            const piece = event.target.closest(
+                "#unassigned-match-list [data-match-kind]"
+            );
+            const assignedRow = event.target.closest(
+                ".schedule-slot-row--assigned[data-schedule-id]"
+            );
+            const source = piece || assignedRow;
+            const payload = getPayloadFromSource(source);
+            if (!payload) {
+                return;
+            }
+
+            event.dataTransfer.setData(
+                "text/plain",
+                JSON.stringify(payload)
+            );
+            event.dataTransfer.effectAllowed = "move";
+        });
+
+        if (assignmentArea) {
+            assignmentArea.addEventListener("dragover", function(event) {
+                const target = event.target.closest(".schedule-slot-row");
+                if (!target || !assignmentArea.contains(target)) {
+                    setDropHighlight(null);
+                    return;
+                }
+                event.preventDefault();
+                setDropHighlight(target);
+            });
+
+            assignmentArea.addEventListener("dragleave", function(event) {
+                if (!assignmentArea.contains(event.relatedTarget)) {
+                    setDropHighlight(null);
+                }
+            });
+
+            assignmentArea.addEventListener("drop", function(event) {
+                const target = event.target.closest(".schedule-slot-row");
+                if (!target || !assignmentArea.contains(target)) {
+                    return;
+                }
+                event.preventDefault();
+                setDropHighlight(null);
+                applyPayloadToTarget(getDragData(event), target);
+            });
+
+            assignmentArea.addEventListener("click", function(event) {
+                const unassignButton = event.target.closest(
+                    ".schedule-slot-unassign"
+                );
+                if (unassignButton) {
+                    event.stopPropagation();
+                    const body = new URLSearchParams();
+                    postForm(unassignButton.dataset.unassignUrl, body);
+                    return;
+                }
+
+                const target = event.target.closest(".schedule-slot-row");
+                if (!target || !assignmentArea.contains(target)) {
+                    return;
+                }
+
+                if (selectedSourceForTap === target) {
+                    clearTapSelection();
+                    return;
+                }
+
+                if (selectedSourceForTap) {
+                    const payload = getPayloadFromSource(selectedSourceForTap);
+                    clearTapSelection();
+                    applyPayloadToTarget(payload, target);
+                    return;
+                }
+
+                if (!target.classList.contains("schedule-slot-row--assigned")) {
+                    return;
+                }
+
+                clearTapSelection();
+                selectedSourceForTap = target;
+                target.classList.add("entry-tap-selecting");
+            });
+        }
+
+        if (unassignedList) {
+            unassignedList.addEventListener("click", function(event) {
+                const piece = event.target.closest("[data-match-kind]");
+                if (!piece) {
+                    return;
+                }
+
+                if (selectedSourceForTap === piece) {
+                    clearTapSelection();
+                    return;
+                }
+
+                clearTapSelection();
+                selectedSourceForTap = piece;
+                piece.classList.add("entry-tap-selecting");
+            });
+        }
+
+        if (searchInput && unassignedList) {
+            searchInput.addEventListener("input", function() {
+                const keyword = searchInput.value.trim();
+                unassignedList.querySelectorAll(
+                    "[data-category-name]"
+                ).forEach(function(piece) {
+                    const categoryName = piece.dataset.categoryName || "";
+                    piece.hidden = (
+                        keyword.length > 0
+                        && categoryName.indexOf(keyword) === -1
+                    );
+                });
+            });
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        setupScheduleSlotAssignment();
+    });
+</script>
 
 {% endblock %}

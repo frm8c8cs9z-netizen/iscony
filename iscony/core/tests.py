@@ -7111,6 +7111,155 @@ class ScheduleBlockDetailTests(TestCase):
             },
         )
 
+    def test_get_builds_unassigned_matches_and_court_columns(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        league_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=league_stage,
+            name="A",
+            display_order=1,
+        )
+        league_entry1 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="1",
+            display_order=1,
+            player1_name="予選1A",
+            player2_name="予選1B",
+        )
+        league_entry2 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="2",
+            display_order=2,
+            player1_name="予選2A",
+            player2_name="予選2B",
+        )
+        unassigned_round_robin = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=league_entry1,
+            pair2=league_entry2,
+        )
+        assigned_round_robin = RoundRobinMatch.objects.create(
+            group=group,
+            pair1=league_entry2,
+            pair2=league_entry1,
+        )
+        assigned_round_robin_schedule = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+            round_robin_match=assigned_round_robin,
+        )
+
+        tournament_stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=tournament_stage,
+            name="本戦",
+            display_order=1,
+        )
+        tournament_entry1 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="本戦1A",
+            player2_name="本戦1B",
+        )
+        tournament_entry2 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T2",
+            display_order=2,
+            player1_name="本戦2A",
+            player2_name="本戦2B",
+        )
+        unassigned_tournament = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=tournament_entry1,
+            pair2=tournament_entry2,
+        )
+        assigned_tournament = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=tournament_entry2,
+            pair2=tournament_entry1,
+        )
+        TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=0,
+            match_number=1,
+            match_code="S1",
+            pair1=tournament_entry1,
+        )
+        assigned_tournament_schedule = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court2,
+            order=1,
+            tournament_match=assigned_tournament,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        unassigned_keys = [
+            (piece["match_kind"], piece["match_id"])
+            for piece in response.context["unassigned_matches"]
+        ]
+        self.assertEqual(
+            unassigned_keys,
+            [
+                ("tournament", unassigned_tournament.id),
+                ("round_robin", unassigned_round_robin.id),
+            ],
+        )
+        self.assertEqual(
+            [court.id for court in response.context["courts"]],
+            [self.court1.id, self.court2.id],
+        )
+        self.assertEqual(
+            [
+                (
+                    column["court"].id,
+                    [schedule.id for schedule in column["schedules"]],
+                )
+                for column in response.context["court_schedule_columns"]
+            ],
+            [
+                (
+                    self.court1.id,
+                    [assigned_round_robin_schedule.id],
+                ),
+                (
+                    self.court2.id,
+                    [assigned_tournament_schedule.id],
+                ),
+            ],
+        )
+        self.assertContains(response, "未配置の試合")
+        self.assertContains(response, "コートへ配置")
+        self.assertContains(response, "M1")
+        self.assertContains(response, group.name)
+        self.assertContains(response, self.court1.name)
+        self.assertContains(response, self.court2.name)
+
     def test_split_to_new_block_moves_tail_in_same_court_only(self):
         court1_first = Schedule.objects.create(
             schedule_block=self.block1,

@@ -617,6 +617,63 @@
         background-color: #eaf3ff;
     }
 
+    .schedule-piece-list {
+        list-style: none;
+        padding-left: 0;
+    }
+
+    .schedule-piece {
+        margin: 0.35rem 0;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #d0d7de;
+        background-color: #fff;
+        cursor: grab;
+    }
+
+    .schedule-piece:active {
+        cursor: grabbing;
+    }
+
+    .schedule-piece-category {
+        display: inline-block;
+        margin-right: 0.5rem;
+        font-weight: bold;
+    }
+
+    .schedule-court-columns {
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+        margin: 1rem 0;
+        padding-bottom: 0.5rem;
+    }
+
+    .schedule-court-column {
+        min-width: 220px;
+        flex: 0 0 240px;
+    }
+
+    .schedule-slot-row {
+        margin: 0.35rem 0;
+        padding: 0.5rem;
+        border: 1px solid #d0d7de;
+        background-color: #fff;
+    }
+
+    .schedule-slot-row--assigned {
+        cursor: grab;
+    }
+
+    .schedule-slot-row--empty {
+        border-style: dashed;
+        color: #57606a;
+        background-color: #f6f8fa;
+    }
+
+    .schedule-slot-unassign {
+        margin-left: 0.5rem;
+    }
+
     .called-cell {
         background-color: #eef7ff;
     }
