@@ -1733,6 +1733,58 @@ def move_schedule_tail_to_block(schedule, target_block):
         )
 
 
+def assign_match_to_schedule_slot(match, schedule_block, court, position=None):
+    """
+    match(RoundRobinMatchまたはTournamentMatchのインスタンス)を、
+    schedule_block×courtへ新規のScheduleとして割り付ける。
+
+    positionを指定すると、その順番へ挿入し(以降を後ろへ詰める)、
+    指定しなければコートの最後尾に追加する。
+    """
+
+    if isinstance(match, RoundRobinMatch):
+        match_kwargs = {"round_robin_match": match}
+    elif isinstance(match, TournamentMatch):
+        match_kwargs = {"tournament_match": match}
+    else:
+        raise ValidationError("対応していない試合の種類です。")
+
+    if Schedule.objects.filter(**match_kwargs).exists():
+        raise ValidationError("この試合は既に進行表へ割り付けられています。")
+
+    if court.tournament_id != schedule_block.tournament_id:
+        raise ValidationError("同じ大会内のコートを指定してください。")
+
+    max_order = (
+        Schedule.objects.filter(
+            schedule_block=schedule_block,
+            court=court,
+        )
+        .order_by("-order")
+        .values_list("order", flat=True)
+        .first()
+        or 0
+    )
+
+    schedule = Schedule.objects.create(
+        schedule_block=schedule_block,
+        court=court,
+        order=max_order + 1,
+        **match_kwargs,
+    )
+
+    if position is not None and position < schedule.order:
+        move_schedule(
+            schedule,
+            source_court=court,
+            source_order=schedule.order,
+            target_court=court,
+            target_order=position,
+        )
+
+    return schedule
+
+
 # =========================================================
 # 順位再計算
 # =========================================================

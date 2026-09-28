@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q
+from django.http import JsonResponse
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 
@@ -48,6 +49,7 @@ from ..match_keys import (
 )
 
 from ..services import (
+    assign_match_to_schedule_slot,
     clone_tournament_without_results,
     merge_schedule_blocks,
     move_schedule_tail_to_block,
@@ -2856,3 +2858,152 @@ def schedule_block_detail(request, code, schedule_block_id):
             "other_blocks": other_blocks,
         },
     )
+
+
+def assign_schedule_slot_api(request, code, schedule_block_id, court_id):
+    """指定された試合を日程区分×コートの順番へ割り付けるJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    schedule_block = get_object_or_404(
+        ScheduleBlock,
+        id=schedule_block_id,
+        tournament=tournament,
+    )
+    court = get_object_or_404(
+        Court,
+        id=court_id,
+        tournament=tournament,
+    )
+
+    match_kind = request.POST.get("match_kind")
+    match_id = request.POST.get("match_id")
+
+    if match_kind == "round_robin":
+        match = get_object_or_404(
+            RoundRobinMatch,
+            id=match_id,
+            group__category__tournament=tournament,
+        )
+    elif match_kind == "tournament":
+        match = get_object_or_404(
+            TournamentMatch,
+            id=match_id,
+            bracket__category__tournament=tournament,
+        )
+    else:
+        return JsonResponse(
+            {"success": False, "error": "不明な試合種別です。"},
+            status=400,
+        )
+
+    position_raw = request.POST.get("position", "").strip()
+    try:
+        position = int(position_raw) if position_raw else None
+    except ValueError:
+        return JsonResponse(
+            {"success": False, "error": "挿入先の順番が不正です。"},
+            status=400,
+        )
+
+    try:
+        schedule = assign_match_to_schedule_slot(
+            match,
+            schedule_block,
+            court,
+            position,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
+
+    return JsonResponse({
+        "success": True,
+        "schedule_id": schedule.id,
+        "court_id": court.id,
+        "order": schedule.order,
+    })
+
+
+def unassign_schedule_slot_api(request, schedule_id):
+    """進行表へ割り付け済みの試合を取り消すJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    schedule = get_object_or_404(Schedule, id=schedule_id)
+
+    if schedule.is_locked_for_move:
+        return JsonResponse(
+            {
+                "success": False,
+                "error": "呼出済・試合中・完了・結果入力済の試合は取り消せません。",
+            },
+            status=400,
+        )
+
+    court_id = schedule.court_id
+    schedule.delete()
+
+    return JsonResponse({"success": True, "court_id": court_id})
+
+
+def move_schedule_slot_api(request, schedule_id):
+    """進行表のScheduleを別コート・別順番へ移動するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    schedule = get_object_or_404(Schedule, id=schedule_id)
+    source_court = schedule.court
+    source_order = schedule.order
+
+    target_court_id = request.POST.get("target_court_id")
+    target_order_raw = request.POST.get("target_order")
+
+    target_court = get_object_or_404(
+        Court,
+        id=target_court_id,
+        tournament=source_court.tournament,
+    )
+
+    try:
+        target_order = int(target_order_raw)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"success": False, "error": "移動先の順番が不正です。"},
+            status=400,
+        )
+
+    try:
+        move_schedule(
+            schedule,
+            source_court=source_court,
+            source_order=source_order,
+            target_court=target_court,
+            target_order=target_order,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
+
+    return JsonResponse({
+        "success": True,
+        "schedule_id": schedule.id,
+        "court_id": target_court.id,
+    })

@@ -7302,6 +7302,356 @@ class ScheduleBlockDetailTests(TestCase):
         )
 
 
+class ScheduleSlotApiTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="試合順配置APIテスト大会",
+            code="SCHEDULESLOT",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+        )
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        self.court1 = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.court2 = Court.objects.create(
+            tournament=self.tournament,
+            name="2コート",
+            display_order=2,
+        )
+        self._entry_index = 0
+
+    def _create_league_entry(self):
+        self._entry_index += 1
+        return create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code=str(self._entry_index),
+            display_order=self._entry_index,
+            player1_name=f"選手{self._entry_index}A",
+            player2_name=f"選手{self._entry_index}B",
+        )
+
+    def _create_round_robin_match(self):
+        pair1 = self._create_league_entry()
+        pair2 = self._create_league_entry()
+        return RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=pair1,
+            pair2=pair2,
+        )
+
+    def _create_tournament_match(self):
+        stage = Stage.objects.create(
+            category=self.category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=stage,
+            name="本戦",
+        )
+        entry1 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="本戦1A",
+            player2_name="本戦1B",
+        )
+        entry2 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T2",
+            display_order=2,
+            player1_name="本戦2A",
+            player2_name="本戦2B",
+        )
+        return TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=entry1,
+            pair2=entry2,
+        )
+
+    def _assign_url(self):
+        return reverse(
+            "assign_schedule_slot_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": self.block.id,
+                "court_id": self.court1.id,
+            },
+        )
+
+    def test_assign_schedule_slot_api_assigns_order_one_to_empty_court(self):
+        match = self._create_round_robin_match()
+
+        response = self.client.post(
+            self._assign_url(),
+            {
+                "match_kind": "round_robin",
+                "match_id": str(match.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["court_id"], self.court1.id)
+        self.assertEqual(payload["order"], 1)
+
+        schedule = Schedule.objects.get(id=payload["schedule_id"])
+        self.assertEqual(schedule.schedule_block, self.block)
+        self.assertEqual(schedule.court, self.court1)
+        self.assertEqual(schedule.round_robin_match, match)
+
+    def test_assign_schedule_slot_api_assigns_tournament_match(self):
+        match = self._create_tournament_match()
+
+        response = self.client.post(
+            self._assign_url(),
+            {
+                "match_kind": "tournament",
+                "match_id": str(match.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        schedule = Schedule.objects.get(id=response.json()["schedule_id"])
+        self.assertEqual(schedule.order, 1)
+        self.assertEqual(schedule.tournament_match, match)
+        self.assertIsNone(schedule.round_robin_match)
+
+    def test_assign_schedule_slot_api_appends_without_position(self):
+        existing_match = self._create_round_robin_match()
+        new_match = self._create_round_robin_match()
+        existing = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=existing_match,
+        )
+
+        response = self.client.post(
+            self._assign_url(),
+            {
+                "match_kind": "round_robin",
+                "match_id": str(new_match.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        new_schedule = Schedule.objects.get(id=response.json()["schedule_id"])
+        self.assertEqual(new_schedule.order, 2)
+        existing.refresh_from_db()
+        self.assertEqual(existing.order, 1)
+
+    def test_assign_schedule_slot_api_inserts_at_position(self):
+        first_match = self._create_round_robin_match()
+        second_match = self._create_round_robin_match()
+        new_match = self._create_round_robin_match()
+        first = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=first_match,
+        )
+        second = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            round_robin_match=second_match,
+        )
+
+        response = self.client.post(
+            self._assign_url(),
+            {
+                "match_kind": "round_robin",
+                "match_id": str(new_match.id),
+                "position": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        new_schedule = Schedule.objects.get(id=response.json()["schedule_id"])
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(new_schedule.order, 1)
+        self.assertEqual(first.order, 2)
+        self.assertEqual(second.order, 3)
+
+    def test_assign_schedule_slot_api_rejects_already_assigned_match(self):
+        match = self._create_round_robin_match()
+        Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=match,
+        )
+
+        response = self.client.post(
+            self._assign_url(),
+            {
+                "match_kind": "round_robin",
+                "match_id": str(match.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertFalse(payload["success"])
+        self.assertEqual(
+            payload["error"],
+            "この試合は既に進行表へ割り付けられています。",
+        )
+
+    def test_unassign_schedule_slot_api_deletes_schedule(self):
+        match = self._create_round_robin_match()
+        schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=match,
+        )
+
+        response = self.client.post(
+            reverse(
+                "unassign_schedule_slot_api",
+                kwargs={"schedule_id": schedule.id},
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"success": True, "court_id": self.court1.id},
+        )
+        self.assertFalse(Schedule.objects.filter(id=schedule.id).exists())
+
+    def test_unassign_schedule_slot_api_rejects_locked_schedule(self):
+        match = self._create_round_robin_match()
+        schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=match,
+            called=True,
+        )
+
+        response = self.client.post(
+            reverse(
+                "unassign_schedule_slot_api",
+                kwargs={"schedule_id": schedule.id},
+            ),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertTrue(Schedule.objects.filter(id=schedule.id).exists())
+
+    def test_move_schedule_slot_api_moves_between_courts_and_reorders(self):
+        first_match = self._create_round_robin_match()
+        moving_match = self._create_round_robin_match()
+        target_match = self._create_round_robin_match()
+        first = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=first_match,
+        )
+        moving = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=2,
+            round_robin_match=moving_match,
+        )
+        target = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court2,
+            order=1,
+            round_robin_match=target_match,
+        )
+
+        response = self.client.post(
+            reverse(
+                "move_schedule_slot_api",
+                kwargs={"schedule_id": moving.id},
+            ),
+            {
+                "target_court_id": str(self.court2.id),
+                "target_order": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "schedule_id": moving.id,
+                "court_id": self.court2.id,
+            },
+        )
+        first.refresh_from_db()
+        moving.refresh_from_db()
+        target.refresh_from_db()
+        self.assertEqual(first.order, 1)
+        self.assertEqual(moving.court, self.court2)
+        self.assertEqual(moving.order, 1)
+        self.assertEqual(target.order, 2)
+
+    def test_schedule_slot_apis_reject_get(self):
+        match = self._create_round_robin_match()
+        schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=1,
+            round_robin_match=match,
+        )
+
+        urls = [
+            self._assign_url(),
+            reverse(
+                "unassign_schedule_slot_api",
+                kwargs={"schedule_id": schedule.id},
+            ),
+            reverse(
+                "move_schedule_slot_api",
+                kwargs={"schedule_id": schedule.id},
+            ),
+        ]
+
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 405)
+                self.assertEqual(
+                    response.json(),
+                    {"success": False, "error": "POSTで送信してください。"},
+                )
+
+
 class RoundRobinMeetingTests(TestCase):
 
     def setUp(self):

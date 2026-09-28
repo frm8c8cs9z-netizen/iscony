@@ -494,6 +494,12 @@ urlpatterns = [
     ),
 
     path(
+        "schedule/<int:schedule_id>/unassign/",
+        dashboard.unassign_schedule_slot_api,
+        name="unassign_schedule_slot_api",
+    ),
+
+    path(
         "tournament/<str:code>/maintenance/order/",
         dashboard.order_maintenance,
         name="order_maintenance",
@@ -536,6 +542,15 @@ urlpatterns = [
         "tournament/<str:code>/maintenance/schedule-block/<int:schedule_block_id>/",
         dashboard.schedule_block_detail,
         name="schedule_block_detail",
+    ),
+
+    path(
+        (
+            "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
+            "court/<int:court_id>/assign/"
+        ),
+        dashboard.assign_schedule_slot_api,
+        name="assign_schedule_slot_api",
     ),
 
     path(
@@ -722,6 +737,12 @@ urlpatterns = [
         "schedule/<int:schedule_id>/move/",
         dashboard.move_schedule_view,
         name="move_schedule",
+    ),
+
+    path(
+        "schedule/<int:schedule_id>/move-slot/",
+        dashboard.move_schedule_slot_api,
+        name="move_schedule_slot_api",
     ),
 
     path(
