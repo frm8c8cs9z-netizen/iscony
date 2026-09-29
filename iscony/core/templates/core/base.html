@@ -620,14 +620,23 @@
     .schedule-piece-list {
         list-style: none;
         padding-left: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
     .schedule-piece {
-        margin: 0.35rem 0;
+        margin: 0;
         padding: 0.5rem 0.75rem;
         border: 1px solid #d0d7de;
         background-color: #fff;
         cursor: grab;
+        flex: 0 1 260px;
+        box-sizing: border-box;
+    }
+
+    .schedule-piece[hidden] {
+        display: none;
     }
 
     .schedule-piece:active {
