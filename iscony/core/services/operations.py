@@ -1800,6 +1800,7 @@ def tournament_matches_in_round1_position_range(
     その試合を指している下位試合)が全て対象集合に含まれている場合のみ
     対象に加える。境界にかかって一部の下位試合しか対象に含まれない
     上位試合は対象外のままにする。
+    S試合(内部シード試合)は部分木の完成判定には使うが、戻り値には含めない。
 
     戻り値は、ラウンドごとに(1回戦から順)、ラウンド内はmatch_number順で
     並んだTournamentMatchのリスト。
@@ -1841,7 +1842,8 @@ def tournament_matches_in_round1_position_range(
 
     for match in round1_matches[lo:hi + 1]:
         selected_ids.add(match.id)
-        result.append(match)
+        if not is_internal_seed_match(match):
+            result.append(match)
 
     for round_item in round_data[1:]:
         newly_selected = []

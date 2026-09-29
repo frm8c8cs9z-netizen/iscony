@@ -7400,6 +7400,23 @@ class TournamentAutoScheduleAssignTests(TestCase):
             )
         )
 
+    def create_seed_bracket(self):
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="シードあり本戦",
+        )
+        for order in range(1, 8):
+            create_tournament_entry(
+                bracket=bracket,
+                pair_code=f"S{order}",
+                display_order=order,
+                player1_name=f"シード{order}A",
+                player2_name=f"シード{order}B",
+            )
+        generate_tournament_bracket_matches(bracket, 7)
+        return bracket
+
     def test_tournament_range_returns_partial_subtree_matches(self):
         matches = self.ordered_matches()
         selected = tournament_matches_in_round1_position_range(
@@ -7541,6 +7558,67 @@ class TournamentAutoScheduleAssignTests(TestCase):
             1,
         )
 
+    def test_tournament_range_uses_seed_match_for_subtree_but_excludes_it(self):
+        bracket = self.create_seed_bracket()
+        seed_match = TournamentMatch.objects.get(
+            bracket=bracket,
+            match_code__startswith="S",
+        )
+        paired_round1_match = TournamentMatch.objects.get(
+            bracket=bracket,
+            round_number=1,
+            match_number=2,
+        )
+        upper_match = seed_match.next_match
+
+        selected = tournament_matches_in_round1_position_range(
+            bracket,
+            seed_match.match_number - 1,
+            paired_round1_match.match_number - 1,
+        )
+
+        self.assertNotIn(seed_match, selected)
+        self.assertEqual(
+            [match.id for match in selected],
+            [
+                paired_round1_match.id,
+                upper_match.id,
+            ],
+        )
+
+    def test_auto_assign_tournament_range_does_not_schedule_seed_match(self):
+        bracket = self.create_seed_bracket()
+        seed_match = TournamentMatch.objects.get(
+            bracket=bracket,
+            match_code__startswith="S",
+        )
+        paired_round1_match = TournamentMatch.objects.get(
+            bracket=bracket,
+            round_number=1,
+            match_number=2,
+        )
+
+        assigned = auto_assign_tournament_range_to_court(
+            bracket,
+            seed_match.match_number - 1,
+            paired_round1_match.match_number - 1,
+            self.block,
+            self.court,
+        )
+
+        self.assertEqual(
+            [schedule.tournament_match_id for schedule in assigned],
+            [
+                paired_round1_match.id,
+                seed_match.next_match_id,
+            ],
+        )
+        self.assertFalse(
+            Schedule.objects.filter(
+                tournament_match=seed_match,
+            ).exists(),
+        )
+
 
 class ScheduleBlockDetailTests(TestCase):
 
@@ -7621,7 +7699,7 @@ class ScheduleBlockDetailTests(TestCase):
                 )
         return group
 
-    def create_auto_assign_bracket(self):
+    def create_auto_assign_bracket(self, entry_count=8):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -7639,7 +7717,7 @@ class ScheduleBlockDetailTests(TestCase):
             name="本戦",
             display_order=1,
         )
-        for order in range(1, 9):
+        for order in range(1, entry_count + 1):
             create_tournament_entry(
                 bracket=bracket,
                 pair_code=str(order),
@@ -7681,6 +7759,17 @@ class ScheduleBlockDetailTests(TestCase):
                 for slot in response.context["slots"]
             },
             set(range(first_round_match_count)),
+        )
+
+    def test_tournament_range_assign_get_marks_seed_slot_as_no_match(self):
+        bracket = self.create_auto_assign_bracket(entry_count=7)
+
+        response = self.client.get(self.tournament_range_assign_url(bracket))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "(シード・試合なし)")
+        self.assertTrue(
+            any(slot["is_seed"] for slot in response.context["slots"])
         )
 
     def test_tournament_range_assign_post_assigns_and_redirects_to_same_screen(self):

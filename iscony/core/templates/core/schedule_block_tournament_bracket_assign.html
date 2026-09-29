@@ -56,6 +56,9 @@
                         未定
                     {% endif %}
                 </span>
+                {% if slot.is_seed %}
+                    <span class="subtle-text">(シード・試合なし)</span>
+                {% endif %}
             </div>
         {% endfor %}
     </div>

@@ -56,6 +56,7 @@ from ..services import (
     auto_assign_league_groups_to_court,
     auto_assign_tournament_range_to_court,
     clone_tournament_without_results,
+    is_internal_seed_match,
     merge_schedule_blocks,
     move_schedule_tail_to_block,
     move_schedule,
@@ -2962,6 +2963,7 @@ def schedule_block_tournament_bracket_assign(
                 "y": position.get("y1", 0),
                 "match_index": match_index,
                 "is_scheduled": is_scheduled,
+                "is_seed": is_internal_seed_match(match),
             })
 
         if match.pair2_id:
@@ -2970,6 +2972,7 @@ def schedule_block_tournament_bracket_assign(
                 "y": position.get("y2", 0),
                 "match_index": match_index,
                 "is_scheduled": is_scheduled,
+                "is_seed": is_internal_seed_match(match),
             })
 
     slots.sort(key=lambda slot: slot["y"])
