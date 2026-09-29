@@ -8,95 +8,101 @@
     {% csrf_token %}
 </form>
 
-<section>
-    <h3>未配置の試合</h3>
+<div class="pair-assignment-layout">
+    <div>
+        <section>
+            <h3>コートへ配置</h3>
 
-    <p class="subtle-text">
-        下の一覧の試合をドラッグ、またはタップしてから配置先をタップすると、
-        コートへ割り付けられます。
-    </p>
+            <p class="subtle-text">
+                試合をコート欄へドラッグ&ドロップ(またはタップ→タップ)で移動できます。
+                すでに配置された試合の行へドロップするとその位置に割り込み、
+                「ここへ追加(最後尾)」へドロップするとそのコートの最後に追加されます。
+                配置済みの試合も同様にドラッグで並べ替え・他コートへの移動ができます。
+            </p>
 
-    <input
-        type="text"
-        id="unassigned-match-search"
-        placeholder="カテゴリ名で絞り込み"
-    >
-
-    <ul id="unassigned-match-list" class="schedule-piece-list">
-        {% for piece in unassigned_matches %}
-            <li
-                class="schedule-piece"
-                draggable="true"
-                data-match-kind="{{ piece.match_kind }}"
-                data-match-id="{{ piece.match_id }}"
-                data-category-name="{{ piece.category_name }}"
-            >
-                <span class="schedule-piece-category">
-                    {{ piece.category_name }}
-                </span>
-                {{ piece.label }}:
-                {{ piece.pair1_name }} vs {{ piece.pair2_name }}
-            </li>
-        {% empty %}
-            <li>未配置の試合はありません。</li>
-        {% endfor %}
-    </ul>
-</section>
-
-<section>
-    <h3>コートへ配置</h3>
-
-    <p class="subtle-text">
-        試合をコート欄へドラッグ&ドロップ(またはタップ→タップ)で移動できます。
-        すでに配置された試合の行へドロップするとその位置に割り込み、
-        「ここへ追加(最後尾)」へドロップするとそのコートの最後に追加されます。
-        配置済みの試合も同様にドラッグで並べ替え・他コートへの移動ができます。
-    </p>
-
-    <div class="schedule-court-columns">
-        {% for column in court_schedule_columns %}
-            <div
-                class="schedule-court-column"
-                data-court-id="{{ column.court.id }}"
-                data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id column.court.id %}"
-            >
-                <h4>{{ column.court.name }}</h4>
-
-                {% for schedule in column.schedules %}
+            <div class="schedule-court-columns">
+                {% for column in court_schedule_columns %}
                     <div
-                        class="schedule-slot-row schedule-slot-row--assigned"
-                        draggable="true"
-                        data-schedule-id="{{ schedule.id }}"
-                        data-order="{{ schedule.order }}"
-                        data-move-url="{% url 'move_schedule_slot_api' schedule.id %}"
+                        class="schedule-court-column"
+                        data-court-id="{{ column.court.id }}"
+                        data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id column.court.id %}"
                     >
-                        第{{ schedule.order }}試合:
-                        {% if schedule.is_tournament %}
-                            {{ schedule.tournament_match.match_code }}
-                        {% else %}
-                            {{ schedule.round_robin_match.group.name }}
-                        {% endif %}
-                        <button
-                            type="button"
-                            class="schedule-slot-unassign"
-                            data-schedule-id="{{ schedule.id }}"
-                            data-unassign-url="{% url 'unassign_schedule_slot_api' schedule.id %}"
+                        <h4>{{ column.court.name }}</h4>
+
+                        {% for schedule in column.schedules %}
+                            <div
+                                class="schedule-slot-row schedule-slot-row--assigned"
+                                draggable="true"
+                                data-schedule-id="{{ schedule.id }}"
+                                data-order="{{ schedule.order }}"
+                                data-move-url="{% url 'move_schedule_slot_api' schedule.id %}"
+                            >
+                                第{{ schedule.order }}試合:
+                                {% if schedule.is_tournament %}
+                                    {{ schedule.tournament_match.match_code }}
+                                {% else %}
+                                    {{ schedule.round_robin_match.group.name }}
+                                {% endif %}
+                                <button
+                                    type="button"
+                                    class="schedule-slot-unassign"
+                                    data-schedule-id="{{ schedule.id }}"
+                                    data-unassign-url="{% url 'unassign_schedule_slot_api' schedule.id %}"
+                                >
+                                    取り消す
+                                </button>
+                            </div>
+                        {% endfor %}
+
+                        <div
+                            class="schedule-slot-row schedule-slot-row--empty"
+                            data-court-id="{{ column.court.id }}"
                         >
-                            取り消す
-                        </button>
+                            ここへ追加(最後尾)
+                        </div>
                     </div>
                 {% endfor %}
-
-                <div
-                    class="schedule-slot-row schedule-slot-row--empty"
-                    data-court-id="{{ column.court.id }}"
-                >
-                    ここへ追加(最後尾)
-                </div>
             </div>
-        {% endfor %}
+        </section>
     </div>
-</section>
+
+    <div>
+        <section>
+            <h3>未配置の試合</h3>
+
+            <p class="subtle-text">
+                下の一覧の試合をドラッグ、またはタップしてから配置先をタップすると、
+                コートへ割り付けられます。
+            </p>
+
+            <input
+                type="text"
+                id="unassigned-match-search"
+                placeholder="カテゴリ名で絞り込み"
+            >
+
+            <ul id="unassigned-match-list" class="schedule-piece-list">
+                {% for piece in unassigned_matches %}
+                    <li
+                        class="schedule-piece"
+                        draggable="true"
+                        data-match-kind="{{ piece.match_kind }}"
+                        data-match-id="{{ piece.match_id }}"
+                        data-category-name="{{ piece.category_name }}"
+                    >
+                        <span class="schedule-piece-category">
+                            {{ piece.category_name }}
+                        </span>
+                        {{ piece.label }}:
+                        {{ piece.pair1_name }} vs {{ piece.pair2_name }}
+                    </li>
+                {% empty %}
+                    <li>未配置の試合はありません。</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+</div>
 
 <section>
     <h3>リーグの自動割り付け</h3>
