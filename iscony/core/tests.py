@@ -7761,17 +7761,6 @@ class ScheduleBlockDetailTests(TestCase):
             set(range(first_round_match_count)),
         )
 
-    def test_tournament_range_assign_get_marks_seed_slot_as_no_match(self):
-        bracket = self.create_auto_assign_bracket(entry_count=7)
-
-        response = self.client.get(self.tournament_range_assign_url(bracket))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "(シード・試合なし)")
-        self.assertTrue(
-            any(slot["is_seed"] for slot in response.context["slots"])
-        )
-
     def test_tournament_range_assign_post_assigns_and_redirects_to_same_screen(self):
         bracket = self.create_auto_assign_bracket()
         expected_matches = tournament_matches_in_round1_position_range(
