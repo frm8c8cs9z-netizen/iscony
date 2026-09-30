@@ -7761,6 +7761,48 @@ class ScheduleBlockDetailTests(TestCase):
             set(range(first_round_match_count)),
         )
 
+    def test_tournament_range_assign_get_marks_internal_seed_slots_scheduled(self):
+        bracket = self.create_auto_assign_bracket(entry_count=7)
+
+        response = self.client.get(self.tournament_range_assign_url(bracket))
+
+        self.assertEqual(response.status_code, 200)
+        first_round_matches = list(
+            TournamentMatch.objects.filter(
+                bracket=bracket,
+                round_number=1,
+            ).order_by(
+                "match_number",
+            )
+        )
+        seed_match_indexes = [
+            index
+            for index, match in enumerate(first_round_matches)
+            if match.match_code.startswith("S")
+        ]
+        self.assertTrue(seed_match_indexes)
+        self.assertFalse(
+            Schedule.objects.filter(
+                tournament_match__in=[
+                    first_round_matches[index]
+                    for index in seed_match_indexes
+                ],
+            ).exists()
+        )
+
+        seed_slots = [
+            slot
+            for slot in response.context["slots"]
+            if slot["match_index"] in seed_match_indexes
+        ]
+        self.assertTrue(seed_slots)
+        self.assertTrue(all(slot["is_scheduled"] for slot in seed_slots))
+        self.assertContains(
+            response,
+            "tournament-slot-row tournament-slot-row--already-scheduled",
+            count=len(seed_slots),
+        )
+
     def test_tournament_range_assign_post_assigns_and_redirects_to_same_screen(self):
         bracket = self.create_auto_assign_bracket()
         expected_matches = tournament_matches_in_round1_position_range(
