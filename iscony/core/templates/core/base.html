@@ -649,17 +649,31 @@
         font-weight: bold;
     }
 
-    .schedule-court-columns {
-        display: flex;
-        gap: 1rem;
+    .schedule-court-table-wrap {
         overflow-x: auto;
         margin: 1rem 0;
         padding-bottom: 0.5rem;
     }
 
+    .schedule-court-table {
+        border-collapse: collapse;
+    }
+
+    .schedule-court-table th,
+    .schedule-court-table td {
+        border: 1px solid #d0d7de;
+        padding: 0.25rem;
+        vertical-align: top;
+    }
+
+    .schedule-slot-order-header {
+        white-space: nowrap;
+        background-color: #f6f8fa;
+        font-weight: bold;
+    }
+
     .schedule-court-column {
         min-width: 150px;
-        flex: 0 0 160px;
     }
 
     .schedule-slot-row {
@@ -685,13 +699,6 @@
     .schedule-slot-unassign {
         flex: 0 0 auto;
         min-width: 1.6em;
-    }
-
-    .schedule-slot-order {
-        flex: 0 0 auto;
-        min-width: 2.6em;
-        font-weight: bold;
-        white-space: nowrap;
     }
 
     .schedule-slot-label {

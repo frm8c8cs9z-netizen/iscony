@@ -8048,6 +8048,82 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertContains(response, self.court1.name)
         self.assertContains(response, self.court2.name)
 
+    def test_get_builds_schedule_grid_rows_for_court_table(self):
+        group = self.create_auto_assign_group(
+            name="A",
+            prefix="G",
+            display_order=1,
+        )
+        matches = list(
+            RoundRobinMatch.objects.filter(
+                group=group,
+            ).order_by("id")
+        )
+        court1_schedule1 = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+            round_robin_match=matches[0],
+        )
+        court1_schedule2 = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=2,
+            round_robin_match=matches[1],
+        )
+        court2_schedule1 = Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court2,
+            order=1,
+            round_robin_match=matches[2],
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.context["schedule_grid_rows"]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual([row["order"] for row in rows], [1, 2, 3])
+
+        row1_cells = {
+            cell["court"].id: cell
+            for cell in rows[0]["cells"]
+        }
+        self.assertEqual(row1_cells[self.court1.id]["kind"], "assigned")
+        self.assertEqual(
+            row1_cells[self.court1.id]["schedule"].id,
+            court1_schedule1.id,
+        )
+        self.assertEqual(row1_cells[self.court2.id]["kind"], "assigned")
+        self.assertEqual(
+            row1_cells[self.court2.id]["schedule"].id,
+            court2_schedule1.id,
+        )
+
+        row2_cells = {
+            cell["court"].id: cell
+            for cell in rows[1]["cells"]
+        }
+        self.assertEqual(row2_cells[self.court1.id]["kind"], "assigned")
+        self.assertEqual(
+            row2_cells[self.court1.id]["schedule"].id,
+            court1_schedule2.id,
+        )
+        self.assertEqual(row2_cells[self.court2.id]["kind"], "empty")
+
+        row3_cells = {
+            cell["court"].id: cell
+            for cell in rows[2]["cells"]
+        }
+        self.assertEqual(row3_cells[self.court1.id]["kind"], "empty")
+        self.assertEqual(row3_cells[self.court2.id]["kind"], "blank")
+        self.assertContains(response, '<table class="schedule-court-table">')
+        self.assertContains(
+            response,
+            'class="schedule-slot-row schedule-slot-row--empty"',
+            count=2,
+        )
+
     def test_get_groups_league_choices_by_category_and_stage(self):
         category = Category.objects.create(
             tournament=self.tournament,

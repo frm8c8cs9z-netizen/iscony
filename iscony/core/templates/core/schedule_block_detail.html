@@ -20,53 +20,64 @@
                 配置済みの試合も同様にドラッグで並べ替え・他コートへの移動ができます。
             </p>
 
-            <div class="schedule-court-columns">
-                {% for column in court_schedule_columns %}
-                    <div
-                        class="schedule-court-column"
-                        data-court-id="{{ column.court.id }}"
-                        data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id column.court.id %}"
-                    >
-                        <h4>{{ column.court.name }}</h4>
-
-                        {% for schedule in column.schedules %}
-                            <div
-                                class="schedule-slot-row schedule-slot-row--assigned"
-                                draggable="true"
-                                data-schedule-id="{{ schedule.id }}"
-                                data-order="{{ schedule.order }}"
-                                data-move-url="{% url 'move_schedule_slot_api' schedule.id %}"
-                            >
-                                <button
-                                    type="button"
-                                    class="schedule-slot-unassign"
-                                    data-schedule-id="{{ schedule.id }}"
-                                    data-unassign-url="{% url 'unassign_schedule_slot_api' schedule.id %}"
-                                    aria-label="取り消す"
-                                >
-                                    ×
-                                </button>
-                                <span class="schedule-slot-order">
-                                    第{{ schedule.order }}試合
-                                </span>
-                                <span class="schedule-slot-label">
-                                    {% if schedule.is_tournament %}
-                                        {{ schedule.tournament_match.match_code }}
-                                    {% else %}
-                                        {{ schedule.round_robin_match.group.name }}
-                                    {% endif %}
-                                </span>
-                            </div>
+            <div class="schedule-court-table-wrap">
+                <table class="schedule-court-table">
+                    <tr>
+                        <th class="schedule-slot-order-header">試合順</th>
+                        {% for column in court_schedule_columns %}
+                            <th>{{ column.court.name }}</th>
                         {% endfor %}
-
-                        <div
-                            class="schedule-slot-row schedule-slot-row--empty"
-                            data-court-id="{{ column.court.id }}"
-                        >
-                            ここへ追加(最後尾)
-                        </div>
-                    </div>
-                {% endfor %}
+                    </tr>
+                    {% for row in schedule_grid_rows %}
+                        <tr>
+                            <th class="schedule-slot-order-header">
+                                第{{ row.order }}試合
+                            </th>
+                            {% for cell in row.cells %}
+                                <td
+                                    class="schedule-court-column"
+                                    data-court-id="{{ cell.court.id }}"
+                                    data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id cell.court.id %}"
+                                >
+                                    {% if cell.kind == "assigned" %}
+                                        <div
+                                            class="schedule-slot-row schedule-slot-row--assigned"
+                                            draggable="true"
+                                            data-schedule-id="{{ cell.schedule.id }}"
+                                            data-order="{{ cell.schedule.order }}"
+                                            data-move-url="{% url 'move_schedule_slot_api' cell.schedule.id %}"
+                                        >
+                                            <button
+                                                type="button"
+                                                class="schedule-slot-unassign"
+                                                data-schedule-id="{{ cell.schedule.id }}"
+                                                data-unassign-url="{% url 'unassign_schedule_slot_api' cell.schedule.id %}"
+                                                aria-label="取り消す"
+                                            >
+                                                ×
+                                            </button>
+                                            <span class="schedule-slot-label">
+                                                {% if cell.schedule.is_tournament %}
+                                                    {{ cell.schedule.tournament_match.match_code }}
+                                                {% else %}
+                                                    {{ cell.schedule.round_robin_match.group.name }}
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                    {% elif cell.kind == "empty" %}
+                                        <div
+                                            class="schedule-slot-row schedule-slot-row--empty"
+                                            data-court-id="{{ cell.court.id }}"
+                                            data-order="{{ row.order }}"
+                                        >
+                                            +
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </table>
             </div>
         </section>
     </div>
@@ -313,7 +324,7 @@
             "#unassigned-match-list"
         );
         const assignmentArea = document.querySelector(
-            ".schedule-court-columns"
+            ".schedule-court-table-wrap"
         );
         const searchInput = document.querySelector(
             "#unassigned-match-search"
@@ -424,19 +435,6 @@
             return target.closest(".schedule-court-column");
         }
 
-        function getNextOrder(courtColumn) {
-            let maxOrder = 0;
-            courtColumn.querySelectorAll(
-                ".schedule-slot-row--assigned[data-order]"
-            ).forEach(function(row) {
-                const order = parseInt(row.dataset.order, 10);
-                if (!isNaN(order) && order > maxOrder) {
-                    maxOrder = order;
-                }
-            });
-            return maxOrder + 1;
-        }
-
         function assignPieceToTarget(payload, target) {
             const courtColumn = getTargetCourtColumn(target);
             if (!courtColumn) {
@@ -446,10 +444,7 @@
             const body = new URLSearchParams();
             body.append("match_kind", payload.matchKind);
             body.append("match_id", payload.matchId);
-
-            if (target.classList.contains("schedule-slot-row--assigned")) {
-                body.append("position", target.dataset.order);
-            }
+            body.append("position", target.dataset.order);
 
             postForm(courtColumn.dataset.assignUrl, body);
         }
@@ -467,11 +462,7 @@
 
             const body = new URLSearchParams();
             body.append("target_court_id", courtColumn.dataset.courtId);
-            if (target.classList.contains("schedule-slot-row--assigned")) {
-                body.append("target_order", target.dataset.order);
-            } else {
-                body.append("target_order", getNextOrder(courtColumn));
-            }
+            body.append("target_order", target.dataset.order);
 
             postForm(source.dataset.moveUrl, body);
         }

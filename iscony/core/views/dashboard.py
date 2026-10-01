@@ -3152,6 +3152,41 @@ def schedule_block_detail(request, code, schedule_block_id):
         }
         for court in courts
     ]
+    max_schedule_count = max(
+        (
+            len(column["schedules"])
+            for column in court_schedule_columns
+        ),
+        default=0,
+    )
+    schedule_grid_rows = []
+    for row_order in range(1, max_schedule_count + 2):
+        cells = []
+
+        for column in court_schedule_columns:
+            court_schedules = column["schedules"]
+
+            if row_order <= len(court_schedules):
+                cells.append({
+                    "court": column["court"],
+                    "kind": "assigned",
+                    "schedule": court_schedules[row_order - 1],
+                })
+            elif row_order == len(court_schedules) + 1:
+                cells.append({
+                    "court": column["court"],
+                    "kind": "empty",
+                })
+            else:
+                cells.append({
+                    "court": column["court"],
+                    "kind": "blank",
+                })
+
+        schedule_grid_rows.append({
+            "order": row_order,
+            "cells": cells,
+        })
 
     other_blocks = ScheduleBlock.objects.filter(
         tournament=tournament,
@@ -3176,6 +3211,7 @@ def schedule_block_detail(request, code, schedule_block_id):
             "tournament_brackets": tournament_brackets,
             "schedules_by_court_id": schedules_by_court_id,
             "court_schedule_columns": court_schedule_columns,
+            "schedule_grid_rows": schedule_grid_rows,
             "other_blocks": other_blocks,
         },
     )
