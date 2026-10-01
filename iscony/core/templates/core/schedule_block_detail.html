@@ -37,20 +37,21 @@
                                 data-order="{{ schedule.order }}"
                                 data-move-url="{% url 'move_schedule_slot_api' schedule.id %}"
                             >
+                                <button
+                                    type="button"
+                                    class="schedule-slot-unassign"
+                                    data-schedule-id="{{ schedule.id }}"
+                                    data-unassign-url="{% url 'unassign_schedule_slot_api' schedule.id %}"
+                                    aria-label="取り消す"
+                                >
+                                    ×
+                                </button>
                                 第{{ schedule.order }}試合:
                                 {% if schedule.is_tournament %}
                                     {{ schedule.tournament_match.match_code }}
                                 {% else %}
                                     {{ schedule.round_robin_match.group.name }}
                                 {% endif %}
-                                <button
-                                    type="button"
-                                    class="schedule-slot-unassign"
-                                    data-schedule-id="{{ schedule.id }}"
-                                    data-unassign-url="{% url 'unassign_schedule_slot_api' schedule.id %}"
-                                >
-                                    取り消す
-                                </button>
                             </div>
                         {% endfor %}
 
