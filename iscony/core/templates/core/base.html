@@ -667,6 +667,9 @@
         padding: 0.5rem;
         border: 1px solid #d0d7de;
         background-color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
     }
 
     .schedule-slot-row--assigned {
@@ -680,8 +683,21 @@
     }
 
     .schedule-slot-unassign {
-        margin-right: 0.5rem;
+        flex: 0 0 auto;
         min-width: 1.6em;
+    }
+
+    .schedule-slot-order {
+        flex: 0 0 auto;
+        min-width: 2.6em;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+
+    .schedule-slot-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
     }
 
     .called-cell {
