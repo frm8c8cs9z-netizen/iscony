@@ -8525,13 +8525,14 @@ class ScheduleBlockDetailTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ブロック分割")
         self.assertContains(
             response,
-            f'name="schedule_id" value="{in_block.id}"',
+            f'data-schedule-id="{in_block.id}"',
         )
         self.assertNotContains(
             response,
-            f'name="schedule_id" value="{other_block.id}"',
+            f'data-schedule-id="{other_block.id}"',
         )
 
 
