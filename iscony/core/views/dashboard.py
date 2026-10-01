@@ -2955,14 +2955,21 @@ def schedule_block_tournament_bracket_assign(
 
     for match_index, match in enumerate(first_round_matches):
         position = match_positions.get(("left", match.id), {})
-        is_scheduled = match.id in scheduled_match_ids
+
+        if is_internal_seed_match(match):
+            is_scheduled = (
+                match.next_match_id is not None
+                and match.next_match_id in scheduled_match_ids
+            )
+        else:
+            is_scheduled = match.id in scheduled_match_ids
 
         if match.pair1_id:
             slots.append({
                 "entry": match.pair1,
                 "y": position.get("y1", 0),
                 "match_index": match_index,
-                "is_scheduled": is_scheduled or is_internal_seed_match(match),
+                "is_scheduled": is_scheduled,
             })
 
         if match.pair2_id:
@@ -2970,7 +2977,7 @@ def schedule_block_tournament_bracket_assign(
                 "entry": match.pair2,
                 "y": position.get("y2", 0),
                 "match_index": match_index,
-                "is_scheduled": is_scheduled or is_internal_seed_match(match),
+                "is_scheduled": is_scheduled,
             })
 
     slots.sort(key=lambda slot: slot["y"])

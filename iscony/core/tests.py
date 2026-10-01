@@ -7761,12 +7761,9 @@ class ScheduleBlockDetailTests(TestCase):
             set(range(first_round_match_count)),
         )
 
-    def test_tournament_range_assign_get_marks_internal_seed_slots_scheduled(self):
+    def test_tournament_range_assign_get_marks_internal_seed_slots_after_next_match_scheduled(self):
         bracket = self.create_auto_assign_bracket(entry_count=7)
 
-        response = self.client.get(self.tournament_range_assign_url(bracket))
-
-        self.assertEqual(response.status_code, 200)
         first_round_matches = list(
             TournamentMatch.objects.filter(
                 bracket=bracket,
@@ -7775,33 +7772,75 @@ class ScheduleBlockDetailTests(TestCase):
                 "match_number",
             )
         )
-        seed_match_indexes = [
-            index
-            for index, match in enumerate(first_round_matches)
-            if match.match_code.startswith("S")
-        ]
-        self.assertTrue(seed_match_indexes)
+        seed_match_index, seed_match = next(
+            (
+                (index, match)
+                for index, match in enumerate(first_round_matches)
+                if match.match_code.startswith("S")
+            ),
+            (None, None),
+        )
+        self.assertIsNotNone(seed_match)
+        sibling_match_index, sibling_match = next(
+            (
+                (index, match)
+                for index, match in enumerate(first_round_matches)
+                if (
+                    match.id != seed_match.id
+                    and match.next_match_id == seed_match.next_match_id
+                )
+            ),
+            (None, None),
+        )
+        self.assertIsNotNone(sibling_match)
+
+        response = self.client.get(self.tournament_range_assign_url(bracket))
+
+        self.assertEqual(response.status_code, 200)
         self.assertFalse(
             Schedule.objects.filter(
-                tournament_match__in=[
-                    first_round_matches[index]
-                    for index in seed_match_indexes
-                ],
+                tournament_match=seed_match,
             ).exists()
         )
 
         seed_slots = [
             slot
             for slot in response.context["slots"]
-            if slot["match_index"] in seed_match_indexes
+            if slot["match_index"] == seed_match_index
+        ]
+        self.assertTrue(seed_slots)
+        self.assertTrue(
+            all(not slot["is_scheduled"] for slot in seed_slots)
+        )
+
+        auto_assign_tournament_range_to_court(
+            bracket,
+            seed_match_index,
+            sibling_match_index,
+            self.block1,
+            self.court1,
+        )
+
+        response = self.client.get(self.tournament_range_assign_url(bracket))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            Schedule.objects.filter(
+                tournament_match=seed_match,
+            ).exists()
+        )
+        self.assertTrue(
+            Schedule.objects.filter(
+                tournament_match_id=seed_match.next_match_id,
+            ).exists()
+        )
+        seed_slots = [
+            slot
+            for slot in response.context["slots"]
+            if slot["match_index"] == seed_match_index
         ]
         self.assertTrue(seed_slots)
         self.assertTrue(all(slot["is_scheduled"] for slot in seed_slots))
-        self.assertContains(
-            response,
-            "tournament-slot-row tournament-slot-row--already-scheduled",
-            count=len(seed_slots),
-        )
 
     def test_tournament_range_assign_post_assigns_and_redirects_to_same_screen(self):
         bracket = self.create_auto_assign_bracket()
