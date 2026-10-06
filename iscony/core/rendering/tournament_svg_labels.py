@@ -19,6 +19,7 @@ from .svg_text_blocks import (
     ENTRY_CODE_TEXT_BLOCK_LAYOUT,
     ENTRY_LINE_HEIGHT,
     ENTRY_TEXT_BLOCK_LAYOUT,
+    MATCH_CODE_SCHEDULE_ANNOTATION_LINE_HEIGHT,
     MATCH_CODE_TEXT_BLOCK_LAYOUT,
     MATCH_SCORE_TEXT_BLOCK_LAYOUT,
     ROW_GAP_DENSITY_VALUES,
@@ -226,24 +227,43 @@ def svg_match_code_label_spec(
         offset_x=None,
         offset_y=None,
         block_anchor="middle-center"):
-    """マッチラベル用のSVGテキストブロック仕様を返す。"""
+    """マッチラベル用のSVGテキストブロック仕様を返す。
+
+    matchに`schedule_label_text`属性(文字列)がセットされている場合、
+    マッチラベルの下にその文字列を小さく2行目として表示する。
+    これはDBに保存されたフィールドではなく、呼び出し側が必要に応じて
+    インメモリでセットする追加属性(例:
+    schedule_block_tournament_bracket_assignビュー)。
+    """
 
     layout = MATCH_CODE_TEXT_BLOCK_LAYOUT
     actual_offset_x = layout.offset_x if offset_x is None else offset_x
     actual_offset_y = layout.offset_y if offset_y is None else offset_y
 
+    lines = _svg_single_text_line(
+        match.match_label or match.match_code,
+        "svg-match-code",
+    )
+
+    schedule_label_text = getattr(match, "schedule_label_text", None)
+    line_height = layout.line_height
+
+    if schedule_label_text:
+        lines = lines + _svg_single_text_line(
+            schedule_label_text,
+            "svg-schedule-annotation",
+        )
+        line_height = MATCH_CODE_SCHEDULE_ANNOTATION_LINE_HEIGHT
+
     return _svg_text_block_spec(
-        lines=_svg_single_text_line(
-            match.match_label or match.match_code,
-            "svg-match-code",
-        ),
+        lines=lines,
         orientation=layout.orientation,
         base_x=base_x,
         base_y=base_y,
         offset_x=actual_offset_x,
         offset_y=actual_offset_y,
         block_anchor=block_anchor,
-        line_height=layout.line_height,
+        line_height=line_height,
         minimum_height=layout.minimum_height,
         padding_x=layout.padding_x,
         padding_y=layout.padding_y,
@@ -386,6 +406,15 @@ def estimate_svg_round_gap(round_data):
                     _estimate_svg_text_width(
                         match.match_label or match.match_code
                     )
+                )
+
+            schedule_label_text = getattr(
+                match, "schedule_label_text", None,
+            )
+
+            if schedule_label_text:
+                widths.append(
+                    _estimate_svg_text_width(schedule_label_text)
                 )
 
             for side in ("pair1", "pair2"):

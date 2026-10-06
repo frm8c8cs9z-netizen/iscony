@@ -2926,6 +2926,23 @@ def schedule_block_tournament_bracket_assign(
         )
 
     round_data = build_tournament_round_data(bracket)
+
+    schedules_by_match_id = {
+        schedule.tournament_match_id: schedule
+        for schedule in Schedule.objects.filter(
+            tournament_match__bracket=bracket,
+        ).select_related("court")
+    }
+
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            schedule = schedules_by_match_id.get(match.id)
+
+            if schedule:
+                match.schedule_label_text = (
+                    f"{schedule.court.name}ー第{schedule.order}試合"
+                )
+
     svg_bracket = build_svg_bracket_data(
         bracket,
         round_data,
@@ -2945,12 +2962,6 @@ def schedule_block_tournament_bracket_assign(
         "match_number",
     )
 
-    scheduled_match_ids = set(
-        Schedule.objects.filter(
-            tournament_match__bracket=bracket,
-        ).values_list("tournament_match_id", flat=True)
-    )
-
     slots = []
 
     for match_index, match in enumerate(first_round_matches):
@@ -2959,10 +2970,10 @@ def schedule_block_tournament_bracket_assign(
         if is_internal_seed_match(match):
             is_scheduled = (
                 match.next_match_id is not None
-                and match.next_match_id in scheduled_match_ids
+                and match.next_match_id in schedules_by_match_id
             )
         else:
-            is_scheduled = match.id in scheduled_match_ids
+            is_scheduled = match.id in schedules_by_match_id
 
         if match.pair1_id:
             slots.append({

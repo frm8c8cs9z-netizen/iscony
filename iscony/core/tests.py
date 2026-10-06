@@ -7761,6 +7761,50 @@ class ScheduleBlockDetailTests(TestCase):
             set(range(first_round_match_count)),
         )
 
+    def test_tournament_range_assign_get_shows_scheduled_match_annotation(self):
+        bracket = self.create_auto_assign_bracket()
+        first_round_matches = list(
+            TournamentMatch.objects.filter(
+                bracket=bracket,
+                round_number=1,
+            ).order_by(
+                "match_number",
+            )
+        )
+        scheduled_match = first_round_matches[0]
+        unscheduled_match = first_round_matches[1]
+        schedule_label_text = f"{self.court1.name}ー第3試合"
+        Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=3,
+            tournament_match=scheduled_match,
+        )
+
+        response = self.client.get(self.tournament_range_assign_url(bracket))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, schedule_label_text)
+        match_code_labels = {
+            label["match_id"]: label
+            for label in response.context["svg_bracket"]["labels"]
+            if label.get("label_type") == "match_code"
+        }
+        scheduled_label = match_code_labels[scheduled_match.id]
+        self.assertEqual(len(scheduled_label["lines"]), 2)
+        self.assertEqual(
+            scheduled_label["lines"][1]["class"],
+            "svg-schedule-annotation",
+        )
+        self.assertEqual(
+            scheduled_label["lines"][1]["text"],
+            schedule_label_text,
+        )
+        self.assertEqual(
+            match_code_labels[unscheduled_match.id]["lines"],
+            [],
+        )
+
     def test_tournament_range_assign_get_marks_internal_seed_slots_after_next_match_scheduled(self):
         bracket = self.create_auto_assign_bracket(entry_count=7)
 
