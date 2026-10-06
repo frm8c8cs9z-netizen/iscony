@@ -7773,7 +7773,7 @@ class ScheduleBlockDetailTests(TestCase):
         )
         scheduled_match = first_round_matches[0]
         unscheduled_match = first_round_matches[1]
-        schedule_label_text = f"{self.court1.name}ー第3試合"
+        schedule_label_text = f"{self.court1.name}ー3"
         Schedule.objects.create(
             schedule_block=self.block1,
             court=self.court1,

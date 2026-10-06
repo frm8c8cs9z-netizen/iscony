@@ -2940,7 +2940,7 @@ def schedule_block_tournament_bracket_assign(
 
             if schedule:
                 match.schedule_label_text = (
-                    f"{schedule.court.name}ー第{schedule.order}試合"
+                    f"{schedule.court.name}ー{schedule.order}"
                 )
 
     svg_bracket = build_svg_bracket_data(
