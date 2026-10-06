@@ -246,6 +246,8 @@ def svg_match_code_label_spec(
     )
 
     schedule_label_text = getattr(match, "schedule_label_text", None)
+    suppress_score_link = getattr(match, "suppress_score_link", False)
+    score_url = "" if suppress_score_link else tournament_match_score_url(match)
     line_height = layout.line_height
 
     if schedule_label_text:
@@ -269,7 +271,7 @@ def svg_match_code_label_spec(
         padding_y=layout.padding_y,
         baseline=layout.baseline,
         css_class="svg-match-code",
-        url=tournament_match_score_url(match),
+        url=score_url,
         style=resolve_svg_match_code_text_style(match.bracket),
     )
 

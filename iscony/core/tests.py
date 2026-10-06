@@ -7785,6 +7785,16 @@ class ScheduleBlockDetailTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, schedule_label_text)
+        self.assertNotContains(
+            response,
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": scheduled_match.id,
+                },
+            ),
+        )
         match_code_labels = {
             label["match_id"]: label
             for label in response.context["svg_bracket"]["labels"]
@@ -7800,9 +7810,15 @@ class ScheduleBlockDetailTests(TestCase):
             scheduled_label["lines"][1]["text"],
             schedule_label_text,
         )
+        self.assertFalse(scheduled_label.get("url"))
+        self.assertFalse(scheduled_label.get("public_url"))
         self.assertEqual(
             match_code_labels[unscheduled_match.id]["lines"],
             [],
+        )
+        self.assertFalse(match_code_labels[unscheduled_match.id].get("url"))
+        self.assertFalse(
+            match_code_labels[unscheduled_match.id].get("public_url"),
         )
 
     def test_tournament_range_assign_get_marks_internal_seed_slots_after_next_match_scheduled(self):

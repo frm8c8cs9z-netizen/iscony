@@ -2936,6 +2936,8 @@ def schedule_block_tournament_bracket_assign(
 
     for round_item in round_data:
         for match in round_item["matches"]:
+            match.suppress_score_link = True
+
             schedule = schedules_by_match_id.get(match.id)
 
             if schedule:
