@@ -20,12 +20,27 @@
                 配置済みの試合も同様にドラッグで並べ替え・他コートへの移動ができます。
             </p>
 
+            <div class="advancement-piece-filter">
+                <div class="advancement-piece-rank-filter" id="schedule-court-filter">
+                    <button type="button" class="rank-filter-button is-active" data-court-filter="all">
+                        すべて
+                    </button>
+                    {% for column in court_schedule_columns %}
+                        <button type="button" class="rank-filter-button" data-court-filter="{{ column.court.id }}">
+                            {{ column.court.name }}
+                        </button>
+                    {% endfor %}
+                </div>
+            </div>
+
             <div class="schedule-court-table-wrap">
                 <table class="schedule-court-table">
                     <tr>
                         <th class="schedule-slot-order-header">試合順</th>
                         {% for column in court_schedule_columns %}
-                            <th>{{ column.court.name }}</th>
+                            <th data-court-id="{{ column.court.id }}">
+                                {{ column.court.name }}
+                            </th>
                         {% endfor %}
                     </tr>
                     {% for row in schedule_grid_rows %}
@@ -549,8 +564,65 @@
         }
     }
 
+    function setupScheduleCourtFilter() {
+        const filterContainer = document.querySelector(
+            "#schedule-court-filter"
+        );
+
+        if (!filterContainer) {
+            return;
+        }
+
+        let activeCourtIds = new Set();
+
+        function applyFilter() {
+            document.querySelectorAll(
+                ".schedule-court-table [data-court-id]"
+            ).forEach(function(cell) {
+                const courtId = cell.dataset.courtId;
+                cell.hidden = (
+                    activeCourtIds.size > 0
+                    && !activeCourtIds.has(courtId)
+                );
+            });
+        }
+
+        filterContainer.querySelectorAll(".rank-filter-button").forEach(
+            function(button) {
+                button.addEventListener("click", function() {
+                    const courtId = button.dataset.courtFilter;
+
+                    if (courtId === "all") {
+                        activeCourtIds = new Set();
+                    } else if (activeCourtIds.has(courtId)) {
+                        activeCourtIds.delete(courtId);
+                    } else {
+                        activeCourtIds.add(courtId);
+                    }
+
+                    filterContainer.querySelectorAll(
+                        ".rank-filter-button"
+                    ).forEach(function(otherButton) {
+                        const otherCourtId = otherButton.dataset.courtFilter;
+                        const isActive = (
+                            (
+                                otherCourtId === "all"
+                                && activeCourtIds.size === 0
+                            )
+                            || activeCourtIds.has(otherCourtId)
+                        );
+                        otherButton.classList.toggle("is-active", isActive);
+                    });
+
+                    applyFilter();
+                });
+            }
+        );
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         setupScheduleSlotAssignment();
+        setupScheduleCourtFilter();
     });
 </script>
 
