@@ -8142,6 +8142,14 @@ class ScheduleBlockDetailTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         rows = response.context["schedule_grid_rows"]
+        expected_labels = {
+            match.id: (
+                f"{match.group.stage.name}/{match.group.name}:"
+                f"{min(match.pair1.display_order, match.pair2.display_order)}-"
+                f"{max(match.pair1.display_order, match.pair2.display_order)}"
+            )
+            for match in matches
+        }
         self.assertEqual(len(rows), 3)
         self.assertEqual([row["order"] for row in rows], [1, 2, 3])
 
@@ -8154,10 +8162,18 @@ class ScheduleBlockDetailTests(TestCase):
             row1_cells[self.court1.id]["schedule"].id,
             court1_schedule1.id,
         )
+        self.assertEqual(
+            row1_cells[self.court1.id]["label"],
+            expected_labels[court1_schedule1.round_robin_match_id],
+        )
         self.assertEqual(row1_cells[self.court2.id]["kind"], "assigned")
         self.assertEqual(
             row1_cells[self.court2.id]["schedule"].id,
             court2_schedule1.id,
+        )
+        self.assertEqual(
+            row1_cells[self.court2.id]["label"],
+            expected_labels[court2_schedule1.round_robin_match_id],
         )
 
         row2_cells = {
@@ -8168,6 +8184,10 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertEqual(
             row2_cells[self.court1.id]["schedule"].id,
             court1_schedule2.id,
+        )
+        self.assertEqual(
+            row2_cells[self.court1.id]["label"],
+            expected_labels[court1_schedule2.round_robin_match_id],
         )
         self.assertEqual(row2_cells[self.court2.id]["kind"], "empty")
 

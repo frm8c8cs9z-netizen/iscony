@@ -3180,10 +3180,28 @@ def schedule_block_detail(request, code, schedule_block_id):
             court_schedules = column["schedules"]
 
             if row_order <= len(court_schedules):
+                schedule = court_schedules[row_order - 1]
+
+                if schedule.is_tournament:
+                    label = schedule.tournament_match.match_code
+                elif schedule.is_round_robin:
+                    match = schedule.round_robin_match
+                    pair_orders = sorted([
+                        match.pair1.display_order,
+                        match.pair2.display_order,
+                    ])
+                    label = (
+                        f"{match.group.stage.name}/{match.group.name}:"
+                        f"{pair_orders[0]}-{pair_orders[1]}"
+                    )
+                else:
+                    label = ""
+
                 cells.append({
                     "court": column["court"],
                     "kind": "assigned",
-                    "schedule": court_schedules[row_order - 1],
+                    "schedule": schedule,
+                    "label": label,
                 })
             elif row_order == len(court_schedules) + 1:
                 cells.append({

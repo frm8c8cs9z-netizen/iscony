@@ -83,11 +83,7 @@
                                                 </button>
                                             {% endif %}
                                             <span class="schedule-slot-label">
-                                                {% if cell.schedule.is_tournament %}
-                                                    {{ cell.schedule.tournament_match.match_code }}
-                                                {% else %}
-                                                    {{ cell.schedule.round_robin_match.group.name }}
-                                                {% endif %}
+                                                {{ cell.label }}
                                             </span>
                                         </div>
                                     {% elif cell.kind == "empty" %}
