@@ -1523,6 +1523,36 @@ def undo_schedule_replacement(history):
 
         return schedule
 
+
+def unassign_schedule(schedule):
+    """
+    Scheduleへの割り付けを取り消し、同じ(schedule_block, court)内の
+    後続の試合順を1つずつ前へ詰める。
+    """
+
+    if schedule.is_locked_for_move:
+        raise ValidationError(
+            "呼出済・試合中・完了・結果入力済の試合は取り消せません。"
+        )
+
+    schedule_block = schedule.schedule_block
+    court = schedule.court
+    order = schedule.order
+
+    with transaction.atomic():
+        schedule.delete()
+
+        later_schedules = Schedule.objects.filter(
+            schedule_block=schedule_block,
+            court=court,
+            order__gt=order,
+        ).order_by("order")
+
+        for item in later_schedules:
+            item.order -= 1
+            item.save()
+
+
 def move_schedule(
     schedule,
     source_court,
@@ -1732,6 +1762,254 @@ def move_schedule_tail_to_block(schedule, target_block):
                 "order",
             ],
         )
+
+
+def unassign_schedule_range(schedule_block, court, start_order, end_order):
+    """
+    コート内の指定した試合順範囲(start_order/end_order、両端含む、
+    順序は問わない)のScheduleをすべて取り消し、後続の試合順を詰める。
+
+    範囲内に呼出済み・進行中・完了済みの試合が含まれる場合は何も
+    変更せず例外を出す。戻り値は削除した件数。
+    """
+
+    lo, hi = sorted((start_order, end_order))
+
+    range_schedules = list(
+        Schedule.objects.filter(
+            schedule_block=schedule_block,
+            court=court,
+            order__gte=lo,
+            order__lte=hi,
+        ).order_by("order")
+    )
+
+    if not range_schedules:
+        return 0
+
+    if any(item.is_locked_for_move for item in range_schedules):
+        raise ValidationError(
+            "呼出済み・進行中・完了済みの試合が含まれるため、削除できません。"
+        )
+
+    removed_count = len(range_schedules)
+
+    with transaction.atomic():
+        for item in range_schedules:
+            item.delete()
+
+        later_schedules = Schedule.objects.filter(
+            schedule_block=schedule_block,
+            court=court,
+            order__gt=hi,
+        ).order_by("order")
+
+        for item in later_schedules:
+            item.order -= removed_count
+            item.save()
+
+    return removed_count
+
+
+def move_schedule_range(
+    schedule_block,
+    source_court,
+    start_order,
+    end_order,
+    target_court,
+    target_order,
+):
+    """
+    コート内の指定した試合順範囲(両端含む)を、対戦順を保ったまま
+    まとめて移動先コート・位置へ移す(同じコート内での並べ替えも含む)。
+
+    戻り値は移動したSchedule idのリスト(元の対戦順を保った順序)。
+    """
+
+    lo, hi = sorted((start_order, end_order))
+
+    range_schedules = list(
+        Schedule.objects.filter(
+            schedule_block=schedule_block,
+            court=source_court,
+            order__gte=lo,
+            order__lte=hi,
+        ).order_by("order")
+    )
+    range_schedule_ids = [item.id for item in range_schedules]
+
+    if not range_schedule_ids:
+        return []
+
+    if any(item.is_locked_for_move for item in range_schedules):
+        raise ValidationError(
+            "呼出済・試合中・完了・結果入力済の試合は移動できません。"
+        )
+
+    target_schedule = Schedule.objects.filter(
+        schedule_block=schedule_block,
+        court=target_court,
+        order=target_order,
+    ).first()
+
+    if (
+        target_schedule
+        and target_schedule.id not in range_schedule_ids
+        and target_schedule.is_locked_for_move
+    ):
+        raise ValidationError(
+            "呼出済・試合中・完了・結果入力済の試合の前には移動できません。"
+        )
+
+    with transaction.atomic():
+        if source_court == target_court:
+            if lo <= target_order <= hi + 1:
+                return range_schedule_ids
+
+            all_schedules = list(
+                Schedule.objects.filter(
+                    schedule_block=schedule_block,
+                    court=source_court,
+                    order__lt=1000000,
+                ).order_by("order")
+            )
+            moving_ids = set(range_schedule_ids)
+            moving = [
+                item
+                for item in all_schedules
+                if item.id in moving_ids
+            ]
+            remaining = [
+                item
+                for item in all_schedules
+                if item.id not in moving_ids
+            ]
+
+            if target_order <= lo:
+                insert_index = target_order - 1
+            else:
+                insert_index = target_order - len(moving) - 1
+
+            insert_index = max(0, min(insert_index, len(remaining)))
+            reordered = (
+                remaining[:insert_index]
+                + moving
+                + remaining[insert_index:]
+            )
+
+            for offset, item in enumerate(reordered):
+                item.order = 1000000 + offset
+
+            Schedule.objects.bulk_update(reordered, ["order"])
+
+            for offset, item in enumerate(reordered, start=1):
+                item.order = offset
+
+            Schedule.objects.bulk_update(reordered, ["order"])
+            return range_schedule_ids
+
+        current_target_order = target_order
+
+        for schedule_id in range_schedule_ids:
+            schedule = Schedule.objects.select_related("court").get(
+                id=schedule_id,
+            )
+
+            move_schedule(
+                schedule,
+                source_court=schedule.court,
+                source_order=schedule.order,
+                target_court=target_court,
+                target_order=current_target_order,
+            )
+
+            current_target_order += 1
+
+    return range_schedule_ids
+
+
+def move_schedule_range_to_block(
+    schedule_block, court, start_order, end_order, target_block,
+):
+    """
+    コート内の指定した試合順範囲(両端含む)を、target_blockの同じ
+    コートへまとめて移す(move_schedule_tail_to_blockの、任意の範囲
+    向けの一般化)。
+
+    移動元に残る試合(範囲より後ろの試合)の試合順を詰める処理が
+    move_schedule_tail_to_blockには無い(「ここから最後尾まで」専用
+    だったため不要だった)ので、ここでは追加する。
+    """
+
+    source_block = schedule_block
+
+    if source_block.id == target_block.id:
+        raise ValidationError(
+            "移動先には今のブロックとは別のブロックを選んでください。"
+        )
+
+    if source_block.tournament_id != target_block.tournament_id:
+        raise ValidationError("同じ大会内のブロックのみ指定できます。")
+
+    lo, hi = sorted((start_order, end_order))
+
+    moving = list(
+        Schedule.objects.filter(
+            schedule_block=source_block,
+            court=court,
+            order__gte=lo,
+            order__lte=hi,
+        ).order_by("order")
+    )
+
+    if not moving:
+        return []
+
+    if any(item.is_locked_for_move for item in moving):
+        raise ValidationError(
+            "呼出済み・進行中・完了済みの試合が含まれるため、移動できません。"
+        )
+
+    removed_count = len(moving)
+
+    max_order_in_target = (
+        Schedule.objects.filter(
+            schedule_block=target_block,
+            court=court,
+        )
+        .order_by("-order")
+        .values_list("order", flat=True)
+        .first()
+        or 0
+    )
+
+    with transaction.atomic():
+        for offset, item in enumerate(moving):
+            item.order = 1000000 + offset
+
+        Schedule.objects.bulk_update(moving, ["order"])
+
+        later_in_source = list(
+            Schedule.objects.filter(
+                schedule_block=source_block,
+                court=court,
+                order__gt=hi,
+                order__lt=1000000,
+            ).order_by("order")
+        )
+
+        for item in later_in_source:
+            item.order -= removed_count
+
+        Schedule.objects.bulk_update(later_in_source, ["order"])
+
+        for offset, item in enumerate(moving, start=1):
+            item.schedule_block = target_block
+            item.order = max_order_in_target + offset
+
+        Schedule.objects.bulk_update(moving, ["schedule_block", "order"])
+
+    return [item.id for item in moving]
 
 
 def assign_match_to_schedule_slot(match, schedule_block, court, position=None):

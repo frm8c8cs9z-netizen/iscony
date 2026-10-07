@@ -8789,6 +8789,67 @@ class ScheduleSlotApiTests(TestCase):
             },
         )
 
+    def _unassign_range_url(self, court=None, block=None):
+        return reverse(
+            "unassign_schedule_range_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": (block or self.block).id,
+                "court_id": (court or self.court1).id,
+            },
+        )
+
+    def _move_range_url(self, court=None, block=None):
+        return reverse(
+            "move_schedule_range_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": (block or self.block).id,
+                "court_id": (court or self.court1).id,
+            },
+        )
+
+    def _move_range_to_block_url(self, court=None, block=None):
+        return reverse(
+            "move_schedule_range_to_block_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": (block or self.block).id,
+                "court_id": (court or self.court1).id,
+            },
+        )
+
+    def _create_schedules(self, count, *, court=None, block=None):
+        schedules = []
+
+        for order in range(1, count + 1):
+            schedules.append(
+                Schedule.objects.create(
+                    schedule_block=block or self.block,
+                    court=court or self.court1,
+                    order=order,
+                    round_robin_match=self._create_round_robin_match(),
+                )
+            )
+
+        return schedules
+
+    def _ordered_schedule_ids(self, *, court=None, block=None):
+        return list(
+            Schedule.objects.filter(
+                schedule_block=block or self.block,
+                court=court or self.court1,
+            ).order_by("order").values_list("id", flat=True)
+        )
+
+    def _ordered_schedule_orders(self, *, court=None, block=None):
+        return list(
+            Schedule.objects.filter(
+                schedule_block=block or self.block,
+                court=court or self.court1,
+            ).order_by("order").values_list("order", flat=True)
+        )
+
     def test_assign_schedule_slot_api_assigns_order_one_to_empty_court(self):
         match = self._create_round_robin_match()
 
@@ -8912,13 +8973,7 @@ class ScheduleSlotApiTests(TestCase):
         )
 
     def test_unassign_schedule_slot_api_deletes_schedule(self):
-        match = self._create_round_robin_match()
-        schedule = Schedule.objects.create(
-            schedule_block=self.block,
-            court=self.court1,
-            order=1,
-            round_robin_match=match,
-        )
+        schedule = self._create_schedules(1)[0]
 
         response = self.client.post(
             reverse(
@@ -8933,6 +8988,29 @@ class ScheduleSlotApiTests(TestCase):
             {"success": True, "court_id": self.court1.id},
         )
         self.assertFalse(Schedule.objects.filter(id=schedule.id).exists())
+
+    def test_unassign_schedule_slot_api_closes_gap_after_delete(self):
+        schedules = self._create_schedules(5)
+
+        response = self.client.post(
+            reverse(
+                "unassign_schedule_slot_api",
+                kwargs={"schedule_id": schedules[2].id},
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Schedule.objects.filter(id=schedules[2].id).exists())
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [
+                schedules[0].id,
+                schedules[1].id,
+                schedules[3].id,
+                schedules[4].id,
+            ],
+        )
+        self.assertEqual(self._ordered_schedule_orders(), [1, 2, 3, 4])
 
     def test_unassign_schedule_slot_api_rejects_locked_schedule(self):
         match = self._create_round_robin_match()
@@ -8954,6 +9032,49 @@ class ScheduleSlotApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()["success"])
         self.assertTrue(Schedule.objects.filter(id=schedule.id).exists())
+
+    def test_unassign_schedule_range_api_removes_range_and_closes_gap(self):
+        schedules = self._create_schedules(5)
+
+        response = self.client.post(
+            self._unassign_range_url(),
+            {
+                "start_order": "2",
+                "end_order": "4",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"success": True, "removed_count": 3})
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [
+                schedules[0].id,
+                schedules[4].id,
+            ],
+        )
+        self.assertEqual(self._ordered_schedule_orders(), [1, 2])
+
+    def test_unassign_schedule_range_api_rejects_locked_schedule_without_changes(self):
+        schedules = self._create_schedules(5)
+        schedules[2].called = True
+        schedules[2].save()
+
+        response = self.client.post(
+            self._unassign_range_url(),
+            {
+                "start_order": "2",
+                "end_order": "4",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [item.id for item in schedules],
+        )
+        self.assertEqual(self._ordered_schedule_orders(), [1, 2, 3, 4, 5])
 
     def test_move_schedule_slot_api_moves_between_courts_and_reorders(self):
         first_match = self._create_round_robin_match()
@@ -9006,6 +9127,266 @@ class ScheduleSlotApiTests(TestCase):
         self.assertEqual(moving.order, 1)
         self.assertEqual(target.order, 2)
 
+    def test_move_schedule_range_api_moves_range_to_other_court_tail(self):
+        source_schedules = self._create_schedules(5)
+        target_schedules = self._create_schedules(1, court=self.court2)
+
+        response = self.client.post(
+            self._move_range_url(),
+            {
+                "start_order": "2",
+                "end_order": "3",
+                "target_court_id": str(self.court2.id),
+                "target_order": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "moved_ids": [
+                    source_schedules[1].id,
+                    source_schedules[2].id,
+                ],
+                "court_id": self.court2.id,
+            },
+        )
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [
+                source_schedules[0].id,
+                source_schedules[3].id,
+                source_schedules[4].id,
+            ],
+        )
+        self.assertEqual(self._ordered_schedule_orders(), [1, 2, 3])
+        self.assertEqual(
+            self._ordered_schedule_ids(court=self.court2),
+            [
+                target_schedules[0].id,
+                source_schedules[1].id,
+                source_schedules[2].id,
+            ],
+        )
+        self.assertEqual(
+            self._ordered_schedule_orders(court=self.court2),
+            [1, 2, 3],
+        )
+
+    def test_move_schedule_range_api_reorders_same_court_to_front(self):
+        schedules = self._create_schedules(5)
+
+        response = self.client.post(
+            self._move_range_url(),
+            {
+                "start_order": "3",
+                "end_order": "4",
+                "target_court_id": str(self.court1.id),
+                "target_order": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [
+                schedules[2].id,
+                schedules[3].id,
+                schedules[0].id,
+                schedules[1].id,
+                schedules[4].id,
+            ],
+        )
+        self.assertEqual(self._ordered_schedule_orders(), [1, 2, 3, 4, 5])
+
+    def test_move_schedule_range_api_reorders_same_court_to_tail(self):
+        schedules = self._create_schedules(5)
+
+        response = self.client.post(
+            self._move_range_url(),
+            {
+                "start_order": "2",
+                "end_order": "3",
+                "target_court_id": str(self.court1.id),
+                "target_order": "6",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [
+                schedules[0].id,
+                schedules[3].id,
+                schedules[4].id,
+                schedules[1].id,
+                schedules[2].id,
+            ],
+        )
+        self.assertEqual(self._ordered_schedule_orders(), [1, 2, 3, 4, 5])
+
+    def test_move_schedule_range_api_rejects_locked_source_without_changes(self):
+        schedules = self._create_schedules(5)
+        target_schedules = self._create_schedules(1, court=self.court2)
+        schedules[1].called = True
+        schedules[1].save()
+
+        response = self.client.post(
+            self._move_range_url(),
+            {
+                "start_order": "2",
+                "end_order": "3",
+                "target_court_id": str(self.court2.id),
+                "target_order": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [item.id for item in schedules],
+        )
+        self.assertEqual(
+            self._ordered_schedule_ids(court=self.court2),
+            [item.id for item in target_schedules],
+        )
+
+    def test_move_schedule_range_api_rejects_locked_target_position(self):
+        source_schedules = self._create_schedules(3)
+        target_schedules = self._create_schedules(2, court=self.court2)
+        target_schedules[0].called = True
+        target_schedules[0].save()
+
+        response = self.client.post(
+            self._move_range_url(),
+            {
+                "start_order": "2",
+                "end_order": "3",
+                "target_court_id": str(self.court2.id),
+                "target_order": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [item.id for item in source_schedules],
+        )
+        self.assertEqual(
+            self._ordered_schedule_ids(court=self.court2),
+            [item.id for item in target_schedules],
+        )
+
+    def test_move_schedule_range_to_block_api_moves_range_to_other_block_tail(self):
+        source_schedules = self._create_schedules(5)
+        target_block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        target_schedules = self._create_schedules(
+            1,
+            court=self.court1,
+            block=target_block,
+        )
+
+        response = self.client.post(
+            self._move_range_to_block_url(),
+            {
+                "start_order": "2",
+                "end_order": "4",
+                "target_block_id": str(target_block.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "moved_ids": [
+                    source_schedules[1].id,
+                    source_schedules[2].id,
+                    source_schedules[3].id,
+                ],
+                "schedule_block_id": target_block.id,
+            },
+        )
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [
+                source_schedules[0].id,
+                source_schedules[4].id,
+            ],
+        )
+        self.assertEqual(self._ordered_schedule_orders(), [1, 2])
+        self.assertEqual(
+            self._ordered_schedule_ids(block=target_block),
+            [
+                target_schedules[0].id,
+                source_schedules[1].id,
+                source_schedules[2].id,
+                source_schedules[3].id,
+            ],
+        )
+        self.assertEqual(
+            self._ordered_schedule_orders(block=target_block),
+            [1, 2, 3, 4],
+        )
+
+    def test_move_schedule_range_to_block_api_rejects_locked_source_without_changes(self):
+        schedules = self._create_schedules(5)
+        target_block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午後",
+            display_order=2,
+        )
+        schedules[2].called = True
+        schedules[2].save()
+
+        response = self.client.post(
+            self._move_range_to_block_url(),
+            {
+                "start_order": "2",
+                "end_order": "4",
+                "target_block_id": str(target_block.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [item.id for item in schedules],
+        )
+        self.assertEqual(
+            self._ordered_schedule_ids(block=target_block),
+            [],
+        )
+
+    def test_move_schedule_range_to_block_api_rejects_same_block(self):
+        schedules = self._create_schedules(5)
+
+        response = self.client.post(
+            self._move_range_to_block_url(),
+            {
+                "start_order": "2",
+                "end_order": "4",
+                "target_block_id": str(self.block.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()["success"])
+        self.assertEqual(
+            self._ordered_schedule_ids(),
+            [item.id for item in schedules],
+        )
+
     def test_schedule_slot_apis_reject_get(self):
         match = self._create_round_robin_match()
         schedule = Schedule.objects.create(
@@ -9025,6 +9406,9 @@ class ScheduleSlotApiTests(TestCase):
                 "move_schedule_slot_api",
                 kwargs={"schedule_id": schedule.id},
             ),
+            self._unassign_range_url(),
+            self._move_range_url(),
+            self._move_range_to_block_url(),
         ]
 
         for url in urls:

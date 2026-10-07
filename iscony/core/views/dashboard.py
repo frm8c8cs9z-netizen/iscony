@@ -58,12 +58,16 @@ from ..services import (
     clone_tournament_without_results,
     is_internal_seed_match,
     merge_schedule_blocks,
-    move_schedule_tail_to_block,
     move_schedule,
+    move_schedule_range,
+    move_schedule_range_to_block,
+    move_schedule_tail_to_block,
     participant_edit_impact_summary,
     participant_pair_organization_initials,
     save_pair_organization_values,
     tournament_pair_organization_sets,
+    unassign_schedule,
+    unassign_schedule_range,
 )
 
 from ..helpers.view import(
@@ -3321,6 +3325,141 @@ def assign_schedule_slot_api(request, code, schedule_block_id, court_id):
     })
 
 
+def unassign_schedule_range_api(request, code, schedule_block_id, court_id):
+    """コート内の指定した試合順範囲をまとめて取り消すJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    schedule_block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+    court = get_object_or_404(Court, id=court_id, tournament=tournament)
+
+    try:
+        start_order = int(request.POST.get("start_order"))
+        end_order = int(request.POST.get("end_order"))
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"success": False, "error": "範囲の指定が不正です。"},
+            status=400,
+        )
+
+    try:
+        removed_count = unassign_schedule_range(
+            schedule_block, court, start_order, end_order,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
+
+    return JsonResponse({"success": True, "removed_count": removed_count})
+
+
+def move_schedule_range_api(request, code, schedule_block_id, court_id):
+    """コート内の指定した試合順範囲をまとめて移動するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    schedule_block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+    source_court = get_object_or_404(Court, id=court_id, tournament=tournament)
+
+    try:
+        start_order = int(request.POST.get("start_order"))
+        end_order = int(request.POST.get("end_order"))
+        target_order = int(request.POST.get("target_order"))
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"success": False, "error": "範囲または移動先の指定が不正です。"},
+            status=400,
+        )
+
+    target_court_id = request.POST.get("target_court_id")
+    target_court = get_object_or_404(
+        Court, id=target_court_id, tournament=tournament,
+    )
+
+    try:
+        moved_ids = move_schedule_range(
+            schedule_block,
+            source_court,
+            start_order,
+            end_order,
+            target_court,
+            target_order,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
+
+    return JsonResponse({
+        "success": True,
+        "moved_ids": moved_ids,
+        "court_id": target_court.id,
+    })
+
+
+def move_schedule_range_to_block_api(request, code, schedule_block_id, court_id):
+    """コート内の指定した試合順範囲をまとめて別日程区分へ移動するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    schedule_block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+    court = get_object_or_404(Court, id=court_id, tournament=tournament)
+
+    try:
+        start_order = int(request.POST.get("start_order"))
+        end_order = int(request.POST.get("end_order"))
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"success": False, "error": "範囲の指定が不正です。"},
+            status=400,
+        )
+
+    target_block_id = request.POST.get("target_block_id")
+    target_block = get_object_or_404(
+        ScheduleBlock, id=target_block_id, tournament=tournament,
+    )
+
+    try:
+        moved_ids = move_schedule_range_to_block(
+            schedule_block, court, start_order, end_order, target_block,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
+
+    return JsonResponse({
+        "success": True,
+        "moved_ids": moved_ids,
+        "schedule_block_id": target_block.id,
+    })
+
+
 def unassign_schedule_slot_api(request, schedule_id):
     """進行表へ割り付け済みの試合を取り消すJSON API。"""
 
@@ -3342,7 +3481,14 @@ def unassign_schedule_slot_api(request, schedule_id):
         )
 
     court_id = schedule.court_id
-    schedule.delete()
+
+    try:
+        unassign_schedule(schedule)
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
 
     return JsonResponse({"success": True, "court_id": court_id})
 

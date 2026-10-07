@@ -563,6 +563,33 @@ urlpatterns = [
     ),
 
     path(
+        (
+            "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
+            "court/<int:court_id>/unassign-range/"
+        ),
+        dashboard.unassign_schedule_range_api,
+        name="unassign_schedule_range_api",
+    ),
+
+    path(
+        (
+            "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
+            "court/<int:court_id>/move-range/"
+        ),
+        dashboard.move_schedule_range_api,
+        name="move_schedule_range_api",
+    ),
+
+    path(
+        (
+            "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
+            "court/<int:court_id>/move-range-to-block/"
+        ),
+        dashboard.move_schedule_range_to_block_api,
+        name="move_schedule_range_to_block_api",
+    ),
+
+    path(
         "tournament/<str:code>/bracket/<int:bracket_id>/",
         tournament.tournament_bracket_detail,
         name="tournament_bracket_detail",
