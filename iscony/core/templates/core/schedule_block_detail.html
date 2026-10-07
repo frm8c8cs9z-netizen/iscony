@@ -569,7 +569,34 @@
             return;
         }
 
-        let activeCourtIds = new Set();
+        const storageKey = (
+            "schedule-court-filter:{{ schedule_block.id }}"
+        );
+
+        function loadStoredCourtIds() {
+            try {
+                const raw = sessionStorage.getItem(storageKey);
+                if (!raw) {
+                    return new Set();
+                }
+                return new Set(JSON.parse(raw));
+            } catch (error) {
+                return new Set();
+            }
+        }
+
+        function saveStoredCourtIds(courtIds) {
+            try {
+                sessionStorage.setItem(
+                    storageKey,
+                    JSON.stringify(Array.from(courtIds))
+                );
+            } catch (error) {
+                // 保存できない環境(プライベートモード等)では無視する。
+            }
+        }
+
+        let activeCourtIds = loadStoredCourtIds();
 
         function applyFilter() {
             document.querySelectorAll(
@@ -580,6 +607,19 @@
                     activeCourtIds.size > 0
                     && !activeCourtIds.has(courtId)
                 );
+            });
+        }
+
+        function updateButtonStates() {
+            filterContainer.querySelectorAll(
+                ".rank-filter-button"
+            ).forEach(function(button) {
+                const courtId = button.dataset.courtFilter;
+                const isActive = (
+                    (courtId === "all" && activeCourtIds.size === 0)
+                    || activeCourtIds.has(courtId)
+                );
+                button.classList.toggle("is-active", isActive);
             });
         }
 
@@ -596,24 +636,15 @@
                         activeCourtIds.add(courtId);
                     }
 
-                    filterContainer.querySelectorAll(
-                        ".rank-filter-button"
-                    ).forEach(function(otherButton) {
-                        const otherCourtId = otherButton.dataset.courtFilter;
-                        const isActive = (
-                            (
-                                otherCourtId === "all"
-                                && activeCourtIds.size === 0
-                            )
-                            || activeCourtIds.has(otherCourtId)
-                        );
-                        otherButton.classList.toggle("is-active", isActive);
-                    });
-
+                    updateButtonStates();
                     applyFilter();
+                    saveStoredCourtIds(activeCourtIds);
                 });
             }
         );
+
+        updateButtonStates();
+        applyFilter();
     }
 
     document.addEventListener("DOMContentLoaded", function() {
