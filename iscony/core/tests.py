@@ -8144,7 +8144,8 @@ class ScheduleBlockDetailTests(TestCase):
         rows = response.context["schedule_grid_rows"]
         expected_labels = {
             match.id: (
-                f"{match.group.stage.name}/{match.group.name}:"
+                f"{match.group.stage.code or match.group.stage.name}/"
+                f"{match.group.name}:"
                 f"{min(match.pair1.display_order, match.pair2.display_order)}-"
                 f"{max(match.pair1.display_order, match.pair2.display_order)}"
             )
@@ -8203,6 +8204,40 @@ class ScheduleBlockDetailTests(TestCase):
             'class="schedule-slot-row schedule-slot-row--empty"',
             count=2,
         )
+
+    def test_get_builds_schedule_grid_label_uses_stage_code_when_available(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            code="STG1",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = self.create_auto_assign_group(
+            name="A",
+            prefix="G",
+            display_order=1,
+            category=category,
+            stage=stage,
+        )
+        match = RoundRobinMatch.objects.filter(group=group).order_by("id").first()
+        Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+            round_robin_match=match,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        cell = response.context["schedule_grid_rows"][0]["cells"][0]
+        self.assertEqual(cell["label"], "STG1/A:1-2")
 
     def test_get_groups_league_choices_by_category_and_stage(self):
         category = Category.objects.create(

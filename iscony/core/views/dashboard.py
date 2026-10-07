@@ -3190,8 +3190,9 @@ def schedule_block_detail(request, code, schedule_block_id):
                         match.pair1.display_order,
                         match.pair2.display_order,
                     ])
+                    stage_label = match.group.stage.code or match.group.stage.name
                     label = (
-                        f"{match.group.stage.name}/{match.group.name}:"
+                        f"{stage_label}/{match.group.name}:"
                         f"{pair_orders[0]}-{pair_orders[1]}"
                     )
                 else:
