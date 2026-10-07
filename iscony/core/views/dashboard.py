@@ -2812,10 +2812,10 @@ def _schedule_block_split(request, tournament, block):
 def _schedule_block_auto_assign_league(request, tournament, block):
     group_ids = request.POST.getlist("group_ids")
 
-    if not (2 <= len(group_ids) <= 4):
+    if not (1 <= len(group_ids) <= 4):
         messages.error(
             request,
-            "グループは2〜4個選択してください。",
+            "グループは1〜4個選択してください。",
         )
         return redirect(
             "schedule_block_detail",

@@ -159,9 +159,9 @@
 <section>
     <h3>リーグの自動割り付け</h3>
     <p>
-        複数グループ(2〜4個)を選ぶと、各グループの対戦を
+        グループ(1〜4個)を選ぶと、各グループの対戦を
         「強さが近い対戦から先」の順で並べ、選んだグループを
-        交互に1つのコートへまとめて割り付けます。
+        (2個以上の場合は交互に)1つのコートへまとめて割り付けます。
     </p>
 
     <form method="post">
@@ -169,7 +169,7 @@
         <input type="hidden" name="action" value="auto_assign_league">
 
         <fieldset>
-            <legend>グループを選択(2〜4個、同じStageのグループのみ)</legend>
+            <legend>グループを選択(1〜4個、同じStageのグループのみ)</legend>
             {% for section in league_group_sections %}
                 <p class="subtle-text" style="margin-bottom:2px;">
                     {{ section.category.name }} / {{ section.stage.name }}

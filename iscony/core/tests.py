@@ -8243,18 +8243,12 @@ class ScheduleBlockDetailTests(TestCase):
             ],
         )
 
-    def test_auto_assign_league_rejects_too_few_groups(self):
-        group = self.create_auto_assign_group(
-            name="A",
-            prefix="A",
-            display_order=1,
-        )
-
+    def test_auto_assign_league_rejects_zero_groups(self):
         response = self.client.post(
             self.url,
             {
                 "action": "auto_assign_league",
-                "group_ids": [str(group.id)],
+                "group_ids": [],
                 "court_id": str(self.court1.id),
             },
         )
@@ -8262,7 +8256,7 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Schedule.objects.exists())
         self.assertIn(
-            "グループは2〜4個選択してください。",
+            "グループは1〜4個選択してください。",
             [message.message for message in get_messages(response.wsgi_request)],
         )
 
@@ -8288,7 +8282,7 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Schedule.objects.exists())
         self.assertIn(
-            "グループは2〜4個選択してください。",
+            "グループは1〜4個選択してください。",
             [message.message for message in get_messages(response.wsgi_request)],
         )
 
@@ -8351,6 +8345,48 @@ class ScheduleBlockDetailTests(TestCase):
                 (group_b.id, 4),
                 (group_a.id, 5),
                 (group_b.id, 6),
+            ],
+        )
+
+    def test_auto_assign_league_assigns_single_group_from_view(self):
+        group = self.create_auto_assign_group(
+            name="A",
+            prefix="A",
+            display_order=1,
+        )
+        expected_match_ids = [
+            match.id for match in sorted_round_robin_matches_for_group(group)
+        ]
+
+        response = self.client.post(
+            self.url,
+            {
+                "action": "auto_assign_league",
+                "group_ids": [str(group.id)],
+                "court_id": str(self.court1.id),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'3試合を「{self.court1.name}」へ自動割り付けしました。',
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block1,
+                    court=self.court1,
+                ).order_by("order").values_list(
+                    "round_robin_match_id",
+                    "order",
+                )
+            ),
+            [
+                (expected_match_ids[0], 1),
+                (expected_match_ids[1], 2),
+                (expected_match_ids[2], 3),
             ],
         )
 
