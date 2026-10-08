@@ -158,69 +158,71 @@
     <button type="button" class="cancel" id="scheduleActionCancel">キャンセル</button>
 </div>
 
-<section>
-    <h3>リーグの自動割り付け</h3>
-    <p>
-        グループ(1〜4個)を選ぶと、各グループの対戦を
-        「強さが近い対戦から先」の順で並べ、選んだグループを
-        (2個以上の場合は交互に)1つのコートへまとめて割り付けます。
-    </p>
+<div id="scheduleAutoAssignPanel">
+    <section>
+        <h3>リーグの自動割り付け</h3>
+        <p>
+            グループ(1〜4個)を選ぶと、各グループの対戦を
+            「強さが近い対戦から先」の順で並べ、選んだグループを
+            (2個以上の場合は交互に)1つのコートへまとめて割り付けます。
+        </p>
 
-    <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="auto_assign_league">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="auto_assign_league">
 
-        <fieldset>
-            <legend>グループを選択(1〜4個、同じStageのグループのみ)</legend>
-            {% for section in league_group_sections %}
-                <p class="subtle-text" style="margin-bottom:2px;">
-                    {{ section.category.name }} / {{ section.stage.name }}
-                </p>
-                {% for group in section.groups %}
-                    <label style="display:block; margin-left:1em;">
-                        <input type="checkbox" name="group_ids" value="{{ group.id }}">
-                        {{ group.name }}
-                    </label>
+            <fieldset>
+                <legend>グループを選択(1〜4個、同じStageのグループのみ)</legend>
+                {% for section in league_group_sections %}
+                    <p class="subtle-text" style="margin-bottom:2px;">
+                        {{ section.category.name }} / {{ section.stage.name }}
+                    </p>
+                    {% for group in section.groups %}
+                        <label style="display:block; margin-left:1em;">
+                            <input type="checkbox" name="group_ids" value="{{ group.id }}">
+                            {{ group.name }}
+                        </label>
+                    {% endfor %}
+                {% empty %}
+                    <p>リーグのグループがありません。</p>
                 {% endfor %}
-            {% empty %}
-                <p>リーグのグループがありません。</p>
+            </fieldset>
+
+            <label>
+                割り付け先コート
+                <select name="court_id">
+                    {% for court in courts %}
+                        <option value="{{ court.id }}">{{ court.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <button type="submit">自動割り付け</button>
+        </form>
+    </section>
+
+    <section>
+        <h3>トーナメントの自動割り付け</h3>
+        <p class="subtle-text">
+            ブラケットを選ぶと、トーナメント表をクリックして枠順の範囲を選び、
+            その範囲から育つ試合をまとめて1コートへ自動割り付けできる画面に
+            移動します。
+        </p>
+
+        <select
+            onchange="if (this.value) { location.href = this.value; }"
+        >
+            <option value="">ブラケットを選択してください</option>
+            {% for bracket in tournament_brackets %}
+                <option
+                    value="{% url 'schedule_block_tournament_bracket_assign' tournament.code schedule_block.id bracket.id %}"
+                >
+                    {{ bracket.category.name }} / {{ bracket.name }}
+                </option>
             {% endfor %}
-        </fieldset>
-
-        <label>
-            割り付け先コート
-            <select name="court_id">
-                {% for court in courts %}
-                    <option value="{{ court.id }}">{{ court.name }}</option>
-                {% endfor %}
-            </select>
-        </label>
-
-        <button type="submit">自動割り付け</button>
-    </form>
-</section>
-
-<section>
-    <h3>トーナメントの自動割り付け</h3>
-    <p class="subtle-text">
-        ブラケットを選ぶと、トーナメント表をクリックして枠順の範囲を選び、
-        その範囲から育つ試合をまとめて1コートへ自動割り付けできる画面に
-        移動します。
-    </p>
-
-    <select
-        onchange="if (this.value) { location.href = this.value; }"
-    >
-        <option value="">ブラケットを選択してください</option>
-        {% for bracket in tournament_brackets %}
-            <option
-                value="{% url 'schedule_block_tournament_bracket_assign' tournament.code schedule_block.id bracket.id %}"
-            >
-                {{ bracket.category.name }} / {{ bracket.name }}
-            </option>
-        {% endfor %}
-    </select>
-</section>
+        </select>
+    </section>
+</div>
 
 <p>
     <a class="button-link" href="{% url 'schedule_block_maintenance' tournament.code %}">
@@ -244,6 +246,9 @@
             "#unassigned-match-search"
         );
         const piecePanel = document.querySelector("#schedulePiecePanel");
+        const autoAssignPanel = document.querySelector(
+            "#scheduleAutoAssignPanel"
+        );
         const instructionEl = document.querySelector(
             "#scheduleModeInstruction"
         );
@@ -479,6 +484,9 @@
             instructionEl.textContent = INSTRUCTIONS[mode];
             if (piecePanel) {
                 piecePanel.hidden = mode !== "place";
+            }
+            if (autoAssignPanel) {
+                autoAssignPanel.hidden = mode !== "place";
             }
 
             renderRangeHighlight();
