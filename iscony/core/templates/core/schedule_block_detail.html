@@ -4,21 +4,47 @@
 
 <h2>{{ tournament.name }} {{ schedule_block.name }}</h2>
 
+<div class="schedule-block-tabs" id="scheduleBlockTabs">
+    {% for tab_block in tournament_schedule_blocks %}
+        <a
+            href="{% url 'schedule_block_detail' tournament.code tab_block.id %}"
+            class="schedule-block-tab{% if tab_block.id == schedule_block.id %} is-active{% endif %}"
+            data-block-id="{{ tab_block.id }}"
+        >
+            {{ tab_block.name }}
+        </a>
+    {% endfor %}
+</div>
+
 <form style="display:none;">
     {% csrf_token %}
 </form>
+
+<div class="schedule-mode-toolbar" id="scheduleModeToolbar">
+    <button type="button" class="schedule-mode-button is-active" data-mode="place">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        配置
+    </button>
+    <button type="button" class="schedule-mode-button" data-mode="move">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M19 9l3 3-3 3M9 5l3-3 3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
+        移動
+    </button>
+    <button type="button" class="schedule-mode-button" data-mode="delete">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>
+        削除
+    </button>
+    <button type="button" class="schedule-mode-button" data-mode="move-block">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M9 15l3-3 3 3M12 12v6"/></svg>
+        他日程へ移動
+    </button>
+</div>
+
+<p class="subtle-text" id="scheduleModeInstruction"></p>
 
 <div class="pair-assignment-layout pair-assignment-layout--schedule">
     <div>
         <section>
             <h3>コートへ配置</h3>
-
-            <p class="subtle-text">
-                試合をコート欄へドラッグ&ドロップ(またはタップ→タップ)で移動できます。
-                すでに配置された試合の行へドロップするとその位置に割り込み、
-                「ここへ追加(最後尾)」へドロップするとそのコートの最後に追加されます。
-                配置済みの試合も同様にドラッグで並べ替え・他コートへの移動ができます。
-            </p>
 
             <div class="advancement-piece-filter">
                 <div class="advancement-piece-rank-filter" id="schedule-court-filter">
@@ -53,6 +79,9 @@
                                     class="schedule-court-column"
                                     data-court-id="{{ cell.court.id }}"
                                     data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id cell.court.id %}"
+                                    data-unassign-range-url="{% url 'unassign_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
+                                    data-move-range-url="{% url 'move_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
+                                    data-move-range-to-block-url="{% url 'move_schedule_range_to_block_api' tournament.code schedule_block.id cell.court.id %}"
                                 >
                                     {% if cell.kind == "assigned" %}
                                         <div
@@ -60,28 +89,7 @@
                                             draggable="true"
                                             data-schedule-id="{{ cell.schedule.id }}"
                                             data-order="{{ cell.schedule.order }}"
-                                            data-move-url="{% url 'move_schedule_slot_api' cell.schedule.id %}"
                                         >
-                                            <button
-                                                type="button"
-                                                class="schedule-slot-unassign"
-                                                data-schedule-id="{{ cell.schedule.id }}"
-                                                data-unassign-url="{% url 'unassign_schedule_slot_api' cell.schedule.id %}"
-                                                aria-label="取り消す"
-                                            >
-                                                ×
-                                            </button>
-                                            {% if not cell.schedule.is_locked_for_move %}
-                                                <button
-                                                    type="button"
-                                                    class="schedule-slot-split-trigger"
-                                                    data-schedule-id="{{ cell.schedule.id }}"
-                                                    data-schedule-label="{{ cell.court.name }} 第{{ row.order }}試合"
-                                                    aria-label="この試合以降をブロック分割"
-                                                >
-                                                    ✂
-                                                </button>
-                                            {% endif %}
                                             <span class="schedule-slot-label">
                                                 {{ cell.label }}
                                             </span>
@@ -104,7 +112,7 @@
         </section>
     </div>
 
-    <div>
+    <div id="schedulePiecePanel">
         <section>
             <h3>未配置の試合</h3>
 
@@ -142,30 +150,11 @@
     </div>
 </div>
 
-<section id="schedule-split-section" hidden>
-    <h3>ブロック分割</h3>
-    <p class="subtle-text" id="schedule-split-target-label"></p>
-
-    <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="schedule_id" id="schedule-split-schedule-id">
-        <label>
-            移動先ブロック
-            <select name="target_block_choice">
-                <option value="__new__">新規ブロックを作成</option>
-                {% for other in other_blocks %}
-                    <option value="{{ other.id }}">{{ other.name }}</option>
-                {% endfor %}
-            </select>
-        </label>
-        <input
-            type="text"
-            name="new_block_name"
-            placeholder="新規ブロック名(新規作成時のみ)"
-        >
-        <button type="submit">ここで分割する</button>
-    </form>
-</section>
+<div class="schedule-action-bar" id="scheduleActionBar" hidden>
+    <span class="msg" id="scheduleActionMsg"></span>
+    <button type="button" class="run" id="scheduleActionRun" hidden></button>
+    <button type="button" class="cancel" id="scheduleActionCancel">キャンセル</button>
+</div>
 
 <section>
     <h3>リーグの自動割り付け</h3>
@@ -238,7 +227,7 @@
 </p>
 
 <script>
-    function setupScheduleSlotAssignment() {
+    function setupScheduleModeUi() {
         const csrfInput = document.querySelector(
             "input[name=csrfmiddlewaretoken]"
         );
@@ -252,8 +241,44 @@
         const searchInput = document.querySelector(
             "#unassigned-match-search"
         );
+        const piecePanel = document.querySelector("#schedulePiecePanel");
+        const instructionEl = document.querySelector(
+            "#scheduleModeInstruction"
+        );
+        const actionBar = document.querySelector("#scheduleActionBar");
+        const actionMsgEl = document.querySelector("#scheduleActionMsg");
+        const actionRunEl = document.querySelector("#scheduleActionRun");
+        const actionCancelEl = document.querySelector("#scheduleActionCancel");
+
         let highlightedDropTarget = null;
         let selectedSourceForTap = null;
+
+        let currentMode = "place";
+        let rangeCourtId = null;
+        let rangeStart = null;
+        let rangeEnd = null;
+        let pickingDestination = false;
+
+        const INSTRUCTIONS = {
+            place: (
+                "未配置の試合をドラッグ、またはタップしてから配置先を" +
+                "タップしてください。"
+            ),
+            move: (
+                "移動したい範囲の開始セルをタップし、続けて同じコート内の" +
+                "終了セルをタップしてください。別のコートのセルをタップすると" +
+                "そこへ移動します。同じコート内の既存の試合の直前に差し込みたい" +
+                "場合は「移動先を選ぶ」を押してから好きなセルをタップするか、" +
+                "選択範囲を直接ドラッグしてください。"
+            ),
+            delete: (
+                "削除したい範囲の開始セルをタップし、続けて同じコート内の" +
+                "終了セルをタップしてください。"
+            ),
+            "move-block": (
+                "移動したい範囲を選んだら、上の日程タブをタップしてください。"
+            ),
+        };
 
         function parseJsonResponse(response) {
             return response.json().then(function(data) {
@@ -330,62 +355,200 @@
             selectedSourceForTap = null;
         }
 
-        function getPayloadFromSource(source) {
-            if (!source) {
-                return null;
-            }
-
-            if (source.dataset.matchKind) {
-                return {
-                    type: "piece",
-                    matchKind: source.dataset.matchKind,
-                    matchId: source.dataset.matchId,
-                };
-            }
-
-            if (source.dataset.scheduleId) {
-                return {
-                    type: "schedule",
-                    scheduleId: source.dataset.scheduleId,
-                    sourceOrder: source.dataset.order,
-                };
-            }
-
-            return null;
-        }
-
         function getTargetCourtColumn(target) {
             return target.closest(".schedule-court-column");
         }
 
-        function showScheduleSplitForm(scheduleId, label) {
-            const section = document.querySelector(
-                "#schedule-split-section"
-            );
-            const idInput = document.querySelector(
-                "#schedule-split-schedule-id"
-            );
-            const labelEl = document.querySelector(
-                "#schedule-split-target-label"
-            );
+        function rangeLowHigh() {
+            if (rangeStart === null) {
+                return null;
+            }
+            if (rangeEnd === null) {
+                return [rangeStart, rangeStart];
+            }
+            return [
+                Math.min(rangeStart, rangeEnd),
+                Math.max(rangeStart, rangeEnd),
+            ];
+        }
 
-            if (!section || !idInput) {
+        function rangeCount() {
+            const bounds = rangeLowHigh();
+            if (!bounds) {
+                return 0;
+            }
+            return bounds[1] - bounds[0] + 1;
+        }
+
+        function clearRangeSelection() {
+            rangeCourtId = null;
+            rangeStart = null;
+            rangeEnd = null;
+            pickingDestination = false;
+        }
+
+        function renderRangeHighlight() {
+            document.querySelectorAll(
+                ".schedule-slot-row--range-selected"
+            ).forEach(function(row) {
+                row.classList.remove("schedule-slot-row--range-selected");
+            });
+
+            const bounds = rangeLowHigh();
+            if (!bounds || rangeCourtId === null) {
                 return;
             }
 
-            idInput.value = scheduleId;
-
-            if (labelEl) {
-                labelEl.textContent = (
-                    "「" + label + "」以降を移動します。"
-                );
-            }
-
-            section.hidden = false;
-            section.scrollIntoView({ behavior: "smooth", block: "start" });
+            document.querySelectorAll(
+                '.schedule-court-column[data-court-id="' + rangeCourtId +
+                '"] .schedule-slot-row--assigned'
+            ).forEach(function(row) {
+                const order = parseInt(row.dataset.order, 10);
+                if (order >= bounds[0] && order <= bounds[1]) {
+                    row.classList.add("schedule-slot-row--range-selected");
+                }
+            });
         }
 
-        function assignPieceToTarget(payload, target) {
+        function updateDropTargetTabs() {
+            const active = currentMode === "move-block" && rangeCount() > 0;
+            document.querySelectorAll(".schedule-block-tab").forEach(
+                function(tab) {
+                    tab.classList.toggle(
+                        "is-drop-target",
+                        active && !tab.classList.contains("is-active")
+                    );
+                }
+            );
+        }
+
+        function updateActionBar() {
+            const count = rangeCount();
+
+            if (currentMode === "place" || count === 0) {
+                actionBar.hidden = true;
+                return;
+            }
+
+            actionBar.hidden = false;
+            actionBar.classList.toggle("mode-delete", currentMode === "delete");
+
+            if (currentMode === "delete") {
+                actionMsgEl.textContent = count + "件選択中";
+                actionRunEl.hidden = false;
+                actionRunEl.textContent = "削除する";
+                actionRunEl.onclick = executeDelete;
+            } else if (currentMode === "move") {
+                if (pickingDestination) {
+                    actionMsgEl.textContent = (
+                        count + "件選択中・移動先をタップしてください"
+                    );
+                    actionRunEl.hidden = true;
+                } else {
+                    actionMsgEl.textContent = count + "件選択中";
+                    actionRunEl.hidden = false;
+                    actionRunEl.textContent = "移動先を選ぶ";
+                    actionRunEl.onclick = function() {
+                        pickingDestination = true;
+                        updateActionBar();
+                    };
+                }
+            } else if (currentMode === "move-block") {
+                actionMsgEl.textContent = (
+                    count + "件選択中・上の日程タブをタップしてください"
+                );
+                actionRunEl.hidden = true;
+            }
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            clearRangeSelection();
+            clearTapSelection();
+
+            document.querySelectorAll(".schedule-mode-button").forEach(
+                function(button) {
+                    button.classList.toggle(
+                        "is-active", button.dataset.mode === mode
+                    );
+                }
+            );
+
+            instructionEl.textContent = INSTRUCTIONS[mode];
+            if (piecePanel) {
+                piecePanel.hidden = mode !== "place";
+            }
+
+            renderRangeHighlight();
+            updateActionBar();
+            updateDropTargetTabs();
+        }
+
+        function executeDelete() {
+            const bounds = rangeLowHigh();
+            if (!bounds || rangeCourtId === null) {
+                return;
+            }
+
+            const column = document.querySelector(
+                '.schedule-court-column[data-court-id="' + rangeCourtId + '"]'
+            );
+            if (!column) {
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append("start_order", bounds[0]);
+            body.append("end_order", bounds[1]);
+
+            postForm(column.dataset.unassignRangeUrl, body);
+        }
+
+        function executeMoveToDestination(targetCell) {
+            const bounds = rangeLowHigh();
+            if (!bounds || rangeCourtId === null) {
+                return;
+            }
+
+            const sourceColumn = document.querySelector(
+                '.schedule-court-column[data-court-id="' + rangeCourtId + '"]'
+            );
+            const targetColumn = getTargetCourtColumn(targetCell);
+            if (!sourceColumn || !targetColumn) {
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append("start_order", bounds[0]);
+            body.append("end_order", bounds[1]);
+            body.append("target_court_id", targetColumn.dataset.courtId);
+            body.append("target_order", targetCell.dataset.order);
+
+            postForm(sourceColumn.dataset.moveRangeUrl, body);
+        }
+
+        function executeMoveToBlock(targetBlockId) {
+            const bounds = rangeLowHigh();
+            if (!bounds || rangeCourtId === null) {
+                return;
+            }
+
+            const column = document.querySelector(
+                '.schedule-court-column[data-court-id="' + rangeCourtId + '"]'
+            );
+            if (!column) {
+                return;
+            }
+
+            const body = new URLSearchParams();
+            body.append("start_order", bounds[0]);
+            body.append("end_order", bounds[1]);
+            body.append("target_block_id", targetBlockId);
+
+            postForm(column.dataset.moveRangeToBlockUrl, body);
+        }
+
+        function applyPieceToTarget(payload, target) {
             const courtColumn = getTargetCourtColumn(target);
             if (!courtColumn) {
                 return;
@@ -399,54 +562,150 @@
             postForm(courtColumn.dataset.assignUrl, body);
         }
 
-        function moveScheduleToTarget(payload, target) {
-            const courtColumn = getTargetCourtColumn(target);
-            const source = document.querySelector(
-                '.schedule-slot-row--assigned[data-schedule-id="'
-                + payload.scheduleId
-                + '"]'
+        function handleGridClick(target) {
+            const isAssigned = target.classList.contains(
+                "schedule-slot-row--assigned"
             );
-            if (!courtColumn || !source) {
+            const isEmpty = target.classList.contains(
+                "schedule-slot-row--empty"
+            );
+            const column = getTargetCourtColumn(target);
+            const courtId = column ? column.dataset.courtId : null;
+            const order = (isAssigned || isEmpty)
+                ? parseInt(target.dataset.order, 10)
+                : null;
+
+            if (currentMode === "place") {
+                if (!isAssigned && !isEmpty) {
+                    return;
+                }
+                if (selectedSourceForTap) {
+                    const payload = {
+                        type: "piece",
+                        matchKind: selectedSourceForTap.dataset.matchKind,
+                        matchId: selectedSourceForTap.dataset.matchId,
+                    };
+                    clearTapSelection();
+                    applyPieceToTarget(payload, target);
+                }
                 return;
             }
 
-            const body = new URLSearchParams();
-            body.append("target_court_id", courtColumn.dataset.courtId);
-            body.append("target_order", target.dataset.order);
+            if (currentMode === "move" && pickingDestination) {
+                executeMoveToDestination(target);
+                return;
+            }
 
-            postForm(source.dataset.moveUrl, body);
+            if (
+                currentMode === "move"
+                && rangeCourtId !== null
+                && courtId !== rangeCourtId
+                && (isAssigned || isEmpty)
+            ) {
+                executeMoveToDestination(target);
+                return;
+            }
+
+            if (!isAssigned) {
+                return;
+            }
+
+            if (rangeCourtId !== null && courtId === rangeCourtId) {
+                if (rangeStart === null) {
+                    rangeStart = order;
+                } else if (rangeEnd === null && order === rangeStart) {
+                    clearRangeSelection();
+                } else if (rangeEnd === null) {
+                    rangeEnd = order;
+                } else {
+                    rangeStart = order;
+                    rangeEnd = null;
+                }
+            } else {
+                rangeCourtId = courtId;
+                rangeStart = order;
+                rangeEnd = null;
+            }
+
+            renderRangeHighlight();
+            updateActionBar();
+            updateDropTargetTabs();
         }
 
-        function applyPayloadToTarget(payload, target) {
-            if (!payload || !target) {
-                return;
+        document.querySelectorAll(".schedule-mode-button").forEach(
+            function(button) {
+                button.addEventListener("click", function() {
+                    setMode(button.dataset.mode);
+                });
             }
+        );
 
-            if (payload.type === "piece") {
-                assignPieceToTarget(payload, target);
-            } else if (payload.type === "schedule") {
-                moveScheduleToTarget(payload, target);
+        document.querySelectorAll(".schedule-block-tab").forEach(
+            function(tab) {
+                tab.addEventListener("click", function(event) {
+                    if (
+                        currentMode === "move-block"
+                        && rangeCount() > 0
+                        && !tab.classList.contains("is-active")
+                    ) {
+                        event.preventDefault();
+                        executeMoveToBlock(tab.dataset.blockId);
+                    }
+                });
             }
+        );
+
+        if (actionCancelEl) {
+            actionCancelEl.addEventListener("click", function() {
+                clearRangeSelection();
+                renderRangeHighlight();
+                updateActionBar();
+                updateDropTargetTabs();
+            });
         }
 
         document.addEventListener("dragstart", function(event) {
             const piece = event.target.closest(
                 "#unassigned-match-list [data-match-kind]"
             );
-            const assignedRow = event.target.closest(
-                ".schedule-slot-row--assigned[data-schedule-id]"
-            );
-            const source = piece || assignedRow;
-            const payload = getPayloadFromSource(source);
-            if (!payload) {
+            if (piece && currentMode === "place") {
+                const payload = {
+                    type: "piece",
+                    matchKind: piece.dataset.matchKind,
+                    matchId: piece.dataset.matchId,
+                };
+                event.dataTransfer.setData(
+                    "text/plain", JSON.stringify(payload)
+                );
+                event.dataTransfer.effectAllowed = "move";
                 return;
             }
 
-            event.dataTransfer.setData(
-                "text/plain",
-                JSON.stringify(payload)
+            const assignedRow = event.target.closest(
+                ".schedule-slot-row--assigned[data-schedule-id]"
             );
-            event.dataTransfer.effectAllowed = "move";
+            if (
+                assignedRow
+                && currentMode === "move"
+                && rangeCourtId !== null
+            ) {
+                const column = getTargetCourtColumn(assignedRow);
+                const courtId = column ? column.dataset.courtId : null;
+                const order = parseInt(assignedRow.dataset.order, 10);
+                const bounds = rangeLowHigh();
+
+                if (
+                    bounds
+                    && courtId === rangeCourtId
+                    && order >= bounds[0]
+                    && order <= bounds[1]
+                ) {
+                    event.dataTransfer.setData(
+                        "text/plain", JSON.stringify({ type: "range" })
+                    );
+                    event.dataTransfer.effectAllowed = "move";
+                }
+            }
         });
 
         if (assignmentArea) {
@@ -473,56 +732,28 @@
                 }
                 event.preventDefault();
                 setDropHighlight(null);
-                applyPayloadToTarget(getDragData(event), target);
+
+                const payload = getDragData(event);
+                if (!payload) {
+                    return;
+                }
+
+                if (payload.type === "piece" && currentMode === "place") {
+                    applyPieceToTarget(payload, target);
+                } else if (
+                    payload.type === "range"
+                    && currentMode === "move"
+                ) {
+                    executeMoveToDestination(target);
+                }
             });
 
             assignmentArea.addEventListener("click", function(event) {
-                const unassignButton = event.target.closest(
-                    ".schedule-slot-unassign"
-                );
-                if (unassignButton) {
-                    event.stopPropagation();
-                    const body = new URLSearchParams();
-                    postForm(unassignButton.dataset.unassignUrl, body);
-                    return;
-                }
-
-                const splitTrigger = event.target.closest(
-                    ".schedule-slot-split-trigger"
-                );
-                if (splitTrigger) {
-                    event.stopPropagation();
-                    showScheduleSplitForm(
-                        splitTrigger.dataset.scheduleId,
-                        splitTrigger.dataset.scheduleLabel
-                    );
-                    return;
-                }
-
                 const target = event.target.closest(".schedule-slot-row");
                 if (!target || !assignmentArea.contains(target)) {
                     return;
                 }
-
-                if (selectedSourceForTap === target) {
-                    clearTapSelection();
-                    return;
-                }
-
-                if (selectedSourceForTap) {
-                    const payload = getPayloadFromSource(selectedSourceForTap);
-                    clearTapSelection();
-                    applyPayloadToTarget(payload, target);
-                    return;
-                }
-
-                if (!target.classList.contains("schedule-slot-row--assigned")) {
-                    return;
-                }
-
-                clearTapSelection();
-                selectedSourceForTap = target;
-                target.classList.add("entry-tap-selecting");
+                handleGridClick(target);
             });
         }
 
@@ -558,6 +789,8 @@
                 });
             });
         }
+
+        setMode("place");
     }
 
     function setupScheduleCourtFilter() {
@@ -648,7 +881,7 @@
     }
 
     document.addEventListener("DOMContentLoaded", function() {
-        setupScheduleSlotAssignment();
+        setupScheduleModeUi();
         setupScheduleCourtFilter();
     });
 </script>

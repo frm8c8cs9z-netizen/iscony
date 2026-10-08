@@ -8103,6 +8103,27 @@ class ScheduleBlockDetailTests(TestCase):
         )
         self.assertContains(response, "未配置の試合")
         self.assertContains(response, "コートへ配置")
+        self.assertContains(response, "schedule-block-tabs")
+        content = response.content.decode()
+        active_tab = re.search(
+            (
+                r'<a[^>]*class="schedule-block-tab is-active"'
+                r'[^>]*data-block-id="' + str(self.block1.id) + r'"'
+                r'[^>]*>\s*' + re.escape(self.block1.name) + r'\s*</a>'
+            ),
+            content,
+            re.S,
+        )
+        self.assertIsNotNone(active_tab)
+        self.assertContains(response, self.block1.name)
+        self.assertContains(response, self.block2.name)
+        self.assertContains(response, "schedule-mode-toolbar")
+        self.assertContains(response, "配置")
+        self.assertContains(response, "移動")
+        self.assertContains(response, "削除")
+        self.assertContains(response, "他日程へ移動")
+        self.assertNotContains(response, "×")
+        self.assertNotContains(response, "✂")
         self.assertContains(response, "M1")
         self.assertContains(response, group.name)
         self.assertContains(response, self.court1.name)
@@ -8676,7 +8697,6 @@ class ScheduleBlockDetailTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "ブロック分割")
         self.assertContains(
             response,
             f'data-schedule-id="{in_block.id}"',

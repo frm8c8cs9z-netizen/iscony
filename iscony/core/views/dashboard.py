@@ -3232,6 +3232,12 @@ def schedule_block_detail(request, code, schedule_block_id):
         "display_order",
         "name",
     )
+    tournament_schedule_blocks = ScheduleBlock.objects.filter(
+        tournament=tournament,
+    ).order_by(
+        "display_order",
+        "name",
+    )
 
     return render(
         request,
@@ -3249,6 +3255,7 @@ def schedule_block_detail(request, code, schedule_block_id):
             "court_schedule_columns": court_schedule_columns,
             "schedule_grid_rows": schedule_grid_rows,
             "other_blocks": other_blocks,
+            "tournament_schedule_blocks": tournament_schedule_blocks,
         },
     )
 
