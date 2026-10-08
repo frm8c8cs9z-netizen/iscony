@@ -4,40 +4,42 @@
 
 <h2>{{ tournament.name }} {{ schedule_block.name }}</h2>
 
-<div class="schedule-block-tabs" id="scheduleBlockTabs">
-    {% for tab_block in tournament_schedule_blocks %}
-        <a
-            href="{% url 'schedule_block_detail' tournament.code tab_block.id %}"
-            class="schedule-block-tab{% if tab_block.id == schedule_block.id %} is-active{% endif %}"
-            data-block-id="{{ tab_block.id }}"
-        >
-            {{ tab_block.name }}
-        </a>
-    {% endfor %}
+<div class="schedule-sticky-controls">
+    <div class="schedule-block-tabs" id="scheduleBlockTabs">
+        {% for tab_block in tournament_schedule_blocks %}
+            <a
+                href="{% url 'schedule_block_detail' tournament.code tab_block.id %}"
+                class="schedule-block-tab{% if tab_block.id == schedule_block.id %} is-active{% endif %}"
+                data-block-id="{{ tab_block.id }}"
+            >
+                {{ tab_block.name }}
+            </a>
+        {% endfor %}
+    </div>
+
+    <div class="schedule-mode-toolbar" id="scheduleModeToolbar">
+        <button type="button" class="schedule-mode-button is-active" data-mode="place">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            配置
+        </button>
+        <button type="button" class="schedule-mode-button" data-mode="move">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M19 9l3 3-3 3M9 5l3-3 3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
+            移動
+        </button>
+        <button type="button" class="schedule-mode-button" data-mode="delete">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>
+            削除
+        </button>
+        <button type="button" class="schedule-mode-button" data-mode="move-block">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M9 15l3-3 3 3M12 12v6"/></svg>
+            他日程へ移動
+        </button>
+    </div>
 </div>
 
 <form style="display:none;">
     {% csrf_token %}
 </form>
-
-<div class="schedule-mode-toolbar" id="scheduleModeToolbar">
-    <button type="button" class="schedule-mode-button is-active" data-mode="place">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-        配置
-    </button>
-    <button type="button" class="schedule-mode-button" data-mode="move">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M19 9l3 3-3 3M9 5l3-3 3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
-        移動
-    </button>
-    <button type="button" class="schedule-mode-button" data-mode="delete">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>
-        削除
-    </button>
-    <button type="button" class="schedule-mode-button" data-mode="move-block">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M9 15l3-3 3 3M12 12v6"/></svg>
-        他日程へ移動
-    </button>
-</div>
 
 <p class="subtle-text" id="scheduleModeInstruction"></p>
 
