@@ -266,6 +266,25 @@
         let rangeEnd = null;
         let pickingDestination = false;
 
+        const modeStorageKey = "schedule-mode:{{ schedule_block.id }}";
+
+        function loadStoredMode() {
+            try {
+                const stored = sessionStorage.getItem(modeStorageKey);
+                return stored || "place";
+            } catch (error) {
+                return "place";
+            }
+        }
+
+        function saveStoredMode(mode) {
+            try {
+                sessionStorage.setItem(modeStorageKey, mode);
+            } catch (error) {
+                // 保存できない環境(プライベートモード等)では無視する。
+            }
+        }
+
         const INSTRUCTIONS = {
             place: (
                 "未配置の試合をドラッグ、またはタップしてから配置先を" +
@@ -470,6 +489,7 @@
 
         function setMode(mode) {
             currentMode = mode;
+            saveStoredMode(mode);
             clearRangeSelection();
             clearTapSelection();
 
@@ -800,7 +820,7 @@
             });
         }
 
-        setMode("place");
+        setMode(loadStoredMode());
     }
 
     function setupScheduleCourtFilter() {
