@@ -1025,6 +1025,7 @@
                 .then(function(html) {
                     bodyEl.innerHTML = html;
                     bindBracketAssignBody();
+                    scrollToFirstUnscheduledSlot();
                 })
                 .catch(function() {
                     bodyEl.innerHTML = (
@@ -1033,6 +1034,18 @@
                         "</p>"
                     );
                 });
+        }
+
+        function scrollToFirstUnscheduledSlot() {
+            if (!bodyEl) {
+                return;
+            }
+            const target = bodyEl.querySelector(
+                ".tournament-slot-row:not(.tournament-slot-row--already-scheduled)"
+            );
+            if (target) {
+                target.scrollIntoView({block: "center"});
+            }
         }
 
         function submitAssign(url, body) {
