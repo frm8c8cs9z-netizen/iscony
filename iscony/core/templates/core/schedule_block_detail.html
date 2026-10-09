@@ -63,52 +63,56 @@
 
             <div class="schedule-court-table-wrap">
                 <table class="schedule-court-table">
-                    <tr class="schedule-court-table-head-row">
-                        <th class="schedule-slot-order-header">試合順</th>
-                        {% for column in court_schedule_columns %}
-                            <th data-court-id="{{ column.court.id }}">
-                                {{ column.court.name }}
-                            </th>
-                        {% endfor %}
-                    </tr>
-                    {% for row in schedule_grid_rows %}
-                        <tr>
-                            <th class="schedule-slot-order-header">
-                                第{{ row.order }}試合
-                            </th>
-                            {% for cell in row.cells %}
-                                <td
-                                    class="schedule-court-column"
-                                    data-court-id="{{ cell.court.id }}"
-                                    data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id cell.court.id %}"
-                                    data-unassign-range-url="{% url 'unassign_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
-                                    data-move-range-url="{% url 'move_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
-                                    data-move-range-to-block-url="{% url 'move_schedule_range_to_block_api' tournament.code schedule_block.id cell.court.id %}"
-                                >
-                                    {% if cell.kind == "assigned" %}
-                                        <div
-                                            class="schedule-slot-row schedule-slot-row--assigned"
-                                            draggable="true"
-                                            data-schedule-id="{{ cell.schedule.id }}"
-                                            data-order="{{ cell.schedule.order }}"
-                                        >
-                                            <span class="schedule-slot-label">
-                                                {{ cell.label }}
-                                            </span>
-                                        </div>
-                                    {% elif cell.kind == "empty" %}
-                                        <div
-                                            class="schedule-slot-row schedule-slot-row--empty"
-                                            data-court-id="{{ cell.court.id }}"
-                                            data-order="{{ row.order }}"
-                                        >
-                                            +
-                                        </div>
-                                    {% endif %}
-                                </td>
+                    <thead>
+                        <tr class="schedule-court-table-head-row">
+                            <th class="schedule-slot-order-header">試合順</th>
+                            {% for column in court_schedule_columns %}
+                                <th data-court-id="{{ column.court.id }}">
+                                    {{ column.court.name }}
+                                </th>
                             {% endfor %}
                         </tr>
-                    {% endfor %}
+                    </thead>
+                    <tbody>
+                        {% for row in schedule_grid_rows %}
+                            <tr>
+                                <th class="schedule-slot-order-header">
+                                    第{{ row.order }}試合
+                                </th>
+                                {% for cell in row.cells %}
+                                    <td
+                                        class="schedule-court-column"
+                                        data-court-id="{{ cell.court.id }}"
+                                        data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id cell.court.id %}"
+                                        data-unassign-range-url="{% url 'unassign_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
+                                        data-move-range-url="{% url 'move_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
+                                        data-move-range-to-block-url="{% url 'move_schedule_range_to_block_api' tournament.code schedule_block.id cell.court.id %}"
+                                    >
+                                        {% if cell.kind == "assigned" %}
+                                            <div
+                                                class="schedule-slot-row schedule-slot-row--assigned"
+                                                draggable="true"
+                                                data-schedule-id="{{ cell.schedule.id }}"
+                                                data-order="{{ cell.schedule.order }}"
+                                            >
+                                                <span class="schedule-slot-label">
+                                                    {{ cell.label }}
+                                                </span>
+                                            </div>
+                                        {% elif cell.kind == "empty" %}
+                                            <div
+                                                class="schedule-slot-row schedule-slot-row--empty"
+                                                data-court-id="{{ cell.court.id }}"
+                                                data-order="{{ row.order }}"
+                                            >
+                                                +
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
                 </table>
             </div>
         </section>
@@ -937,6 +941,7 @@
         }
 
         updateOffset();
+        window.addEventListener("load", updateOffset);
         window.addEventListener("resize", updateOffset);
     }
 
