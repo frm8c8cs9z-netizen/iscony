@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import JsonResponse
+from django.http import HttpResponseNotAllowed, JsonResponse
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 
@@ -2870,73 +2870,20 @@ def _schedule_block_auto_assign_league(request, tournament, block):
     )
 
 
-def schedule_block_tournament_bracket_assign(
-    request, code, schedule_block_id, bracket_id,
-):
-    """トーナメント表で枠順範囲を選び、1コートへ自動割り付けする。"""
-
-    tournament = get_object_or_404(Tournament, code=code)
-    block = get_object_or_404(
-        ScheduleBlock, id=schedule_block_id, tournament=tournament,
-    )
-    bracket = get_object_or_404(
-        TournamentBracket,
-        id=bracket_id,
-        category__tournament=tournament,
-    )
-
-    courts = list(
-        Court.objects.filter(
-            tournament=tournament,
-        ).order_by(
-            "display_order",
-            "name",
-        )
-    )
-
-    if request.method == "POST":
-        start_index = request.POST.get("start_match_index")
-        end_index = request.POST.get("end_match_index")
-        court_id = request.POST.get("court_id")
-
-        if start_index is None or end_index is None or not court_id:
-            messages.error(request, "範囲とコートを選択してください。")
-            return redirect(
-                "schedule_block_tournament_bracket_assign",
-                code=tournament.code,
-                schedule_block_id=block.id,
-                bracket_id=bracket.id,
-            )
-
-        court = get_object_or_404(Court, id=court_id, tournament=tournament)
-
-        assigned = auto_assign_tournament_range_to_court(
-            bracket,
-            int(start_index),
-            int(end_index),
-            block,
-            court,
-        )
-
-        messages.success(
-            request,
-            f"{len(assigned)}試合を「{court.name}」へ自動割り付けしました。",
-        )
-        return redirect(
-            "schedule_block_tournament_bracket_assign",
-            code=tournament.code,
-            schedule_block_id=block.id,
-            bracket_id=bracket.id,
-        )
+def _build_tournament_bracket_assign_render_data(
+        bracket,
+        schedules_by_match_id=None):
+    """トーナメント表配置画面/断片で使う描画データを組み立てる。"""
 
     round_data = build_tournament_round_data(bracket)
 
-    schedules_by_match_id = {
-        schedule.tournament_match_id: schedule
-        for schedule in Schedule.objects.filter(
-            tournament_match__bracket=bracket,
-        ).select_related("court")
-    }
+    if schedules_by_match_id is None:
+        schedules_by_match_id = {
+            schedule.tournament_match_id: schedule
+            for schedule in Schedule.objects.filter(
+                tournament_match__bracket=bracket,
+            ).select_related("court")
+        }
 
     for round_item in round_data:
         for match in round_item["matches"]:
@@ -2999,6 +2946,73 @@ def schedule_block_tournament_bracket_assign(
 
     slots.sort(key=lambda slot: slot["y"])
 
+    return {
+        "svg_bracket": svg_bracket,
+        "slots": slots,
+    }
+
+
+def schedule_block_tournament_bracket_assign(
+    request, code, schedule_block_id, bracket_id,
+):
+    """トーナメント表で枠順範囲を選び、1コートへ自動割り付けする。"""
+
+    tournament = get_object_or_404(Tournament, code=code)
+    block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+    bracket = get_object_or_404(
+        TournamentBracket,
+        id=bracket_id,
+        category__tournament=tournament,
+    )
+
+    courts = list(
+        Court.objects.filter(
+            tournament=tournament,
+        ).order_by(
+            "display_order",
+            "name",
+        )
+    )
+
+    if request.method == "POST":
+        start_index = request.POST.get("start_match_index")
+        end_index = request.POST.get("end_match_index")
+        court_id = request.POST.get("court_id")
+
+        if start_index is None or end_index is None or not court_id:
+            messages.error(request, "範囲とコートを選択してください。")
+            return redirect(
+                "schedule_block_tournament_bracket_assign",
+                code=tournament.code,
+                schedule_block_id=block.id,
+                bracket_id=bracket.id,
+            )
+
+        court = get_object_or_404(Court, id=court_id, tournament=tournament)
+
+        assigned = auto_assign_tournament_range_to_court(
+            bracket,
+            int(start_index),
+            int(end_index),
+            block,
+            court,
+        )
+
+        messages.success(
+            request,
+            f"{len(assigned)}試合を「{court.name}」へ自動割り付けしました。",
+        )
+        return redirect(
+            "schedule_block_tournament_bracket_assign",
+            code=tournament.code,
+            schedule_block_id=block.id,
+            bracket_id=bracket.id,
+        )
+
+    render_data = _build_tournament_bracket_assign_render_data(bracket)
+
     return render(
         request,
         "core/schedule_block_tournament_bracket_assign.html",
@@ -3007,11 +3021,98 @@ def schedule_block_tournament_bracket_assign(
             "block": block,
             "schedule_block": block,
             "bracket": bracket,
-            "svg_bracket": svg_bracket,
-            "slots": slots,
+            "svg_bracket": render_data["svg_bracket"],
+            "slots": render_data["slots"],
             "courts": courts,
         },
     )
+
+
+def schedule_block_tournament_bracket_assign_fragment(
+    request, code, schedule_block_id, bracket_id,
+):
+    """トーナメント表配置モーダルの中身だけを返す(GET専用)。"""
+
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    tournament = get_object_or_404(Tournament, code=code)
+    block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+    bracket = get_object_or_404(
+        TournamentBracket,
+        id=bracket_id,
+        category__tournament=tournament,
+    )
+
+    courts = list(
+        Court.objects.filter(tournament=tournament).order_by(
+            "display_order", "name",
+        )
+    )
+
+    render_data = _build_tournament_bracket_assign_render_data(bracket)
+
+    return render(
+        request,
+        "core/_schedule_block_tournament_bracket_assign_fragment.html",
+        {
+            "tournament": tournament,
+            "block": block,
+            "schedule_block": block,
+            "bracket": bracket,
+            "svg_bracket": render_data["svg_bracket"],
+            "slots": render_data["slots"],
+            "courts": courts,
+        },
+    )
+
+
+def auto_assign_tournament_range_api(
+    request, code, schedule_block_id, bracket_id,
+):
+    """トーナメント表の枠順範囲を1コートへ自動割り付けするJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    block = get_object_or_404(
+        ScheduleBlock, id=schedule_block_id, tournament=tournament,
+    )
+    bracket = get_object_or_404(
+        TournamentBracket,
+        id=bracket_id,
+        category__tournament=tournament,
+    )
+
+    try:
+        start_index = int(request.POST.get("start_match_index"))
+        end_index = int(request.POST.get("end_match_index"))
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"success": False, "error": "範囲の指定が不正です。"},
+            status=400,
+        )
+
+    court_id = request.POST.get("court_id")
+    court = get_object_or_404(Court, id=court_id, tournament=tournament)
+
+    try:
+        assigned = auto_assign_tournament_range_to_court(
+            bracket, start_index, end_index, block, court,
+        )
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
+
+    return JsonResponse({"success": True, "assigned_count": len(assigned)})
 
 
 def schedule_block_detail(request, code, schedule_block_id):

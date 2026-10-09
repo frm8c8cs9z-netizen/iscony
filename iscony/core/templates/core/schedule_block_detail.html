@@ -209,24 +209,38 @@
         <h3>トーナメントの自動割り付け</h3>
         <p class="subtle-text">
             ブラケットを選ぶと、トーナメント表をクリックして枠順の範囲を選び、
-            その範囲から育つ試合をまとめて1コートへ自動割り付けできる画面に
-            移動します。
+            その範囲から育つ試合をまとめて1コートへ自動割り付けできます。
+            トーナメント表はこの画面上で開きます。
         </p>
 
-        <select
-            onchange="if (this.value) { location.href = this.value; }"
-        >
-            <option value="">ブラケットを選択してください</option>
+        <div class="schedule-bracket-button-list">
             {% for bracket in tournament_brackets %}
-                <option
-                    value="{% url 'schedule_block_tournament_bracket_assign' tournament.code schedule_block.id bracket.id %}"
+                <button
+                    type="button"
+                    class="schedule-bracket-open-button"
+                    data-fragment-url="{% url 'schedule_block_tournament_bracket_assign_fragment' tournament.code schedule_block.id bracket.id %}"
+                    data-bracket-label="{{ bracket.category.name }} / {{ bracket.name }}"
                 >
                     {{ bracket.category.name }} / {{ bracket.name }}
-                </option>
+                </button>
+            {% empty %}
+                <p>トーナメントのブラケットがありません。</p>
             {% endfor %}
-        </select>
+        </div>
     </section>
 </div>
+
+<dialog id="tournamentBracketAssignDialog" class="tournament-bracket-assign-dialog">
+    <div class="tournament-bracket-assign-dialog-head">
+        <h3 id="tournamentBracketAssignTitle"></h3>
+        <button type="button" id="tournamentBracketAssignClose" aria-label="閉じる">
+            &times;
+        </button>
+    </div>
+    <div id="tournamentBracketAssignBody" class="tournament-bracket-assign-dialog-body">
+        <p class="subtle-text">読み込み中…</p>
+    </div>
+</dialog>
 
 <p>
     <a class="button-link" href="{% url 'schedule_block_maintenance' tournament.code %}">
@@ -945,8 +959,227 @@
         window.addEventListener("resize", updateOffset);
     }
 
+    function setupTournamentBracketAssignDialog() {
+        const dialog = document.querySelector("#tournamentBracketAssignDialog");
+        const titleEl = document.querySelector("#tournamentBracketAssignTitle");
+        const closeButton = document.querySelector(
+            "#tournamentBracketAssignClose"
+        );
+        const bodyEl = document.querySelector("#tournamentBracketAssignBody");
+        const csrfInput = document.querySelector(
+            "input[name=csrfmiddlewaretoken]"
+        );
+        const csrfToken = csrfInput ? csrfInput.value : "";
+
+        if (!dialog || !titleEl || !bodyEl) {
+            return;
+        }
+
+        function parseJsonResponse(response) {
+            return response.json().then(function(data) {
+                return {
+                    ok: response.ok,
+                    data: data,
+                };
+            });
+        }
+
+        function handleResult(result) {
+            if (result.ok && result.data.success) {
+                location.reload();
+                return;
+            }
+            alert(result.data.error || "操作に失敗しました。");
+        }
+
+        function handleFetchError() {
+            alert("操作に失敗しました。");
+        }
+
+        function postForm(url, body) {
+            return fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: body,
+            })
+                .then(parseJsonResponse)
+                .then(handleResult)
+                .catch(handleFetchError);
+        }
+
+        function bindBracketAssignBody() {
+            const column = bodyEl.querySelector(".tournament-slot-column");
+            const form = bodyEl.querySelector(
+                ".tournament-bracket-assign-form"
+            );
+            const startInput = bodyEl.querySelector(
+                ".tournament-bracket-assign-start"
+            );
+            const endInput = bodyEl.querySelector(
+                ".tournament-bracket-assign-end"
+            );
+            const courtSelect = bodyEl.querySelector(
+                ".tournament-bracket-assign-court"
+            );
+            const submitButton = bodyEl.querySelector(
+                ".tournament-bracket-assign-submit"
+            );
+            const clearButton = bodyEl.querySelector(
+                ".tournament-bracket-assign-clear"
+            );
+
+            if (!column || !form || !startInput || !endInput) {
+                return;
+            }
+
+            let startIndex = null;
+            let endIndex = null;
+
+            function applyHighlight() {
+                const rows = column.querySelectorAll(".tournament-slot-row");
+                const lo = startIndex === null || endIndex === null
+                    ? null
+                    : Math.min(startIndex, endIndex);
+                const hi = startIndex === null || endIndex === null
+                    ? null
+                    : Math.max(startIndex, endIndex);
+
+                rows.forEach(function(row) {
+                    const index = parseInt(row.dataset.matchIndex, 10);
+                    row.classList.remove(
+                        "entry-tap-selecting",
+                        "tournament-slot-row--range-selected"
+                    );
+
+                    if (lo === null) {
+                        if (startIndex !== null && index === startIndex) {
+                            row.classList.add("entry-tap-selecting");
+                        }
+                        return;
+                    }
+
+                    if (index >= lo && index <= hi) {
+                        row.classList.add(
+                            "tournament-slot-row--range-selected"
+                        );
+                    }
+                });
+            }
+
+            function updateSelectionFields() {
+                if (startIndex !== null && endIndex !== null) {
+                    startInput.value = Math.min(startIndex, endIndex);
+                    endInput.value = Math.max(startIndex, endIndex);
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                    }
+                } else {
+                    startInput.value = "";
+                    endInput.value = "";
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                    }
+                }
+            }
+
+            function resetSelection() {
+                startIndex = null;
+                endIndex = null;
+                updateSelectionFields();
+                applyHighlight();
+            }
+
+            column.addEventListener("click", function(event) {
+                const row = event.target.closest(".tournament-slot-row");
+                if (!row || !column.contains(row)) {
+                    return;
+                }
+
+                const index = parseInt(row.dataset.matchIndex, 10);
+                if (isNaN(index)) {
+                    return;
+                }
+
+                if (startIndex === null) {
+                    startIndex = index;
+                    endIndex = null;
+                } else if (endIndex === null) {
+                    endIndex = index;
+                } else {
+                    startIndex = index;
+                    endIndex = null;
+                }
+
+                updateSelectionFields();
+                applyHighlight();
+            });
+
+            if (clearButton) {
+                clearButton.addEventListener("click", resetSelection);
+            }
+
+            if (submitButton) {
+                submitButton.addEventListener("click", function() {
+                    if (!courtSelect || !startInput.value || !endInput.value) {
+                        return;
+                    }
+
+                    const body = new URLSearchParams();
+                    body.append("start_match_index", startInput.value);
+                    body.append("end_match_index", endInput.value);
+                    body.append("court_id", courtSelect.value);
+
+                    postForm(form.dataset.autoAssignUrl, body);
+                });
+            }
+        }
+
+        if (closeButton) {
+            closeButton.addEventListener("click", function() {
+                dialog.close();
+            });
+        }
+
+        document.querySelectorAll(".schedule-bracket-open-button").forEach(
+            function(button) {
+                button.addEventListener("click", function() {
+                    titleEl.textContent = button.dataset.bracketLabel || "";
+                    bodyEl.innerHTML = (
+                        '<p class="subtle-text">読み込み中…</p>'
+                    );
+                    dialog.showModal();
+
+                    fetch(button.dataset.fragmentUrl, {
+                        headers: {"X-Requested-With": "XMLHttpRequest"},
+                    })
+                        .then(function(response) {
+                            if (!response.ok) {
+                                throw new Error("fragment load failed");
+                            }
+                            return response.text();
+                        })
+                        .then(function(html) {
+                            bodyEl.innerHTML = html;
+                            bindBracketAssignBody();
+                        })
+                        .catch(function() {
+                            bodyEl.innerHTML = (
+                                '<p class="subtle-text">' +
+                                "読み込みに失敗しました。" +
+                                "</p>"
+                            );
+                        });
+                });
+            }
+        );
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         setupScheduleModeUi();
+        setupTournamentBracketAssignDialog();
         setupScheduleCourtFilter();
         setupScheduleStickyOffsets();
     });

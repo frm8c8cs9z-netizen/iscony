@@ -975,6 +975,70 @@
         margin-top: 16px;
     }
 
+    .tournament-bracket-assign-dialog {
+        border: 1px solid #b8c7dc;
+        border-radius: 8px;
+        padding: 0;
+        width: min(94vw, 980px);
+        max-width: 94vw;
+        max-height: 88vh;
+        box-shadow: 0 4px 16px rgba(38, 62, 90, 0.2);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .tournament-bracket-assign-dialog:not([open]) {
+        display: none;
+    }
+
+    .tournament-bracket-assign-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    .tournament-bracket-assign-dialog-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 18px;
+        border-bottom: 1px solid #d0d7de;
+    }
+
+    .tournament-bracket-assign-dialog-head h3 {
+        margin: 0;
+        font-size: 1rem;
+    }
+
+    .tournament-bracket-assign-dialog-head button {
+        border: none;
+        background: none;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        color: #57606a;
+    }
+
+    .tournament-bracket-assign-dialog-body {
+        padding: 16px 18px;
+        overflow: auto;
+    }
+
+    .schedule-bracket-button-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .schedule-bracket-open-button {
+        border: 1px solid #b8c7dc;
+        background: #f6f8fa;
+        color: #1f2328;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
     .pair-assignment-layout--tournament > ul.tournament-assign-participants {
         flex: 0 0 260px;
         max-width: 260px;

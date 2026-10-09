@@ -1,0 +1,57 @@
+<p class="subtle-text">
+    1回戦の枠をクリックすると開始位置、別の枠をクリックすると終了位置に
+    なります(その間の1回戦の試合が対象です)。すでに配置済みの試合は
+    薄く表示されます(既に配置された試合は自動割り付けの対象から
+    自動的に除外されます)。もう一度別の枠をクリックすると選択がやり直せます。
+</p>
+
+<div
+    class="tournament-bracket-assign-form"
+    data-auto-assign-url="{% url 'auto_assign_tournament_range_api' tournament.code schedule_block.id bracket.id %}"
+>
+    <input type="hidden" class="tournament-bracket-assign-start" value="">
+    <input type="hidden" class="tournament-bracket-assign-end" value="">
+
+    <label>
+        割り付け先コート
+        <select class="tournament-bracket-assign-court">
+            {% for court in courts %}
+                <option value="{{ court.id }}">{{ court.name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <button type="button" class="tournament-bracket-assign-submit" disabled>
+        自動割り付け
+    </button>
+    <button type="button" class="tournament-bracket-assign-clear">
+        選択をクリア
+    </button>
+</div>
+
+<div class="svg-bracket-wrap svg-bracket-wrap--with-slots">
+    <div
+        class="tournament-slot-column"
+        style="position:relative; width:150px; height:{{ svg_bracket.height }}px; flex:0 0 auto;"
+    >
+        {% for slot in slots %}
+            <div
+                class="tournament-slot-row{% if slot.is_scheduled %} tournament-slot-row--already-scheduled{% endif %}"
+                style="position:absolute; top:{{ slot.y }}px; left:0; right:0; transform:translateY(-50%);"
+                data-match-index="{{ slot.match_index }}"
+            >
+                <span class="tournament-slot-name">
+                    {% if slot.entry.participant %}
+                        {{ slot.entry.display_name }}
+                    {% elif slot.entry.advancement_source %}
+                        {{ slot.entry.advancement_source.label }}
+                    {% else %}
+                        未定
+                    {% endif %}
+                </span>
+            </div>
+        {% endfor %}
+    </div>
+
+    {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=bracket.name|add:" トーナメント表" %}
+</div>

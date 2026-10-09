@@ -7738,6 +7738,26 @@ class ScheduleBlockDetailTests(TestCase):
             },
         )
 
+    def tournament_range_assign_fragment_url(self, bracket):
+        return reverse(
+            "schedule_block_tournament_bracket_assign_fragment",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": self.block1.id,
+                "bracket_id": bracket.id,
+            },
+        )
+
+    def auto_assign_tournament_range_api_url(self, bracket):
+        return reverse(
+            "auto_assign_tournament_range_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": self.block1.id,
+                "bracket_id": bracket.id,
+            },
+        )
+
     def test_tournament_range_assign_get_shows_round1_slots(self):
         bracket = self.create_auto_assign_bracket()
 
@@ -7760,6 +7780,39 @@ class ScheduleBlockDetailTests(TestCase):
             },
             set(range(first_round_match_count)),
         )
+
+    def test_tournament_range_assign_fragment_returns_only_dialog_body(self):
+        bracket = self.create_auto_assign_bracket()
+
+        response = self.client.get(
+            self.tournament_range_assign_fragment_url(bracket)
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "tournament-slot-column")
+        self.assertContains(response, "tournament-bracket-assign-form")
+        self.assertContains(
+            response,
+            reverse(
+                "auto_assign_tournament_range_api",
+                kwargs={
+                    "code": self.tournament.code,
+                    "schedule_block_id": self.block1.id,
+                    "bracket_id": bracket.id,
+                },
+            ),
+        )
+        self.assertNotContains(response, "<html")
+        self.assertNotContains(response, "site-chrome")
+
+    def test_tournament_range_assign_fragment_rejects_post(self):
+        bracket = self.create_auto_assign_bracket()
+
+        response = self.client.post(
+            self.tournament_range_assign_fragment_url(bracket)
+        )
+
+        self.assertEqual(response.status_code, 405)
 
     def test_tournament_range_assign_get_shows_scheduled_match_annotation(self):
         bracket = self.create_auto_assign_bracket()
@@ -7942,6 +7995,79 @@ class ScheduleBlockDetailTests(TestCase):
             ],
         )
 
+    def test_auto_assign_tournament_range_api_assigns_and_returns_json(self):
+        bracket = self.create_auto_assign_bracket()
+        expected_matches = tournament_matches_in_round1_position_range(
+            bracket,
+            0,
+            1,
+        )
+
+        response = self.client.post(
+            self.auto_assign_tournament_range_api_url(bracket),
+            {
+                "start_match_index": "0",
+                "end_match_index": "1",
+                "court_id": str(self.court1.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"success": True, "assigned_count": len(expected_matches)},
+        )
+        self.assertEqual(
+            list(
+                Schedule.objects.filter(
+                    schedule_block=self.block1,
+                    court=self.court1,
+                ).order_by("order").values_list(
+                    "tournament_match_id",
+                    "order",
+                )
+            ),
+            [
+                (expected_matches[0].id, 1),
+                (expected_matches[1].id, 2),
+                (expected_matches[2].id, 3),
+            ],
+        )
+
+    def test_auto_assign_tournament_range_api_rejects_invalid_range(self):
+        bracket = self.create_auto_assign_bracket()
+
+        response = self.client.post(
+            self.auto_assign_tournament_range_api_url(bracket),
+            {
+                "start_match_index": "invalid",
+                "end_match_index": "1",
+                "court_id": str(self.court1.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {"success": False, "error": "範囲の指定が不正です。"},
+        )
+        self.assertFalse(
+            Schedule.objects.filter(schedule_block=self.block1).exists()
+        )
+
+    def test_auto_assign_tournament_range_api_rejects_get(self):
+        bracket = self.create_auto_assign_bracket()
+
+        response = self.client.get(
+            self.auto_assign_tournament_range_api_url(bracket)
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            response.json(),
+            {"success": False, "error": "POSTで送信してください。"},
+        )
+
     def test_get_includes_tournament_range_assign_bracket_select(self):
         bracket = self.create_auto_assign_bracket()
 
@@ -7949,10 +8075,10 @@ class ScheduleBlockDetailTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "トーナメントの自動割り付け")
-        self.assertContains(response, "ブラケットを選択してください")
+        self.assertContains(response, "schedule-bracket-open-button")
         self.assertContains(
             response,
-            self.tournament_range_assign_url(bracket),
+            self.tournament_range_assign_fragment_url(bracket),
         )
         self.assertContains(
             response,

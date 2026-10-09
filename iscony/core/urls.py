@@ -556,6 +556,24 @@ urlpatterns = [
     path(
         (
             "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
+            "tournament-bracket/<int:bracket_id>/fragment/"
+        ),
+        dashboard.schedule_block_tournament_bracket_assign_fragment,
+        name="schedule_block_tournament_bracket_assign_fragment",
+    ),
+
+    path(
+        (
+            "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
+            "tournament-bracket/<int:bracket_id>/auto-assign-range/"
+        ),
+        dashboard.auto_assign_tournament_range_api,
+        name="auto_assign_tournament_range_api",
+    ),
+
+    path(
+        (
+            "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
             "court/<int:court_id>/assign/"
         ),
         dashboard.assign_schedule_slot_api,
