@@ -656,6 +656,8 @@
 
     .schedule-court-table-wrap {
         overflow-x: auto;
+        overflow-y: auto;
+        max-height: calc(100vh - var(--schedule-table-head-top, 114px) - 20px);
         margin: 1rem 0;
         padding-bottom: 0.5rem;
     }
@@ -908,6 +910,11 @@
         min-width: 0;
     }
 
+    .pair-assignment-layout--schedule > div:last-child {
+        top: var(--schedule-table-head-top, 114px);
+        max-height: calc(100vh - var(--schedule-table-head-top, 114px) - 20px);
+    }
+
     .move-empty-slot-dialog {
         border: 1px solid #b8c7dc;
         border-radius: 8px;
@@ -1053,7 +1060,7 @@
 
     .schedule-court-table-head-row th {
         position: sticky;
-        top: var(--schedule-table-head-top, 114px);
+        top: 0;
         z-index: 12;
         background: #f6f8fa;
     }
