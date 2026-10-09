@@ -1044,11 +1044,18 @@
 
     .schedule-sticky-controls {
         position: sticky;
-        top: 114px;
+        top: var(--schedule-sticky-top, 114px);
         z-index: 15;
         background: #f6f8fa;
         padding-top: 4px;
         margin-bottom: 4px;
+    }
+
+    .schedule-court-table-head-row th {
+        position: sticky;
+        top: var(--schedule-table-head-top, 114px);
+        z-index: 12;
+        background: #f6f8fa;
     }
 
     .schedule-mode-toolbar {

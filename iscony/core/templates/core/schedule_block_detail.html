@@ -35,6 +35,19 @@
             他日程へ移動
         </button>
     </div>
+
+    <div class="advancement-piece-filter">
+        <div class="advancement-piece-rank-filter" id="schedule-court-filter">
+            <button type="button" class="rank-filter-button is-active" data-court-filter="all">
+                すべて
+            </button>
+            {% for column in court_schedule_columns %}
+                <button type="button" class="rank-filter-button" data-court-filter="{{ column.court.id }}">
+                    {{ column.court.name }}
+                </button>
+            {% endfor %}
+        </div>
+    </div>
 </div>
 
 <form style="display:none;">
@@ -48,22 +61,9 @@
         <section>
             <h3>コートへ配置</h3>
 
-            <div class="advancement-piece-filter">
-                <div class="advancement-piece-rank-filter" id="schedule-court-filter">
-                    <button type="button" class="rank-filter-button is-active" data-court-filter="all">
-                        すべて
-                    </button>
-                    {% for column in court_schedule_columns %}
-                        <button type="button" class="rank-filter-button" data-court-filter="{{ column.court.id }}">
-                            {{ column.court.name }}
-                        </button>
-                    {% endfor %}
-                </div>
-            </div>
-
             <div class="schedule-court-table-wrap">
                 <table class="schedule-court-table">
-                    <tr>
+                    <tr class="schedule-court-table-head-row">
                         <th class="schedule-slot-order-header">試合順</th>
                         {% for column in court_schedule_columns %}
                             <th data-court-id="{{ column.court.id }}">
@@ -910,9 +910,40 @@
         applyFilter();
     }
 
+    function setupScheduleStickyOffsets() {
+        const siteChrome = document.querySelector(".site-chrome");
+        const stickyControls = document.querySelector(
+            ".schedule-sticky-controls"
+        );
+
+        if (!siteChrome || !stickyControls) {
+            return;
+        }
+
+        function updateOffset() {
+            const chromeHeight = siteChrome.offsetHeight;
+
+            document.documentElement.style.setProperty(
+                "--schedule-sticky-top",
+                chromeHeight + "px"
+            );
+
+            const controlsHeight = stickyControls.offsetHeight;
+
+            document.documentElement.style.setProperty(
+                "--schedule-table-head-top",
+                (chromeHeight + controlsHeight) + "px"
+            );
+        }
+
+        updateOffset();
+        window.addEventListener("resize", updateOffset);
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         setupScheduleModeUi();
         setupScheduleCourtFilter();
+        setupScheduleStickyOffsets();
     });
 </script>
 
