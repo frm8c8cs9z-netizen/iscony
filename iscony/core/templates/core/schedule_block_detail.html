@@ -237,6 +237,11 @@
             &times;
         </button>
     </div>
+    <p
+        class="tournament-bracket-assign-status"
+        id="tournamentBracketAssignStatus"
+        hidden
+    ></p>
     <div id="tournamentBracketAssignBody" class="tournament-bracket-assign-dialog-body">
         <p class="subtle-text">読み込み中…</p>
     </div>
@@ -966,38 +971,72 @@
             "#tournamentBracketAssignClose"
         );
         const bodyEl = document.querySelector("#tournamentBracketAssignBody");
+        const statusEl = document.querySelector(
+            "#tournamentBracketAssignStatus"
+        );
         const csrfInput = document.querySelector(
             "input[name=csrfmiddlewaretoken]"
         );
         const csrfToken = csrfInput ? csrfInput.value : "";
+        let hasAssignedSinceOpen = false;
+        let currentFragmentUrl = null;
 
         if (!dialog || !titleEl || !bodyEl) {
             return;
         }
 
-        function parseJsonResponse(response) {
-            return response.json().then(function(data) {
-                return {
-                    ok: response.ok,
-                    data: data,
-                };
-            });
-        }
-
-        function handleResult(result) {
-            if (result.ok && result.data.success) {
-                location.reload();
+        function showAssignStatus(message, kind) {
+            if (!statusEl) {
                 return;
             }
-            alert(result.data.error || "操作に失敗しました。");
+            statusEl.textContent = message;
+            statusEl.hidden = false;
+            statusEl.classList.remove(
+                "tournament-bracket-assign-status--success",
+                "tournament-bracket-assign-status--error"
+            );
+            statusEl.classList.add(
+                "tournament-bracket-assign-status--" + kind
+            );
         }
 
-        function handleFetchError() {
-            alert("操作に失敗しました。");
+        function hideAssignStatus() {
+            if (!statusEl) {
+                return;
+            }
+            statusEl.hidden = true;
+            statusEl.textContent = "";
         }
 
-        function postForm(url, body) {
-            return fetch(url, {
+        function loadFragment(url) {
+            bodyEl.innerHTML = (
+                '<p class="subtle-text">読み込み中…</p>'
+            );
+
+            fetch(url, {
+                headers: {"X-Requested-With": "XMLHttpRequest"},
+            })
+                .then(function(response) {
+                    if (!response.ok) {
+                        throw new Error("fragment load failed");
+                    }
+                    return response.text();
+                })
+                .then(function(html) {
+                    bodyEl.innerHTML = html;
+                    bindBracketAssignBody();
+                })
+                .catch(function() {
+                    bodyEl.innerHTML = (
+                        '<p class="subtle-text">' +
+                        "読み込みに失敗しました。" +
+                        "</p>"
+                    );
+                });
+        }
+
+        function submitAssign(url, body) {
+            fetch(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded",
@@ -1005,9 +1044,32 @@
                 },
                 body: body,
             })
-                .then(parseJsonResponse)
-                .then(handleResult)
-                .catch(handleFetchError);
+                .then(function(response) {
+                    return response.json().then(function(data) {
+                        return {ok: response.ok, data: data};
+                    });
+                })
+                .then(function(result) {
+                    if (result.ok && result.data.success) {
+                        hasAssignedSinceOpen = true;
+                        showAssignStatus(
+                            result.data.assigned_count +
+                                "試合を割り付けました。",
+                            "success"
+                        );
+                        if (currentFragmentUrl) {
+                            loadFragment(currentFragmentUrl);
+                        }
+                        return;
+                    }
+                    showAssignStatus(
+                        result.data.error || "操作に失敗しました。",
+                        "error"
+                    );
+                })
+                .catch(function() {
+                    showAssignStatus("操作に失敗しました。", "error");
+                });
         }
 
         function bindBracketAssignBody() {
@@ -1132,7 +1194,7 @@
                     body.append("end_match_index", endInput.value);
                     body.append("court_id", courtSelect.value);
 
-                    postForm(form.dataset.autoAssignUrl, body);
+                    submitAssign(form.dataset.autoAssignUrl, body);
                 });
             }
         }
@@ -1143,35 +1205,21 @@
             });
         }
 
+        dialog.addEventListener("close", function() {
+            if (hasAssignedSinceOpen) {
+                location.reload();
+            }
+        });
+
         document.querySelectorAll(".schedule-bracket-open-button").forEach(
             function(button) {
                 button.addEventListener("click", function() {
                     titleEl.textContent = button.dataset.bracketLabel || "";
-                    bodyEl.innerHTML = (
-                        '<p class="subtle-text">読み込み中…</p>'
-                    );
+                    currentFragmentUrl = button.dataset.fragmentUrl;
+                    hasAssignedSinceOpen = false;
+                    hideAssignStatus();
                     dialog.showModal();
-
-                    fetch(button.dataset.fragmentUrl, {
-                        headers: {"X-Requested-With": "XMLHttpRequest"},
-                    })
-                        .then(function(response) {
-                            if (!response.ok) {
-                                throw new Error("fragment load failed");
-                            }
-                            return response.text();
-                        })
-                        .then(function(html) {
-                            bodyEl.innerHTML = html;
-                            bindBracketAssignBody();
-                        })
-                        .catch(function() {
-                            bodyEl.innerHTML = (
-                                '<p class="subtle-text">' +
-                                "読み込みに失敗しました。" +
-                                "</p>"
-                            );
-                        });
+                    loadFragment(currentFragmentUrl);
                 });
             }
         );
