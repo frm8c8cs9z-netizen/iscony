@@ -633,10 +633,15 @@
 
     .schedule-piece-category-filter,
     .schedule-piece-stage-filter {
-        display: flex;
         gap: 6px;
         flex-wrap: wrap;
         margin-bottom: 8px;
+        flex-shrink: 0;
+    }
+
+    .schedule-piece-category-filter:not([hidden]),
+    .schedule-piece-stage-filter:not([hidden]) {
+        display: flex;
     }
 
     .schedule-piece-stage-filter {
@@ -691,6 +696,7 @@
         border-radius: 999px;
         overflow: hidden;
         margin-bottom: 12px;
+        flex-shrink: 0;
     }
 
     .schedule-piece-submode-toggle button {
@@ -717,6 +723,10 @@
         flex-direction: column;
         flex: 1 1 auto;
         min-height: 0;
+    }
+
+    #schedulePiecePanel > section > h3 {
+        flex-shrink: 0;
     }
 
     #schedulePieceManualBlock:not([hidden]) {
@@ -995,8 +1005,11 @@
         top: 114px;
         max-height: calc(100vh - 130px);
         overflow-y: visible;
-        display: flex;
         flex-direction: column;
+    }
+
+    .pair-assignment-layout > div:last-child:not([hidden]) {
+        display: flex;
     }
 
     .pair-assignment-layout > div:last-child #unassigned-participant-list {
