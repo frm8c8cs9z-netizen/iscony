@@ -6826,11 +6826,44 @@ class ScheduleBlockMaintenanceTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            self.url,
+            fetch_redirect_response=False,
+        )
         block = ScheduleBlock.objects.get(
             tournament=self.tournament,
             name="夕方",
         )
         self.assertEqual(block.display_order, 3)
+
+    def test_add_single_from_detail_redirects_to_new_schedule_block_detail(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_single",
+                "schedule_block_name": "夕方",
+                "redirect_to_detail": "1",
+                "current_schedule_block_id": str(self.block1.id),
+            },
+        )
+
+        block = ScheduleBlock.objects.get(
+            tournament=self.tournament,
+            name="夕方",
+        )
+        self.assertEqual(block.display_order, 3)
+        self.assertRedirects(
+            response,
+            reverse(
+                "schedule_block_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "schedule_block_id": block.id,
+                },
+            ),
+            fetch_redirect_response=False,
+        )
 
     def test_add_single_duplicate_name_is_rejected(self):
         response = self.client.post(
@@ -6852,6 +6885,33 @@ class ScheduleBlockMaintenanceTests(TestCase):
                 name="午前",
             ).count(),
             1,
+        )
+
+    def test_add_single_from_detail_duplicate_redirects_to_current_detail(self):
+        response = self.client.post(
+            self.url,
+            {
+                "action": "add_single",
+                "schedule_block_name": "午前",
+                "redirect_to_detail": "1",
+                "current_schedule_block_id": str(self.block1.id),
+            },
+        )
+
+        self.assertEqual(
+            ScheduleBlock.objects.filter(tournament=self.tournament).count(),
+            2,
+        )
+        self.assertRedirects(
+            response,
+            reverse(
+                "schedule_block_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "schedule_block_id": self.block1.id,
+                },
+            ),
+            fetch_redirect_response=False,
         )
 
     def test_schedule_block_name_can_be_updated(self):
@@ -8230,6 +8290,8 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertContains(response, "未配置の試合")
         self.assertContains(response, "コートへ配置")
         self.assertContains(response, "schedule-block-tabs")
+        self.assertContains(response, "scheduleBlockAddTabButton")
+        self.assertContains(response, "schedule-block-tab-add")
         content = response.content.decode()
         active_tab = re.search(
             (

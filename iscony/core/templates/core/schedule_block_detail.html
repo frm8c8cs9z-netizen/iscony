@@ -15,6 +15,14 @@
                 {{ tab_block.name }}
             </a>
         {% endfor %}
+        <button
+            type="button"
+            class="schedule-block-tab-add"
+            id="scheduleBlockAddTabButton"
+            aria-label="日程区分を追加"
+        >
+            ＋
+        </button>
     </div>
 
     <div class="schedule-mode-toolbar" id="scheduleModeToolbar">
@@ -308,6 +316,25 @@
     <div id="tournamentBracketAssignBody" class="tournament-bracket-assign-dialog-body">
         <p class="subtle-text">読み込み中…</p>
     </div>
+</dialog>
+
+<dialog id="scheduleBlockAddDialog" class="schedule-block-add-dialog">
+    <form method="post" action="{% url 'schedule_block_maintenance' tournament.code %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_single">
+        <input type="hidden" name="redirect_to_detail" value="1">
+        <input type="hidden" name="current_schedule_block_id" value="{{ schedule_block.id }}">
+
+        <label>
+            日程区分名
+            <input type="text" name="schedule_block_name" required autofocus>
+        </label>
+
+        <div class="schedule-block-add-dialog-actions">
+            <button type="button" id="scheduleBlockAddCancel">キャンセル</button>
+            <button type="submit">追加</button>
+        </div>
+    </form>
 </dialog>
 
 <p>
@@ -1526,10 +1553,37 @@
         );
     }
 
+    function setupScheduleBlockAddDialog() {
+        const button = document.querySelector("#scheduleBlockAddTabButton");
+        const dialog = document.querySelector("#scheduleBlockAddDialog");
+        const cancelButton = document.querySelector("#scheduleBlockAddCancel");
+        const nameInput = dialog
+            ? dialog.querySelector("input[name=schedule_block_name]")
+            : null;
+
+        if (!button || !dialog) {
+            return;
+        }
+
+        button.addEventListener("click", function() {
+            dialog.showModal();
+            if (nameInput) {
+                nameInput.focus();
+            }
+        });
+
+        if (cancelButton) {
+            cancelButton.addEventListener("click", function() {
+                dialog.close();
+            });
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         setupScheduleModeUi();
         setupSchedulePieceFilters();
         setupTournamentBracketAssignDialog();
+        setupScheduleBlockAddDialog();
         setupScheduleCourtFilter();
         setupScheduleStickyOffsets();
     });

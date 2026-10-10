@@ -2611,17 +2611,28 @@ def _schedule_block_reorder_rename(request, tournament):
 
 def _schedule_block_add_single(request, tournament):
     name = request.POST.get("schedule_block_name", "").strip()
+    redirect_to_detail = request.POST.get("redirect_to_detail") == "1"
+    current_schedule_block_id = request.POST.get("current_schedule_block_id")
+
+    def redirect_after_error():
+        if redirect_to_detail and current_schedule_block_id:
+            return redirect(
+                "schedule_block_detail",
+                code=tournament.code,
+                schedule_block_id=current_schedule_block_id,
+            )
+        return redirect("schedule_block_maintenance", code=tournament.code)
 
     if not name:
         messages.error(request, "日程区分名を入力してください。")
-        return redirect("schedule_block_maintenance", code=tournament.code)
+        return redirect_after_error()
 
     if ScheduleBlock.objects.filter(tournament=tournament, name=name).exists():
         messages.error(
             request,
             f"「{name}」という名前の日程区分は既に存在します。",
         )
-        return redirect("schedule_block_maintenance", code=tournament.code)
+        return redirect_after_error()
 
     max_display_order = (
         ScheduleBlock.objects.filter(tournament=tournament)
@@ -2635,13 +2646,19 @@ def _schedule_block_add_single(request, tournament):
     else:
         display_order = max_display_order + 1
 
-    ScheduleBlock.objects.create(
+    block = ScheduleBlock.objects.create(
         tournament=tournament,
         name=name,
         display_order=display_order,
     )
 
     messages.success(request, f"「{name}」を追加しました。")
+    if redirect_to_detail:
+        return redirect(
+            "schedule_block_detail",
+            code=tournament.code,
+            schedule_block_id=block.id,
+        )
     return redirect("schedule_block_maintenance", code=tournament.code)
 
 
