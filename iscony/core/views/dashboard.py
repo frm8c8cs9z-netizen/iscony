@@ -3165,6 +3165,7 @@ def schedule_block_detail(request, code, schedule_block_id):
     ).select_related(
         "bracket",
         "bracket__category",
+        "bracket__stage",
         "pair1",
         "pair2",
     ).order_by(
@@ -3183,6 +3184,7 @@ def schedule_block_detail(request, code, schedule_block_id):
     ).select_related(
         "group",
         "group__category",
+        "group__stage",
         "pair1",
         "pair2",
     ).order_by(
@@ -3196,6 +3198,8 @@ def schedule_block_detail(request, code, schedule_block_id):
             "match_kind": "tournament",
             "match_id": match.id,
             "category_name": match.bracket.category.name,
+            "category_id": match.bracket.category_id,
+            "stage_id": match.bracket.stage_id,
             "label": (
                 f"{match.bracket.name}/{match.round_number}回戦/"
                 f"{match.match_code}"
@@ -3209,6 +3213,8 @@ def schedule_block_detail(request, code, schedule_block_id):
             "match_kind": "round_robin",
             "match_id": match.id,
             "category_name": match.group.category.name,
+            "category_id": match.group.category_id,
+            "stage_id": match.group.stage_id,
             "label": f"{match.group.name}",
             "pair1_name": match.pair1.display_name if match.pair1 else "未定",
             "pair2_name": match.pair2.display_name if match.pair2 else "未定",
@@ -3255,11 +3261,58 @@ def schedule_block_detail(request, code, schedule_block_id):
         category__tournament=tournament,
     ).select_related(
         "category",
+        "stage",
     ).order_by(
         "category__display_order",
         "display_order",
         "name",
     )
+    stage_sections_by_key = {}
+    for section in league_group_sections:
+        key = (section["category"].id, section["stage"].id)
+        stage_sections_by_key[key] = {
+            "category": section["category"],
+            "stage": section["stage"],
+            "kind": "league",
+            "groups": section["groups"],
+            "brackets": [],
+        }
+    for bracket in tournament_brackets:
+        if bracket.stage_id is None:
+            continue
+        key = (bracket.category_id, bracket.stage_id)
+        entry = stage_sections_by_key.setdefault(
+            key,
+            {
+                "category": bracket.category,
+                "stage": bracket.stage,
+                "kind": "tournament",
+                "groups": [],
+                "brackets": [],
+            },
+        )
+        entry["brackets"].append(bracket)
+    all_stage_sections = sorted(
+        stage_sections_by_key.values(),
+        key=lambda entry: (
+            entry["category"].display_order,
+            entry["category"].id,
+            entry["stage"].display_order,
+            entry["stage"].id,
+        ),
+    )
+    category_stage_sections = []
+    for entry in all_stage_sections:
+        category = entry["category"]
+        if (
+            not category_stage_sections
+            or category_stage_sections[-1]["category"].id != category.id
+        ):
+            category_stage_sections.append({
+                "category": category,
+                "stages": [],
+            })
+        category_stage_sections[-1]["stages"].append(entry)
     schedules_by_court_id = defaultdict(list)
     for schedule in schedules:
         schedules_by_court_id[schedule.court_id].append(schedule)
@@ -3352,6 +3405,7 @@ def schedule_block_detail(request, code, schedule_block_id):
             "courts": courts,
             "league_group_sections": league_group_sections,
             "tournament_brackets": tournament_brackets,
+            "category_stage_sections": category_stage_sections,
             "schedules_by_court_id": schedules_by_court_id,
             "court_schedule_columns": court_schedule_columns,
             "schedule_grid_rows": schedule_grid_rows,

@@ -122,36 +122,167 @@
         <section>
             <h3>未配置の試合</h3>
 
-            <p class="subtle-text">
-                下の一覧の試合をドラッグ、またはタップしてから配置先をタップすると、
-                コートへ割り付けられます。
-            </p>
-
-            <input
-                type="text"
-                id="unassigned-match-search"
-                placeholder="カテゴリ名で絞り込み"
-            >
-
-            <ul id="unassigned-match-list" class="schedule-piece-list">
-                {% for piece in unassigned_matches %}
-                    <li
-                        class="schedule-piece"
-                        draggable="true"
-                        data-match-kind="{{ piece.match_kind }}"
-                        data-match-id="{{ piece.match_id }}"
-                        data-category-name="{{ piece.category_name }}"
-                    >
-                        <span class="schedule-piece-category">
-                            {{ piece.category_name }}
-                        </span>
-                        {{ piece.label }}:
-                        {{ piece.pair1_name }} vs {{ piece.pair2_name }}
-                    </li>
-                {% empty %}
-                    <li>未配置の試合はありません。</li>
+            <div class="schedule-piece-category-filter" id="schedulePieceCategoryFilter">
+                <button
+                    type="button"
+                    class="stage-chip is-active"
+                    data-category-filter="all"
+                >すべて</button>
+                {% for section in category_stage_sections %}
+                    <button
+                        type="button"
+                        class="stage-chip"
+                        data-category-filter="{{ section.category.id }}"
+                    >{{ section.category.name }}</button>
                 {% endfor %}
-            </ul>
+            </div>
+
+            {% for section in category_stage_sections %}
+                <div
+                    class="schedule-piece-stage-filter"
+                    data-category-filter-group="{{ section.category.id }}"
+                    hidden
+                >
+                    {% for stage_section in section.stages %}
+                        <button
+                            type="button"
+                            class="stage-chip stage-chip--sub"
+                            data-stage-filter="{{ stage_section.stage.id }}"
+                            data-stage-kind="{{ stage_section.kind }}"
+                        >
+                            {{ stage_section.stage.name }}
+                            <span class="kind">
+                                {% if stage_section.kind == "league" %}
+                                    リーグ
+                                {% else %}
+                                    トナメ
+                                {% endif %}
+                            </span>
+                        </button>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+
+            <div class="schedule-piece-submode-toggle" id="schedulePieceSubmodeToggle">
+                <button type="button" class="is-active" data-submode="manual">
+                    個別割り付け
+                </button>
+                <button type="button" data-submode="auto">
+                    自動割り付け
+                </button>
+            </div>
+
+            <div id="schedulePieceManualBlock">
+                <p class="subtle-text">
+                    下の一覧の試合をドラッグ、またはタップしてから配置先をタップすると、
+                    コートへ割り付けられます。
+                </p>
+
+                <input
+                    type="text"
+                    id="unassigned-match-search"
+                    placeholder="カテゴリ名で絞り込み"
+                >
+
+                <ul id="unassigned-match-list" class="schedule-piece-list">
+                    {% for piece in unassigned_matches %}
+                        <li
+                            class="schedule-piece"
+                            draggable="true"
+                            data-match-kind="{{ piece.match_kind }}"
+                            data-match-id="{{ piece.match_id }}"
+                            data-category-name="{{ piece.category_name }}"
+                            data-category-id="{{ piece.category_id }}"
+                            data-stage-id="{{ piece.stage_id }}"
+                        >
+                            <span class="schedule-piece-category">
+                                {{ piece.category_name }}
+                            </span>
+                            {{ piece.label }}:
+                            {{ piece.pair1_name }} vs {{ piece.pair2_name }}
+                        </li>
+                    {% empty %}
+                        <li>未配置の試合はありません。</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div id="schedulePieceAutoBlock" hidden>
+                <p class="subtle-text" id="schedulePieceAutoHint">
+                    自動割り付けする対象のカテゴリとStageを上から選んでください。
+                </p>
+
+                {% for section in category_stage_sections %}
+                    {% for stage_section in section.stages %}
+                        <div
+                            class="schedule-piece-auto-stage"
+                            data-stage-id="{{ stage_section.stage.id }}"
+                            hidden
+                        >
+                            {% if stage_section.kind == "league" %}
+                                <h4>リーグの自動割り付け</h4>
+                                <p class="subtle-text">
+                                    グループ(1〜4個)を選ぶと、各グループの対戦を
+                                    「強さが近い対戦から先」の順で並べ、選んだグループを
+                                    (2個以上の場合は交互に)1つのコートへまとめて
+                                    割り付けます。
+                                </p>
+
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="auto_assign_league">
+
+                                    <fieldset>
+                                        <legend>{{ section.category.name }} / {{ stage_section.stage.name }} のグループを選択(1〜4個)</legend>
+                                        {% for group in stage_section.groups %}
+                                            <label style="display:block;">
+                                                <input type="checkbox" name="group_ids" value="{{ group.id }}">
+                                                {{ group.name }}
+                                            </label>
+                                        {% empty %}
+                                            <p>リーグのグループがありません。</p>
+                                        {% endfor %}
+                                    </fieldset>
+
+                                    <label>
+                                        割り付け先コート
+                                        <select name="court_id">
+                                            {% for court in courts %}
+                                                <option value="{{ court.id }}">{{ court.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </label>
+
+                                    <button type="submit">自動割り付け</button>
+                                </form>
+                            {% else %}
+                                <h4>トーナメントの自動割り付け</h4>
+                                <p class="subtle-text">
+                                    ブラケットを選ぶと、トーナメント表をクリックして
+                                    枠順の範囲を選び、その範囲から育つ試合をまとめて
+                                    1コートへ自動割り付けできます。
+                                    トーナメント表はこの画面上で開きます。
+                                </p>
+
+                                <div class="schedule-bracket-button-list">
+                                    {% for bracket in stage_section.brackets %}
+                                        <button
+                                            type="button"
+                                            class="schedule-bracket-open-button"
+                                            data-fragment-url="{% url 'schedule_block_tournament_bracket_assign_fragment' tournament.code schedule_block.id bracket.id %}"
+                                            data-bracket-label="{{ bracket.category.name }} / {{ bracket.name }}"
+                                        >
+                                            {{ bracket.category.name }} / {{ bracket.name }}
+                                        </button>
+                                    {% empty %}
+                                        <p>トーナメントのブラケットがありません。</p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% endfor %}
+            </div>
         </section>
     </div>
 </div>
@@ -160,74 +291,6 @@
     <span class="msg" id="scheduleActionMsg"></span>
     <button type="button" class="run" id="scheduleActionRun" hidden></button>
     <button type="button" class="cancel" id="scheduleActionCancel">キャンセル</button>
-</div>
-
-<div id="scheduleAutoAssignPanel">
-    <section>
-        <h3>リーグの自動割り付け</h3>
-        <p>
-            グループ(1〜4個)を選ぶと、各グループの対戦を
-            「強さが近い対戦から先」の順で並べ、選んだグループを
-            (2個以上の場合は交互に)1つのコートへまとめて割り付けます。
-        </p>
-
-        <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="auto_assign_league">
-
-            <fieldset>
-                <legend>グループを選択(1〜4個、同じStageのグループのみ)</legend>
-                {% for section in league_group_sections %}
-                    <p class="subtle-text" style="margin-bottom:2px;">
-                        {{ section.category.name }} / {{ section.stage.name }}
-                    </p>
-                    {% for group in section.groups %}
-                        <label style="display:block; margin-left:1em;">
-                            <input type="checkbox" name="group_ids" value="{{ group.id }}">
-                            {{ group.name }}
-                        </label>
-                    {% endfor %}
-                {% empty %}
-                    <p>リーグのグループがありません。</p>
-                {% endfor %}
-            </fieldset>
-
-            <label>
-                割り付け先コート
-                <select name="court_id">
-                    {% for court in courts %}
-                        <option value="{{ court.id }}">{{ court.name }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-
-            <button type="submit">自動割り付け</button>
-        </form>
-    </section>
-
-    <section>
-        <h3>トーナメントの自動割り付け</h3>
-        <p class="subtle-text">
-            ブラケットを選ぶと、トーナメント表をクリックして枠順の範囲を選び、
-            その範囲から育つ試合をまとめて1コートへ自動割り付けできます。
-            トーナメント表はこの画面上で開きます。
-        </p>
-
-        <div class="schedule-bracket-button-list">
-            {% for bracket in tournament_brackets %}
-                <button
-                    type="button"
-                    class="schedule-bracket-open-button"
-                    data-fragment-url="{% url 'schedule_block_tournament_bracket_assign_fragment' tournament.code schedule_block.id bracket.id %}"
-                    data-bracket-label="{{ bracket.category.name }} / {{ bracket.name }}"
-                >
-                    {{ bracket.category.name }} / {{ bracket.name }}
-                </button>
-            {% empty %}
-                <p>トーナメントのブラケットがありません。</p>
-            {% endfor %}
-        </div>
-    </section>
 </div>
 
 <dialog id="tournamentBracketAssignDialog" class="tournament-bracket-assign-dialog">
@@ -265,13 +328,7 @@
         const assignmentArea = document.querySelector(
             ".schedule-court-table-wrap"
         );
-        const searchInput = document.querySelector(
-            "#unassigned-match-search"
-        );
         const piecePanel = document.querySelector("#schedulePiecePanel");
-        const autoAssignPanel = document.querySelector(
-            "#scheduleAutoAssignPanel"
-        );
         const instructionEl = document.querySelector(
             "#scheduleModeInstruction"
         );
@@ -527,9 +584,6 @@
             instructionEl.textContent = INSTRUCTIONS[mode];
             if (piecePanel) {
                 piecePanel.hidden = mode !== "place";
-            }
-            if (autoAssignPanel) {
-                autoAssignPanel.hidden = mode !== "place";
             }
 
             renderRangeHighlight();
@@ -828,22 +882,256 @@
             });
         }
 
-        if (searchInput && unassignedList) {
-            searchInput.addEventListener("input", function() {
-                const keyword = searchInput.value.trim();
-                unassignedList.querySelectorAll(
-                    "[data-category-name]"
-                ).forEach(function(piece) {
-                    const categoryName = piece.dataset.categoryName || "";
-                    piece.hidden = (
-                        keyword.length > 0
-                        && categoryName.indexOf(keyword) === -1
+        setMode(loadStoredMode());
+    }
+
+    function setupSchedulePieceFilters() {
+        const categoryFilter = document.querySelector(
+            "#schedulePieceCategoryFilter"
+        );
+        const stageFilterGroups = document.querySelectorAll(
+            ".schedule-piece-stage-filter[data-category-filter-group]"
+        );
+        const submodeToggle = document.querySelector(
+            "#schedulePieceSubmodeToggle"
+        );
+        const manualBlock = document.querySelector("#schedulePieceManualBlock");
+        const autoBlock = document.querySelector("#schedulePieceAutoBlock");
+        const autoHint = document.querySelector("#schedulePieceAutoHint");
+        const autoStages = document.querySelectorAll(
+            ".schedule-piece-auto-stage[data-stage-id]"
+        );
+        const searchInput = document.querySelector(
+            "#unassigned-match-search"
+        );
+        const unassignedList = document.querySelector(
+            "#unassigned-match-list"
+        );
+
+        if (!categoryFilter) {
+            return;
+        }
+
+        const categoryStorageKey = (
+            "schedule-piece-category:{{ schedule_block.id }}"
+        );
+        const stageStorageKey = (
+            "schedule-piece-stage:{{ schedule_block.id }}"
+        );
+        const submodeStorageKey = (
+            "schedule-piece-submode:{{ schedule_block.id }}"
+        );
+
+        let selectedCategoryId = "all";
+        let selectedStageId = null;
+        let selectedSubmode = "manual";
+
+        function readStorage(key) {
+            try {
+                return sessionStorage.getItem(key);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function writeStorage(key, value) {
+            try {
+                if (value === null || value === undefined) {
+                    sessionStorage.removeItem(key);
+                } else {
+                    sessionStorage.setItem(key, value);
+                }
+            } catch (error) {
+                // 保存できない環境(プライベートモード等)では無視する。
+            }
+        }
+
+        function getStageButtonsForCategory(categoryId) {
+            if (categoryId === "all") {
+                return [];
+            }
+            const group = document.querySelector(
+                '.schedule-piece-stage-filter[data-category-filter-group="' +
+                categoryId + '"]'
+            );
+            if (!group) {
+                return [];
+            }
+            return Array.from(group.querySelectorAll("[data-stage-filter]"));
+        }
+
+        function stageExistsInCategory(stageId, categoryId) {
+            if (!stageId || categoryId === "all") {
+                return false;
+            }
+            return getStageButtonsForCategory(categoryId).some(
+                function(button) {
+                    return button.dataset.stageFilter === stageId;
+                }
+            );
+        }
+
+        function saveState() {
+            writeStorage(categoryStorageKey, selectedCategoryId);
+            writeStorage(stageStorageKey, selectedStageId);
+            writeStorage(submodeStorageKey, selectedSubmode);
+        }
+
+        function render() {
+            categoryFilter.querySelectorAll("[data-category-filter]").forEach(
+                function(button) {
+                    button.classList.toggle(
+                        "is-active",
+                        button.dataset.categoryFilter === selectedCategoryId
                     );
-                });
+                }
+            );
+
+            stageFilterGroups.forEach(function(group) {
+                const isVisible = (
+                    selectedCategoryId !== "all"
+                    && group.dataset.categoryFilterGroup === selectedCategoryId
+                );
+                group.hidden = !isVisible;
+                group.querySelectorAll("[data-stage-filter]").forEach(
+                    function(button) {
+                        button.classList.toggle(
+                            "is-active",
+                            isVisible
+                            && button.dataset.stageFilter === selectedStageId
+                        );
+                    }
+                );
+            });
+
+            if (manualBlock) {
+                manualBlock.hidden = selectedSubmode !== "manual";
+            }
+            if (autoBlock) {
+                autoBlock.hidden = selectedSubmode !== "auto";
+            }
+            if (submodeToggle) {
+                submodeToggle.querySelectorAll("[data-submode]").forEach(
+                    function(button) {
+                        button.classList.toggle(
+                            "is-active",
+                            button.dataset.submode === selectedSubmode
+                        );
+                    }
+                );
+            }
+
+            if (unassignedList) {
+                const keyword = searchInput ? searchInput.value.trim() : "";
+                unassignedList.querySelectorAll("[data-match-kind]").forEach(
+                    function(piece) {
+                        const categoryName = piece.dataset.categoryName || "";
+                        const matchesKeyword = (
+                            keyword.length === 0
+                            || categoryName.indexOf(keyword) !== -1
+                        );
+                        const matchesCategory = (
+                            selectedCategoryId === "all"
+                            || piece.dataset.categoryId === selectedCategoryId
+                        );
+                        const matchesStage = (
+                            !selectedStageId
+                            || piece.dataset.stageId === selectedStageId
+                        );
+                        piece.hidden = !(
+                            matchesKeyword
+                            && matchesCategory
+                            && matchesStage
+                        );
+                    }
+                );
+            }
+
+            if (autoHint) {
+                autoHint.hidden = !!selectedStageId;
+            }
+            autoStages.forEach(function(stage) {
+                stage.hidden = (
+                    !selectedStageId
+                    || stage.dataset.stageId !== selectedStageId
+                );
             });
         }
 
-        setMode(loadStoredMode());
+        function selectCategory(categoryId) {
+            selectedCategoryId = categoryId;
+            if (categoryId === "all") {
+                selectedStageId = null;
+            } else {
+                const stageButtons = getStageButtonsForCategory(categoryId);
+                selectedStageId = stageButtons.length > 0
+                    ? stageButtons[0].dataset.stageFilter
+                    : null;
+            }
+            saveState();
+            render();
+        }
+
+        categoryFilter.querySelectorAll("[data-category-filter]").forEach(
+            function(button) {
+                button.addEventListener("click", function() {
+                    selectCategory(button.dataset.categoryFilter);
+                });
+            }
+        );
+
+        stageFilterGroups.forEach(function(group) {
+            group.querySelectorAll("[data-stage-filter]").forEach(
+                function(button) {
+                    button.addEventListener("click", function() {
+                        selectedStageId = button.dataset.stageFilter;
+                        saveState();
+                        render();
+                    });
+                }
+            );
+        });
+
+        if (submodeToggle) {
+            submodeToggle.querySelectorAll("[data-submode]").forEach(
+                function(button) {
+                    button.addEventListener("click", function() {
+                        selectedSubmode = button.dataset.submode;
+                        saveState();
+                        render();
+                    });
+                }
+            );
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener("input", render);
+        }
+
+        const storedCategoryId = readStorage(categoryStorageKey);
+        if (
+            storedCategoryId
+            && storedCategoryId !== "all"
+            && categoryFilter.querySelector(
+                '[data-category-filter="' + storedCategoryId + '"]'
+            )
+        ) {
+            selectedCategoryId = storedCategoryId;
+        }
+
+        const storedStageId = readStorage(stageStorageKey);
+        if (stageExistsInCategory(storedStageId, selectedCategoryId)) {
+            selectedStageId = storedStageId;
+        } else {
+            selectedStageId = null;
+        }
+
+        const storedSubmode = readStorage(submodeStorageKey);
+        if (storedSubmode === "auto" || storedSubmode === "manual") {
+            selectedSubmode = storedSubmode;
+        }
+
+        render();
     }
 
     function setupScheduleCourtFilter() {
@@ -1240,6 +1528,7 @@
 
     document.addEventListener("DOMContentLoaded", function() {
         setupScheduleModeUi();
+        setupSchedulePieceFilters();
         setupTournamentBracketAssignDialog();
         setupScheduleCourtFilter();
         setupScheduleStickyOffsets();

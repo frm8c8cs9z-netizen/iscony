@@ -8445,6 +8445,59 @@ class ScheduleBlockDetailTests(TestCase):
             ],
         )
 
+    def test_get_builds_category_stage_sections_for_piece_panel(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        league_stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        tournament_stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=league_stage,
+            name="A",
+            display_order=1,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=tournament_stage,
+            name="本戦",
+            display_order=1,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        category_stage_sections = response.context["category_stage_sections"]
+        self.assertEqual(len(category_stage_sections), 1)
+        self.assertEqual(category_stage_sections[0]["category"].id, category.id)
+        self.assertEqual(
+            [
+                (
+                    stage_section["stage"].id,
+                    stage_section["kind"],
+                    [group.id for group in stage_section["groups"]],
+                    [bracket.id for bracket in stage_section["brackets"]],
+                )
+                for stage_section in category_stage_sections[0]["stages"]
+            ],
+            [
+                (league_stage.id, "league", [group.id], []),
+                (tournament_stage.id, "tournament", [], [bracket.id]),
+            ],
+        )
+
     def test_auto_assign_league_rejects_zero_groups(self):
         response = self.client.post(
             self.url,
