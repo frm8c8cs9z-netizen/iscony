@@ -2498,6 +2498,18 @@ def _ordered_tournament_schedule_blocks(tournament):
 
 
 def _schedule_block_reorder_rename(request, tournament):
+    redirect_to_detail = request.POST.get("redirect_to_detail") == "1"
+    current_schedule_block_id = request.POST.get("current_schedule_block_id")
+
+    def redirect_target():
+        if redirect_to_detail and current_schedule_block_id:
+            return redirect(
+                "schedule_block_detail",
+                code=tournament.code,
+                schedule_block_id=current_schedule_block_id,
+            )
+        return redirect("schedule_block_maintenance", code=tournament.code)
+
     schedule_blocks = _ordered_tournament_schedule_blocks(tournament)
     pending_orders = []
 
@@ -2514,20 +2526,14 @@ def _schedule_block_reorder_rename(request, tournament):
                 request,
                 f"{block.name}: 表示順は整数で入力してください。",
             )
-            return redirect(
-                "schedule_block_maintenance",
-                code=tournament.code,
-            )
+            return redirect_target()
 
         if display_order < 0:
             messages.error(
                 request,
                 f"{block.name}: 表示順は0以上で入力してください。",
             )
-            return redirect(
-                "schedule_block_maintenance",
-                code=tournament.code,
-            )
+            return redirect_target()
 
         pending_orders.append((block, display_order))
 
@@ -2554,10 +2560,7 @@ def _schedule_block_reorder_rename(request, tournament):
             pending_renames.append((block, new_name))
 
     if has_blank_name_error:
-        return redirect(
-            "schedule_block_maintenance",
-            code=tournament.code,
-        )
+        return redirect_target()
 
     if pending_renames:
         final_names = {}
@@ -2585,10 +2588,7 @@ def _schedule_block_reorder_rename(request, tournament):
                     + "、".join(sorted(duplicate_names))
                 ),
             )
-            return redirect(
-                "schedule_block_maintenance",
-                code=tournament.code,
-            )
+            return redirect_target()
 
     with transaction.atomic():
         for block, display_order in pending_orders:
@@ -2603,10 +2603,7 @@ def _schedule_block_reorder_rename(request, tournament):
             block.name = new_name
             block.save(update_fields=["name"])
 
-    return redirect(
-        "schedule_block_maintenance",
-        code=tournament.code,
-    )
+    return redirect_target()
 
 
 def _schedule_block_add_single(request, tournament):

@@ -6928,6 +6928,55 @@ class ScheduleBlockMaintenanceTests(TestCase):
         self.block1.refresh_from_db()
         self.assertEqual(self.block1.name, "第1日")
 
+    def test_schedule_block_order_update_redirects_to_maintenance_by_default(self):
+        response = self.client.post(
+            self.url,
+            self._reorder_rename_payload(
+                block_orders={
+                    self.block1.id: 1,
+                    self.block2.id: 0,
+                },
+            ),
+        )
+
+        self.assertRedirects(
+            response,
+            self.url,
+            fetch_redirect_response=False,
+        )
+        self.block1.refresh_from_db()
+        self.block2.refresh_from_db()
+        self.assertEqual(self.block1.display_order, 1)
+        self.assertEqual(self.block2.display_order, 0)
+
+    def test_schedule_block_order_update_from_detail_redirects_to_current_detail(self):
+        payload = self._reorder_rename_payload(
+            block_orders={
+                self.block1.id: 1,
+                self.block2.id: 0,
+            },
+        )
+        payload["redirect_to_detail"] = "1"
+        payload["current_schedule_block_id"] = str(self.block1.id)
+
+        response = self.client.post(self.url, payload)
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "schedule_block_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "schedule_block_id": self.block1.id,
+                },
+            ),
+            fetch_redirect_response=False,
+        )
+        self.block1.refresh_from_db()
+        self.block2.refresh_from_db()
+        self.assertEqual(self.block1.display_order, 1)
+        self.assertEqual(self.block2.display_order, 0)
+
     def test_schedule_block_names_can_be_swapped(self):
         response = self.client.post(
             self.url,
