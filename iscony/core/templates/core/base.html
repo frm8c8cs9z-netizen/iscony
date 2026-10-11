@@ -1358,6 +1358,87 @@
         border-color: #b42318;
     }
 
+    .schedule-slot-referee-badge {
+        display: inline-block;
+        margin-left: 4px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #fff;
+        background: #8a4fc9;
+        border-radius: 999px;
+        padding: 0 5px;
+        vertical-align: middle;
+    }
+
+    .schedule-mode-button[data-mode="referee"].is-active {
+        background: #8a4fc9;
+        border-color: #8a4fc9;
+    }
+
+    .schedule-referee-dialog {
+        border: 1px solid #b8c7dc;
+        border-radius: 8px;
+        padding: 20px;
+        max-width: 380px;
+        width: 92vw;
+        box-shadow: 0 4px 16px rgba(38, 62, 90, 0.2);
+    }
+
+    .schedule-referee-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    .schedule-referee-dialog input[type="text"] {
+        width: 100%;
+        padding: 6px;
+        margin-top: 6px;
+        box-sizing: border-box;
+    }
+
+    .schedule-referee-result-list {
+        list-style: none;
+        margin: 4px 0 0;
+        padding: 0;
+        max-height: 140px;
+        overflow-y: auto;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+    }
+
+    .schedule-referee-result-list li {
+        padding: 6px 9px;
+        font-size: 12.5px;
+        cursor: pointer;
+        border-bottom: 1px solid #d0d7de;
+    }
+
+    .schedule-referee-result-list li:last-child {
+        border-bottom: none;
+    }
+
+    .schedule-referee-result-list li:hover {
+        background: #f6f8fa;
+    }
+
+    .schedule-referee-result-list li.is-selected {
+        background: #e8f5e9;
+        color: #1a7f37;
+        font-weight: 700;
+    }
+
+    .schedule-referee-dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 16px;
+    }
+
+    .schedule-referee-dialog-actions .save {
+        background: #8a4fc9;
+        border-color: #8a4fc9;
+        color: #fff;
+    }
+
     .schedule-slot-row--range-selected {
         background: #dbe9ff;
         border-color: #6f9ce8;

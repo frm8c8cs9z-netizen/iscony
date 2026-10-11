@@ -8625,6 +8625,8 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertContains(response, "移動")
         self.assertContains(response, "削除")
         self.assertContains(response, "他日程へ移動")
+        self.assertContains(response, 'data-mode="referee"')
+        self.assertContains(response, "審判")
         self.assertNotContains(response, "×")
         self.assertNotContains(response, "✂")
         self.assertContains(response, "M1")
@@ -9260,6 +9262,233 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertNotContains(
             response,
             f'data-schedule-id="{other_block.id}"',
+        )
+
+    def test_get_marks_schedule_referee_badge_only_for_refereed_cell(self):
+        group = self.create_auto_assign_group(
+            name="A",
+            prefix="G",
+            display_order=1,
+        )
+        matches = list(
+            RoundRobinMatch.objects.filter(
+                group=group,
+            ).order_by("id")
+        )
+        referee = create_league_entry_with_participant(
+            category=group.category,
+            group=group,
+            pair_code="R",
+            display_order=9,
+            player1_name="審判A",
+            player2_name="審判B",
+        ).participant
+        Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+            round_robin_match=matches[0],
+            referee_participant=referee,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=2,
+            round_robin_match=matches[1],
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'title="審判指定あり"', count=1)
+
+
+class ScheduleRefereeApiTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="審判指定APIテスト大会",
+            code="SCHEDULEREFEREE",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+        )
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.pair1 = self._create_entry("1", "出場1A", "出場1B", 1)
+        self.pair2 = self._create_entry("2", "出場2A", "出場2B", 2)
+        self.referee_entry = self._create_entry("3", "審判A", "審判B", 3)
+        self.match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.pair1,
+            pair2=self.pair2,
+        )
+        self.schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=1,
+            round_robin_match=self.match,
+        )
+
+    def _create_entry(self, pair_code, player1_name, player2_name, order):
+        return create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code=pair_code,
+            display_order=order,
+            player1_name=player1_name,
+            player2_name=player2_name,
+        )
+
+    def _candidates_url(self):
+        return reverse(
+            "schedule_referee_candidates_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_id": self.schedule.id,
+            },
+        )
+
+    def _set_url(self):
+        return reverse(
+            "set_schedule_referee_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_id": self.schedule.id,
+            },
+        )
+
+    def test_candidates_api_excludes_match_participants(self):
+        response = self.client.get(self._candidates_url())
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        candidate_ids = {
+            candidate["id"]
+            for candidate in payload["candidates"]
+        }
+        self.assertNotIn(self.pair1.participant_id, candidate_ids)
+        self.assertNotIn(self.pair2.participant_id, candidate_ids)
+        self.assertIn(self.referee_entry.participant_id, candidate_ids)
+
+    def test_candidates_api_rejects_non_get(self):
+        response = self.client.post(self._candidates_url())
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            response.json(),
+            {"success": False, "error": "GETで取得してください。"},
+        )
+
+    def test_set_referee_api_sets_participant(self):
+        response = self.client.post(
+            self._set_url(),
+            {
+                "referee_participant_id": str(
+                    self.referee_entry.participant_id
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.schedule.refresh_from_db()
+        self.assertEqual(
+            self.schedule.referee_participant_id,
+            self.referee_entry.participant_id,
+        )
+        self.assertEqual(
+            response.json(),
+            {
+                "success": True,
+                "referee_label": self.referee_entry.participant.display_name,
+            },
+        )
+
+    def test_set_referee_api_sets_note(self):
+        response = self.client.post(
+            self._set_url(),
+            {
+                "referee_note": "本部審判",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.schedule.refresh_from_db()
+        self.assertIsNone(self.schedule.referee_participant_id)
+        self.assertEqual(self.schedule.referee_note, "本部審判")
+        self.assertEqual(
+            response.json(),
+            {"success": True, "referee_label": "本部審判"},
+        )
+
+    def test_set_referee_api_rejects_match_participant(self):
+        response = self.client.post(
+            self._set_url(),
+            {
+                "referee_participant_id": str(self.pair1.participant_id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.schedule.refresh_from_db()
+        self.assertIsNone(self.schedule.referee_participant_id)
+        self.assertEqual(self.schedule.referee_note, "")
+        self.assertEqual(
+            response.json(),
+            {
+                "success": False,
+                "error": "この試合に出場している参加者は審判に指定できません。",
+            },
+        )
+
+    def test_set_referee_api_clears_referee(self):
+        self.schedule.referee_participant = self.referee_entry.participant
+        self.schedule.referee_note = "本部審判"
+        self.schedule.save()
+
+        response = self.client.post(
+            self._set_url(),
+            {
+                "action": "clear",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.schedule.refresh_from_db()
+        self.assertIsNone(self.schedule.referee_participant_id)
+        self.assertEqual(self.schedule.referee_note, "")
+        self.assertEqual(
+            response.json(),
+            {"success": True, "referee_label": None},
+        )
+
+    def test_set_referee_api_rejects_non_post(self):
+        response = self.client.get(self._set_url())
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            response.json(),
+            {"success": False, "error": "POSTで送信してください。"},
         )
 
 

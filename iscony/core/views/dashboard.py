@@ -65,6 +65,7 @@ from ..services import (
     participant_edit_impact_summary,
     participant_pair_organization_initials,
     save_pair_organization_values,
+    schedule_match_participant_ids,
     tournament_pair_organization_sets,
     unassign_schedule,
     unassign_schedule_range,
@@ -3162,6 +3163,7 @@ def schedule_block_detail(request, code, schedule_block_id):
         "tournament_match__bracket__category",
         "tournament_match__pair1",
         "tournament_match__pair2",
+        "referee_participant",
     ).order_by(
         "court__display_order",
         "court__name",
@@ -3427,6 +3429,130 @@ def schedule_block_detail(request, code, schedule_block_id):
             "tournament_schedule_blocks": tournament_schedule_blocks,
         },
     )
+
+
+def schedule_referee_candidates_api(request, code, schedule_id):
+    """指定Scheduleの審判候補一覧と現在の指定状況を返すJSON API。"""
+
+    if request.method != "GET":
+        return JsonResponse(
+            {"success": False, "error": "GETで取得してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    schedule = get_object_or_404(
+        Schedule,
+        id=schedule_id,
+        schedule_block__tournament=tournament,
+    )
+
+    match = schedule.match
+    category = (
+        match.group.category if schedule.is_round_robin
+        else match.bracket.category
+    )
+    own_participant_ids = schedule_match_participant_ids(schedule)
+
+    candidates = Participant.objects.filter(
+        category=category,
+    ).exclude(
+        id__in=own_participant_ids,
+    ).order_by("entry_code")
+
+    if schedule.is_round_robin:
+        match_label = (
+            f"{schedule.court.name} 第{schedule.order}試合 "
+            f"({match.group.name})"
+        )
+    else:
+        match_label = (
+            f"{schedule.court.name} 第{schedule.order}試合 "
+            f"({match.bracket.name} {match.match_code})"
+        )
+
+    current_label = None
+    if schedule.referee_participant_id:
+        current_label = schedule.referee_participant.display_name
+    elif schedule.referee_note:
+        current_label = schedule.referee_note
+
+    return JsonResponse({
+        "success": True,
+        "match_label": match_label,
+        "candidates": [
+            {"id": p.id, "label": p.display_name}
+            for p in candidates
+        ],
+        "current": {
+            "referee_participant_id": schedule.referee_participant_id,
+            "referee_note": schedule.referee_note,
+            "label": current_label,
+        },
+    })
+
+
+def set_schedule_referee_api(request, code, schedule_id):
+    """指定Scheduleの審判を直接参加者指定または自由入力メモで設定/解除するJSON API。"""
+
+    if request.method != "POST":
+        return JsonResponse(
+            {"success": False, "error": "POSTで送信してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    schedule = get_object_or_404(
+        Schedule,
+        id=schedule_id,
+        schedule_block__tournament=tournament,
+    )
+
+    action = request.POST.get("action", "set")
+
+    if action == "clear":
+        schedule.referee_participant = None
+        schedule.referee_note = ""
+    else:
+        participant_id = request.POST.get("referee_participant_id") or None
+        note = request.POST.get("referee_note", "").strip()
+
+        if participant_id:
+            own_participant_ids = schedule_match_participant_ids(schedule)
+
+            if int(participant_id) in own_participant_ids:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": "この試合に出場している参加者は審判に指定できません。",
+                    },
+                    status=400,
+                )
+
+            participant = get_object_or_404(Participant, id=participant_id)
+            schedule.referee_participant = participant
+        else:
+            schedule.referee_participant = None
+
+        schedule.referee_note = note
+
+    try:
+        schedule.full_clean()
+    except ValidationError as error:
+        return JsonResponse(
+            {"success": False, "error": "、".join(error.messages)},
+            status=400,
+        )
+
+    schedule.save()
+
+    label = None
+    if schedule.referee_participant_id:
+        label = schedule.referee_participant.display_name
+    elif schedule.referee_note:
+        label = schedule.referee_note
+
+    return JsonResponse({"success": True, "referee_label": label})
 
 
 def assign_schedule_slot_api(request, code, schedule_block_id, court_id):

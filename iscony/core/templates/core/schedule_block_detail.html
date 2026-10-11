@@ -43,6 +43,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 9h18M8 3v4M16 3v4M9 15l3-3 3 3M12 12v6"/></svg>
             他日程へ移動
         </button>
+        <button type="button" class="schedule-mode-button" data-mode="referee">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16.8 5.6 21.2 8 14 2 9.2h7.6z"/></svg>
+            審判
+        </button>
     </div>
 
     <div class="advancement-piece-filter">
@@ -103,10 +107,15 @@
                                                 draggable="true"
                                                 data-schedule-id="{{ cell.schedule.id }}"
                                                 data-order="{{ cell.schedule.order }}"
+                                                data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code cell.schedule.id %}"
+                                                data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code cell.schedule.id %}"
                                             >
                                                 <span class="schedule-slot-label">
                                                     {{ cell.label }}
                                                 </span>
+                                                {% if cell.schedule.referee_participant_id or cell.schedule.referee_note %}
+                                                    <span class="schedule-slot-referee-badge" title="審判指定あり">審</span>
+                                                {% endif %}
                                             </div>
                                         {% elif cell.kind == "empty" %}
                                             <div
@@ -319,6 +328,29 @@
     </div>
 </dialog>
 
+<dialog id="scheduleRefereeDialog" class="schedule-referee-dialog">
+    <h4 id="scheduleRefereeDialogTarget"></h4>
+
+    <p class="subtle-text" id="scheduleRefereeCurrentLabel"></p>
+
+    <label>
+        参加者を検索
+        <input type="text" id="scheduleRefereeSearchInput" placeholder="名前で検索">
+    </label>
+    <ul class="schedule-referee-result-list" id="scheduleRefereeResultList"></ul>
+
+    <label>
+        自由入力メモ(本部審判、外部審判など)
+        <input type="text" id="scheduleRefereeNoteInput" placeholder="例: 本部審判">
+    </label>
+
+    <div class="schedule-referee-dialog-actions">
+        <button type="button" id="scheduleRefereeClearButton">指定なしにする</button>
+        <button type="button" id="scheduleRefereeCancelButton">キャンセル</button>
+        <button type="button" id="scheduleRefereeSaveButton" class="save">保存</button>
+    </div>
+</dialog>
+
 <dialog id="scheduleBlockAddDialog" class="schedule-block-add-dialog">
     <form method="post" action="{% url 'schedule_block_maintenance' tournament.code %}">
         {% csrf_token %}
@@ -428,6 +460,7 @@
             "move-block": (
                 "移動したい範囲を選んだら、上の日程タブをタップしてください。"
             ),
+            referee: "審判を指定したいセルをタップしてください。",
         };
 
         function parseJsonResponse(response) {
@@ -757,6 +790,10 @@
                 return;
             }
 
+            if (currentMode === "referee") {
+                return;
+            }
+
             if (!isAssigned) {
                 return;
             }
@@ -927,6 +964,209 @@
         }
 
         setMode(loadStoredMode());
+    }
+
+    function setupScheduleRefereeMode() {
+        const assignmentArea = document.querySelector(
+            ".schedule-court-table-wrap"
+        );
+        const dialog = document.querySelector("#scheduleRefereeDialog");
+        const targetEl = document.querySelector(
+            "#scheduleRefereeDialogTarget"
+        );
+        const currentLabelEl = document.querySelector(
+            "#scheduleRefereeCurrentLabel"
+        );
+        const searchInput = document.querySelector(
+            "#scheduleRefereeSearchInput"
+        );
+        const resultList = document.querySelector(
+            "#scheduleRefereeResultList"
+        );
+        const noteInput = document.querySelector("#scheduleRefereeNoteInput");
+        const clearButton = document.querySelector(
+            "#scheduleRefereeClearButton"
+        );
+        const cancelButton = document.querySelector(
+            "#scheduleRefereeCancelButton"
+        );
+        const saveButton = document.querySelector("#scheduleRefereeSaveButton");
+        const csrfInput = document.querySelector(
+            "input[name=csrfmiddlewaretoken]"
+        );
+        const csrfToken = csrfInput ? csrfInput.value : "";
+
+        let candidates = [];
+        let selectedCandidateId = null;
+        let activeRow = null;
+
+        if (
+            !assignmentArea || !dialog || !targetEl || !currentLabelEl
+            || !searchInput || !resultList || !noteInput || !clearButton
+            || !cancelButton || !saveButton
+        ) {
+            return;
+        }
+
+        function isRefereeMode() {
+            return Boolean(document.querySelector(
+                '.schedule-mode-button.is-active[data-mode="referee"]'
+            ));
+        }
+
+        function renderCandidates() {
+            const query = searchInput.value.trim().toLowerCase();
+            resultList.innerHTML = "";
+
+            candidates.forEach(function(candidate) {
+                if (
+                    query
+                    && candidate.label.toLowerCase().indexOf(query) === -1
+                ) {
+                    return;
+                }
+
+                const item = document.createElement("li");
+                item.textContent = candidate.label;
+                item.dataset.candidateId = candidate.id;
+                item.classList.toggle(
+                    "is-selected",
+                    String(candidate.id) === String(selectedCandidateId)
+                );
+                item.addEventListener("click", function() {
+                    selectedCandidateId = candidate.id;
+                    noteInput.value = "";
+                    renderCandidates();
+                });
+                resultList.appendChild(item);
+            });
+        }
+
+        function parseJsonResponse(response) {
+            return response.json().then(function(data) {
+                return {
+                    ok: response.ok,
+                    data: data,
+                };
+            });
+        }
+
+        function postReferee(body) {
+            if (!activeRow) {
+                return;
+            }
+
+            fetch(activeRow.dataset.refereeSaveUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: body,
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (result.ok && result.data.success) {
+                        location.reload();
+                        return;
+                    }
+                    alert(result.data.error || "保存に失敗しました。");
+                })
+                .catch(function() {
+                    alert("保存に失敗しました。");
+                });
+        }
+
+        function openDialog(row) {
+            activeRow = row;
+            selectedCandidateId = null;
+            candidates = [];
+            targetEl.textContent = "読み込み中…";
+            currentLabelEl.textContent = "";
+            searchInput.value = "";
+            noteInput.value = "";
+            resultList.innerHTML = "";
+            dialog.showModal();
+
+            fetch(row.dataset.refereeCandidatesUrl, {
+                headers: {"X-Requested-With": "XMLHttpRequest"},
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(result.data.error || "読み込みに失敗しました。");
+                        dialog.close();
+                        return;
+                    }
+
+                    const data = result.data;
+                    targetEl.textContent = data.match_label;
+                    if (data.current && data.current.label) {
+                        currentLabelEl.textContent = (
+                            "現在の審判: " + data.current.label
+                        );
+                    } else {
+                        currentLabelEl.textContent = (
+                            "現在、審判は指定されていません"
+                        );
+                    }
+                    candidates = data.candidates || [];
+                    selectedCandidateId = data.current
+                        ? data.current.referee_participant_id
+                        : null;
+                    noteInput.value = (
+                        data.current && data.current.referee_note
+                    ) ? data.current.referee_note : "";
+                    renderCandidates();
+                })
+                .catch(function() {
+                    alert("読み込みに失敗しました。");
+                    dialog.close();
+                });
+        }
+
+        assignmentArea.addEventListener("click", function(event) {
+            if (!isRefereeMode()) {
+                return;
+            }
+
+            const row = event.target.closest(
+                ".schedule-slot-row--assigned[data-schedule-id]"
+            );
+            if (!row || !assignmentArea.contains(row)) {
+                return;
+            }
+
+            openDialog(row);
+        });
+
+        searchInput.addEventListener("input", renderCandidates);
+        noteInput.addEventListener("input", function() {
+            if (noteInput.value.trim()) {
+                selectedCandidateId = null;
+                renderCandidates();
+            }
+        });
+
+        saveButton.addEventListener("click", function() {
+            const body = new URLSearchParams();
+            if (selectedCandidateId) {
+                body.append("referee_participant_id", selectedCandidateId);
+            } else {
+                body.append("referee_note", noteInput.value.trim());
+            }
+            postReferee(body);
+        });
+
+        clearButton.addEventListener("click", function() {
+            const body = new URLSearchParams();
+            body.append("action", "clear");
+            postReferee(body);
+        });
+
+        cancelButton.addEventListener("click", function() {
+            dialog.close();
+        });
     }
 
     function setupSchedulePieceFilters() {
@@ -1715,6 +1955,7 @@
 
     document.addEventListener("DOMContentLoaded", function() {
         setupScheduleModeUi();
+        setupScheduleRefereeMode();
         setupSchedulePieceFilters();
         setupTournamentBracketAssignDialog();
         setupScheduleBlockAddDialog();
