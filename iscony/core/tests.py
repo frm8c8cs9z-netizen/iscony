@@ -8630,7 +8630,8 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertNotContains(response, "×")
         self.assertNotContains(response, "✂")
         self.assertContains(response, "男子A・予選リーグ・A")
-        self.assertContains(response, "本戦 M2")
+        self.assertContains(response, "男子A・本戦")
+        self.assertContains(response, "M2")
         self.assertContains(response, "M1")
         self.assertContains(response, group.name)
         self.assertContains(response, self.court1.name)
@@ -8807,10 +8808,13 @@ class ScheduleBlockDetailTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         cell = response.context["schedule_grid_rows"][0]["cells"][0]
-        self.assertEqual(cell["context_label"], bracket.category.name)
-        self.assertEqual(cell["label"], f"{bracket.name} {match.match_code}")
+        self.assertEqual(
+            cell["context_label"],
+            f"{bracket.category.name}・{bracket.name}",
+        )
+        self.assertEqual(cell["label"], match.match_code)
         self.assertContains(response, "schedule-slot-context")
-        self.assertContains(response, bracket.category.name)
+        self.assertContains(response, f"{bracket.category.name}・{bracket.name}")
 
     def test_get_groups_league_choices_by_category_and_stage(self):
         category = Category.objects.create(

@@ -3363,8 +3363,11 @@ def schedule_block_detail(request, code, schedule_block_id):
 
                 if schedule.is_tournament:
                     match = schedule.tournament_match
-                    context_label = match.bracket.category.name
-                    main_label = f"{match.bracket.name} {match.match_code}"
+                    context_label = (
+                        f"{match.bracket.category.name}・"
+                        f"{match.bracket.name}"
+                    )
+                    main_label = match.match_code
                 elif schedule.is_round_robin:
                     match = schedule.round_robin_match
                     pair_orders = sorted([
