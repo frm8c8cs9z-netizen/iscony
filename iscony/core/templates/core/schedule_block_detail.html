@@ -118,6 +118,9 @@
                                                     <span class="schedule-slot-label">
                                                         {{ cell.label }}
                                                     </span>
+                                                    {% if cell.schedule.referee_participant %}
+                                                        <span class="schedule-slot-context">（{{ cell.schedule.referee_participant.code }}）</span>
+                                                    {% endif %}
                                                 </span>
                                                 {% if cell.schedule.referee_participant_id or cell.schedule.referee_note or cell.schedule.referee_source_type %}
                                                     <span class="schedule-slot-referee-badge" title="審判指定あり">審</span>
