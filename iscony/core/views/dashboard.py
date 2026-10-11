@@ -28,6 +28,7 @@ from ..models import (
     Participant,
     AdvancementSource,
     Group,
+    LeagueEntry,
     Court,
     ScheduleBlock,
     RoundRobinMatch,
@@ -3361,26 +3362,31 @@ def schedule_block_detail(request, code, schedule_block_id):
                 schedule = court_schedules[row_order - 1]
 
                 if schedule.is_tournament:
-                    label = schedule.tournament_match.match_code
+                    match = schedule.tournament_match
+                    context_label = match.bracket.category.name
+                    main_label = f"{match.bracket.name} {match.match_code}"
                 elif schedule.is_round_robin:
                     match = schedule.round_robin_match
                     pair_orders = sorted([
                         match.pair1.display_order,
                         match.pair2.display_order,
                     ])
-                    stage_label = match.group.stage.code or match.group.stage.name
-                    label = (
-                        f"{stage_label}/{match.group.name}:"
-                        f"{pair_orders[0]}-{pair_orders[1]}"
+                    context_label = (
+                        f"{match.group.category.name}・"
+                        f"{match.group.stage.name}・"
+                        f"{match.group.name}"
                     )
+                    main_label = f"{pair_orders[0]}-{pair_orders[1]}"
                 else:
-                    label = ""
+                    context_label = ""
+                    main_label = ""
 
                 cells.append({
                     "court": column["court"],
                     "kind": "assigned",
                     "schedule": schedule,
-                    "label": label,
+                    "context_label": context_label,
+                    "label": main_label,
                 })
             elif row_order == len(court_schedules) + 1:
                 cells.append({
@@ -3470,6 +3476,27 @@ def schedule_referee_candidates_api(request, code, schedule_id):
             ).order_by("display_order", "id")
         ]
     own_participant_ids = schedule_match_participant_ids(schedule)
+    groups = []
+    own_group_id = None
+    group_id_by_participant_id = {}
+
+    if schedule.is_round_robin:
+        stage_groups = list(
+            Group.objects.filter(
+                stage=current_stage,
+            ).order_by("display_order", "name")
+        )
+        groups = [
+            {"id": group.id, "name": group.name}
+            for group in stage_groups
+        ]
+        own_group_id = match.group_id
+
+        for entry in LeagueEntry.objects.filter(
+            group__in=stage_groups,
+            participant__isnull=False,
+        ):
+            group_id_by_participant_id[entry.participant_id] = entry.group_id
 
     candidates = Participant.objects.filter(
         category=category,
@@ -3518,8 +3545,14 @@ def schedule_referee_candidates_api(request, code, schedule_id):
         "success": True,
         "match_label": match_label,
         "available_stages": available_stages,
+        "groups": groups,
+        "own_group_id": own_group_id,
         "candidates": [
-            {"id": p.id, "label": p.display_name}
+            {
+                "id": p.id,
+                "label": p.display_name,
+                "group_id": group_id_by_participant_id.get(p.id),
+            }
             for p in candidates
         ],
         "current": {

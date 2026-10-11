@@ -111,8 +111,13 @@
                                                 data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code cell.schedule.id 0 %}"
                                                 data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code cell.schedule.id %}"
                                             >
-                                                <span class="schedule-slot-label">
-                                                    {{ cell.label }}
+                                                <span class="schedule-slot-text">
+                                                    {% if cell.context_label %}
+                                                        <span class="schedule-slot-context">{{ cell.context_label }}</span>
+                                                    {% endif %}
+                                                    <span class="schedule-slot-label">
+                                                        {{ cell.label }}
+                                                    </span>
                                                 </span>
                                                 {% if cell.schedule.referee_participant_id or cell.schedule.referee_note or cell.schedule.referee_source_type %}
                                                     <span class="schedule-slot-referee-badge" title="審判指定あり">審</span>
@@ -340,6 +345,8 @@
     </div>
 
     <div id="scheduleRefereeDirectPanel">
+        <div id="scheduleRefereeGroupFilter" hidden></div>
+        <div id="scheduleRefereeSuggestions" hidden></div>
         <label>
             参加者を検索
             <input type="text" id="scheduleRefereeSearchInput" placeholder="名前で検索">
@@ -1001,6 +1008,12 @@
         const resultList = document.querySelector(
             "#scheduleRefereeResultList"
         );
+        const groupFilterEl = document.querySelector(
+            "#scheduleRefereeGroupFilter"
+        );
+        const suggestionsEl = document.querySelector(
+            "#scheduleRefereeSuggestions"
+        );
         const noteInput = document.querySelector("#scheduleRefereeNoteInput");
         const tabButtons = Array.from(document.querySelectorAll(
             "[data-referee-tab]"
@@ -1031,6 +1044,9 @@
 
         let candidates = [];
         let selectedCandidateId = null;
+        let refereeGroups = [];
+        let ownGroupId = null;
+        let selectedGroupId = null;
         let availableStages = [];
         let sourceOptions = [];
         let selectedSourceOption = null;
@@ -1042,6 +1058,7 @@
             || !searchInput || !resultList || !noteInput || !clearButton
             || !cancelButton || !saveButton || !directPanel || !sourcePanel
             || !stageSelect || !sourceResultList || !tabButtons.length
+            || !groupFilterEl || !suggestionsEl
         ) {
             return;
         }
@@ -1057,6 +1074,12 @@
             resultList.innerHTML = "";
 
             candidates.forEach(function(candidate) {
+                if (
+                    selectedGroupId
+                    && String(candidate.group_id) !== String(selectedGroupId)
+                ) {
+                    return;
+                }
                 if (
                     query
                     && candidate.label.toLowerCase().indexOf(query) === -1
@@ -1078,6 +1101,90 @@
                     renderCandidates();
                 });
                 resultList.appendChild(item);
+            });
+        }
+
+        function renderGroupFilters() {
+            groupFilterEl.innerHTML = "";
+            groupFilterEl.hidden = !refereeGroups.length;
+
+            if (!refereeGroups.length) {
+                selectedGroupId = null;
+                return;
+            }
+
+            groupFilterEl.className = "schedule-referee-chip-group";
+
+            const label = document.createElement("span");
+            label.className = "schedule-referee-chip-label";
+            label.textContent = "グループで絞り込み";
+            groupFilterEl.appendChild(label);
+
+            const allButton = document.createElement("button");
+            allButton.type = "button";
+            allButton.className = "schedule-referee-chip";
+            allButton.textContent = "すべて";
+            allButton.classList.toggle("is-active", !selectedGroupId);
+            allButton.addEventListener("click", function() {
+                selectedGroupId = null;
+                renderGroupFilters();
+                renderCandidates();
+            });
+            groupFilterEl.appendChild(allButton);
+
+            refereeGroups.forEach(function(group) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "schedule-referee-chip";
+                button.textContent = group.name;
+                button.classList.toggle(
+                    "is-active",
+                    String(group.id) === String(selectedGroupId)
+                );
+                button.addEventListener("click", function() {
+                    selectedGroupId = group.id;
+                    renderGroupFilters();
+                    renderCandidates();
+                });
+                groupFilterEl.appendChild(button);
+            });
+        }
+
+        function renderSuggestions() {
+            suggestionsEl.innerHTML = "";
+            suggestionsEl.hidden = !refereeGroups.length || !ownGroupId;
+
+            if (suggestionsEl.hidden) {
+                return;
+            }
+
+            const suggestedCandidates = candidates.filter(function(candidate) {
+                return String(candidate.group_id) === String(ownGroupId);
+            });
+            if (!suggestedCandidates.length) {
+                suggestionsEl.hidden = true;
+                return;
+            }
+
+            suggestionsEl.className = "schedule-referee-chip-group";
+
+            const label = document.createElement("span");
+            label.className = "schedule-referee-chip-label";
+            label.textContent = "提案";
+            suggestionsEl.appendChild(label);
+
+            suggestedCandidates.forEach(function(candidate) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "schedule-referee-chip";
+                button.textContent = candidate.label;
+                button.addEventListener("click", function() {
+                    selectedCandidateId = candidate.id;
+                    selectedSourceOption = null;
+                    noteInput.value = "";
+                    renderCandidates();
+                });
+                suggestionsEl.appendChild(button);
             });
         }
 
@@ -1263,11 +1370,16 @@
             activeRow = row;
             selectedCandidateId = null;
             candidates = [];
+            refereeGroups = [];
+            ownGroupId = null;
+            selectedGroupId = null;
             targetEl.textContent = "読み込み中…";
             currentLabelEl.textContent = "";
             searchInput.value = "";
             noteInput.value = "";
             resultList.innerHTML = "";
+            renderGroupFilters();
+            renderSuggestions();
             availableStages = [];
             sourceOptions = [];
             selectedSourceOption = null;
@@ -1310,6 +1422,9 @@
                         );
                     }
                     candidates = data.candidates || [];
+                    refereeGroups = data.groups || [];
+                    ownGroupId = data.own_group_id || null;
+                    selectedGroupId = ownGroupId;
                     selectedCandidateId = data.current
                         ? data.current.referee_participant_id
                         : null;
@@ -1330,6 +1445,8 @@
                             currentSource
                         );
                     }
+                    renderGroupFilters();
+                    renderSuggestions();
                     renderCandidates();
                 })
                 .catch(function() {

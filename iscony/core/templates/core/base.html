@@ -822,6 +822,22 @@
         white-space: nowrap;
     }
 
+    .schedule-slot-text {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .schedule-slot-context {
+        display: block;
+        font-size: 9.5px;
+        line-height: 1.2;
+        color: #57606a;
+        font-weight: 400;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .called-cell {
         background-color: #eef7ff;
     }
@@ -1451,6 +1467,38 @@
 
     .schedule-referee-tabs button.is-active {
         background: #8a4fc9;
+        color: #fff;
+    }
+
+    .schedule-referee-chip-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin: 8px 0;
+    }
+
+    .schedule-referee-chip-label {
+        color: #57606a;
+        font-size: 12px;
+        font-weight: 700;
+        margin-right: 2px;
+    }
+
+    .schedule-referee-chip {
+        border: 1px solid #b8c7dc;
+        border-radius: 999px;
+        background: #fff;
+        color: #1f2328;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
+    }
+
+    .schedule-referee-chip.is-active {
+        background: #8a4fc9;
+        border-color: #8a4fc9;
         color: #fff;
     }
 

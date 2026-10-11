@@ -8629,6 +8629,8 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertContains(response, "審判")
         self.assertNotContains(response, "×")
         self.assertNotContains(response, "✂")
+        self.assertContains(response, "男子A・予選リーグ・A")
+        self.assertContains(response, "本戦 M2")
         self.assertContains(response, "M1")
         self.assertContains(response, group.name)
         self.assertContains(response, self.court1.name)
@@ -8670,10 +8672,16 @@ class ScheduleBlockDetailTests(TestCase):
         rows = response.context["schedule_grid_rows"]
         expected_labels = {
             match.id: (
-                f"{match.group.stage.code or match.group.stage.name}/"
-                f"{match.group.name}:"
                 f"{min(match.pair1.display_order, match.pair2.display_order)}-"
                 f"{max(match.pair1.display_order, match.pair2.display_order)}"
+            )
+            for match in matches
+        }
+        expected_contexts = {
+            match.id: (
+                f"{match.group.category.name}・"
+                f"{match.group.stage.name}・"
+                f"{match.group.name}"
             )
             for match in matches
         }
@@ -8693,6 +8701,10 @@ class ScheduleBlockDetailTests(TestCase):
             row1_cells[self.court1.id]["label"],
             expected_labels[court1_schedule1.round_robin_match_id],
         )
+        self.assertEqual(
+            row1_cells[self.court1.id]["context_label"],
+            expected_contexts[court1_schedule1.round_robin_match_id],
+        )
         self.assertEqual(row1_cells[self.court2.id]["kind"], "assigned")
         self.assertEqual(
             row1_cells[self.court2.id]["schedule"].id,
@@ -8701,6 +8713,10 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertEqual(
             row1_cells[self.court2.id]["label"],
             expected_labels[court2_schedule1.round_robin_match_id],
+        )
+        self.assertEqual(
+            row1_cells[self.court2.id]["context_label"],
+            expected_contexts[court2_schedule1.round_robin_match_id],
         )
 
         row2_cells = {
@@ -8716,6 +8732,10 @@ class ScheduleBlockDetailTests(TestCase):
             row2_cells[self.court1.id]["label"],
             expected_labels[court1_schedule2.round_robin_match_id],
         )
+        self.assertEqual(
+            row2_cells[self.court1.id]["context_label"],
+            expected_contexts[court1_schedule2.round_robin_match_id],
+        )
         self.assertEqual(row2_cells[self.court2.id]["kind"], "empty")
 
         row3_cells = {
@@ -8725,13 +8745,14 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertEqual(row3_cells[self.court1.id]["kind"], "empty")
         self.assertEqual(row3_cells[self.court2.id]["kind"], "blank")
         self.assertContains(response, '<table class="schedule-court-table">')
+        self.assertContains(response, 'class="schedule-slot-context"', count=3)
         self.assertContains(
             response,
             'class="schedule-slot-row schedule-slot-row--empty"',
             count=2,
         )
 
-    def test_get_builds_schedule_grid_label_uses_stage_code_when_available(self):
+    def test_get_builds_schedule_grid_context_for_league_cell(self):
         category = Category.objects.create(
             tournament=self.tournament,
             name="男子A",
@@ -8763,7 +8784,33 @@ class ScheduleBlockDetailTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         cell = response.context["schedule_grid_rows"][0]["cells"][0]
-        self.assertEqual(cell["label"], "STG1/A:1-2")
+        self.assertEqual(cell["context_label"], "男子A・予選リーグ・A")
+        self.assertEqual(cell["label"], "1-2")
+        self.assertContains(response, "schedule-slot-context")
+        self.assertContains(response, "男子A・予選リーグ・A")
+
+    def test_get_builds_schedule_grid_context_for_tournament_cell(self):
+        bracket = self.create_auto_assign_bracket(entry_count=4)
+        match = TournamentMatch.objects.filter(
+            bracket=bracket,
+        ).exclude(
+            match_code__startswith="S",
+        ).order_by("round_number", "match_number").first()
+        Schedule.objects.create(
+            schedule_block=self.block1,
+            court=self.court1,
+            order=1,
+            tournament_match=match,
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        cell = response.context["schedule_grid_rows"][0]["cells"][0]
+        self.assertEqual(cell["context_label"], bracket.category.name)
+        self.assertEqual(cell["label"], f"{bracket.name} {match.match_code}")
+        self.assertContains(response, "schedule-slot-context")
+        self.assertContains(response, bracket.category.name)
 
     def test_get_groups_league_choices_by_category_and_stage(self):
         category = Category.objects.create(
@@ -9459,6 +9506,80 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertNotIn(self.pair1.participant_id, candidate_ids)
         self.assertNotIn(self.pair2.participant_id, candidate_ids)
         self.assertIn(self.referee_entry.participant_id, candidate_ids)
+
+    def test_candidates_api_includes_league_groups_and_candidate_group_ids(self):
+        other_group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="Bグループ",
+            display_order=2,
+        )
+        other_entry = create_league_entry_with_participant(
+            category=self.category,
+            group=other_group,
+            pair_code="B1",
+            display_order=1,
+            player1_name="別組A",
+            player2_name="別組B",
+        )
+        no_group_participant = Participant.objects.create(
+            category=self.category,
+            entry_code="NO-GROUP",
+            player1_name="未所属A",
+            player2_name="未所属B",
+        )
+
+        response = self.client.get(self._candidates_url())
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(
+            payload["groups"],
+            [
+                {"id": self.group.id, "name": self.group.name},
+                {"id": other_group.id, "name": other_group.name},
+            ],
+        )
+        self.assertEqual(payload["own_group_id"], self.group.id)
+        group_id_by_candidate_id = {
+            candidate["id"]: candidate["group_id"]
+            for candidate in payload["candidates"]
+        }
+        self.assertEqual(
+            group_id_by_candidate_id[self.referee_entry.participant_id],
+            self.group.id,
+        )
+        self.assertEqual(
+            group_id_by_candidate_id[other_entry.participant_id],
+            other_group.id,
+        )
+        self.assertIsNone(group_id_by_candidate_id[no_group_participant.id])
+
+    def test_candidates_api_returns_empty_groups_for_tournament_match(self):
+        _stage, _bracket, match = self._create_tournament_stage_with_match()
+        schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=2,
+            tournament_match=match,
+        )
+        url = reverse(
+            "schedule_referee_candidates_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_id": schedule.id,
+            },
+        )
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["groups"], [])
+        self.assertIsNone(payload["own_group_id"])
+        self.assertTrue(
+            all(candidate["group_id"] is None for candidate in payload["candidates"])
+        )
 
     def test_candidates_api_includes_available_stages_up_to_current_stage(self):
         previous_stage = Stage.objects.create(
