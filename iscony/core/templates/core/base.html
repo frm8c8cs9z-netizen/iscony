@@ -833,12 +833,14 @@
     }
 
     .schedule-slot-context {
-        display: block;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
         font-size: 9.5px;
         line-height: 1.2;
         color: #57606a;
         font-weight: 400;
-        white-space: nowrap;
+        white-space: normal;
         overflow: hidden;
         text-overflow: ellipsis;
     }
