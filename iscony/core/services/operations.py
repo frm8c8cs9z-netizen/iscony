@@ -552,6 +552,19 @@ def _resolved_advancement_entry(source):
     )
 
 
+def schedule_match_participant_ids(schedule):
+    """Scheduleが指す試合に出ている参加者(Participant)のIDの集合を返す。"""
+
+    match = schedule.match
+    participant_ids = set()
+
+    for entry in (match.pair1, match.pair2):
+        if entry and entry.participant_id:
+            participant_ids.add(entry.participant_id)
+
+    return participant_ids
+
+
 def resolve_schedule_referee(schedule):
     """
     Scheduleの審判指定を解決する。

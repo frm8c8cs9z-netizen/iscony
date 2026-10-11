@@ -26,6 +26,7 @@ from ..models import (
     Category,
     Stage,
     Participant,
+    AdvancementSource,
     Group,
     Court,
     ScheduleBlock,
@@ -64,9 +65,12 @@ from ..services import (
     move_schedule_tail_to_block,
     participant_edit_impact_summary,
     participant_pair_organization_initials,
+    league_rank_advances_further,
+    resolve_schedule_referee,
     save_pair_organization_values,
     schedule_match_participant_ids,
     tournament_pair_organization_sets,
+    tournament_result_advances_further,
     unassign_schedule,
     unassign_schedule_range,
 )
@@ -3452,6 +3456,19 @@ def schedule_referee_candidates_api(request, code, schedule_id):
         match.group.category if schedule.is_round_robin
         else match.bracket.category
     )
+    current_stage = (
+        match.group.stage if schedule.is_round_robin
+        else match.bracket.stage
+    )
+    available_stages = []
+    if current_stage:
+        available_stages = [
+            {"id": s.id, "name": s.name, "stage_type": s.stage_type}
+            for s in Stage.objects.filter(
+                category=category,
+                display_order__lte=current_stage.display_order,
+            ).order_by("display_order", "id")
+        ]
     own_participant_ids = schedule_match_participant_ids(schedule)
 
     candidates = Participant.objects.filter(
@@ -3474,12 +3491,33 @@ def schedule_referee_candidates_api(request, code, schedule_id):
     current_label = None
     if schedule.referee_participant_id:
         current_label = schedule.referee_participant.display_name
+    elif schedule.referee_source_type:
+        resolved = resolve_schedule_referee(schedule)
+        current_label = (
+            resolved.display_name if resolved
+            else schedule.referee_source_label
+        )
     elif schedule.referee_note:
         current_label = schedule.referee_note
+
+    current_source = None
+    if schedule.referee_source_type:
+        resolved = resolve_schedule_referee(schedule)
+        current_source = {
+            "source_type": schedule.referee_source_type,
+            "stage_id": schedule.referee_source_stage_id,
+            "group_id": schedule.referee_source_group_id,
+            "rank": schedule.referee_source_rank,
+            "match_id": schedule.referee_source_match_id,
+            "result": schedule.referee_source_result,
+            "label": schedule.referee_source_label,
+            "resolved_label": resolved.display_name if resolved else None,
+        }
 
     return JsonResponse({
         "success": True,
         "match_label": match_label,
+        "available_stages": available_stages,
         "candidates": [
             {"id": p.id, "label": p.display_name}
             for p in candidates
@@ -3488,8 +3526,117 @@ def schedule_referee_candidates_api(request, code, schedule_id):
             "referee_participant_id": schedule.referee_participant_id,
             "referee_note": schedule.referee_note,
             "label": current_label,
+            "source": current_source,
         },
     })
+
+
+def schedule_referee_source_options_api(request, code, schedule_id, stage_id):
+    """指定Scheduleの審判を進出元参照で指定する際の候補一覧を返すJSON API。"""
+
+    if request.method != "GET":
+        return JsonResponse(
+            {"success": False, "error": "GETで取得してください。"},
+            status=405,
+        )
+
+    tournament = get_object_or_404(Tournament, code=code)
+    schedule = get_object_or_404(
+        Schedule,
+        id=schedule_id,
+        schedule_block__tournament=tournament,
+    )
+
+    match = schedule.match
+    category = (
+        match.group.category if schedule.is_round_robin
+        else match.bracket.category
+    )
+    current_stage = (
+        match.group.stage if schedule.is_round_robin
+        else match.bracket.stage
+    )
+
+    stage = get_object_or_404(
+        Stage,
+        id=stage_id,
+        category=category,
+    )
+
+    if not current_stage or stage.display_order > current_stage.display_order:
+        return JsonResponse(
+            {"success": False, "error": "指定できないStageです。"},
+            status=400,
+        )
+
+    options = []
+
+    if stage.stage_type == Stage.TYPE_LEAGUE:
+        groups = list(
+            Group.objects.filter(
+                stage=stage,
+            ).annotate(
+                entry_count=Count("leagueentry"),
+            ).order_by("display_order", "name")
+        )
+        advanced_keys = set(
+            AdvancementSource.objects.filter(
+                source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+                source_group__in=groups,
+            ).values_list("source_group_id", "source_rank")
+        )
+
+        for group in groups:
+            for rank in range(1, group.entry_count + 1):
+                if (group.id, rank) in advanced_keys:
+                    continue
+
+                options.append({
+                    "source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
+                    "source_group_id": group.id,
+                    "source_rank": rank,
+                    "label": f"{group.name}－{rank}位",
+                })
+    else:
+        matches = list(
+            TournamentMatch.objects.filter(
+                bracket__stage=stage,
+            ).exclude(
+                match_code__startswith="S",
+            ).select_related(
+                "bracket",
+            ).order_by(
+                "bracket__display_order",
+                "round_number",
+                "match_number",
+            )
+        )
+        advanced_keys = set(
+            AdvancementSource.objects.filter(
+                source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+                source_match__in=matches,
+            ).values_list("source_match_id", "source_result")
+        )
+
+        for source_match in matches:
+            for result in (
+                AdvancementSource.RESULT_WINNER,
+                AdvancementSource.RESULT_LOSER,
+            ):
+                if (source_match.id, result) in advanced_keys:
+                    continue
+
+                options.append({
+                    "source_type": AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+                    "source_match_id": source_match.id,
+                    "source_result": result,
+                    "label": AdvancementSource.tournament_result_piece_label(
+                        source_match,
+                        result,
+                    ),
+                })
+
+    return JsonResponse({"success": True, "options": options})
 
 
 def set_schedule_referee_api(request, code, schedule_id):
@@ -3511,6 +3658,126 @@ def set_schedule_referee_api(request, code, schedule_id):
     action = request.POST.get("action", "set")
 
     if action == "clear":
+        schedule.referee_participant = None
+        schedule.referee_note = ""
+        schedule.referee_source_type = ""
+        schedule.referee_source_stage = None
+        schedule.referee_source_group = None
+        schedule.referee_source_rank = None
+        schedule.referee_source_match = None
+        schedule.referee_source_result = ""
+    elif action == "set_source":
+        source_type = request.POST.get("referee_source_type")
+        match = schedule.match
+        category = (
+            match.group.category if schedule.is_round_robin
+            else match.bracket.category
+        )
+        current_stage = (
+            match.group.stage if schedule.is_round_robin
+            else match.bracket.stage
+        )
+
+        if source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
+            group = get_object_or_404(
+                Group,
+                id=request.POST.get("referee_source_group_id"),
+                category=category,
+            )
+
+            try:
+                rank = int(request.POST.get("referee_source_rank"))
+            except (TypeError, ValueError):
+                return JsonResponse(
+                    {"success": False, "error": "順位の指定が不正です。"},
+                    status=400,
+                )
+
+            if (
+                not current_stage
+                or not group.stage_id
+                or group.stage.display_order > current_stage.display_order
+            ):
+                return JsonResponse(
+                    {"success": False, "error": "指定できないStageです。"},
+                    status=400,
+                )
+
+            if league_rank_advances_further(group, rank):
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": (
+                            "この枠はさらに後のStageへ進出するため、"
+                            "進出先のStageで指定してください。"
+                        ),
+                    },
+                    status=400,
+                )
+
+            schedule.referee_source_type = AdvancementSource.SOURCE_LEAGUE_RANK
+            schedule.referee_source_stage = group.stage
+            schedule.referee_source_group = group
+            schedule.referee_source_rank = rank
+            schedule.referee_source_match = None
+            schedule.referee_source_result = ""
+
+        elif source_type == AdvancementSource.SOURCE_TOURNAMENT_RESULT:
+            source_match = get_object_or_404(
+                TournamentMatch,
+                id=request.POST.get("referee_source_match_id"),
+                bracket__category=category,
+            )
+            result = request.POST.get("referee_source_result")
+
+            if result not in (
+                AdvancementSource.RESULT_WINNER,
+                AdvancementSource.RESULT_LOSER,
+            ):
+                return JsonResponse(
+                    {"success": False, "error": "勝者/敗者を指定してください。"},
+                    status=400,
+                )
+
+            match_stage = source_match.bracket.stage
+
+            if (
+                not current_stage
+                or not match_stage
+                or match_stage.display_order > current_stage.display_order
+            ):
+                return JsonResponse(
+                    {"success": False, "error": "指定できないStageです。"},
+                    status=400,
+                )
+
+            if tournament_result_advances_further(source_match, result):
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": (
+                            "この結果はさらに後のStageへ進出するため、"
+                            "進出先のStageで指定してください。"
+                        ),
+                    },
+                    status=400,
+                )
+
+            schedule.referee_source_type = (
+                AdvancementSource.SOURCE_TOURNAMENT_RESULT
+            )
+            schedule.referee_source_stage = match_stage
+            schedule.referee_source_group = None
+            schedule.referee_source_rank = None
+            schedule.referee_source_match = source_match
+            schedule.referee_source_result = result
+
+        else:
+            return JsonResponse(
+                {"success": False, "error": "不明な進出元種別です。"},
+                status=400,
+            )
+
         schedule.referee_participant = None
         schedule.referee_note = ""
     else:
@@ -3535,6 +3802,12 @@ def set_schedule_referee_api(request, code, schedule_id):
             schedule.referee_participant = None
 
         schedule.referee_note = note
+        schedule.referee_source_type = ""
+        schedule.referee_source_stage = None
+        schedule.referee_source_group = None
+        schedule.referee_source_rank = None
+        schedule.referee_source_match = None
+        schedule.referee_source_result = ""
 
     try:
         schedule.full_clean()
@@ -3549,6 +3822,12 @@ def set_schedule_referee_api(request, code, schedule_id):
     label = None
     if schedule.referee_participant_id:
         label = schedule.referee_participant.display_name
+    elif schedule.referee_source_type:
+        resolved = resolve_schedule_referee(schedule)
+        label = (
+            resolved.display_name if resolved
+            else schedule.referee_source_label
+        )
     elif schedule.referee_note:
         label = schedule.referee_note
 

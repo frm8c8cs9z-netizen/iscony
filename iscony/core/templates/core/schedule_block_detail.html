@@ -108,12 +108,13 @@
                                                 data-schedule-id="{{ cell.schedule.id }}"
                                                 data-order="{{ cell.schedule.order }}"
                                                 data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code cell.schedule.id %}"
+                                                data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code cell.schedule.id 0 %}"
                                                 data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code cell.schedule.id %}"
                                             >
                                                 <span class="schedule-slot-label">
                                                     {{ cell.label }}
                                                 </span>
-                                                {% if cell.schedule.referee_participant_id or cell.schedule.referee_note %}
+                                                {% if cell.schedule.referee_participant_id or cell.schedule.referee_note or cell.schedule.referee_source_type %}
                                                     <span class="schedule-slot-referee-badge" title="審判指定あり">審</span>
                                                 {% endif %}
                                             </div>
@@ -333,16 +334,33 @@
 
     <p class="subtle-text" id="scheduleRefereeCurrentLabel"></p>
 
-    <label>
-        参加者を検索
-        <input type="text" id="scheduleRefereeSearchInput" placeholder="名前で検索">
-    </label>
-    <ul class="schedule-referee-result-list" id="scheduleRefereeResultList"></ul>
+    <div class="schedule-referee-tabs">
+        <button type="button" class="is-active" data-referee-tab="direct">参加者から選ぶ</button>
+        <button type="button" data-referee-tab="source">進出元/結果から選ぶ</button>
+    </div>
 
-    <label>
-        自由入力メモ(本部審判、外部審判など)
-        <input type="text" id="scheduleRefereeNoteInput" placeholder="例: 本部審判">
-    </label>
+    <div id="scheduleRefereeDirectPanel">
+        <label>
+            参加者を検索
+            <input type="text" id="scheduleRefereeSearchInput" placeholder="名前で検索">
+        </label>
+        <ul class="schedule-referee-result-list" id="scheduleRefereeResultList"></ul>
+
+        <label>
+            自由入力メモ(本部審判、外部審判など)
+            <input type="text" id="scheduleRefereeNoteInput" placeholder="例: 本部審判">
+        </label>
+    </div>
+
+    <div id="scheduleRefereeSourcePanel" hidden>
+        <label>
+            対象Stage
+            <select id="scheduleRefereeStageSelect">
+                <option value="">Stageを選択してください</option>
+            </select>
+        </label>
+        <ul class="schedule-referee-result-list" id="scheduleRefereeSourceResultList"></ul>
+    </div>
 
     <div class="schedule-referee-dialog-actions">
         <button type="button" id="scheduleRefereeClearButton">指定なしにする</button>
@@ -984,6 +1002,21 @@
             "#scheduleRefereeResultList"
         );
         const noteInput = document.querySelector("#scheduleRefereeNoteInput");
+        const tabButtons = Array.from(document.querySelectorAll(
+            "[data-referee-tab]"
+        ));
+        const directPanel = document.querySelector(
+            "#scheduleRefereeDirectPanel"
+        );
+        const sourcePanel = document.querySelector(
+            "#scheduleRefereeSourcePanel"
+        );
+        const stageSelect = document.querySelector(
+            "#scheduleRefereeStageSelect"
+        );
+        const sourceResultList = document.querySelector(
+            "#scheduleRefereeSourceResultList"
+        );
         const clearButton = document.querySelector(
             "#scheduleRefereeClearButton"
         );
@@ -998,12 +1031,17 @@
 
         let candidates = [];
         let selectedCandidateId = null;
+        let availableStages = [];
+        let sourceOptions = [];
+        let selectedSourceOption = null;
+        let activeTab = "direct";
         let activeRow = null;
 
         if (
             !assignmentArea || !dialog || !targetEl || !currentLabelEl
             || !searchInput || !resultList || !noteInput || !clearButton
-            || !cancelButton || !saveButton
+            || !cancelButton || !saveButton || !directPanel || !sourcePanel
+            || !stageSelect || !sourceResultList || !tabButtons.length
         ) {
             return;
         }
@@ -1035,11 +1073,155 @@
                 );
                 item.addEventListener("click", function() {
                     selectedCandidateId = candidate.id;
+                    selectedSourceOption = null;
                     noteInput.value = "";
                     renderCandidates();
                 });
                 resultList.appendChild(item);
             });
+        }
+
+        function sourceOptionKey(option) {
+            if (!option) {
+                return "";
+            }
+            if (option.source_type === "league_rank") {
+                return [
+                    option.source_type,
+                    option.source_group_id,
+                    option.source_rank,
+                ].join(":");
+            }
+            return [
+                option.source_type,
+                option.source_match_id,
+                option.source_result,
+            ].join(":");
+        }
+
+        function currentSourceKey(source) {
+            if (!source) {
+                return "";
+            }
+            if (source.source_type === "league_rank") {
+                return [
+                    source.source_type,
+                    source.group_id,
+                    source.rank,
+                ].join(":");
+            }
+            return [
+                source.source_type,
+                source.match_id,
+                source.result,
+            ].join(":");
+        }
+
+        function switchRefereeTab(tabName) {
+            activeTab = tabName;
+            tabButtons.forEach(function(button) {
+                button.classList.toggle(
+                    "is-active",
+                    button.dataset.refereeTab === tabName
+                );
+            });
+            directPanel.hidden = tabName !== "direct";
+            sourcePanel.hidden = tabName !== "source";
+        }
+
+        function renderStageOptions(selectedStageId) {
+            stageSelect.innerHTML = "";
+
+            const defaultOption = document.createElement("option");
+            defaultOption.value = "";
+            defaultOption.textContent = "Stageを選択してください";
+            stageSelect.appendChild(defaultOption);
+
+            availableStages.forEach(function(stage) {
+                const option = document.createElement("option");
+                option.value = stage.id;
+                option.textContent = stage.name + (
+                    stage.stage_type === "league" ? " (リーグ)" : " (トーナメント)"
+                );
+                if (
+                    selectedStageId
+                    && String(stage.id) === String(selectedStageId)
+                ) {
+                    option.selected = true;
+                }
+                stageSelect.appendChild(option);
+            });
+        }
+
+        function renderSourceOptions() {
+            sourceResultList.innerHTML = "";
+
+            if (!stageSelect.value) {
+                return;
+            }
+
+            if (!sourceOptions.length) {
+                const emptyItem = document.createElement("li");
+                emptyItem.textContent = "指定できる進出元/結果はありません。";
+                sourceResultList.appendChild(emptyItem);
+                return;
+            }
+
+            sourceOptions.forEach(function(option) {
+                const item = document.createElement("li");
+                item.textContent = option.label;
+                item.dataset.sourceOptionKey = sourceOptionKey(option);
+                item.classList.toggle(
+                    "is-selected",
+                    sourceOptionKey(option) === sourceOptionKey(selectedSourceOption)
+                );
+                item.addEventListener("click", function() {
+                    selectedSourceOption = option;
+                    selectedCandidateId = null;
+                    noteInput.value = "";
+                    renderSourceOptions();
+                    renderCandidates();
+                });
+                sourceResultList.appendChild(item);
+            });
+        }
+
+        function loadSourceOptions(stageId, currentSource) {
+            if (!activeRow || !stageId) {
+                sourceOptions = [];
+                selectedSourceOption = null;
+                renderSourceOptions();
+                return;
+            }
+
+            const template = activeRow.dataset.refereeSourceOptionsUrlTemplate;
+            const url = template.replace("/0/", "/" + stageId + "/");
+            sourceResultList.innerHTML = "";
+
+            fetch(url, {
+                headers: {"X-Requested-With": "XMLHttpRequest"},
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(result.data.error || "読み込みに失敗しました。");
+                        return;
+                    }
+
+                    sourceOptions = result.data.options || [];
+                    if (currentSource) {
+                        const key = currentSourceKey(currentSource);
+                        selectedSourceOption = sourceOptions.find(
+                            function(option) {
+                                return sourceOptionKey(option) === key;
+                            }
+                        ) || null;
+                    }
+                    renderSourceOptions();
+                })
+                .catch(function() {
+                    alert("読み込みに失敗しました。");
+                });
         }
 
         function parseJsonResponse(response) {
@@ -1086,6 +1268,12 @@
             searchInput.value = "";
             noteInput.value = "";
             resultList.innerHTML = "";
+            availableStages = [];
+            sourceOptions = [];
+            selectedSourceOption = null;
+            stageSelect.value = "";
+            sourceResultList.innerHTML = "";
+            switchRefereeTab("direct");
             dialog.showModal();
 
             fetch(row.dataset.refereeCandidatesUrl, {
@@ -1101,7 +1289,18 @@
 
                     const data = result.data;
                     targetEl.textContent = data.match_label;
-                    if (data.current && data.current.label) {
+                    if (
+                        data.current
+                        && data.current.source
+                    ) {
+                        const source = data.current.source;
+                        const sourceLabel = (
+                            source.resolved_label || source.label
+                        );
+                        currentLabelEl.textContent = source.resolved_label
+                            ? "現在の審判: " + sourceLabel
+                            : "現在の審判: " + sourceLabel + "(未確定)";
+                    } else if (data.current && data.current.label) {
                         currentLabelEl.textContent = (
                             "現在の審判: " + data.current.label
                         );
@@ -1117,6 +1316,20 @@
                     noteInput.value = (
                         data.current && data.current.referee_note
                     ) ? data.current.referee_note : "";
+                    availableStages = data.available_stages || [];
+                    const currentSource = data.current
+                        ? data.current.source
+                        : null;
+                    renderStageOptions(
+                        currentSource ? currentSource.stage_id : null
+                    );
+                    if (currentSource && currentSource.stage_id) {
+                        switchRefereeTab("source");
+                        loadSourceOptions(
+                            currentSource.stage_id,
+                            currentSource
+                        );
+                    }
                     renderCandidates();
                 })
                 .catch(function() {
@@ -1140,17 +1353,59 @@
             openDialog(row);
         });
 
+        tabButtons.forEach(function(button) {
+            button.addEventListener("click", function() {
+                switchRefereeTab(button.dataset.refereeTab);
+            });
+        });
+
         searchInput.addEventListener("input", renderCandidates);
         noteInput.addEventListener("input", function() {
             if (noteInput.value.trim()) {
                 selectedCandidateId = null;
+                selectedSourceOption = null;
                 renderCandidates();
+                renderSourceOptions();
             }
+        });
+        stageSelect.addEventListener("change", function() {
+            selectedSourceOption = null;
+            loadSourceOptions(stageSelect.value, null);
         });
 
         saveButton.addEventListener("click", function() {
             const body = new URLSearchParams();
-            if (selectedCandidateId) {
+            if (activeTab === "source") {
+                if (!selectedSourceOption) {
+                    alert("進出元/結果を選択してください。");
+                    return;
+                }
+
+                body.append("action", "set_source");
+                body.append(
+                    "referee_source_type",
+                    selectedSourceOption.source_type
+                );
+                if (selectedSourceOption.source_type === "league_rank") {
+                    body.append(
+                        "referee_source_group_id",
+                        selectedSourceOption.source_group_id
+                    );
+                    body.append(
+                        "referee_source_rank",
+                        selectedSourceOption.source_rank
+                    );
+                } else {
+                    body.append(
+                        "referee_source_match_id",
+                        selectedSourceOption.source_match_id
+                    );
+                    body.append(
+                        "referee_source_result",
+                        selectedSourceOption.source_result
+                    );
+                }
+            } else if (selectedCandidateId) {
                 body.append("referee_participant_id", selectedCandidateId);
             } else {
                 body.append("referee_note", noteInput.value.trim());

@@ -9318,11 +9318,12 @@ class ScheduleRefereeApiTests(TestCase):
             category=self.category,
             name="予選リーグ",
             stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
         )
         self.group = Group.objects.create(
             category=self.category,
             stage=self.stage,
-            name="A",
+            name="Aグループ",
         )
         self.block = ScheduleBlock.objects.create(
             tournament=self.tournament,
@@ -9377,6 +9378,74 @@ class ScheduleRefereeApiTests(TestCase):
             },
         )
 
+    def _source_options_url(self, stage):
+        return reverse(
+            "schedule_referee_source_options_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_id": self.schedule.id,
+                "stage_id": stage.id,
+            },
+        )
+
+    def _create_tournament_stage_with_match(
+            self,
+            *,
+            display_order=1,
+            match_code="M1"):
+        stage = Stage.objects.create(
+            category=self.category,
+            name=f"決勝トーナメント{display_order}",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=display_order,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=stage,
+            name=f"本戦{display_order}",
+        )
+        entry1 = create_tournament_entry(
+            bracket=bracket,
+            pair_code=f"T{display_order}A",
+            display_order=1,
+            player1_name="本戦1A",
+            player2_name="本戦1B",
+        )
+        entry2 = create_tournament_entry(
+            bracket=bracket,
+            pair_code=f"T{display_order}B",
+            display_order=2,
+            player1_name="本戦2A",
+            player2_name="本戦2B",
+        )
+        match = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code=match_code,
+            pair1=entry1,
+            pair2=entry2,
+        )
+        return stage, bracket, match
+
+    def _create_advancement_target_entry(self, pair_code="ADV"):
+        stage = Stage.objects.create(
+            category=self.category,
+            name=f"進出先{pair_code}",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=10,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=stage,
+            name=f"進出先{pair_code}",
+        )
+        return create_tournament_entry(
+            bracket=bracket,
+            pair_code=pair_code,
+            display_order=1,
+        )
+
     def test_candidates_api_excludes_match_participants(self):
         response = self.client.get(self._candidates_url())
 
@@ -9391,8 +9460,124 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertNotIn(self.pair2.participant_id, candidate_ids)
         self.assertIn(self.referee_entry.participant_id, candidate_ids)
 
+    def test_candidates_api_includes_available_stages_up_to_current_stage(self):
+        previous_stage = Stage.objects.create(
+            category=self.category,
+            name="前段階",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        later_stage = Stage.objects.create(
+            category=self.category,
+            name="後段階",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=3,
+        )
+
+        response = self.client.get(self._candidates_url())
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        stage_ids = {
+            stage["id"]
+            for stage in payload["available_stages"]
+        }
+        self.assertIn(previous_stage.id, stage_ids)
+        self.assertIn(self.stage.id, stage_ids)
+        self.assertNotIn(later_stage.id, stage_ids)
+
     def test_candidates_api_rejects_non_get(self):
         response = self.client.post(self._candidates_url())
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(
+            response.json(),
+            {"success": False, "error": "GETで取得してください。"},
+        )
+
+    def test_source_options_api_includes_unused_league_ranks(self):
+        response = self.client.get(self._source_options_url(self.stage))
+
+        self.assertEqual(response.status_code, 200)
+        labels = {
+            option["label"]
+            for option in response.json()["options"]
+        }
+        self.assertIn("Aグループ－1位", labels)
+        self.assertIn("Aグループ－2位", labels)
+
+    def test_source_options_api_excludes_advanced_league_rank(self):
+        AdvancementSource.objects.create(
+            target_tournament_entry=self._create_advancement_target_entry(),
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+
+        response = self.client.get(self._source_options_url(self.stage))
+
+        self.assertEqual(response.status_code, 200)
+        labels = {
+            option["label"]
+            for option in response.json()["options"]
+        }
+        self.assertNotIn("Aグループ－1位", labels)
+        self.assertIn("Aグループ－2位", labels)
+
+    def test_source_options_api_includes_unused_tournament_results(self):
+        tournament_stage, bracket, source_match = (
+            self._create_tournament_stage_with_match()
+        )
+        target_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="ADV-L",
+            display_order=4,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            source_stage=tournament_stage,
+            source_match=source_match,
+            source_result=AdvancementSource.RESULT_WINNER,
+        )
+
+        response = self.client.get(self._source_options_url(tournament_stage))
+
+        self.assertEqual(response.status_code, 200)
+        options = response.json()["options"]
+        keys = {
+            (option["source_match_id"], option["source_result"])
+            for option in options
+        }
+        self.assertNotIn(
+            (source_match.id, AdvancementSource.RESULT_WINNER),
+            keys,
+        )
+        self.assertIn(
+            (source_match.id, AdvancementSource.RESULT_LOSER),
+            keys,
+        )
+
+    def test_source_options_api_rejects_stage_after_current_stage(self):
+        later_stage = Stage.objects.create(
+            category=self.category,
+            name="後段階",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=3,
+        )
+
+        response = self.client.get(self._source_options_url(later_stage))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json(),
+            {"success": False, "error": "指定できないStageです。"},
+        )
+
+    def test_source_options_api_rejects_non_get(self):
+        response = self.client.post(self._source_options_url(self.stage))
 
         self.assertEqual(response.status_code, 405)
         self.assertEqual(
@@ -9439,6 +9624,171 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertEqual(
             response.json(),
             {"success": True, "referee_label": "本部審判"},
+        )
+
+    def test_set_referee_api_sets_unresolved_league_rank_source(self):
+        response = self.client.post(
+            self._set_url(),
+            {
+                "action": "set_source",
+                "referee_source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
+                "referee_source_group_id": str(self.group.id),
+                "referee_source_rank": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.schedule.refresh_from_db()
+        self.assertEqual(
+            self.schedule.referee_source_type,
+            AdvancementSource.SOURCE_LEAGUE_RANK,
+        )
+        self.assertEqual(self.schedule.referee_source_group_id, self.group.id)
+        self.assertEqual(self.schedule.referee_source_rank, 1)
+        self.assertIsNone(self.schedule.referee_participant_id)
+        self.assertEqual(self.schedule.referee_note, "")
+        self.assertEqual(
+            response.json(),
+            {"success": True, "referee_label": "Aグループ－1位"},
+        )
+
+    def test_set_referee_api_uses_resolved_league_rank_label(self):
+        self.match.pair1_games = 4
+        self.match.pair2_games = 1
+        self.match.save()
+        GroupRanking.objects.create(
+            group=self.group,
+            pair=self.pair1,
+            rank=1,
+        )
+
+        response = self.client.post(
+            self._set_url(),
+            {
+                "action": "set_source",
+                "referee_source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
+                "referee_source_group_id": str(self.group.id),
+                "referee_source_rank": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"success": True, "referee_label": self.pair1.display_name},
+        )
+
+    def test_set_referee_api_rejects_league_rank_advancing_further(self):
+        AdvancementSource.objects.create(
+            target_tournament_entry=self._create_advancement_target_entry(),
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+
+        response = self.client.post(
+            self._set_url(),
+            {
+                "action": "set_source",
+                "referee_source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
+                "referee_source_group_id": str(self.group.id),
+                "referee_source_rank": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.schedule.refresh_from_db()
+        self.assertEqual(self.schedule.referee_source_type, "")
+        self.assertEqual(
+            response.json(),
+            {
+                "success": False,
+                "error": (
+                    "この枠はさらに後のStageへ進出するため、"
+                    "進出先のStageで指定してください。"
+                ),
+            },
+        )
+
+    def test_set_referee_api_rejects_source_after_current_stage(self):
+        later_stage = Stage.objects.create(
+            category=self.category,
+            name="後段階",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=3,
+        )
+        later_group = Group.objects.create(
+            category=self.category,
+            stage=later_stage,
+            name="後段階A",
+        )
+
+        response = self.client.post(
+            self._set_url(),
+            {
+                "action": "set_source",
+                "referee_source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
+                "referee_source_group_id": str(later_group.id),
+                "referee_source_rank": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.schedule.refresh_from_db()
+        self.assertEqual(self.schedule.referee_source_type, "")
+        self.assertEqual(
+            response.json(),
+            {"success": False, "error": "指定できないStageです。"},
+        )
+
+    def test_set_referee_api_overwrites_source_and_direct_referee(self):
+        response = self.client.post(
+            self._set_url(),
+            {
+                "action": "set_source",
+                "referee_source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
+                "referee_source_group_id": str(self.group.id),
+                "referee_source_rank": "1",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            self._set_url(),
+            {
+                "referee_participant_id": str(
+                    self.referee_entry.participant_id
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.schedule.refresh_from_db()
+        self.assertEqual(
+            self.schedule.referee_participant_id,
+            self.referee_entry.participant_id,
+        )
+        self.assertEqual(self.schedule.referee_source_type, "")
+        self.assertIsNone(self.schedule.referee_source_group_id)
+        self.assertIsNone(self.schedule.referee_source_rank)
+
+        response = self.client.post(
+            self._set_url(),
+            {
+                "action": "set_source",
+                "referee_source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
+                "referee_source_group_id": str(self.group.id),
+                "referee_source_rank": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.schedule.refresh_from_db()
+        self.assertIsNone(self.schedule.referee_participant_id)
+        self.assertEqual(
+            self.schedule.referee_source_type,
+            AdvancementSource.SOURCE_LEAGUE_RANK,
         )
 
     def test_set_referee_api_rejects_match_participant(self):

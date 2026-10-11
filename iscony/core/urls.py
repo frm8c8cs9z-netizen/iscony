@@ -587,6 +587,15 @@ urlpatterns = [
     ),
 
     path(
+        (
+            "tournament/<str:code>/schedule/<int:schedule_id>/"
+            "referee-source-options/<int:stage_id>/"
+        ),
+        dashboard.schedule_referee_source_options_api,
+        name="schedule_referee_source_options_api",
+    ),
+
+    path(
         "tournament/<str:code>/schedule/<int:schedule_id>/referee/",
         dashboard.set_schedule_referee_api,
         name="set_schedule_referee_api",
