@@ -479,53 +479,126 @@ def clone_tournament_without_results(source, *, name, code):
     return clone
 
 
-def _resolved_advancement_entry(source):
-    """進出元設定から、確定した参加枠を1件取得する。"""
+def _resolve_rank_or_result_reference(
+        source_type,
+        source_group,
+        source_rank,
+        source_match,
+        source_result,
+        *,
+        label):
+    """
+    リーグ順位(source_group+source_rank)またはトーナメント結果
+    (source_match+source_result)の参照から、確定した参加枠を1件取得する。
+    まだ確定していなければ ValidationError を送出する。
+    """
 
-    if source.source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
+    if source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
         if RoundRobinMatch.objects.filter(
-            group=source.source_group,
+            group=source_group,
             counts_for_ranking=True,
         ).filter(
             Q(pair1_games__isnull=True)
             | Q(pair2_games__isnull=True)
         ).exists():
             raise ValidationError(
-                f"{source.label}: 順位計算対象の試合が完了していません。"
+                f"{label}: 順位計算対象の試合が完了していません。"
             )
 
         rankings = GroupRanking.objects.filter(
-            group=source.source_group,
-            rank=source.source_rank,
+            group=source_group,
+            rank=source_rank,
         ).select_related("pair")
 
         if rankings.count() != 1:
             raise ValidationError(
-                f"{source.label}: {source.source_rank}位を1ペアに確定してください。"
+                f"{label}: {source_rank}位を1ペアに確定してください。"
             )
 
         return rankings.first().pair
 
-    if source.source_type == AdvancementSource.SOURCE_TOURNAMENT_RESULT:
-        match = source.source_match
+    if source_type == AdvancementSource.SOURCE_TOURNAMENT_RESULT:
+        match = source_match
 
         if not match or not match.winner:
             raise ValidationError(
-                f"{source.label}: トーナメント結果が確定していません。"
+                f"{label}: トーナメント結果が確定していません。"
             )
 
-        if source.source_result == AdvancementSource.RESULT_WINNER:
+        if source_result == AdvancementSource.RESULT_WINNER:
             return match.winner
 
-        if source.source_result == AdvancementSource.RESULT_LOSER:
+        if source_result == AdvancementSource.RESULT_LOSER:
             if not match.pair1 or not match.pair2:
                 raise ValidationError(
-                    f"{source.label}: 対戦ペアが確定していません。"
+                    f"{label}: 対戦ペアが確定していません。"
                 )
 
             return match.pair2 if match.winner_id == match.pair1_id else match.pair1
 
-    raise ValidationError(f"{source.label}: 進出元設定を確認してください。")
+    raise ValidationError(f"{label}: 進出元設定を確認してください。")
+
+
+def _resolved_advancement_entry(source):
+    """進出元設定から、確定した参加枠を1件取得する。"""
+
+    return _resolve_rank_or_result_reference(
+        source.source_type,
+        source.source_group,
+        source.source_rank,
+        source.source_match,
+        source.source_result,
+        label=source.label,
+    )
+
+
+def resolve_schedule_referee(schedule):
+    """
+    Scheduleの審判指定を解決する。
+    - 参加者が直接指定されていれば、その参加者を返す。
+    - 進出元参照が指定されていて、まだ結果が確定していなければ None を返す
+      (エラーにはしない。審判についてはこれが通常の状態のため)。
+    - 進出元参照が指定されていて結果が確定していれば、解決した参加者を返す。
+    - どちらも指定されていなければ None を返す。
+    """
+
+    if schedule.referee_participant_id:
+        return schedule.referee_participant
+
+    if schedule.referee_source_type:
+        try:
+            return _resolve_rank_or_result_reference(
+                schedule.referee_source_type,
+                schedule.referee_source_group,
+                schedule.referee_source_rank,
+                schedule.referee_source_match,
+                schedule.referee_source_result,
+                label=schedule.referee_source_label,
+            )
+        except ValidationError:
+            return None
+
+    return None
+
+
+def league_rank_advances_further(group, rank):
+    """このグループの順位を進出元として参照するAdvancementSourceが存在するか。"""
+
+    return AdvancementSource.objects.filter(
+        source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+        source_group=group,
+        source_rank=rank,
+    ).exists()
+
+
+def tournament_result_advances_further(match, result):
+    """このマッチの勝敗を進出元として参照するAdvancementSourceが存在するか。"""
+
+    return AdvancementSource.objects.filter(
+        source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+        source_match=match,
+        source_result=result,
+    ).exists()
 
 
 def _target_has_score(target):

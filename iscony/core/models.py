@@ -2304,6 +2304,60 @@ class Schedule(models.Model):
         default=False
     )
 
+    referee_participant = models.ForeignKey(
+        Participant,
+        null=True,
+        blank=True,
+        related_name="refereed_schedules",
+        on_delete=models.SET_NULL,
+    )
+
+    referee_note = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    referee_source_type = models.CharField(
+        max_length=30,
+        choices=AdvancementSource.SOURCE_TYPE_CHOICES,
+        blank=True,
+    )
+
+    referee_source_stage = models.ForeignKey(
+        Stage,
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.SET_NULL,
+    )
+
+    referee_source_group = models.ForeignKey(
+        Group,
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.SET_NULL,
+    )
+
+    referee_source_rank = models.IntegerField(
+        null=True,
+        blank=True,
+    )
+
+    referee_source_match = models.ForeignKey(
+        TournamentMatch,
+        null=True,
+        blank=True,
+        related_name="+",
+        on_delete=models.SET_NULL,
+    )
+
+    referee_source_result = models.CharField(
+        max_length=20,
+        choices=AdvancementSource.SOURCE_RESULT_CHOICES,
+        blank=True,
+    )
+
     class Meta:
         unique_together = (
             "schedule_block",
@@ -2335,6 +2389,11 @@ class Schedule(models.Model):
         if not self.round_robin_match and not self.tournament_match:
             raise ValidationError(
                 "リーグ試合またはトーナメント試合のどちらかを指定してください。"
+            )
+
+        if self.referee_participant_id and self.referee_source_type:
+            raise ValidationError(
+                "審判は参加者の直接指定と進出元参照のどちらか一方にしてください。"
             )
 
     def save(self, *args, **kwargs):
@@ -2387,6 +2446,28 @@ class Schedule(models.Model):
             and self.round_robin_match.result_type
             == RoundRobinMatch.RESULT_RETIREMENT
         )
+
+    @property
+    def referee_source_label(self):
+        if self.referee_source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
+            if not self.referee_source_group_id or not self.referee_source_rank:
+                return "未定"
+
+            return (
+                f"{self.referee_source_group.name}"
+                f"－{self.referee_source_rank}位"
+            )
+
+        if self.referee_source_type == AdvancementSource.SOURCE_TOURNAMENT_RESULT:
+            if not self.referee_source_match_id or not self.referee_source_result:
+                return "未定"
+
+            return AdvancementSource.tournament_result_piece_label(
+                self.referee_source_match,
+                self.referee_source_result,
+            )
+
+        return "未定"
 
     def __str__(self):
         return (

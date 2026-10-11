@@ -109,11 +109,14 @@ from .services import (
     move_tournament_entry_advancement_piece,
     move_tournament_entry_participant,
     delete_tournament_score,
+    league_rank_advances_further,
+    resolve_schedule_referee,
     save_round_robin_score,
     save_tournament_score,
     save_tournament_retirement,
     sorted_round_robin_matches_for_group,
     swap_advancement_sources,
+    tournament_result_advances_further,
     tournament_matches_in_round1_position_range,
     undo_schedule_replacement,
     unassign_league_entry_advancement_piece,
@@ -2956,6 +2959,269 @@ class AdvancementSourceModelTests(TestCase):
 
         with self.assertRaises(ValidationError):
             source.full_clean()
+
+
+class ScheduleRefereeTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="指定審判テスト大会",
+            code="REF",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="Aグループ",
+        )
+        self.league_entry_1 = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="L1",
+            display_order=1,
+            player1_name="予選1A",
+            player2_name="予選1B",
+        )
+        self.league_entry_2 = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="L2",
+            display_order=2,
+            player1_name="予選2A",
+            player2_name="予選2B",
+        )
+        self.round_robin_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entry_1,
+            pair2=self.league_entry_2,
+        )
+        self.tournament_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.tournament_stage,
+            name="本戦",
+        )
+        self.tournament_entry_1 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="本戦1A",
+            player2_name="本戦1B",
+        )
+        self.tournament_entry_2 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="T2",
+            display_order=2,
+            player1_name="本戦2A",
+            player2_name="本戦2B",
+        )
+        self.tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.tournament_entry_1,
+            pair2=self.tournament_entry_2,
+        )
+        self.court = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.block = ScheduleBlock.get_default(self.tournament)
+
+    def _schedule(self, **kwargs):
+        defaults = {
+            "schedule_block": self.block,
+            "court": self.court,
+            "order": 1,
+            "round_robin_match": self.round_robin_match,
+        }
+        defaults.update(kwargs)
+        return Schedule(**defaults)
+
+    def test_clean_rejects_participant_and_source_together(self):
+        schedule = self._schedule(
+            referee_participant=self.league_entry_1.participant,
+            referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=self.group,
+            referee_source_rank=1,
+        )
+
+        with self.assertRaises(ValidationError):
+            schedule.full_clean()
+
+    def test_resolve_schedule_referee_returns_direct_participant(self):
+        schedule = self._schedule(
+            referee_participant=self.league_entry_1.participant,
+        )
+
+        self.assertEqual(
+            resolve_schedule_referee(schedule),
+            self.league_entry_1.participant,
+        )
+
+    def test_resolve_schedule_referee_returns_none_for_unresolved_league_rank(self):
+        schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=self.group,
+            referee_source_rank=1,
+        )
+
+        self.assertIsNone(resolve_schedule_referee(schedule))
+
+    def test_resolve_schedule_referee_returns_resolved_league_rank(self):
+        self.round_robin_match.pair1_games = 4
+        self.round_robin_match.pair2_games = 1
+        self.round_robin_match.save()
+        GroupRanking.objects.create(
+            group=self.group,
+            pair=self.league_entry_1,
+            rank=1,
+        )
+        schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=self.group,
+            referee_source_rank=1,
+        )
+
+        self.assertEqual(
+            resolve_schedule_referee(schedule),
+            self.league_entry_1,
+        )
+
+    def test_resolve_schedule_referee_returns_none_for_unresolved_tournament_result(self):
+        schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            referee_source_match=self.tournament_match,
+            referee_source_result=AdvancementSource.RESULT_WINNER,
+        )
+
+        self.assertIsNone(resolve_schedule_referee(schedule))
+
+    def test_resolve_schedule_referee_returns_resolved_tournament_winner_and_loser(self):
+        self.tournament_match.winner = self.tournament_entry_1
+        self.tournament_match.save()
+        winner_schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            referee_source_match=self.tournament_match,
+            referee_source_result=AdvancementSource.RESULT_WINNER,
+        )
+        loser_schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            referee_source_match=self.tournament_match,
+            referee_source_result=AdvancementSource.RESULT_LOSER,
+        )
+
+        self.assertEqual(
+            resolve_schedule_referee(winner_schedule),
+            self.tournament_entry_1,
+        )
+        self.assertEqual(
+            resolve_schedule_referee(loser_schedule),
+            self.tournament_entry_2,
+        )
+
+    def test_resolve_schedule_referee_returns_none_without_referee_setting(self):
+        self.assertIsNone(resolve_schedule_referee(self._schedule()))
+
+    def test_referee_source_label_formats_league_rank(self):
+        schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=self.group,
+            referee_source_rank=1,
+        )
+
+        self.assertEqual(schedule.referee_source_label, "Aグループ－1位")
+
+    def test_referee_source_label_formats_tournament_result(self):
+        schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            referee_source_match=self.tournament_match,
+            referee_source_result=AdvancementSource.RESULT_WINNER,
+        )
+
+        self.assertEqual(
+            schedule.referee_source_label,
+            AdvancementSource.tournament_result_piece_label(
+                self.tournament_match,
+                AdvancementSource.RESULT_WINNER,
+            ),
+        )
+
+    def test_referee_source_label_returns_pending_for_missing_reference(self):
+        self.assertEqual(self._schedule().referee_source_label, "未定")
+        self.assertEqual(
+            self._schedule(
+                referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+                referee_source_group=self.group,
+            ).referee_source_label,
+            "未定",
+        )
+        self.assertEqual(
+            self._schedule(
+                referee_source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+                referee_source_match=self.tournament_match,
+            ).referee_source_label,
+            "未定",
+        )
+
+    def test_league_rank_advances_further(self):
+        target_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="T3",
+            display_order=3,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage,
+            source_group=self.group,
+            source_rank=1,
+        )
+
+        self.assertTrue(league_rank_advances_further(self.group, 1))
+        self.assertFalse(league_rank_advances_further(self.group, 2))
+
+    def test_tournament_result_advances_further(self):
+        target_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=self.group,
+            pair_code="L3",
+            display_order=3,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=target_entry,
+            source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            source_match=self.tournament_match,
+            source_result=AdvancementSource.RESULT_WINNER,
+        )
+
+        self.assertTrue(
+            tournament_result_advances_further(
+                self.tournament_match,
+                AdvancementSource.RESULT_WINNER,
+            )
+        )
+        self.assertFalse(
+            tournament_result_advances_further(
+                self.tournament_match,
+                AdvancementSource.RESULT_LOSER,
+            )
+        )
 
 
 class AdvancementPieceServiceTests(TestCase):
