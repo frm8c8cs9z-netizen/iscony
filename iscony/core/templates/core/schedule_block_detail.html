@@ -1427,10 +1427,24 @@
                     candidates = data.candidates || [];
                     refereeGroups = data.groups || [];
                     ownGroupId = data.own_group_id || null;
-                    selectedGroupId = ownGroupId;
                     selectedCandidateId = data.current
                         ? data.current.referee_participant_id
                         : null;
+                    if (selectedCandidateId) {
+                        const currentCandidate = candidates.find(
+                            function(candidate) {
+                                return (
+                                    String(candidate.id)
+                                    === String(selectedCandidateId)
+                                );
+                            }
+                        );
+                        selectedGroupId = currentCandidate
+                            ? currentCandidate.group_id
+                            : ownGroupId;
+                    } else {
+                        selectedGroupId = ownGroupId;
+                    }
                     noteInput.value = (
                         data.current && data.current.referee_note
                     ) ? data.current.referee_note : "";
