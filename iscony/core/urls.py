@@ -602,6 +602,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/maintenance/schedule/referee-conflicts/",
+        dashboard.schedule_referee_conflicts_view,
+        name="schedule_referee_conflicts_view",
+    ),
+
+    path(
         (
             "tournament/<str:code>/schedule-block/<int:schedule_block_id>/"
             "court/<int:court_id>/unassign-range/"

@@ -112,6 +112,7 @@ from .services import (
     delete_tournament_score,
     league_rank_advances_further,
     resolve_schedule_referee,
+    schedule_referee_key,
     save_round_robin_score,
     save_tournament_score,
     save_tournament_retirement,
@@ -3138,6 +3139,53 @@ class ScheduleRefereeTests(TestCase):
 
     def test_resolve_schedule_referee_returns_none_without_referee_setting(self):
         self.assertIsNone(resolve_schedule_referee(self._schedule()))
+
+    def test_schedule_referee_key_normalizes_direct_and_resolved_source(self):
+        self.round_robin_match.pair1_games = 4
+        self.round_robin_match.pair2_games = 1
+        self.round_robin_match.save()
+        GroupRanking.objects.create(
+            group=self.group,
+            pair=self.league_entry_1,
+            rank=1,
+        )
+        direct_schedule = self._schedule(
+            referee_participant=self.league_entry_1.participant,
+        )
+        source_schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=self.group,
+            referee_source_rank=1,
+        )
+
+        self.assertEqual(
+            schedule_referee_key(direct_schedule),
+            ("participant", self.league_entry_1.participant_id),
+        )
+        self.assertEqual(
+            schedule_referee_key(source_schedule),
+            ("participant", self.league_entry_1.participant_id),
+        )
+
+    def test_schedule_referee_key_returns_source_key_for_unresolved_source(self):
+        schedule = self._schedule(
+            referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=self.group,
+            referee_source_rank=1,
+        )
+
+        self.assertEqual(
+            schedule_referee_key(schedule),
+            (
+                "source",
+                AdvancementSource.SOURCE_LEAGUE_RANK,
+                self.group.id,
+                1,
+            ),
+        )
+
+    def test_schedule_referee_key_returns_none_without_referee_setting(self):
+        self.assertIsNone(schedule_referee_key(self._schedule()))
 
     def test_referee_source_label_formats_league_rank(self):
         schedule = self._schedule(
@@ -9387,6 +9435,11 @@ class ScheduleRefereeApiTests(TestCase):
             name="1コート",
             display_order=1,
         )
+        self.court2 = Court.objects.create(
+            tournament=self.tournament,
+            name="2コート",
+            display_order=2,
+        )
         self.pair1 = self._create_entry("1", "出場1A", "出場1B", 1)
         self.pair2 = self._create_entry("2", "出場2A", "出場2B", 2)
         self.referee_entry = self._create_entry("3", "審判A", "審判B", 3)
@@ -9410,6 +9463,19 @@ class ScheduleRefereeApiTests(TestCase):
             display_order=order,
             player1_name=player1_name,
             player2_name=player2_name,
+        )
+
+    def _create_schedule(self, court, order, pair1, pair2):
+        match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=pair1,
+            pair2=pair2,
+        )
+        return Schedule.objects.create(
+            schedule_block=self.block,
+            court=court,
+            order=order,
+            round_robin_match=match,
         )
 
     def _candidates_url(self):
@@ -9640,6 +9706,38 @@ class ScheduleRefereeApiTests(TestCase):
             flag_by_candidate_id[self.referee_entry.participant_id]
         )
 
+    def test_candidates_api_marks_duplicate_referee_on_same_order(self):
+        other_pair1 = self._create_entry("4", "別試合1A", "別試合1B", 4)
+        other_pair2 = self._create_entry("5", "別試合2A", "別試合2B", 5)
+        unrelated_referee = self._create_entry("6", "別審判A", "別審判B", 6)
+        other_schedule = self._create_schedule(
+            self.court2,
+            self.schedule.order,
+            other_pair1,
+            other_pair2,
+        )
+        other_schedule.referee_participant = self.referee_entry.participant
+        other_schedule.save()
+
+        response = self.client.get(self._candidates_url())
+
+        self.assertEqual(response.status_code, 200)
+        candidates = {
+            candidate["id"]: candidate
+            for candidate in response.json()["candidates"]
+        }
+        self.assertEqual(
+            candidates[self.referee_entry.participant_id][
+                "duplicate_referee_court_name"
+            ],
+            "2コート",
+        )
+        self.assertIsNone(
+            candidates[unrelated_referee.participant_id][
+                "duplicate_referee_court_name"
+            ]
+        )
+
     def test_candidates_api_rejects_non_get(self):
         response = self.client.post(self._candidates_url())
 
@@ -9678,6 +9776,36 @@ class ScheduleRefereeApiTests(TestCase):
         }
         self.assertNotIn("Aグループ－1位", labels)
         self.assertIn("Aグループ－2位", labels)
+
+    def test_source_options_api_marks_duplicate_referee_source(self):
+        other_pair1 = self._create_entry("4", "別試合1A", "別試合1B", 4)
+        other_pair2 = self._create_entry("5", "別試合2A", "別試合2B", 5)
+        other_schedule = self._create_schedule(
+            self.court2,
+            self.schedule.order,
+            other_pair1,
+            other_pair2,
+        )
+        other_schedule.referee_source_type = (
+            AdvancementSource.SOURCE_LEAGUE_RANK
+        )
+        other_schedule.referee_source_stage = self.stage
+        other_schedule.referee_source_group = self.group
+        other_schedule.referee_source_rank = 1
+        other_schedule.save()
+
+        response = self.client.get(self._source_options_url(self.stage))
+
+        self.assertEqual(response.status_code, 200)
+        options = {
+            option["source_rank"]: option
+            for option in response.json()["options"]
+        }
+        self.assertEqual(
+            options[1]["duplicate_referee_court_name"],
+            "2コート",
+        )
+        self.assertIsNone(options[2]["duplicate_referee_court_name"])
 
     def test_source_options_api_includes_unused_tournament_results(self):
         tournament_stage, bracket, source_match = (
@@ -9994,6 +10122,53 @@ class ScheduleRefereeApiTests(TestCase):
             response.json(),
             {"success": False, "error": "POSTで送信してください。"},
         )
+
+    def test_referee_conflicts_view_lists_duplicate_referees(self):
+        other_pair1 = self._create_entry("4", "別試合1A", "別試合1B", 4)
+        other_pair2 = self._create_entry("5", "別試合2A", "別試合2B", 5)
+        other_schedule = self._create_schedule(
+            self.court2,
+            self.schedule.order,
+            other_pair1,
+            other_pair2,
+        )
+        self.schedule.referee_participant = self.referee_entry.participant
+        self.schedule.save()
+        other_schedule.referee_participant = self.referee_entry.participant
+        other_schedule.save()
+
+        response = self.client.get(
+            reverse(
+                "schedule_referee_conflicts_view",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "審判重複チェック")
+        self.assertContains(response, self.referee_entry.participant.code)
+        self.assertContains(
+            response,
+            self.referee_entry.participant.display_name,
+        )
+        self.assertContains(response, "1コート")
+        self.assertContains(response, "2コート")
+        self.assertContains(response, f"#schedule-{self.schedule.id}")
+        self.assertContains(response, f"#schedule-{other_schedule.id}")
+
+    def test_referee_conflicts_view_shows_empty_message_without_duplicates(self):
+        self.schedule.referee_participant = self.referee_entry.participant
+        self.schedule.save()
+
+        response = self.client.get(
+            reverse(
+                "schedule_referee_conflicts_view",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "重複している審判指定はありません。")
 
 
 class DayOfRefereeTests(TestCase):

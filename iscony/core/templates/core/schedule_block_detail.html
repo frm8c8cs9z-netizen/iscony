@@ -4,6 +4,12 @@
 
 <h2>{{ tournament.name }} {{ schedule_block.name }}</h2>
 
+<p>
+    <a href="{% url 'schedule_referee_conflicts_view' tournament.code %}">
+        審判重複チェック
+    </a>
+</p>
+
 <div class="schedule-sticky-controls">
     <div class="schedule-block-tabs" id="scheduleBlockTabs">
         {% for tab_block in tournament_schedule_blocks %}
@@ -341,6 +347,8 @@
     <h4 id="scheduleRefereeDialogTarget"></h4>
 
     <p class="subtle-text" id="scheduleRefereeCurrentLabel"></p>
+
+    <p class="schedule-referee-duplicate-alert" id="scheduleRefereeDuplicateAlert" hidden></p>
 
     <div class="schedule-referee-tabs">
         <button type="button" class="is-active" data-referee-tab="direct">参加者から選ぶ</button>
@@ -1018,6 +1026,9 @@
         const nextMatchAlertEl = document.querySelector(
             "#scheduleRefereeNextMatchAlert"
         );
+        const duplicateAlertEl = document.querySelector(
+            "#scheduleRefereeDuplicateAlert"
+        );
         const suggestionsEl = document.querySelector(
             "#scheduleRefereeSuggestions"
         );
@@ -1066,7 +1077,8 @@
             || !searchInput || !resultList || !noteInput || !clearButton
             || !cancelButton || !saveButton || !directPanel || !sourcePanel
             || !stageSelect || !sourceResultList || !tabButtons.length
-            || !groupFilterEl || !nextMatchAlertEl || !suggestionsEl
+            || !groupFilterEl || !nextMatchAlertEl || !duplicateAlertEl
+            || !suggestionsEl
         ) {
             return;
         }
@@ -1107,6 +1119,7 @@
                     selectedSourceOption = null;
                     noteInput.value = "";
                     updateNextMatchAlert();
+                    updateDuplicateAlert();
                     renderCandidates();
                 });
                 resultList.appendChild(item);
@@ -1127,6 +1140,34 @@
                 nextMatchAlertEl.hidden = false;
             } else {
                 nextMatchAlertEl.hidden = true;
+            }
+        }
+
+        function updateDuplicateAlert() {
+            let courtName = null;
+
+            if (activeTab === "direct" && selectedCandidateId) {
+                const candidate = candidates.find(function(c) {
+                    return String(c.id) === String(selectedCandidateId);
+                });
+                courtName = candidate
+                    ? candidate.duplicate_referee_court_name
+                    : null;
+            } else if (activeTab === "source" && selectedSourceOption) {
+                courtName = (
+                    selectedSourceOption.duplicate_referee_court_name || null
+                );
+            }
+
+            if (courtName) {
+                duplicateAlertEl.textContent = (
+                    "同じ試合順の" + courtName
+                    + "でも、この審判が指定されています。"
+                    + "重複していないか確認してください。"
+                );
+                duplicateAlertEl.hidden = false;
+            } else {
+                duplicateAlertEl.hidden = true;
             }
         }
 
@@ -1209,6 +1250,7 @@
                     selectedSourceOption = null;
                     noteInput.value = "";
                     updateNextMatchAlert();
+                    updateDuplicateAlert();
                     renderCandidates();
                 });
                 suggestionsEl.appendChild(button);
@@ -1266,6 +1308,7 @@
             } else {
                 updateNextMatchAlert();
             }
+            updateDuplicateAlert();
         }
 
         function renderStageOptions(selectedStageId) {
@@ -1318,6 +1361,7 @@
                     selectedSourceOption = option;
                     selectedCandidateId = null;
                     noteInput.value = "";
+                    updateDuplicateAlert();
                     renderSourceOptions();
                     renderCandidates();
                 });
@@ -1330,6 +1374,7 @@
                 sourceOptions = [];
                 selectedSourceOption = null;
                 renderSourceOptions();
+                updateDuplicateAlert();
                 return;
             }
 
@@ -1357,6 +1402,7 @@
                         ) || null;
                     }
                     renderSourceOptions();
+                    updateDuplicateAlert();
                 })
                 .catch(function() {
                     alert("読み込みに失敗しました。");
@@ -1420,6 +1466,7 @@
             sourceResultList.innerHTML = "";
             switchRefereeTab("direct");
             updateNextMatchAlert();
+            updateDuplicateAlert();
             dialog.showModal();
 
             fetch(row.dataset.refereeCandidatesUrl, {
@@ -1498,6 +1545,7 @@
                     renderSuggestions();
                     renderCandidates();
                     updateNextMatchAlert();
+                    updateDuplicateAlert();
                 })
                 .catch(function() {
                     alert("読み込みに失敗しました。");
@@ -1532,12 +1580,14 @@
                 selectedCandidateId = null;
                 selectedSourceOption = null;
                 updateNextMatchAlert();
+                updateDuplicateAlert();
                 renderCandidates();
                 renderSourceOptions();
             }
         });
         stageSelect.addEventListener("change", function() {
             selectedSourceOption = null;
+            updateDuplicateAlert();
             loadSourceOptions(stageSelect.value, null);
         });
 

@@ -70,6 +70,9 @@ from ..services import (
     league_rank_advances_further,
     resolve_schedule_referee,
     save_pair_organization_values,
+    schedule_referee_conflicts_at_same_order,
+    schedule_referee_key,
+    schedule_referee_source_key,
     schedule_match_participant_ids,
     tournament_pair_organization_sets,
     tournament_result_advances_further,
@@ -3494,6 +3497,7 @@ def schedule_referee_candidates_api(request, code, schedule_id):
         ]
     own_participant_ids = schedule_match_participant_ids(schedule)
     day_of_status_map = day_of_referee_status_map(schedule.schedule_block)
+    conflict_map = schedule_referee_conflicts_at_same_order(schedule)
     same_court_next_schedule = Schedule.objects.filter(
         schedule_block_id=schedule.schedule_block_id,
         court_id=schedule.court_id,
@@ -3572,10 +3576,14 @@ def schedule_referee_candidates_api(request, code, schedule_id):
     candidate_payload = []
     for p in candidates:
         status_info = day_of_status_map.get(p.id)
+        conflict_schedule = conflict_map.get(("participant", p.id))
         candidate_payload.append({
             "id": p.id,
             "label": p.display_name,
             "group_id": group_id_by_participant_id.get(p.id),
+            "duplicate_referee_court_name": (
+                conflict_schedule.court.name if conflict_schedule else None
+            ),
             "has_same_court_next_match": (
                 p.id in same_court_next_participant_ids
             ),
@@ -3657,6 +3665,7 @@ def schedule_referee_source_options_api(request, code, schedule_id, stage_id):
         )
 
     options = []
+    conflict_map = schedule_referee_conflicts_at_same_order(schedule)
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
         groups = list(
@@ -3678,11 +3687,27 @@ def schedule_referee_source_options_api(request, code, schedule_id, stage_id):
                 if (group.id, rank) in advanced_keys:
                     continue
 
+                label = f"{group.name}－{rank}位"
+                option_key = schedule_referee_source_key(
+                    AdvancementSource.SOURCE_LEAGUE_RANK,
+                    group,
+                    rank,
+                    None,
+                    "",
+                    label=label,
+                )
+                conflict_schedule = conflict_map.get(option_key)
+
                 options.append({
                     "source_type": AdvancementSource.SOURCE_LEAGUE_RANK,
                     "source_group_id": group.id,
                     "source_rank": rank,
-                    "label": f"{group.name}－{rank}位",
+                    "label": label,
+                    "duplicate_referee_court_name": (
+                        conflict_schedule.court.name
+                        if conflict_schedule
+                        else None
+                    ),
                 })
     else:
         matches = list(
@@ -3713,17 +3738,107 @@ def schedule_referee_source_options_api(request, code, schedule_id, stage_id):
                 if (source_match.id, result) in advanced_keys:
                     continue
 
+                label = AdvancementSource.tournament_result_piece_label(
+                    source_match,
+                    result,
+                )
+                option_key = schedule_referee_source_key(
+                    AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+                    None,
+                    None,
+                    source_match,
+                    result,
+                    label=label,
+                )
+                conflict_schedule = conflict_map.get(option_key)
+
                 options.append({
                     "source_type": AdvancementSource.SOURCE_TOURNAMENT_RESULT,
                     "source_match_id": source_match.id,
                     "source_result": result,
-                    "label": AdvancementSource.tournament_result_piece_label(
-                        source_match,
-                        result,
+                    "label": label,
+                    "duplicate_referee_court_name": (
+                        conflict_schedule.court.name
+                        if conflict_schedule
+                        else None
                     ),
                 })
 
     return JsonResponse({"success": True, "options": options})
+
+
+def schedule_referee_conflicts_view(request, code):
+    """大会全体の、審判の重複指定を一覧表示する。"""
+
+    tournament = get_object_or_404(Tournament, code=code)
+
+    schedules = list(
+        Schedule.objects.filter(
+            court__tournament=tournament,
+        ).select_related(
+            "court",
+            "schedule_block",
+            "referee_participant",
+            "referee_source_group",
+            "referee_source_match",
+            "round_robin_match__group__category",
+            "round_robin_match__group__stage",
+            "round_robin_match__pair1",
+            "round_robin_match__pair2",
+            "tournament_match__bracket__category",
+            "tournament_match__bracket__stage",
+            "tournament_match__pair1",
+            "tournament_match__pair2",
+        ).order_by(
+            "schedule_block__display_order",
+            "order",
+            "court__display_order",
+        )
+    )
+
+    grouped = {}
+    for schedule in schedules:
+        key = schedule_referee_key(schedule)
+        if not key:
+            continue
+        grouped.setdefault(
+            (schedule.schedule_block_id, schedule.order), {}
+        ).setdefault(key, []).append(schedule)
+
+    conflicts = []
+    for (_block_id, order), key_map in grouped.items():
+        for key, schedule_list in key_map.items():
+            if len(schedule_list) < 2:
+                continue
+
+            if key[0] == "participant":
+                participant = Participant.objects.filter(id=key[1]).first()
+                referee_label = (
+                    f"{participant.code} {participant.display_name}"
+                    if participant else "(不明)"
+                )
+            else:
+                referee_label = schedule_list[0].referee_source_label
+
+            conflicts.append({
+                "schedule_block": schedule_list[0].schedule_block,
+                "order": order,
+                "referee_label": referee_label,
+                "schedules": schedule_list,
+            })
+
+    conflicts.sort(
+        key=lambda c: (c["schedule_block"].display_order, c["order"])
+    )
+
+    return render(
+        request,
+        "core/schedule_referee_conflicts.html",
+        {
+            "tournament": tournament,
+            "conflicts": conflicts,
+        },
+    )
 
 
 def set_schedule_referee_api(request, code, schedule_id):

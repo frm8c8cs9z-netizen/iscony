@@ -1,0 +1,58 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ tournament.name }} 審判重複チェック{% endblock %}
+
+{% block content %}
+
+<h1>{{ tournament.name }} 審判重複チェック</h1>
+
+<p>
+    <a href="{% url 'schedule_view' tournament.code %}">
+        試合進行へ戻る
+    </a>
+</p>
+
+{% if conflicts %}
+    {% for conflict in conflicts %}
+        <section>
+            <h2>
+                {{ conflict.schedule_block.name }}
+                第{{ conflict.order }}試合
+                / {{ conflict.referee_label }}
+            </h2>
+
+            <ul>
+                {% for s in conflict.schedules %}
+                    <li>
+                        <a href="{% url 'schedule_view' tournament.code %}#schedule-{{ s.id }}">
+                            {{ s.court.name }}
+                        </a>
+                        :
+                        {% if s.is_round_robin %}
+                            {% with match=s.round_robin_match %}
+                                {{ match.group.category.name }}
+                                ・{{ match.group.stage.name }}
+                                ・{{ match.group.name }}
+                                / {{ match.pair1.display_name }}
+                                vs {{ match.pair2.display_name }}
+                            {% endwith %}
+                        {% elif s.is_tournament %}
+                            {% with match=s.tournament_match %}
+                                {{ match.bracket.category.name }}
+                                ・{{ match.bracket.stage.name }}
+                                ・{{ match.bracket.name }}
+                                ・{{ match.match_code }}
+                                / {{ match.pair1.display_name }}
+                                vs {{ match.pair2.display_name }}
+                            {% endwith %}
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+    {% endfor %}
+{% else %}
+    <p>重複している審判指定はありません。</p>
+{% endif %}
+
+{% endblock %}

@@ -649,6 +649,106 @@ def resolve_schedule_referee(schedule):
     return None
 
 
+def schedule_referee_key(schedule):
+    """
+    Scheduleの審判指定を、重複比較用のキーに変換する。
+    - 直接指定: ("participant", participant_id)
+    - 進出元参照で解決済み: ("participant", 解決したentryのparticipant_id)
+      (直接指定と同じ人物を指していれば同じキーになる)
+    - 進出元参照で未解決: ("source", source_type, group_id, rank)
+      または ("source", source_type, match_id, result)
+    - 審判未指定: None
+    """
+
+    if schedule.referee_participant_id:
+        return ("participant", schedule.referee_participant_id)
+
+    if schedule.referee_source_type:
+        resolved_entry = resolve_schedule_referee(schedule)
+        if resolved_entry and resolved_entry.participant_id:
+            return ("participant", resolved_entry.participant_id)
+
+        if schedule.referee_source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
+            return (
+                "source",
+                schedule.referee_source_type,
+                schedule.referee_source_group_id,
+                schedule.referee_source_rank,
+            )
+
+        return (
+            "source",
+            schedule.referee_source_type,
+            schedule.referee_source_match_id,
+            schedule.referee_source_result,
+        )
+
+    return None
+
+
+def schedule_referee_source_key(
+        source_type,
+        group=None,
+        rank=None,
+        source_match=None,
+        result="",
+        *,
+        label=""):
+    """審判の進出元候補を、Schedule保存前に重複比較用キーへ変換する。"""
+
+    try:
+        resolved_entry = _resolve_rank_or_result_reference(
+            source_type,
+            group,
+            rank,
+            source_match,
+            result,
+            label=label,
+        )
+        if resolved_entry.participant_id:
+            return ("participant", resolved_entry.participant_id)
+    except ValidationError:
+        pass
+
+    if source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
+        return ("source", source_type, group.id if group else None, rank)
+
+    return (
+        "source",
+        source_type,
+        source_match.id if source_match else None,
+        result,
+    )
+
+
+def schedule_referee_conflicts_at_same_order(schedule):
+    """
+    schedule と同じ schedule_block・同じ order(=同時進行とみなす)の、
+    他のコートのScheduleについて、審判キーごとに割り当て済みのScheduleを返す。
+    戻り値: {referee_key: Schedule} (schedule自身は除く)
+    """
+
+    others = Schedule.objects.filter(
+        schedule_block_id=schedule.schedule_block_id,
+        order=schedule.order,
+    ).exclude(
+        id=schedule.id,
+    ).select_related(
+        "court",
+        "referee_participant",
+        "referee_source_group",
+        "referee_source_match",
+    )
+
+    result = {}
+    for other in others:
+        key = schedule_referee_key(other)
+        if key:
+            result[key] = other
+
+    return result
+
+
 def league_rank_advances_further(group, rank):
     """このグループの順位を進出元として参照するAdvancementSourceが存在するか。"""
 
