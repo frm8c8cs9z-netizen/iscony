@@ -3479,6 +3479,16 @@ def schedule_referee_candidates_api(request, code, schedule_id):
             ).order_by("display_order", "id")
         ]
     own_participant_ids = schedule_match_participant_ids(schedule)
+    same_court_next_schedule = Schedule.objects.filter(
+        schedule_block_id=schedule.schedule_block_id,
+        court_id=schedule.court_id,
+        order=schedule.order + 1,
+    ).first()
+    same_court_next_participant_ids = (
+        schedule_match_participant_ids(same_court_next_schedule)
+        if same_court_next_schedule
+        else set()
+    )
     groups = []
     own_group_id = None
     group_id_by_participant_id = {}
@@ -3550,11 +3560,19 @@ def schedule_referee_candidates_api(request, code, schedule_id):
         "available_stages": available_stages,
         "groups": groups,
         "own_group_id": own_group_id,
+        "next_match_order": (
+            same_court_next_schedule.order
+            if same_court_next_schedule
+            else None
+        ),
         "candidates": [
             {
                 "id": p.id,
                 "label": p.display_name,
                 "group_id": group_id_by_participant_id.get(p.id),
+                "has_same_court_next_match": (
+                    p.id in same_court_next_participant_ids
+                ),
             }
             for p in candidates
         ],

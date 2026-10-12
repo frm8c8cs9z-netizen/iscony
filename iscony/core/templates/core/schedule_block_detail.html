@@ -348,6 +348,7 @@
     </div>
 
     <div id="scheduleRefereeDirectPanel">
+        <p class="schedule-referee-next-match-alert" id="scheduleRefereeNextMatchAlert" hidden></p>
         <div id="scheduleRefereeGroupFilter" hidden></div>
         <div id="scheduleRefereeSuggestions" hidden></div>
         <label>
@@ -1014,6 +1015,9 @@
         const groupFilterEl = document.querySelector(
             "#scheduleRefereeGroupFilter"
         );
+        const nextMatchAlertEl = document.querySelector(
+            "#scheduleRefereeNextMatchAlert"
+        );
         const suggestionsEl = document.querySelector(
             "#scheduleRefereeSuggestions"
         );
@@ -1050,6 +1054,7 @@
         let refereeGroups = [];
         let ownGroupId = null;
         let selectedGroupId = null;
+        let nextMatchOrder = null;
         let availableStages = [];
         let sourceOptions = [];
         let selectedSourceOption = null;
@@ -1061,7 +1066,7 @@
             || !searchInput || !resultList || !noteInput || !clearButton
             || !cancelButton || !saveButton || !directPanel || !sourcePanel
             || !stageSelect || !sourceResultList || !tabButtons.length
-            || !groupFilterEl || !suggestionsEl
+            || !groupFilterEl || !nextMatchAlertEl || !suggestionsEl
         ) {
             return;
         }
@@ -1101,10 +1106,28 @@
                     selectedCandidateId = candidate.id;
                     selectedSourceOption = null;
                     noteInput.value = "";
+                    updateNextMatchAlert();
                     renderCandidates();
                 });
                 resultList.appendChild(item);
             });
+        }
+
+        function updateNextMatchAlert() {
+            const candidate = selectedCandidateId
+                ? candidates.find(function(c) {
+                    return String(c.id) === String(selectedCandidateId);
+                })
+                : null;
+            if (candidate && candidate.has_same_court_next_match && nextMatchOrder) {
+                nextMatchAlertEl.textContent = (
+                    candidate.label + "は同じコートの次の試合(第"
+                    + nextMatchOrder + "試合)の対戦者です。次の試合だいじょうぶですか？"
+                );
+                nextMatchAlertEl.hidden = false;
+            } else {
+                nextMatchAlertEl.hidden = true;
+            }
         }
 
         function renderGroupFilters() {
@@ -1185,6 +1208,7 @@
                     selectedCandidateId = candidate.id;
                     selectedSourceOption = null;
                     noteInput.value = "";
+                    updateNextMatchAlert();
                     renderCandidates();
                 });
                 suggestionsEl.appendChild(button);
@@ -1237,6 +1261,11 @@
             });
             directPanel.hidden = tabName !== "direct";
             sourcePanel.hidden = tabName !== "source";
+            if (tabName !== "direct") {
+                nextMatchAlertEl.hidden = true;
+            } else {
+                updateNextMatchAlert();
+            }
         }
 
         function renderStageOptions(selectedStageId) {
@@ -1376,6 +1405,7 @@
             refereeGroups = [];
             ownGroupId = null;
             selectedGroupId = null;
+            nextMatchOrder = null;
             targetEl.textContent = "読み込み中…";
             currentLabelEl.textContent = "";
             searchInput.value = "";
@@ -1389,6 +1419,7 @@
             stageSelect.value = "";
             sourceResultList.innerHTML = "";
             switchRefereeTab("direct");
+            updateNextMatchAlert();
             dialog.showModal();
 
             fetch(row.dataset.refereeCandidatesUrl, {
@@ -1445,6 +1476,7 @@
                     } else {
                         selectedGroupId = ownGroupId;
                     }
+                    nextMatchOrder = data.next_match_order || null;
                     noteInput.value = (
                         data.current && data.current.referee_note
                     ) ? data.current.referee_note : "";
@@ -1465,6 +1497,7 @@
                     renderGroupFilters();
                     renderSuggestions();
                     renderCandidates();
+                    updateNextMatchAlert();
                 })
                 .catch(function() {
                     alert("読み込みに失敗しました。");
@@ -1498,6 +1531,7 @@
             if (noteInput.value.trim()) {
                 selectedCandidateId = null;
                 selectedSourceOption = null;
+                updateNextMatchAlert();
                 renderCandidates();
                 renderSourceOptions();
             }

@@ -9611,6 +9611,34 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertIn(self.stage.id, stage_ids)
         self.assertNotIn(later_stage.id, stage_ids)
 
+    def test_candidates_api_marks_same_court_next_match_participant(self):
+        next_entry = self._create_entry("4", "次試合A", "次試合B", 4)
+        next_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=next_entry,
+            pair2=self.pair1,
+        )
+        next_schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court,
+            order=self.schedule.order + 1,
+            round_robin_match=next_match,
+        )
+
+        response = self.client.get(self._candidates_url())
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["next_match_order"], next_schedule.order)
+        flag_by_candidate_id = {
+            candidate["id"]: candidate["has_same_court_next_match"]
+            for candidate in payload["candidates"]
+        }
+        self.assertTrue(flag_by_candidate_id[next_entry.participant_id])
+        self.assertFalse(
+            flag_by_candidate_id[self.referee_entry.participant_id]
+        )
+
     def test_candidates_api_rejects_non_get(self):
         response = self.client.post(self._candidates_url())
 
