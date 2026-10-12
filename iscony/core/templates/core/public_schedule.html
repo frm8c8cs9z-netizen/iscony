@@ -300,6 +300,22 @@
                                                     <strong>{{ match.pair2_games }}</strong>
                                                 {% endif %}
                                             </div>
+                                            {% if schedule.referee_participant_id or schedule.referee_note or schedule.referee_source_type %}
+                                                <div class="schedule-referee-line">
+                                                    審判:
+                                                    {% if schedule.referee_participant_id %}
+                                                        {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                    {% elif schedule.referee_note %}
+                                                        {{ schedule.referee_note }}
+                                                    {% elif schedule.referee_source_type %}
+                                                        {% if schedule.referee_resolved_participant %}
+                                                            {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                        {% else %}
+                                                            {{ schedule.referee_source_label }}(未確定)
+                                                        {% endif %}
+                                                    {% endif %}
+                                                </div>
+                                            {% endif %}
                                         {% elif schedule.is_tournament %}
                                             <div class="schedule-context">
                                                 <strong>{{ match.bracket.category.name }}</strong>
@@ -363,6 +379,22 @@
                                                             {{ match.pair2_games }}
                                                         {% endif %}
                                                     </strong>
+                                                </div>
+                                            {% endif %}
+                                            {% if schedule.referee_participant_id or schedule.referee_note or schedule.referee_source_type %}
+                                                <div class="schedule-referee-line">
+                                                    審判:
+                                                    {% if schedule.referee_participant_id %}
+                                                        {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                    {% elif schedule.referee_note %}
+                                                        {{ schedule.referee_note }}
+                                                    {% elif schedule.referee_source_type %}
+                                                        {% if schedule.referee_resolved_participant %}
+                                                            {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                        {% else %}
+                                                            {{ schedule.referee_source_label }}(未確定)
+                                                        {% endif %}
+                                                    {% endif %}
                                                 </div>
                                             {% endif %}
                                         {% endif %}

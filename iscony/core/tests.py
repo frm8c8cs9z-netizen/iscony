@@ -10248,6 +10248,116 @@ class DayOfRefereeTests(TestCase):
             ),
         )
 
+    def test_public_schedule_view_shows_referee_labels_without_buttons(self):
+        self.tournament.is_public = True
+        self.tournament.save(update_fields=["is_public"])
+
+        direct_referee = self._create_entry("PREF")
+        resolved_referee = self._create_entry("RREF")
+        GroupRanking.objects.create(
+            group=self.group,
+            pair=resolved_referee,
+            rank=1,
+        )
+        match1_pair1 = self._create_entry("PM1A")
+        match1_pair2 = self._create_entry("PM1B")
+        match2_pair1 = self._create_entry("PM2A")
+        match2_pair2 = self._create_entry("PM2B")
+
+        direct_schedule = self._create_schedule(
+            self.court1,
+            1,
+            match1_pair1,
+            match1_pair2,
+            scored=True,
+        )
+        direct_schedule.referee_participant = direct_referee.participant
+        direct_schedule.save()
+
+        source_schedule = self._create_schedule(
+            self.court1,
+            2,
+            match2_pair1,
+            match2_pair2,
+            scored=True,
+        )
+        source_schedule.referee_source_type = (
+            AdvancementSource.SOURCE_LEAGUE_RANK
+        )
+        source_schedule.referee_source_stage = self.stage
+        source_schedule.referee_source_group = self.group
+        source_schedule.referee_source_rank = 1
+        source_schedule.save()
+
+        tournament_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=tournament_stage,
+            name="本戦",
+        )
+        tournament_entry1 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T1",
+            display_order=1,
+            player1_name="本戦1A",
+            player2_name="本戦1B",
+        )
+        tournament_entry2 = create_tournament_entry(
+            bracket=bracket,
+            pair_code="T2",
+            display_order=2,
+            player1_name="本戦2A",
+            player2_name="本戦2B",
+        )
+        tournament_match = TournamentMatch.objects.create(
+            bracket=bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=tournament_entry1,
+            pair2=tournament_entry2,
+        )
+        note_schedule = Schedule.objects.create(
+            schedule_block=self.block,
+            court=self.court1,
+            order=3,
+            tournament_match=tournament_match,
+            referee_note="本部審判",
+        )
+
+        response = self.client.get(
+            reverse(
+                "public_schedule_view",
+                kwargs={"tournament_code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "審判:", count=3)
+        self.assertContains(response, 'class="schedule-referee-line"', count=3)
+        self.assertContains(
+            response,
+            (
+                f"{direct_referee.participant.code} "
+                f"{direct_referee.participant.display_name}"
+            ),
+        )
+        self.assertContains(
+            response,
+            f"{resolved_referee.code} {resolved_referee.display_name}",
+        )
+        self.assertContains(response, "本部審判")
+        self.assertContains(response, f'id="schedule-{direct_schedule.id}"')
+        self.assertContains(response, f'id="schedule-{source_schedule.id}"')
+        self.assertContains(response, f'id="schedule-{note_schedule.id}"')
+        self.assertNotContains(response, 'class="schedule-referee-trigger"')
+        self.assertNotContains(response, "data-referee-candidates-url")
+
 
 class ScheduleSlotApiTests(TestCase):
 

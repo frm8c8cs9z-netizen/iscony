@@ -345,6 +345,16 @@ def _schedule_block_tables(tournament):
     return block_tables
 
 
+def _attach_resolved_referee_participants(block_tables):
+    for block_table in block_tables:
+        for row in block_table["table"]:
+            for schedule in row["cells"]:
+                if schedule and schedule.referee_source_type:
+                    schedule.referee_resolved_participant = (
+                        resolve_schedule_referee(schedule)
+                    )
+
+
 def schedule_view(
         request,
         tournament_code
@@ -357,13 +367,7 @@ def schedule_view(
     )
     block_tables = _schedule_block_tables(tournament)
 
-    for block_table in block_tables:
-        for row in block_table["table"]:
-            for schedule in row["cells"]:
-                if schedule and schedule.referee_source_type:
-                    schedule.referee_resolved_participant = (
-                        resolve_schedule_referee(schedule)
-                    )
+    _attach_resolved_referee_participants(block_tables)
 
     return render(
         request,
@@ -832,6 +836,7 @@ def result_input_select(request, code):
 
 def _render_public_schedule(request, tournament):
     block_tables = _schedule_block_tables(tournament)
+    _attach_resolved_referee_participants(block_tables)
 
     return render(
         request,
