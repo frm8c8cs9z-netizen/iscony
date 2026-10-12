@@ -58,6 +58,7 @@ from ..services import (
     auto_assign_league_groups_to_court,
     auto_assign_tournament_range_to_court,
     clone_tournament_without_results,
+    day_of_referee_status_map,
     is_internal_seed_match,
     merge_schedule_blocks,
     move_schedule,
@@ -355,6 +356,14 @@ def schedule_view(
         code=tournament_code
     )
     block_tables = _schedule_block_tables(tournament)
+
+    for block_table in block_tables:
+        for row in block_table["table"]:
+            for schedule in row["cells"]:
+                if schedule and schedule.referee_source_type:
+                    schedule.referee_resolved_participant = (
+                        resolve_schedule_referee(schedule)
+                    )
 
     return render(
         request,
@@ -3479,6 +3488,7 @@ def schedule_referee_candidates_api(request, code, schedule_id):
             ).order_by("display_order", "id")
         ]
     own_participant_ids = schedule_match_participant_ids(schedule)
+    day_of_status_map = day_of_referee_status_map(schedule.schedule_block)
     same_court_next_schedule = Schedule.objects.filter(
         schedule_block_id=schedule.schedule_block_id,
         court_id=schedule.court_id,
@@ -3554,6 +3564,34 @@ def schedule_referee_candidates_api(request, code, schedule_id):
             "resolved_label": resolved.display_name if resolved else None,
         }
 
+    candidate_payload = []
+    for p in candidates:
+        status_info = day_of_status_map.get(p.id)
+        candidate_payload.append({
+            "id": p.id,
+            "label": p.display_name,
+            "group_id": group_id_by_participant_id.get(p.id),
+            "has_same_court_next_match": (
+                p.id in same_court_next_participant_ids
+            ),
+            "day_of_current_match": (
+                {
+                    "court_name": status_info["court_name"],
+                    "order": status_info["order"],
+                }
+                if status_info and status_info["status"] == "in_progress"
+                else None
+            ),
+            "day_of_next_match": (
+                {
+                    "court_name": status_info["court_name"],
+                    "order": status_info["order"],
+                }
+                if status_info and status_info["status"] == "next"
+                else None
+            ),
+        })
+
     return JsonResponse({
         "success": True,
         "match_label": match_label,
@@ -3565,17 +3603,7 @@ def schedule_referee_candidates_api(request, code, schedule_id):
             if same_court_next_schedule
             else None
         ),
-        "candidates": [
-            {
-                "id": p.id,
-                "label": p.display_name,
-                "group_id": group_id_by_participant_id.get(p.id),
-                "has_same_court_next_match": (
-                    p.id in same_court_next_participant_ids
-                ),
-            }
-            for p in candidates
-        ],
+        "candidates": candidate_payload,
         "current": {
             "referee_participant_id": schedule.referee_participant_id,
             "referee_note": schedule.referee_note,

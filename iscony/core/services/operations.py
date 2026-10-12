@@ -565,6 +565,61 @@ def schedule_match_participant_ids(schedule):
     return participant_ids
 
 
+def day_of_referee_status_map(schedule_block):
+    """
+    schedule_block内の各コートについて、「結果未入力のうち試合順が一番若いもの」を
+    進行中(in_progress)、「2番目に若いもの」を次の試合(next)とみなし、
+    その試合に出ているParticipant ID -> {"status": ..., "court_name": ..., "order": ...}
+    のdictを返す。
+    1つのコートに結果未入力の試合が1件もなければ何も登録しない。
+    同じParticipantが複数コートの対象に該当する場合は、in_progressを優先する。
+    """
+
+    schedules = list(
+        Schedule.objects.filter(
+            schedule_block=schedule_block,
+        ).select_related(
+            "court",
+            "round_robin_match__pair1__participant",
+            "round_robin_match__pair2__participant",
+            "tournament_match__pair1__participant",
+            "tournament_match__pair2__participant",
+        ).order_by("court_id", "order")
+    )
+
+    schedules_by_court = {}
+    for schedule in schedules:
+        schedules_by_court.setdefault(schedule.court_id, []).append(schedule)
+
+    status_map = {}
+
+    for court_schedules in schedules_by_court.values():
+        pending = [
+            schedule for schedule in court_schedules
+            if not schedule.match_has_score
+        ]
+
+        for index, status in ((0, "in_progress"), (1, "next")):
+            if index >= len(pending):
+                continue
+
+            target_schedule = pending[index]
+            info = {
+                "status": status,
+                "court_name": target_schedule.court.name,
+                "order": target_schedule.order,
+            }
+
+            for participant_id in schedule_match_participant_ids(
+                    target_schedule):
+                existing = status_map.get(participant_id)
+                if existing and existing["status"] == "in_progress":
+                    continue
+                status_map[participant_id] = info
+
+    return status_map
+
+
 def resolve_schedule_referee(schedule):
     """
     Scheduleの審判指定を解決する。

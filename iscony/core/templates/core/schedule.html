@@ -99,7 +99,34 @@
                                             {% endif %}
                                         </div>
 
+                                        {% if schedule.referee_participant_id or schedule.referee_note or schedule.referee_source_type %}
+                                            <div class="schedule-referee-line">
+                                                審判:
+                                                {% if schedule.referee_participant_id %}
+                                                    {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                {% elif schedule.referee_note %}
+                                                    {{ schedule.referee_note }}
+                                                {% elif schedule.referee_source_type %}
+                                                    {% if schedule.referee_resolved_participant %}
+                                                        {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                    {% else %}
+                                                        {{ schedule.referee_source_label }}(未確定)
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+
                                         <div class="schedule-actions">
+                                            <button
+                                                type="button"
+                                                class="schedule-referee-trigger"
+                                                data-schedule-id="{{ schedule.id }}"
+                                                data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code schedule.id %}"
+                                                data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code schedule.id 0 %}"
+                                                data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code schedule.id %}"
+                                            >
+                                                審判
+                                            </button>
                                             <a href="{% url 'input_match_score' match.id %}?next={{ request.path }}">
                                                 結果入力
                                             </a>
@@ -158,7 +185,34 @@
                                             </div>
                                         {% endif %}
 
+                                        {% if schedule.referee_participant_id or schedule.referee_note or schedule.referee_source_type %}
+                                            <div class="schedule-referee-line">
+                                                審判:
+                                                {% if schedule.referee_participant_id %}
+                                                    {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                {% elif schedule.referee_note %}
+                                                    {{ schedule.referee_note }}
+                                                {% elif schedule.referee_source_type %}
+                                                    {% if schedule.referee_resolved_participant %}
+                                                        {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                    {% else %}
+                                                        {{ schedule.referee_source_label }}(未確定)
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
+
                                         <div class="schedule-actions">
+                                            <button
+                                                type="button"
+                                                class="schedule-referee-trigger"
+                                                data-schedule-id="{{ schedule.id }}"
+                                                data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code schedule.id %}"
+                                                data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code schedule.id 0 %}"
+                                                data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code schedule.id %}"
+                                            >
+                                                審判
+                                            </button>
                                             {% if match.pair1 and match.pair2 %}
                                                 <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
                                                     結果入力
@@ -207,5 +261,652 @@
 {% empty %}
     <p>進行表はまだ登録されていません。</p>
 {% endfor %}
+
+<div hidden>
+    {% csrf_token %}
+</div>
+
+<dialog id="scheduleRefereeDialog" class="schedule-referee-dialog">
+    <h4 id="scheduleRefereeDialogTarget"></h4>
+
+    <p class="subtle-text" id="scheduleRefereeCurrentLabel"></p>
+
+    <div class="schedule-referee-tabs">
+        <button type="button" class="is-active" data-referee-tab="direct">参加者から選ぶ</button>
+        <button type="button" data-referee-tab="source">進出元/結果から選ぶ</button>
+    </div>
+
+    <div id="scheduleRefereeDirectPanel">
+        <p class="schedule-referee-day-of-alert" id="scheduleRefereeDayOfAlert" hidden></p>
+        <div id="scheduleRefereeGroupFilter" hidden></div>
+        <div id="scheduleRefereeSuggestions" hidden></div>
+        <label>
+            参加者を検索
+            <input type="text" id="scheduleRefereeSearchInput" placeholder="名前で検索">
+        </label>
+        <ul class="schedule-referee-result-list" id="scheduleRefereeResultList"></ul>
+
+        <label>
+            自由入力メモ(本部審判、外部審判など)
+            <input type="text" id="scheduleRefereeNoteInput" placeholder="例: 本部審判">
+        </label>
+    </div>
+
+    <div id="scheduleRefereeSourcePanel" hidden>
+        <label>
+            対象Stage
+            <select id="scheduleRefereeStageSelect">
+                <option value="">Stageを選択してください</option>
+            </select>
+        </label>
+        <ul class="schedule-referee-result-list" id="scheduleRefereeSourceResultList"></ul>
+    </div>
+
+    <div class="schedule-referee-dialog-actions">
+        <button type="button" id="scheduleRefereeClearButton">指定なしにする</button>
+        <button type="button" id="scheduleRefereeCancelButton">キャンセル</button>
+        <button type="button" id="scheduleRefereeSaveButton" class="save">保存</button>
+    </div>
+</dialog>
+
+<script>
+    function setupScheduleRefereeMode() {
+        const dialog = document.querySelector("#scheduleRefereeDialog");
+        const targetEl = document.querySelector(
+            "#scheduleRefereeDialogTarget"
+        );
+        const currentLabelEl = document.querySelector(
+            "#scheduleRefereeCurrentLabel"
+        );
+        const searchInput = document.querySelector(
+            "#scheduleRefereeSearchInput"
+        );
+        const resultList = document.querySelector(
+            "#scheduleRefereeResultList"
+        );
+        const groupFilterEl = document.querySelector(
+            "#scheduleRefereeGroupFilter"
+        );
+        const dayOfAlertEl = document.querySelector(
+            "#scheduleRefereeDayOfAlert"
+        );
+        const suggestionsEl = document.querySelector(
+            "#scheduleRefereeSuggestions"
+        );
+        const noteInput = document.querySelector("#scheduleRefereeNoteInput");
+        const tabButtons = Array.from(document.querySelectorAll(
+            "[data-referee-tab]"
+        ));
+        const directPanel = document.querySelector(
+            "#scheduleRefereeDirectPanel"
+        );
+        const sourcePanel = document.querySelector(
+            "#scheduleRefereeSourcePanel"
+        );
+        const stageSelect = document.querySelector(
+            "#scheduleRefereeStageSelect"
+        );
+        const sourceResultList = document.querySelector(
+            "#scheduleRefereeSourceResultList"
+        );
+        const clearButton = document.querySelector(
+            "#scheduleRefereeClearButton"
+        );
+        const cancelButton = document.querySelector(
+            "#scheduleRefereeCancelButton"
+        );
+        const saveButton = document.querySelector("#scheduleRefereeSaveButton");
+        const csrfInput = document.querySelector(
+            "input[name=csrfmiddlewaretoken]"
+        );
+        const csrfToken = csrfInput ? csrfInput.value : "";
+
+        let candidates = [];
+        let selectedCandidateId = null;
+        let refereeGroups = [];
+        let ownGroupId = null;
+        let selectedGroupId = null;
+        let availableStages = [];
+        let sourceOptions = [];
+        let selectedSourceOption = null;
+        let activeTab = "direct";
+        let activeTriggerButton = null;
+
+        if (
+            !dialog || !targetEl || !currentLabelEl
+            || !searchInput || !resultList || !noteInput || !clearButton
+            || !cancelButton || !saveButton || !directPanel || !sourcePanel
+            || !stageSelect || !sourceResultList || !tabButtons.length
+            || !groupFilterEl || !dayOfAlertEl || !suggestionsEl
+        ) {
+            return;
+        }
+
+        function renderCandidates() {
+            const query = searchInput.value.trim().toLowerCase();
+            resultList.innerHTML = "";
+
+            candidates.forEach(function(candidate) {
+                if (
+                    selectedGroupId
+                    && String(candidate.group_id) !== String(selectedGroupId)
+                ) {
+                    return;
+                }
+                if (
+                    query
+                    && candidate.label.toLowerCase().indexOf(query) === -1
+                ) {
+                    return;
+                }
+
+                const item = document.createElement("li");
+                item.textContent = candidate.label;
+                item.dataset.candidateId = candidate.id;
+                item.classList.toggle(
+                    "is-selected",
+                    String(candidate.id) === String(selectedCandidateId)
+                );
+                item.addEventListener("click", function() {
+                    selectedCandidateId = candidate.id;
+                    selectedSourceOption = null;
+                    noteInput.value = "";
+                    updateDayOfAlert();
+                    renderCandidates();
+                });
+                resultList.appendChild(item);
+            });
+        }
+
+        function updateDayOfAlert() {
+            const candidate = selectedCandidateId
+                ? candidates.find(function(c) {
+                    return String(c.id) === String(selectedCandidateId);
+                })
+                : null;
+
+            if (candidate && candidate.day_of_current_match) {
+                const info = candidate.day_of_current_match;
+                dayOfAlertEl.textContent = (
+                    candidate.label + "は現在" + info.court_name
+                    + " 第" + info.order + "試合で試合中です。"
+                    + "それでもよければこのまま指定してください。"
+                );
+                dayOfAlertEl.classList.add("is-current");
+                dayOfAlertEl.classList.remove("is-next");
+                dayOfAlertEl.hidden = false;
+            } else if (candidate && candidate.day_of_next_match) {
+                const info = candidate.day_of_next_match;
+                dayOfAlertEl.textContent = (
+                    candidate.label + "は" + info.court_name
+                    + " 第" + info.order + "試合(次の試合)に出場予定です。"
+                );
+                dayOfAlertEl.classList.remove("is-current");
+                dayOfAlertEl.classList.add("is-next");
+                dayOfAlertEl.hidden = false;
+            } else {
+                dayOfAlertEl.hidden = true;
+            }
+        }
+
+        function renderGroupFilters() {
+            groupFilterEl.innerHTML = "";
+            groupFilterEl.hidden = !refereeGroups.length;
+
+            if (!refereeGroups.length) {
+                selectedGroupId = null;
+                return;
+            }
+
+            groupFilterEl.className = "schedule-referee-chip-group";
+
+            const label = document.createElement("span");
+            label.className = "schedule-referee-chip-label";
+            label.textContent = "グループで絞り込み";
+            groupFilterEl.appendChild(label);
+
+            const allButton = document.createElement("button");
+            allButton.type = "button";
+            allButton.className = "schedule-referee-chip";
+            allButton.textContent = "すべて";
+            allButton.classList.toggle("is-active", !selectedGroupId);
+            allButton.addEventListener("click", function() {
+                selectedGroupId = null;
+                renderGroupFilters();
+                renderCandidates();
+            });
+            groupFilterEl.appendChild(allButton);
+
+            refereeGroups.forEach(function(group) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "schedule-referee-chip";
+                button.textContent = group.name;
+                button.classList.toggle(
+                    "is-active",
+                    String(group.id) === String(selectedGroupId)
+                );
+                button.addEventListener("click", function() {
+                    selectedGroupId = group.id;
+                    renderGroupFilters();
+                    renderCandidates();
+                });
+                groupFilterEl.appendChild(button);
+            });
+        }
+
+        function renderSuggestions() {
+            suggestionsEl.innerHTML = "";
+            suggestionsEl.hidden = !refereeGroups.length || !ownGroupId;
+
+            if (suggestionsEl.hidden) {
+                return;
+            }
+
+            const suggestedCandidates = candidates.filter(function(candidate) {
+                return String(candidate.group_id) === String(ownGroupId);
+            });
+            if (!suggestedCandidates.length) {
+                suggestionsEl.hidden = true;
+                return;
+            }
+
+            suggestionsEl.className = "schedule-referee-chip-group";
+
+            const label = document.createElement("span");
+            label.className = "schedule-referee-chip-label";
+            label.textContent = "提案";
+            suggestionsEl.appendChild(label);
+
+            suggestedCandidates.forEach(function(candidate) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "schedule-referee-chip";
+                button.textContent = candidate.label;
+                button.addEventListener("click", function() {
+                    selectedCandidateId = candidate.id;
+                    selectedSourceOption = null;
+                    noteInput.value = "";
+                    updateDayOfAlert();
+                    renderCandidates();
+                });
+                suggestionsEl.appendChild(button);
+            });
+        }
+
+        function sourceOptionKey(option) {
+            if (!option) {
+                return "";
+            }
+            if (option.source_type === "league_rank") {
+                return [
+                    option.source_type,
+                    option.source_group_id,
+                    option.source_rank,
+                ].join(":");
+            }
+            return [
+                option.source_type,
+                option.source_match_id,
+                option.source_result,
+            ].join(":");
+        }
+
+        function currentSourceKey(source) {
+            if (!source) {
+                return "";
+            }
+            if (source.source_type === "league_rank") {
+                return [
+                    source.source_type,
+                    source.group_id,
+                    source.rank,
+                ].join(":");
+            }
+            return [
+                source.source_type,
+                source.match_id,
+                source.result,
+            ].join(":");
+        }
+
+        function switchRefereeTab(tabName) {
+            activeTab = tabName;
+            tabButtons.forEach(function(button) {
+                button.classList.toggle(
+                    "is-active",
+                    button.dataset.refereeTab === tabName
+                );
+            });
+            directPanel.hidden = tabName !== "direct";
+            sourcePanel.hidden = tabName !== "source";
+            if (tabName !== "direct") {
+                dayOfAlertEl.hidden = true;
+            } else {
+                updateDayOfAlert();
+            }
+        }
+
+        function renderStageOptions(selectedStageId) {
+            stageSelect.innerHTML = "";
+
+            const defaultOption = document.createElement("option");
+            defaultOption.value = "";
+            defaultOption.textContent = "Stageを選択してください";
+            stageSelect.appendChild(defaultOption);
+
+            availableStages.forEach(function(stage) {
+                const option = document.createElement("option");
+                option.value = stage.id;
+                option.textContent = stage.name + (
+                    stage.stage_type === "league" ? " (リーグ)" : " (トーナメント)"
+                );
+                if (
+                    selectedStageId
+                    && String(stage.id) === String(selectedStageId)
+                ) {
+                    option.selected = true;
+                }
+                stageSelect.appendChild(option);
+            });
+        }
+
+        function renderSourceOptions() {
+            sourceResultList.innerHTML = "";
+
+            if (!stageSelect.value) {
+                return;
+            }
+
+            if (!sourceOptions.length) {
+                const emptyItem = document.createElement("li");
+                emptyItem.textContent = "指定できる進出元/結果はありません。";
+                sourceResultList.appendChild(emptyItem);
+                return;
+            }
+
+            sourceOptions.forEach(function(option) {
+                const item = document.createElement("li");
+                item.textContent = option.label;
+                item.dataset.sourceOptionKey = sourceOptionKey(option);
+                item.classList.toggle(
+                    "is-selected",
+                    sourceOptionKey(option) === sourceOptionKey(selectedSourceOption)
+                );
+                item.addEventListener("click", function() {
+                    selectedSourceOption = option;
+                    selectedCandidateId = null;
+                    noteInput.value = "";
+                    renderSourceOptions();
+                    renderCandidates();
+                });
+                sourceResultList.appendChild(item);
+            });
+        }
+
+        function loadSourceOptions(stageId, currentSource) {
+            if (!activeTriggerButton || !stageId) {
+                sourceOptions = [];
+                selectedSourceOption = null;
+                renderSourceOptions();
+                return;
+            }
+
+            const template = (
+                activeTriggerButton.dataset.refereeSourceOptionsUrlTemplate
+            );
+            const url = template.replace("/0/", "/" + stageId + "/");
+            sourceResultList.innerHTML = "";
+
+            fetch(url, {
+                headers: {"X-Requested-With": "XMLHttpRequest"},
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(result.data.error || "読み込みに失敗しました。");
+                        return;
+                    }
+
+                    sourceOptions = result.data.options || [];
+                    if (currentSource) {
+                        const key = currentSourceKey(currentSource);
+                        selectedSourceOption = sourceOptions.find(
+                            function(option) {
+                                return sourceOptionKey(option) === key;
+                            }
+                        ) || null;
+                    }
+                    renderSourceOptions();
+                })
+                .catch(function() {
+                    alert("読み込みに失敗しました。");
+                });
+        }
+
+        function parseJsonResponse(response) {
+            return response.json().then(function(data) {
+                return {
+                    ok: response.ok,
+                    data: data,
+                };
+            });
+        }
+
+        function postReferee(body) {
+            if (!activeTriggerButton) {
+                return;
+            }
+
+            fetch(activeTriggerButton.dataset.refereeSaveUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": csrfToken,
+                },
+                body: body,
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (result.ok && result.data.success) {
+                        location.reload();
+                        return;
+                    }
+                    alert(result.data.error || "保存に失敗しました。");
+                })
+                .catch(function() {
+                    alert("保存に失敗しました。");
+                });
+        }
+
+        function openDialog(triggerButton) {
+            activeTriggerButton = triggerButton;
+            selectedCandidateId = null;
+            candidates = [];
+            refereeGroups = [];
+            ownGroupId = null;
+            selectedGroupId = null;
+            targetEl.textContent = "読み込み中…";
+            currentLabelEl.textContent = "";
+            searchInput.value = "";
+            noteInput.value = "";
+            resultList.innerHTML = "";
+            renderGroupFilters();
+            renderSuggestions();
+            availableStages = [];
+            sourceOptions = [];
+            selectedSourceOption = null;
+            stageSelect.value = "";
+            sourceResultList.innerHTML = "";
+            switchRefereeTab("direct");
+            updateDayOfAlert();
+            dialog.showModal();
+
+            fetch(triggerButton.dataset.refereeCandidatesUrl, {
+                headers: {"X-Requested-With": "XMLHttpRequest"},
+            })
+                .then(parseJsonResponse)
+                .then(function(result) {
+                    if (!result.ok || !result.data.success) {
+                        alert(result.data.error || "読み込みに失敗しました。");
+                        dialog.close();
+                        return;
+                    }
+
+                    const data = result.data;
+                    targetEl.textContent = data.match_label;
+                    if (
+                        data.current
+                        && data.current.source
+                    ) {
+                        const source = data.current.source;
+                        const sourceLabel = (
+                            source.resolved_label || source.label
+                        );
+                        currentLabelEl.textContent = source.resolved_label
+                            ? "現在の審判: " + sourceLabel
+                            : "現在の審判: " + sourceLabel + "(未確定)";
+                    } else if (data.current && data.current.label) {
+                        currentLabelEl.textContent = (
+                            "現在の審判: " + data.current.label
+                        );
+                    } else {
+                        currentLabelEl.textContent = (
+                            "現在、審判は指定されていません"
+                        );
+                    }
+                    candidates = data.candidates || [];
+                    refereeGroups = data.groups || [];
+                    ownGroupId = data.own_group_id || null;
+                    selectedCandidateId = data.current
+                        ? data.current.referee_participant_id
+                        : null;
+                    if (selectedCandidateId) {
+                        const currentCandidate = candidates.find(
+                            function(candidate) {
+                                return (
+                                    String(candidate.id)
+                                    === String(selectedCandidateId)
+                                );
+                            }
+                        );
+                        selectedGroupId = currentCandidate
+                            ? currentCandidate.group_id
+                            : ownGroupId;
+                    } else {
+                        selectedGroupId = ownGroupId;
+                    }
+                    noteInput.value = (
+                        data.current && data.current.referee_note
+                    ) ? data.current.referee_note : "";
+                    availableStages = data.available_stages || [];
+                    const currentSource = data.current
+                        ? data.current.source
+                        : null;
+                    renderStageOptions(
+                        currentSource ? currentSource.stage_id : null
+                    );
+                    if (currentSource && currentSource.stage_id) {
+                        switchRefereeTab("source");
+                        loadSourceOptions(
+                            currentSource.stage_id,
+                            currentSource
+                        );
+                    }
+                    renderGroupFilters();
+                    renderSuggestions();
+                    renderCandidates();
+                    updateDayOfAlert();
+                })
+                .catch(function() {
+                    alert("読み込みに失敗しました。");
+                    dialog.close();
+                });
+        }
+
+        document.querySelectorAll(".schedule-referee-trigger").forEach(
+            function(button) {
+                button.addEventListener("click", function() {
+                    openDialog(button);
+                });
+            }
+        );
+
+        tabButtons.forEach(function(button) {
+            button.addEventListener("click", function() {
+                switchRefereeTab(button.dataset.refereeTab);
+            });
+        });
+
+        searchInput.addEventListener("input", renderCandidates);
+        noteInput.addEventListener("input", function() {
+            if (noteInput.value.trim()) {
+                selectedCandidateId = null;
+                selectedSourceOption = null;
+                updateDayOfAlert();
+                renderCandidates();
+                renderSourceOptions();
+            }
+        });
+        stageSelect.addEventListener("change", function() {
+            selectedSourceOption = null;
+            loadSourceOptions(stageSelect.value, null);
+        });
+
+        saveButton.addEventListener("click", function() {
+            const body = new URLSearchParams();
+            if (activeTab === "source") {
+                if (!selectedSourceOption) {
+                    alert("進出元/結果を選択してください。");
+                    return;
+                }
+
+                body.append("action", "set_source");
+                body.append(
+                    "referee_source_type",
+                    selectedSourceOption.source_type
+                );
+                if (selectedSourceOption.source_type === "league_rank") {
+                    body.append(
+                        "referee_source_group_id",
+                        selectedSourceOption.source_group_id
+                    );
+                    body.append(
+                        "referee_source_rank",
+                        selectedSourceOption.source_rank
+                    );
+                } else {
+                    body.append(
+                        "referee_source_match_id",
+                        selectedSourceOption.source_match_id
+                    );
+                    body.append(
+                        "referee_source_result",
+                        selectedSourceOption.source_result
+                    );
+                }
+            } else if (selectedCandidateId) {
+                body.append("referee_participant_id", selectedCandidateId);
+            } else {
+                body.append("referee_note", noteInput.value.trim());
+            }
+            postReferee(body);
+        });
+
+        clearButton.addEventListener("click", function() {
+            const body = new URLSearchParams();
+            body.append("action", "clear");
+            postReferee(body);
+        });
+
+        cancelButton.addEventListener("click", function() {
+            dialog.close();
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        setupScheduleRefereeMode();
+    });
+</script>
 
 {% endblock %}

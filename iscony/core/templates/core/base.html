@@ -920,6 +920,12 @@
         font-size: 0.86rem;
     }
 
+    .schedule-referee-line {
+        margin-top: 4px;
+        font-size: 0.82rem;
+        color: #555;
+    }
+
     .schedule-pair-line {
         display: flex;
         justify-content: space-between;
@@ -954,6 +960,20 @@
         border-radius: 4px;
         background: #f7fbff;
         white-space: nowrap;
+    }
+
+    .schedule-actions button.schedule-referee-trigger {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 3px 8px;
+        border: 1px solid #b8c7dc;
+        border-radius: 4px;
+        background: #f7fbff;
+        white-space: nowrap;
+        font: inherit;
+        cursor: pointer;
+        color: #1565c0;
     }
 
     /* =========================
@@ -1518,6 +1538,26 @@
         background: #fff8e8;
         font-size: 13px;
         color: #6b4f1d;
+    }
+
+    .schedule-referee-day-of-alert {
+        box-sizing: border-box;
+        margin: 8px 0;
+        padding: 8px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+    }
+
+    .schedule-referee-day-of-alert.is-next {
+        border: 1px solid #e6b86b;
+        background: #fff8e8;
+        color: #6b4f1d;
+    }
+
+    .schedule-referee-day-of-alert.is-current {
+        border: 1px solid #e0a0a0;
+        background: #fff0f0;
+        color: #7a2a2a;
     }
 
     #scheduleRefereeStageSelect {

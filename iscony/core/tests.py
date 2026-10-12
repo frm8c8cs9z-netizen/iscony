@@ -100,6 +100,7 @@ from .services import (
     group_base_size,
     group_slot_reference_total,
     consume_stage_advancement_result,
+    day_of_referee_status_map,
     insert_round_robin_schedule,
     move_schedule,
     move_empty_league_entry_slot,
@@ -9992,6 +9993,259 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertEqual(
             response.json(),
             {"success": False, "error": "POSTで送信してください。"},
+        )
+
+
+class DayOfRefereeTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="当日審判テスト大会",
+            code="DAYREFEREE",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="Aグループ",
+        )
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament,
+            name="午前",
+            display_order=1,
+        )
+        self.court1 = Court.objects.create(
+            tournament=self.tournament,
+            name="1コート",
+            display_order=1,
+        )
+        self.court2 = Court.objects.create(
+            tournament=self.tournament,
+            name="2コート",
+            display_order=2,
+        )
+        self._entry_index = 0
+
+    def _create_entry(self, pair_code=None):
+        self._entry_index += 1
+        code = pair_code or str(self._entry_index)
+        return create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code=code,
+            display_order=self._entry_index,
+            player1_name=f"選手{code}A",
+            player2_name=f"選手{code}B",
+        )
+
+    def _create_schedule(self, court, order, pair1, pair2, scored=False):
+        match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=pair1,
+            pair2=pair2,
+        )
+        if scored:
+            match.pair1_games = 4
+            match.pair2_games = 2
+            match.save()
+        return Schedule.objects.create(
+            schedule_block=self.block,
+            court=court,
+            order=order,
+            round_robin_match=match,
+        )
+
+    def _build_day_of_schedules(self):
+        scored1 = self._create_entry("S1")
+        scored2 = self._create_entry("S2")
+        current1 = self._create_entry("C1")
+        current2 = self._create_entry("C2")
+        next1 = self._create_entry("N1")
+        next2 = self._create_entry("N2")
+        court2_current1 = self._create_entry("D1")
+        court2_current2 = self._create_entry("D2")
+        court2_next2 = self._create_entry("D3")
+
+        self._create_schedule(self.court1, 1, scored1, scored2, scored=True)
+        self._create_schedule(self.court1, 2, current1, current2)
+        self._create_schedule(self.court1, 3, next1, next2)
+        self._create_schedule(self.court2, 1, court2_current1, court2_current2)
+        self._create_schedule(self.court2, 2, current1, court2_next2)
+
+        return {
+            "scored1": scored1,
+            "current1": current1,
+            "current2": current2,
+            "next1": next1,
+            "next2": next2,
+            "court2_current1": court2_current1,
+            "court2_next2": court2_next2,
+        }
+
+    def test_day_of_referee_status_map_marks_current_and_next_by_court(self):
+        entries = self._build_day_of_schedules()
+
+        status_map = day_of_referee_status_map(self.block)
+
+        self.assertNotIn(entries["scored1"].participant_id, status_map)
+        self.assertEqual(
+            status_map[entries["current1"].participant_id],
+            {
+                "status": "in_progress",
+                "court_name": "1コート",
+                "order": 2,
+            },
+        )
+        self.assertEqual(
+            status_map[entries["next1"].participant_id],
+            {
+                "status": "next",
+                "court_name": "1コート",
+                "order": 3,
+            },
+        )
+        self.assertEqual(
+            status_map[entries["court2_current1"].participant_id],
+            {
+                "status": "in_progress",
+                "court_name": "2コート",
+                "order": 1,
+            },
+        )
+        self.assertEqual(
+            status_map[entries["court2_next2"].participant_id],
+            {
+                "status": "next",
+                "court_name": "2コート",
+                "order": 2,
+            },
+        )
+
+    def test_candidates_api_includes_day_of_status_fields(self):
+        entries = self._build_day_of_schedules()
+        own1 = self._create_entry("OWN1")
+        own2 = self._create_entry("OWN2")
+        unrelated = self._create_entry("FREE")
+        target_schedule = self._create_schedule(self.court1, 10, own1, own2)
+        url = reverse(
+            "schedule_referee_candidates_api",
+            kwargs={
+                "code": self.tournament.code,
+                "schedule_id": target_schedule.id,
+            },
+        )
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        candidates = {
+            candidate["id"]: candidate
+            for candidate in payload["candidates"]
+        }
+        self.assertEqual(
+            candidates[entries["current1"].participant_id][
+                "day_of_current_match"
+            ],
+            {"court_name": "1コート", "order": 2},
+        )
+        self.assertIsNone(
+            candidates[entries["current1"].participant_id]["day_of_next_match"]
+        )
+        self.assertEqual(
+            candidates[entries["next1"].participant_id]["day_of_next_match"],
+            {"court_name": "1コート", "order": 3},
+        )
+        self.assertIsNone(
+            candidates[entries["next1"].participant_id][
+                "day_of_current_match"
+            ]
+        )
+        self.assertIsNone(
+            candidates[unrelated.participant_id]["day_of_current_match"]
+        )
+        self.assertIsNone(
+            candidates[unrelated.participant_id]["day_of_next_match"]
+        )
+
+    def test_schedule_view_shows_referee_labels_and_trigger_buttons(self):
+        direct_referee = self._create_entry("REF")
+        match1_pair1 = self._create_entry("M1A")
+        match1_pair2 = self._create_entry("M1B")
+        match2_pair1 = self._create_entry("M2A")
+        match2_pair2 = self._create_entry("M2B")
+        match3_pair1 = self._create_entry("M3A")
+        match3_pair2 = self._create_entry("M3B")
+
+        direct_schedule = self._create_schedule(
+            self.court1,
+            1,
+            match1_pair1,
+            match1_pair2,
+        )
+        direct_schedule.referee_participant = direct_referee.participant
+        direct_schedule.save()
+
+        note_schedule = self._create_schedule(
+            self.court1,
+            2,
+            match2_pair1,
+            match2_pair2,
+        )
+        note_schedule.referee_note = "本部審判"
+        note_schedule.save()
+
+        source_schedule = self._create_schedule(
+            self.court1,
+            3,
+            match3_pair1,
+            match3_pair2,
+        )
+        source_schedule.referee_source_type = (
+            AdvancementSource.SOURCE_LEAGUE_RANK
+        )
+        source_schedule.referee_source_stage = self.stage
+        source_schedule.referee_source_group = self.group
+        source_schedule.referee_source_rank = 1
+        source_schedule.save()
+
+        response = self.client.get(
+            reverse(
+                "schedule_view",
+                kwargs={"tournament_code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "審判:")
+        self.assertContains(
+            response,
+            (
+                f"{direct_referee.participant.code} "
+                f"{direct_referee.participant.display_name}"
+            ),
+        )
+        self.assertContains(response, "本部審判")
+        self.assertContains(response, "Aグループ－1位")
+        self.assertContains(response, "(未確定)")
+        self.assertContains(response, "data-referee-candidates-url", count=3)
+        self.assertContains(
+            response,
+            reverse(
+                "schedule_referee_candidates_api",
+                kwargs={
+                    "code": self.tournament.code,
+                    "schedule_id": direct_schedule.id,
+                },
+            ),
         )
 
 
