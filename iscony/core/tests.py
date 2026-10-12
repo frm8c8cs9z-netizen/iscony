@@ -24432,8 +24432,227 @@ class ParticipantManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "選手変更")
         self.assertContains(response, participant.entry_code)
-        self.assertContains(response, "変更入力は次段階")
+        self.assertContains(response, "選手変更へ")
+        self.assertContains(
+            response,
+            reverse(
+                "edit_day_player_change",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+        )
+        self.assertNotContains(response, "変更入力は次段階")
         self.assertNotContains(response, "通常編集")
+
+    def test_day_player_change_edit_form_shows_original_names(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_day_player_change",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "元の登録(参考表示)")
+        self.assertContains(response, "参加者1A")
+        self.assertContains(response, "参加者1B")
+        self.assertContains(response, "選手1 当日の氏名")
+        self.assertContains(response, "選手2 当日の氏名")
+
+    def test_day_player_change_save_normalizes_blank_fields_to_none(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_day_player_change",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            {
+                "current_player1_name": "当日選手1A",
+                "current_player1_short_name": "",
+                "current_player2_name": "",
+                "current_player2_short_name": "",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "day_player_change_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertTrue(participant.has_day_player_change)
+        self.assertEqual(participant.current_player1_name, "当日選手1A")
+        self.assertIsNone(participant.current_player1_short_name)
+        self.assertIsNone(participant.current_player2_name)
+        self.assertIsNone(participant.current_player2_short_name)
+        self.assertEqual(participant.effective_player1_name, "当日選手1A")
+        self.assertEqual(participant.effective_player2_name, "参加者1B")
+
+    def test_day_player_change_used_participant_requires_impact_confirmation(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+        opponent = Participant.objects.create(
+            category=self.category,
+            entry_code="E002",
+            player1_name="参加者2A",
+            player2_name="参加者2B",
+        )
+        stage = Stage.objects.create(
+            category=self.category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=self.category,
+            stage=stage,
+            name="Aリーグ",
+            display_order=1,
+        )
+        entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            participant=participant,
+            pair_code="A1",
+            display_order=1,
+        )
+        opponent_entry = LeagueEntry.objects.create(
+            category=self.category,
+            group=group,
+            participant=opponent,
+            pair_code="A2",
+            display_order=2,
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry,
+            pair2=opponent_entry,
+            pair1_games=4,
+            pair2_games=1,
+            completed=True,
+        )
+
+        url = reverse(
+            "edit_day_player_change",
+            kwargs={
+                "code": self.tournament.code,
+                "category_id": self.category.id,
+                "participant_id": participant.id,
+            },
+        )
+        post_data = {
+            "current_player1_name": "当日選手1A",
+            "current_player1_short_name": "",
+            "current_player2_name": "",
+            "current_player2_short_name": "",
+        }
+        response = self.client.post(url, post_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "保存前に確認してください")
+        self.assertContains(response, "リーグ枠: 1件")
+        self.assertContains(response, "リーグ試合: 1件")
+        self.assertContains(response, "結果入力済みリーグ試合: 1件")
+        participant.refresh_from_db()
+        self.assertFalse(participant.has_day_player_change)
+        self.assertIsNone(participant.current_player1_name)
+
+        response = self.client.post(
+            url,
+            {
+                **post_data,
+                "confirm_impact": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "day_player_change_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertTrue(participant.has_day_player_change)
+        self.assertEqual(participant.current_player1_name, "当日選手1A")
+
+    def test_day_player_change_clear_resets_current_fields(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+            has_day_player_change=True,
+            current_player1_name="当日選手1A",
+            current_player1_short_name="当日1A",
+            current_player2_name="当日選手1B",
+            current_player2_short_name="当日1B",
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_day_player_change",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            {"action": "clear"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "day_player_change_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertFalse(participant.has_day_player_change)
+        self.assertIsNone(participant.current_player1_name)
+        self.assertIsNone(participant.current_player1_short_name)
+        self.assertIsNone(participant.current_player2_name)
+        self.assertIsNone(participant.current_player2_short_name)
 
     def test_add_participant_saves_pair_common_organizations(self):
         response = self.client.post(

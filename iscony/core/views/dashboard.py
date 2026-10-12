@@ -41,6 +41,7 @@ from ..forms import (
     ScheduleEditForm,
     ScheduleMoveForm,
     CategoryForm,
+    DayPlayerChangeForm,
     ParticipantForm,
     ReceptionMatchSearchForm,
     ScheduleBlockSettingsForm,
@@ -780,6 +781,115 @@ def edit_participant(request, code, category_id, participant_id):
             "org_set_options": tournament_pair_organization_sets(tournament),
             "page_title": "参加者編集",
             "submit_label": "更新",
+        },
+    )
+
+
+def edit_day_player_change(request, code, category_id, participant_id):
+    """カテゴリ内の参加者を当日変更する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code,
+    )
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+    participant = get_object_or_404(
+        Participant,
+        id=participant_id,
+        category=category,
+    )
+
+    original_player1_name = (
+        participant.original_player1_name or participant.player1_name
+    )
+    original_player2_name = (
+        participant.original_player2_name or participant.player2_name
+    )
+
+    if request.method == "POST":
+        if request.POST.get("action") == "clear":
+            participant.has_day_player_change = False
+            participant.current_player1_name = None
+            participant.current_player1_short_name = None
+            participant.current_player2_name = None
+            participant.current_player2_short_name = None
+            participant.save()
+            messages.success(
+                request,
+                f"{participant.entry_code} の選手変更を解除しました。",
+            )
+            return redirect(
+                "day_player_change_list",
+                code=tournament.code,
+                category_id=category.id,
+            )
+
+        form = DayPlayerChangeForm(
+            request.POST,
+            instance=participant,
+        )
+        if form.is_valid():
+            impact_summary = participant_edit_impact_summary(participant)
+            if (
+                impact_summary["has_impact"]
+                and request.POST.get("confirm_impact") != "1"
+            ):
+                return render(
+                    request,
+                    "core/day_player_change_form.html",
+                    {
+                        "tournament": tournament,
+                        "category": category,
+                        "participant": participant,
+                        "form": form,
+                        "original_player1_name": original_player1_name,
+                        "original_player2_name": original_player2_name,
+                        "impact_summary": impact_summary,
+                    },
+                )
+
+            changed = form.save(commit=False)
+            for field_name in (
+                "current_player1_name",
+                "current_player1_short_name",
+                "current_player2_name",
+                "current_player2_short_name",
+            ):
+                if getattr(changed, field_name) == "":
+                    setattr(changed, field_name, None)
+
+            changed.has_day_player_change = bool(
+                changed.current_player1_name
+                or changed.current_player2_name
+            )
+            changed.save()
+            messages.success(
+                request,
+                f"{participant.entry_code} の選手変更を保存しました。",
+            )
+            return redirect(
+                "day_player_change_list",
+                code=tournament.code,
+                category_id=category.id,
+            )
+    else:
+        form = DayPlayerChangeForm(instance=participant)
+
+    return render(
+        request,
+        "core/day_player_change_form.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "participant": participant,
+            "form": form,
+            "original_player1_name": original_player1_name,
+            "original_player2_name": original_player2_name,
+            "impact_summary": None,
         },
     )
 

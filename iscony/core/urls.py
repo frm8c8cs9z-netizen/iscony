@@ -350,6 +350,15 @@ urlpatterns = [
     ),
 
     path(
+        (
+            "tournament/<str:code>/category/<int:category_id>/"
+            "day-player-changes/<int:participant_id>/edit/"
+        ),
+        dashboard.edit_day_player_change,
+        name="edit_day_player_change",
+    ),
+
+    path(
         "tournament/<str:code>/category/<int:category_id>/participants/add/",
         dashboard.add_participant,
         name="add_participant",

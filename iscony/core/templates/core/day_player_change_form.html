@@ -1,0 +1,125 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ tournament.name }} 選手変更{% endblock %}
+
+{% block content %}
+
+<div class="page-heading">
+    <div>
+        <h2>{{ category.name }} 選手変更</h2>
+        <p class="subtle-text">
+            {{ tournament.name }} / {{ participant.entry_code }}
+        </p>
+    </div>
+    <div class="action-row">
+        <a href="{% url 'day_player_change_list' tournament.code category.id %}">
+            選手変更一覧へ
+        </a>
+    </div>
+</div>
+
+<form method="post" class="participant-form">
+    {% csrf_token %}
+
+    <div class="participant-form-shell">
+        <section class="participant-form-panel participant-input-panel">
+            <h3>元の登録(参考表示)</h3>
+            <div class="participant-field-stack">
+                <div class="participant-field participant-field--medium">
+                    <span class="subtle-text">選手1</span>
+                    <p>{{ original_player1_name }}</p>
+                </div>
+                <div class="participant-field participant-field--medium">
+                    <span class="subtle-text">選手2</span>
+                    <p>{{ original_player2_name }}</p>
+                </div>
+            </div>
+
+            <h3>当日の選手</h3>
+            <p class="subtle-text">
+                変更がない選手は空欄のままにしてください。片方だけの変更もできます。
+            </p>
+            <div class="participant-field-stack">
+                <div class="participant-field participant-field--medium">
+                    {{ form.current_player1_name.label_tag }}
+                    {{ form.current_player1_name }}
+                    {{ form.current_player1_name.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.current_player1_short_name.label_tag }}
+                    {{ form.current_player1_short_name }}
+                    {{ form.current_player1_short_name.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.current_player2_name.label_tag }}
+                    {{ form.current_player2_name }}
+                    {{ form.current_player2_name.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.current_player2_short_name.label_tag }}
+                    {{ form.current_player2_short_name }}
+                    {{ form.current_player2_short_name.errors }}
+                </div>
+            </div>
+        </section>
+    </div>
+
+    {% if impact_summary %}
+        <div class="participant-impact-warning">
+            <h3>保存前に確認してください</h3>
+            <p>
+                この参加者は、すでにリーグ表・トーナメント表・進行表・結果に使われています。
+                保存すると、過去の結果も含めて表示名が当日の選手名で表示されます。
+                試合結果そのものは変更されません。
+            </p>
+            <ul>
+                {% if impact_summary.league_entries %}
+                    <li>リーグ枠: {{ impact_summary.league_entries }}件</li>
+                {% endif %}
+                {% if impact_summary.tournament_entries %}
+                    <li>トーナメント枠: {{ impact_summary.tournament_entries }}件</li>
+                {% endif %}
+                {% if impact_summary.round_robin_matches %}
+                    <li>リーグ試合: {{ impact_summary.round_robin_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.tournament_matches %}
+                    <li>トーナメント試合: {{ impact_summary.tournament_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.schedules %}
+                    <li>進行表: {{ impact_summary.schedules }}件</li>
+                {% endif %}
+                {% if impact_summary.scored_round_robin_matches %}
+                    <li>結果入力済みリーグ試合: {{ impact_summary.scored_round_robin_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.scored_tournament_matches %}
+                    <li>結果入力済みトーナメント試合: {{ impact_summary.scored_tournament_matches }}件</li>
+                {% endif %}
+                {% if impact_summary.progressed_schedules %}
+                    <li>呼出・開始・終了済み進行: {{ impact_summary.progressed_schedules }}件</li>
+                {% endif %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <div class="participant-form-actions">
+        <button
+            type="submit"
+            {% if impact_summary %}name="confirm_impact" value="1"{% endif %}
+        >
+            {% if impact_summary %}影響を確認して保存{% else %}保存{% endif %}
+        </button>
+        {% if participant.has_day_player_change %}
+            <button type="submit" name="action" value="clear">
+                変更を解除する
+            </button>
+        {% endif %}
+        <a
+            class="participant-form-action-link"
+            href="{% url 'day_player_change_list' tournament.code category.id %}"
+        >
+            キャンセル
+        </a>
+    </div>
+</form>
+
+{% endblock %}

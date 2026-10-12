@@ -19,6 +19,7 @@ from .schedule import (
 from .setup import (
     CategoryForm,
     CategoryOrderForm,
+    DayPlayerChangeForm,
     GroupOrderForm,
     ParticipantForm,
     StageEditForm,
@@ -41,6 +42,7 @@ __all__ = [
     "CSVUploadForm",
     "CategoryForm",
     "CategoryOrderForm",
+    "DayPlayerChangeForm",
     "ExtraRoundRobinMatchForm",
     "GroupOrderForm",
     "LeagueEntryChoiceField",

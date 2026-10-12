@@ -25,7 +25,7 @@
 
 <p class="subtle-text">
     {% if day_change_mode %}
-        当日だけ出場者が変わる場合の確認入口です。変更入力画面は次の段階で実装します。
+        当日だけ出場者が変わる場合の確認入口です。
     {% else %}
         名簿の誤字、所属、表示順、コードを整えます。当日の選手交代は選手変更で扱います。
     {% endif %}
@@ -55,7 +55,9 @@
             </td>
             <td>
                 {% if day_change_mode %}
-                    <span class="muted-text">変更入力は次段階</span>
+                    <a href="{% url 'edit_day_player_change' tournament.code category.id participant.id %}">
+                        選手変更へ
+                    </a>
                 {% else %}
                     <a href="{% url 'edit_participant' tournament.code category.id participant.id %}">
                         通常編集

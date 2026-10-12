@@ -323,6 +323,44 @@ class ParticipantForm(forms.ModelForm):
         return participant
 
 
+class DayPlayerChangeForm(forms.ModelForm):
+    """当日選手変更の入力フォーム。
+
+    current_* フィールドだけを扱う。空欄のまま保存する場合は、
+    呼び出し側(view)でNoneに正規化すること(このフォーム自体は
+    空文字列をそのまま返す)。
+    """
+
+    class Meta:
+        model = Participant
+        fields = [
+            "current_player1_name",
+            "current_player1_short_name",
+            "current_player2_name",
+            "current_player2_short_name",
+        ]
+        labels = {
+            "current_player1_name": "選手1 当日の氏名",
+            "current_player1_short_name": "選手1 当日の短縮名",
+            "current_player2_name": "選手2 当日の氏名",
+            "current_player2_short_name": "選手2 当日の短縮名",
+        }
+        help_texts = {
+            "current_player1_name": (
+                "変更がない場合は空欄のままにしてください。"
+            ),
+            "current_player1_short_name": (
+                "未入力の場合は氏名から自動的に短縮表示します。"
+            ),
+            "current_player2_name": (
+                "変更がない場合は空欄のままにしてください。"
+            ),
+            "current_player2_short_name": (
+                "未入力の場合は氏名から自動的に短縮表示します。"
+            ),
+        }
+
+
 class TournamentSettingsForm(forms.ModelForm):
 
     class Meta:
