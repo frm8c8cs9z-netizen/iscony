@@ -101,19 +101,28 @@
         <td>カテゴリ管理</td>
         <td>
             <a href="{% url 'category_management' tournament.code %}">
-                カテゴリ一覧・追加・編集
+                カテゴリを管理する
             </a>
         </td>
-        <td>大会内カテゴリの名称と表示順を管理します。参加者管理の前提になる入口です。</td>
+        <td>大会内カテゴリの一覧、追加、編集を行います。参加者管理やStage管理の前提になる入口です。</td>
     </tr>
     <tr>
-        <td>参加者管理</td>
+        <td>参加者名簿</td>
         <td>
             <a href="{% url 'participant_category_select' tournament.code %}">
-                カテゴリ別参加者一覧・追加・編集
+                カテゴリを選んで名簿を見る
             </a>
         </td>
-        <td>CSV取込後の名簿確認や、参加者の手入力・通常編集を行います。</td>
+        <td>CSV取込後の名簿確認、参加者の追加、誤字・所属・表示順の通常編集を行います。</td>
+    </tr>
+    <tr>
+        <td>選手変更</td>
+        <td>
+            <a href="{% url 'day_player_change_category_select' tournament.code %}">
+                当日変更する参加者を探す
+            </a>
+        </td>
+        <td>当日に出場者が変わる場合の入口です。通常の名簿修正とは分けて扱います。</td>
     </tr>
     <tr>
         <td>進出元の整理</td>
@@ -124,32 +133,6 @@
         </td>
         <td>後続Stageの枠に入る進出元を確認・入れ替えします。</td>
     </tr>
-    <tr>
-        <td>Stageの入口整理</td>
-        <td>
-            <a href="{% url 'tournament_stage_overview_index' tournament.code %}">
-                Stage補助一覧
-            </a>
-        </td>
-        <td>カテゴリごとのStage進行への入口だけをまとめた補助一覧です。</td>
-    </tr>
-    {% for category in categories %}
-        <tr>
-            <td>リーグ枠調整</td>
-            <td>
-                <a href="{% url 'pair_maintenance' category.id %}">
-                    {{ category.name }} / リーグ枠
-                </a>
-            </td>
-            <td>リーグの枠調整を行います。結果確認は一般表示側のカテゴリ一覧から見たほうが自然です。</td>
-        </tr>
-    {% empty %}
-    <tr>
-        <td colspan="3">
-            カテゴリがありません。
-        </td>
-    </tr>
-    {% endfor %}
     <tr>
         <td>トーナメント管理</td>
         <td>

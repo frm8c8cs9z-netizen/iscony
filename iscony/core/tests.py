@@ -15829,7 +15829,8 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "構成管理")
         self.assertContains(response, "危険操作・初期化")
         self.assertContains(response, "カテゴリ管理")
-        self.assertContains(response, "参加者管理")
+        self.assertContains(response, "参加者名簿")
+        self.assertContains(response, "選手変更")
         self.assertContains(response, "表示順調整")
         self.assertContains(response, "リーグ表示順")
         self.assertContains(response, "日程区分管理")
@@ -15838,6 +15839,7 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(response, "大会設定")
         self.assertContains(response, "大会複製")
         self.assertContains(response, "進出元一覧・入れ替え")
+        self.assertNotContains(response, "リーグ枠調整")
         self.assertContains(response, "試合進行CSV取込")
         self.assertContains(response, "Stage枠CSV取込")
         self.assertContains(
@@ -15899,13 +15901,9 @@ class MaintenanceMenuTests(TestCase):
         self.assertContains(
             response,
             reverse(
-                "pair_maintenance",
-                kwargs={"category_id": first_category.id},
+                "day_player_change_category_select",
+                kwargs={"code": tournament.code},
             ),
-        )
-        self.assertLess(
-            content.index(first_category.name),
-            content.index(later_category.name),
         )
 
 
@@ -24383,6 +24381,59 @@ class ParticipantManagementTests(TestCase):
                 },
             ),
         )
+
+    def test_day_player_change_category_select_links_to_change_list(self):
+        Participant.objects.create(
+            category=self.category,
+            entry_code="1",
+            player1_name="山田",
+            player2_name="田中",
+        )
+
+        response = self.client.get(
+            reverse(
+                "day_player_change_category_select",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "選手変更")
+        self.assertContains(response, self.category.name)
+        self.assertContains(
+            response,
+            reverse(
+                "day_player_change_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+
+    def test_day_player_change_list_separates_change_from_normal_edit(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+
+        response = self.client.get(
+            reverse(
+                "day_player_change_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "選手変更")
+        self.assertContains(response, participant.entry_code)
+        self.assertContains(response, "変更入力は次段階")
+        self.assertNotContains(response, "通常編集")
 
     def test_add_participant_saves_pair_common_organizations(self):
         response = self.client.post(

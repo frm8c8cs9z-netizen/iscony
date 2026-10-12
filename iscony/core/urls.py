@@ -329,9 +329,24 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/day-player-changes/",
+        dashboard.day_player_change_category_select,
+        name="day_player_change_category_select",
+    ),
+
+    path(
         "tournament/<str:code>/category/<int:category_id>/participants/",
         dashboard.participant_list,
         name="participant_list",
+    ),
+
+    path(
+        (
+            "tournament/<str:code>/category/<int:category_id>/"
+            "day-player-changes/"
+        ),
+        dashboard.day_player_change_list,
+        name="day_player_change_list",
     ),
 
     path(

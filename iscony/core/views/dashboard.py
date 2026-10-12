@@ -481,8 +481,15 @@ def edit_category(request, code, category_id):
     )
 
 
-def participant_category_select(request, code):
-    """参加者管理で編集対象カテゴリを選ぶ。"""
+def _participant_category_select(
+        request,
+        code,
+        *,
+        page_title,
+        lead_text,
+        category_link_url_name,
+        action_label):
+    """参加者系画面で編集対象カテゴリを選ぶ共通入口。"""
 
     tournament = get_object_or_404(
         Tournament,
@@ -503,12 +510,50 @@ def participant_category_select(request, code):
         {
             "tournament": tournament,
             "categories": categories,
+            "page_title": page_title,
+            "lead_text": lead_text,
+            "category_link_url_name": category_link_url_name,
+            "action_label": action_label,
         },
     )
 
 
-def participant_list(request, code, category_id):
-    """カテゴリ別の参加者一覧を表示する。"""
+def participant_category_select(request, code):
+    """参加者名簿で編集対象カテゴリを選ぶ。"""
+
+    return _participant_category_select(
+        request,
+        code,
+        page_title="参加者名簿",
+        lead_text="カテゴリを選んで、名簿の確認・追加・通常編集へ進みます。",
+        category_link_url_name="participant_list",
+        action_label="名簿を見る",
+    )
+
+
+def day_player_change_category_select(request, code):
+    """当日選手変更で対象カテゴリを選ぶ。"""
+
+    return _participant_category_select(
+        request,
+        code,
+        page_title="選手変更",
+        lead_text="当日に出場者が変わった参加者を、カテゴリから探します。",
+        category_link_url_name="day_player_change_list",
+        action_label="選手変更へ",
+    )
+
+
+def _participant_list(
+        request,
+        code,
+        category_id,
+        *,
+        page_title_suffix,
+        back_url_name,
+        back_label,
+        day_change_mode=False):
+    """カテゴリ別の参加者一覧を、名簿/選手変更の文脈で表示する。"""
 
     tournament = get_object_or_404(
         Tournament,
@@ -539,7 +584,38 @@ def participant_list(request, code, category_id):
             "tournament": tournament,
             "category": category,
             "participants": participants,
+            "page_title_suffix": page_title_suffix,
+            "back_url_name": back_url_name,
+            "back_label": back_label,
+            "day_change_mode": day_change_mode,
         },
+    )
+
+
+def participant_list(request, code, category_id):
+    """カテゴリ別の参加者名簿を表示する。"""
+
+    return _participant_list(
+        request,
+        code,
+        category_id,
+        page_title_suffix="参加者名簿",
+        back_url_name="participant_category_select",
+        back_label="参加者名簿へ",
+    )
+
+
+def day_player_change_list(request, code, category_id):
+    """カテゴリ別に当日選手変更の対象参加者を表示する。"""
+
+    return _participant_list(
+        request,
+        code,
+        category_id,
+        page_title_suffix="選手変更",
+        back_url_name="day_player_change_category_select",
+        back_label="選手変更へ",
+        day_change_mode=True,
     )
 
 
