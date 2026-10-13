@@ -13217,6 +13217,20 @@ class ImportParticipantsCsvTests(TestCase):
             },
         )
 
+    def _org1_values_for_entry(self, entry_code):
+        participant = Participant.objects.get(entry_code=entry_code)
+        field = TournamentOrganizationField.objects.get(
+            tournament=self.tournament,
+            code="org1",
+        )
+        return {
+            value.player_no: value.original_value
+            for value in ParticipantOrganizationValue.objects.filter(
+                participant=participant,
+                field=field,
+            )
+        }
+
     def test_missing_category_is_created_from_csv(self):
         response = self._post_csv(
             "category,entry_code,organization,player1_name,player2_name\n"
@@ -13257,6 +13271,98 @@ class ImportParticipantsCsvTests(TestCase):
             {
                 1: "テスト所属",
                 2: "テスト所属",
+            },
+        )
+
+    def test_legacy_organization_delimited_by_middle_dot_is_split(self):
+        response = self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name\n"
+            "男子A,E001,クラブA・クラブB,参加者1A,参加者1B\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._org1_values_for_entry("E001"),
+            {
+                1: "クラブA",
+                2: "クラブB",
+            },
+        )
+
+    def test_legacy_organization_delimited_by_slash_is_split(self):
+        response = self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name\n"
+            "男子A,E001,クラブA/クラブB,参加者1A,参加者1B\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._org1_values_for_entry("E001"),
+            {
+                1: "クラブA",
+                2: "クラブB",
+            },
+        )
+
+    def test_common_org1_delimited_by_middle_dot_is_split(self):
+        response = self._post_csv(
+            "category,entry_code,player1_name,player2_name,org1\n"
+            "男子A,E001,参加者1A,参加者1B,クラブA・クラブB\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._org1_values_for_entry("E001"),
+            {
+                1: "クラブA",
+                2: "クラブB",
+            },
+        )
+
+    def test_common_org_without_delimiter_is_imported_for_both_players(self):
+        response = self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name\n"
+            "男子A,E001,クラブA,参加者1A,参加者1B\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._org1_values_for_entry("E001"),
+            {
+                1: "クラブA",
+                2: "クラブA",
+            },
+        )
+
+    def test_player_org_column_takes_priority_over_split_common_org(self):
+        response = self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name,"
+            "player1_org1\n"
+            "男子A,E001,クラブA・クラブB,参加者1A,参加者1B,"
+            "選手1明示所属\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._org1_values_for_entry("E001"),
+            {
+                1: "選手1明示所属",
+                2: "クラブB",
+            },
+        )
+
+    def test_common_org_is_split_only_at_first_delimiter(self):
+        response = self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name\n"
+            "男子A,E001,クラブA・クラブB・クラブC,参加者1A,参加者1B\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._org1_values_for_entry("E001"),
+            {
+                1: "クラブA",
+                2: "クラブB・クラブC",
             },
         )
 

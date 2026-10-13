@@ -85,6 +85,32 @@ def _participant_common_org_value(row, code):
     ).strip()
 
 
+ORGANIZATION_COMMON_DELIMITERS = ("・", "/")
+
+
+def _split_common_organization_value(value):
+    """共通所属欄の値を、「・」または「/」で選手1・選手2の値に分割する。
+
+    区切り文字が含まれていれば、最初に見つかった区切りで1回だけ分割し、
+    前半を選手1、後半(残り全部)を選手2の値として返す。
+    区切りが無ければ、同じ値を選手1・選手2の両方へ返す(従来通りの挙動)。
+    """
+
+    if not value:
+        return "", ""
+
+    for delimiter in ORGANIZATION_COMMON_DELIMITERS:
+        if delimiter in value:
+            parts = value.split(delimiter, 1)
+            player1_part = parts[0].strip()
+            player2_part = (
+                parts[1].strip() if len(parts) > 1 else ""
+            )
+            return player1_part, player2_part or player1_part
+
+    return value, value
+
+
 CSV_FORMAT_HEADERS = {
     "participants": _participant_csv_headers(),
     "stage_slots": [
@@ -160,12 +186,18 @@ def _participant_row_org_values(row, *, has_player2):
         ).strip()
 
         if common_value:
-            player1_value = player1_value or common_value
-            player2_value = player2_value or common_value
+            common_player1, common_player2 = _split_common_organization_value(
+                common_value
+            )
+            player1_value = player1_value or common_player1
+            player2_value = player2_value or common_player2
 
         if code == "org1" and legacy_organization:
-            player1_value = player1_value or legacy_organization
-            player2_value = player2_value or legacy_organization
+            legacy_player1, legacy_player2 = _split_common_organization_value(
+                legacy_organization
+            )
+            player1_value = player1_value or legacy_player1
+            player2_value = player2_value or legacy_player2
 
         if has_player2 and player1_value and not player2_value:
             player2_value = player1_value
