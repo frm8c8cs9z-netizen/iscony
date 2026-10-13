@@ -116,7 +116,7 @@ from .services import (
     resolve_schedule_referee,
     schedule_referee_key,
     save_day_player_change_organization_values,
-    save_pair_organization_values,
+    save_participant_organization_values,
     save_round_robin_score,
     save_tournament_score,
     save_tournament_retirement,
@@ -866,10 +866,13 @@ class EntryDisplayHelperTests(TestCase):
             player2_name="佐藤　次郎",
         )
         participant = entry.participant
-        save_pair_organization_values(
+        save_participant_organization_values(
             self.tournament,
             participant,
-            {"org1": "第一クラブ", "org2": ""},
+            {
+                "player1": {"org1": "第一クラブ", "org2": ""},
+                "player2": {"org1": "第一クラブ", "org2": ""},
+            },
         )
 
         participant.refresh_from_db()
@@ -899,10 +902,13 @@ class EntryDisplayHelperTests(TestCase):
             player2_name="佐藤　次郎",
         )
         participant = entry.participant
-        save_pair_organization_values(
+        save_participant_organization_values(
             self.tournament,
             participant,
-            {"org1": "第一クラブ", "org2": ""},
+            {
+                "player1": {"org1": "第一クラブ", "org2": ""},
+                "player2": {"org1": "第一クラブ", "org2": ""},
+            },
         )
         participant.has_day_player_change = True
         participant.save()
@@ -941,10 +947,13 @@ class EntryDisplayHelperTests(TestCase):
             player2_name="佐藤　次郎",
         )
         participant = entry.participant
-        save_pair_organization_values(
+        save_participant_organization_values(
             self.tournament,
             participant,
-            {"org1": "第一クラブ", "org2": ""},
+            {
+                "player1": {"org1": "第一クラブ", "org2": ""},
+                "player2": {"org1": "第一クラブ", "org2": ""},
+            },
         )
         participant.has_day_player_change = True
         participant.save()
@@ -989,10 +998,13 @@ class EntryDisplayHelperTests(TestCase):
             player2_name="佐藤　次郎",
         )
         participant = entry.participant
-        save_pair_organization_values(
+        save_participant_organization_values(
             self.tournament,
             participant,
-            {"org1": "第一クラブ", "org2": ""},
+            {
+                "player1": {"org1": "第一クラブ", "org2": ""},
+                "player2": {"org1": "第一クラブ", "org2": ""},
+            },
         )
         participant.has_day_player_change = True
         participant.save()
@@ -24704,6 +24716,36 @@ class ParticipantManagementTests(TestCase):
             display_order=1,
         )
 
+    def _participant_post_data(
+            self,
+            *,
+            entry_code="E001",
+            display_order="1",
+            player1_name="参加者1A",
+            player1_short_name="参1A",
+            player2_name="参加者1B",
+            player2_short_name="参1B",
+            player1_org1="",
+            player1_org2="",
+            player2_org1="",
+            player2_org2="",
+            extra=None):
+        data = {
+            "entry_code": entry_code,
+            "display_order": display_order,
+            "player1_name": player1_name,
+            "original_player1_short_name": player1_short_name,
+            "player2_name": player2_name,
+            "original_player2_short_name": player2_short_name,
+            "player1_org1": player1_org1,
+            "player1_org2": player1_org2,
+            "player2_org1": player2_org1,
+            "player2_org2": player2_org2,
+        }
+        if extra:
+            data.update(extra)
+        return data
+
     def test_participant_category_select_lists_categories(self):
         Participant.objects.create(
             category=self.category,
@@ -24875,10 +24917,13 @@ class ParticipantManagementTests(TestCase):
             player1_name="参加者1A",
             player2_name="参加者1B",
         )
-        save_pair_organization_values(
+        save_participant_organization_values(
             self.tournament,
             participant,
-            {"org1": "共通所属", "org2": ""},
+            {
+                "player1": {"org1": "共通所属", "org2": ""},
+                "player2": {"org1": "共通所属", "org2": ""},
+            },
         )
 
         response = self.client.post(
@@ -25070,10 +25115,13 @@ class ParticipantManagementTests(TestCase):
             has_day_player_change=True,
             current_player2_name="当日選手1B",
         )
-        save_pair_organization_values(
+        save_participant_organization_values(
             self.tournament,
             participant,
-            {"org1": "共通所属", "org2": ""},
+            {
+                "player1": {"org1": "共通所属", "org2": ""},
+                "player2": {"org1": "共通所属", "org2": ""},
+            },
         )
         save_day_player_change_organization_values(
             self.tournament,
@@ -25114,7 +25162,7 @@ class ParticipantManagementTests(TestCase):
             ).exists()
         )
 
-    def test_add_participant_saves_pair_common_organizations(self):
+    def test_add_participant_saves_player_organizations(self):
         response = self.client.post(
             reverse(
                 "add_participant",
@@ -25123,19 +25171,12 @@ class ParticipantManagementTests(TestCase):
                     "category_id": self.category.id,
                 },
             ),
-            {
-                "entry_code": "E001",
-                "display_order": "1",
-                "player1_name": "参加者1A",
-                "original_player1_short_name": "参1A",
-                "player2_name": "参加者1B",
-                "original_player2_short_name": "参1B",
-                "org1": "共通所属",
-                "org2": "共通県",
-                "org3": "",
-                "org4": "",
-                "org5": "",
-            },
+            self._participant_post_data(
+                player1_org1="第一クラブ",
+                player1_org2="第一県",
+                player2_org1="第二クラブ",
+                player2_org2="第二県",
+            ),
         )
 
         self.assertRedirects(
@@ -25154,7 +25195,8 @@ class ParticipantManagementTests(TestCase):
         self.assertEqual(participant.original_player2_name, "参加者1B")
         self.assertEqual(participant.original_player1_short_name, "参1A")
         self.assertEqual(participant.original_player2_short_name, "参1B")
-        self.assertEqual(participant.organization, "共通所属")
+        self.assertEqual(participant.organization, "第一クラブ")
+        self.assertEqual(participant.effective_organization, "第一クラブ・第二クラブ")
         self.assertFalse(participant.has_day_player_change)
 
         org_values = {
@@ -25169,12 +25211,241 @@ class ParticipantManagementTests(TestCase):
         self.assertEqual(
             org_values,
             {
-                (1, "org1"): "共通所属",
-                (1, "org2"): "共通県",
-                (2, "org1"): "共通所属",
-                (2, "org2"): "共通県",
+                (1, "org1"): "第一クラブ",
+                (1, "org2"): "第一県",
+                (2, "org1"): "第二クラブ",
+                (2, "org2"): "第二県",
             },
         )
+
+    def test_edit_participant_updates_only_player2_organization(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+        save_participant_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": "第一クラブ", "org2": ""},
+                "player2": {"org1": "第二クラブ", "org2": ""},
+            },
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            self._participant_post_data(
+                player1_org1="第一クラブ",
+                player2_org1="第二クラブ修正",
+            ),
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        values = {
+            value.player_no: value.original_value
+            for value in participant.organization_values.filter(
+                field__code="org1",
+            )
+        }
+        self.assertEqual(
+            values[ParticipantOrganizationValue.PLAYER_1],
+            "第一クラブ",
+        )
+        self.assertEqual(
+            values[ParticipantOrganizationValue.PLAYER_2],
+            "第二クラブ修正",
+        )
+
+    def test_edit_participant_resets_day_change_organization_values(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+            has_day_player_change=True,
+            current_player2_name="当日選手1B",
+        )
+        save_participant_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": "第一クラブ", "org2": ""},
+                "player2": {"org1": "第二クラブ", "org2": ""},
+            },
+        )
+        save_day_player_change_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": "当日第一クラブ"},
+                "player2": {"org1": "当日第二クラブ"},
+            },
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            self._participant_post_data(
+                player1_org1="第一クラブ",
+                player2_org1="第二クラブ",
+            ),
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertFalse(participant.has_day_player_change)
+        self.assertFalse(
+            participant.organization_values.filter(
+                current_value__isnull=False,
+            ).exists()
+        )
+
+    def test_edit_participant_get_shows_player_organization_initials(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+        save_participant_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": "第一クラブ", "org2": "第一県"},
+                "player2": {"org1": "第二クラブ", "org2": "第二県"},
+            },
+        )
+
+        response = self.client.get(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="player1_org1" value="第一クラブ"')
+        self.assertContains(response, 'name="player1_org2" value="第一県"')
+        self.assertContains(response, 'name="player2_org1" value="第二クラブ"')
+        self.assertContains(response, 'name="player2_org2" value="第二県"')
+
+    def test_edit_participant_blank_organization_deletes_value(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+        save_participant_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": "第一クラブ", "org2": ""},
+                "player2": {"org1": "第二クラブ", "org2": ""},
+            },
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            self._participant_post_data(
+                player1_org1="",
+                player2_org1="第二クラブ",
+            ),
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "participant_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        self.assertFalse(
+            participant.organization_values.filter(
+                player_no=ParticipantOrganizationValue.PLAYER_1,
+                field__code="org1",
+            ).exists()
+        )
+        self.assertTrue(
+            participant.organization_values.filter(
+                player_no=ParticipantOrganizationValue.PLAYER_2,
+                field__code="org1",
+                original_value="第二クラブ",
+            ).exists()
+        )
+
+    def test_participant_form_renders_fields_grouped_by_player(self):
+        response = self.client.get(
+            reverse(
+                "add_participant",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode(response.charset)
+        field_names = [
+            'name="player1_name"',
+            'name="original_player1_short_name"',
+            'name="player1_org1"',
+            'name="player1_org2"',
+            'name="player2_name"',
+            'name="original_player2_short_name"',
+            'name="player2_org1"',
+            'name="player2_org2"',
+        ]
+        positions = [content.index(field_name) for field_name in field_names]
+        self.assertEqual(positions, sorted(positions))
 
     def test_edit_participant_shows_existing_organization_set_option(self):
         participant = Participant.objects.create(
@@ -25279,16 +25550,11 @@ class ParticipantManagementTests(TestCase):
                     "participant_id": participant.id,
                 },
             ),
-            {
-                "entry_code": "E001",
-                "display_order": "1",
-                "player1_name": "参加者1A修正",
-                "original_player1_short_name": "参1A",
-                "player2_name": "参加者1B",
-                "original_player2_short_name": "参1B",
-                "org1": "修正所属",
-                "org2": "",
-            },
+            self._participant_post_data(
+                player1_name="参加者1A修正",
+                player1_org1="修正所属",
+                player2_org1="修正所属",
+            ),
         )
 
         self.assertRedirects(
@@ -25341,16 +25607,11 @@ class ParticipantManagementTests(TestCase):
                     "participant_id": participant.id,
                 },
             ),
-            {
-                "entry_code": "E001",
-                "display_order": "1",
-                "player1_name": "参加者1A修正",
-                "original_player1_short_name": "参1A",
-                "player2_name": "参加者1B",
-                "original_player2_short_name": "参1B",
-                "org1": "修正所属",
-                "org2": "",
-            },
+            self._participant_post_data(
+                player1_name="参加者1A修正",
+                player1_org1="修正所属",
+                player2_org1="修正所属",
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -25397,17 +25658,12 @@ class ParticipantManagementTests(TestCase):
                     "participant_id": participant.id,
                 },
             ),
-            {
-                "entry_code": "E001",
-                "display_order": "1",
-                "player1_name": "参加者1A修正",
-                "original_player1_short_name": "参1A",
-                "player2_name": "参加者1B",
-                "original_player2_short_name": "参1B",
-                "org1": "修正所属",
-                "org2": "",
-                "confirm_impact": "1",
-            },
+            self._participant_post_data(
+                player1_name="参加者1A修正",
+                player1_org1="修正所属",
+                player2_org1="修正所属",
+                extra={"confirm_impact": "1"},
+            ),
         )
 
         self.assertRedirects(

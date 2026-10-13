@@ -274,23 +274,25 @@ class ParticipantForm(forms.ModelForm):
                 for field in tournament.organization_fields.all()
             }
 
-        initials = organization_initials or {}
-        for code in PARTICIPANT_ORGANIZATION_INPUT_CODES:
-            label = field_labels.get(
-                code,
-                f"所属{code.removeprefix('org')}",
-            )
-            self.fields[code] = forms.CharField(
-                label=label,
-                required=False,
-                initial=initials.get(code, ""),
-                widget=forms.TextInput(
-                    attrs={
-                        "class": "participant-org-input",
-                        "data-org-code": code,
-                    }
-                ),
-            )
+        initials = organization_initials or {"player1": {}, "player2": {}}
+        for player_no in (1, 2):
+            player_key = f"player{player_no}"
+            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES:
+                field_name = f"{player_key}_{code}"
+                default_label = f"所属{code.removeprefix('org')}"
+                label = f"選手{player_no} {field_labels.get(code, default_label)}"
+                self.fields[field_name] = forms.CharField(
+                    label=label,
+                    required=False,
+                    initial=initials.get(player_key, {}).get(code, ""),
+                    widget=forms.TextInput(
+                        attrs={
+                            "class": "participant-org-input",
+                            "data-org-code": code,
+                            "data-org-player": str(player_no),
+                        }
+                    ),
+                )
 
     def clean_entry_code(self):
         return self.cleaned_data["entry_code"].strip()
@@ -302,10 +304,15 @@ class ParticipantForm(forms.ModelForm):
         return self.cleaned_data["player2_name"].strip()
 
     def organization_values(self):
-        return {
-            code: self.cleaned_data.get(code, "").strip()
-            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
-        }
+        result = {"player1": {}, "player2": {}}
+        for player_no in (1, 2):
+            player_key = f"player{player_no}"
+            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES:
+                field_name = f"{player_key}_{code}"
+                result[player_key][code] = (
+                    self.cleaned_data.get(field_name, "") or ""
+                ).strip()
+        return result
 
     def save(self, commit=True):
         participant = super().save(commit=False)

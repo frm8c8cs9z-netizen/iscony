@@ -37,8 +37,11 @@
                 </div>
             </div>
 
-            <h3>選手</h3>
-            <div class="participant-field-stack">
+            <h3>選手1</h3>
+            <div
+                class="participant-field-stack participant-org-stack"
+                data-organization-dropzone="1"
+            >
                 <div class="participant-field participant-field--medium">
                     {{ form.player1_name.label_tag }}
                     {{ form.player1_name }}
@@ -50,6 +53,23 @@
                     {{ form.original_player1_short_name.errors }}
                 </div>
                 <div class="participant-field participant-field--medium">
+                    {{ form.player1_org1.label_tag }}
+                    {{ form.player1_org1 }}
+                    {{ form.player1_org1.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.player1_org2.label_tag }}
+                    {{ form.player1_org2 }}
+                    {{ form.player1_org2.errors }}
+                </div>
+            </div>
+
+            <h3>選手2</h3>
+            <div
+                class="participant-field-stack participant-org-stack"
+                data-organization-dropzone="2"
+            >
+                <div class="participant-field participant-field--medium">
                     {{ form.player2_name.label_tag }}
                     {{ form.player2_name }}
                     {{ form.player2_name.errors }}
@@ -59,20 +79,16 @@
                     {{ form.original_player2_short_name }}
                     {{ form.original_player2_short_name.errors }}
                 </div>
-            </div>
-
-            <h3>所属</h3>
-            <div
-                class="participant-field-stack participant-org-stack"
-                data-organization-dropzone
-            >
-                {% for field in org_fields %}
-                    <div class="participant-field participant-field--medium">
-                        {{ field.label_tag }}
-                        {{ field }}
-                        {{ field.errors }}
-                    </div>
-                {% endfor %}
+                <div class="participant-field participant-field--medium">
+                    {{ form.player2_org1.label_tag }}
+                    {{ form.player2_org1 }}
+                    {{ form.player2_org1.errors }}
+                </div>
+                <div class="participant-field participant-field--medium">
+                    {{ form.player2_org2.label_tag }}
+                    {{ form.player2_org2 }}
+                    {{ form.player2_org2.errors }}
+                </div>
             </div>
         </section>
 
@@ -169,7 +185,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const buttons = document.querySelectorAll(".organization-set-button");
-    const dropzone = document.querySelector("[data-organization-dropzone]");
+    const dropzones = document.querySelectorAll("[data-organization-dropzone]");
 
     function organizationValuesFromElement(element) {
         const values = {};
@@ -179,20 +195,29 @@ document.addEventListener("DOMContentLoaded", function () {
         return values;
     }
 
-    function applyOrganizationSet(values) {
+    function applyOrganizationSet(values, fillPlayer1) {
         Object.keys(values).forEach(function (key) {
-            const input = document.querySelector(
-                '.participant-org-input[data-org-code="' + key + '"]'
+            if (fillPlayer1) {
+                const input1 = document.querySelector(
+                    '.participant-org-input[data-org-code="' + key + '"][data-org-player="1"]'
+                );
+                if (input1) {
+                    input1.value = values[key] || "";
+                }
+            }
+
+            const input2 = document.querySelector(
+                '.participant-org-input[data-org-code="' + key + '"][data-org-player="2"]'
             );
-            if (input) {
-                input.value = values[key] || "";
+            if (input2) {
+                input2.value = values[key] || "";
             }
         });
     }
 
     buttons.forEach(function (button) {
         button.addEventListener("click", function () {
-            applyOrganizationSet(organizationValuesFromElement(button));
+            applyOrganizationSet(organizationValuesFromElement(button), true);
         });
 
         button.addEventListener("dragstart", function (event) {
@@ -211,7 +236,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 
-    if (dropzone) {
+    dropzones.forEach(function (dropzone) {
         dropzone.addEventListener("dragover", function (event) {
             event.preventDefault();
             event.dataTransfer.dropEffect = "copy";
@@ -237,12 +262,15 @@ document.addEventListener("DOMContentLoaded", function () {
             }
 
             try {
-                applyOrganizationSet(JSON.parse(rawValues));
+                const fillPlayer1 = (
+                    dropzone.dataset.organizationDropzone === "1"
+                );
+                applyOrganizationSet(JSON.parse(rawValues), fillPlayer1);
             } catch (error) {
                 return;
             }
         });
-    }
+    });
 });
 </script>
 

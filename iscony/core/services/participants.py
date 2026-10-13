@@ -52,46 +52,58 @@ def get_or_create_organization_field(tournament, code):
     return field
 
 
-def participant_pair_organization_initials(participant):
-    values = {
-        code: ""
-        for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
-    }
-    if not participant:
-        return values
+def participant_organization_initials(participant):
+    """選手1・選手2それぞれの現在の所属値を返す。
 
-    for value in participant.organization_values.select_related("field").all():
-        if value.field.code not in values:
-            continue
-        if value.player_no == ParticipantOrganizationValue.PLAYER_1:
-            values[value.field.code] = value.original_value
-
-    return values
-
-
-def save_pair_organization_values(tournament, participant, org_values):
-    """ペア共通所属をplayer1/player2両方へ保存する。
-
-    第1段階の通常画面では所属をペア共通として扱う。DB上は将来の
-    選手別所属表示に備えて player_no を保持するため、ここで同じ値を
-    player1 と player2 の両方へ書く。
+    戻り値: {"player1": {code: value, ...}, "player2": {code: value, ...}}
     """
 
-    player_numbers = [
-        ParticipantOrganizationValue.PLAYER_1,
-    ]
-    if participant.player2_name:
-        player_numbers.append(
-            ParticipantOrganizationValue.PLAYER_2,
-        )
+    player_keys = {
+        ParticipantOrganizationValue.PLAYER_1: "player1",
+        ParticipantOrganizationValue.PLAYER_2: "player2",
+    }
+    result = {
+        "player1": {code: "" for code in PARTICIPANT_ORGANIZATION_INPUT_CODES},
+        "player2": {code: "" for code in PARTICIPANT_ORGANIZATION_INPUT_CODES},
+    }
 
-    for code in PARTICIPANT_ORGANIZATION_CODES:
-        if code not in org_values:
+    if not participant:
+        return result
+
+    for value in participant.organization_values.select_related("field").all():
+        if value.field.code not in PARTICIPANT_ORGANIZATION_INPUT_CODES:
             continue
-        value = (org_values.get(code, "") or "").strip()
-        field = get_or_create_organization_field(tournament, code)
 
-        for player_no in player_numbers:
+        player_key = player_keys.get(value.player_no)
+        if player_key:
+            result[player_key][value.field.code] = value.original_value
+
+    return result
+
+
+def save_participant_organization_values(tournament, participant, org_values):
+    """選手ごとの所属(original_value)を保存する。
+
+    org_valuesは {"player1": {code: value, ...}, "player2": {code: value, ...}} の形。
+    値が空文字列なら、その選手のその項目の行を削除する
+    (既存の save_pair_organization_values と同じ、空なら行ごと消す挙動を踏襲)。
+    """
+
+    player_numbers = {
+        "player1": ParticipantOrganizationValue.PLAYER_1,
+        "player2": ParticipantOrganizationValue.PLAYER_2,
+    }
+
+    for player_key, player_no in player_numbers.items():
+        values_for_player = org_values.get(player_key, {})
+
+        for code in PARTICIPANT_ORGANIZATION_CODES:
+            if code not in values_for_player:
+                continue
+
+            value = (values_for_player.get(code, "") or "").strip()
+            field = get_or_create_organization_field(tournament, code)
+
             if value:
                 ParticipantOrganizationValue.objects.update_or_create(
                     participant=participant,
@@ -108,14 +120,9 @@ def save_pair_organization_values(tournament, participant, org_values):
                     field=field,
                 ).delete()
 
-        if ParticipantOrganizationValue.PLAYER_2 not in player_numbers:
-            ParticipantOrganizationValue.objects.filter(
-                participant=participant,
-                player_no=ParticipantOrganizationValue.PLAYER_2,
-                field=field,
-            ).delete()
-
-    participant.organization = (org_values.get("org1", "") or "").strip()
+    participant.organization = (
+        org_values.get("player1", {}).get("org1", "") or ""
+    ).strip()
     participant.save(update_fields=["organization"])
 
 

@@ -69,11 +69,11 @@ from ..services import (
     clear_day_player_change_organization_values,
     participant_edit_impact_summary,
     participant_day_change_organization_context,
-    participant_pair_organization_initials,
+    participant_organization_initials,
     league_rank_advances_further,
     resolve_schedule_referee,
     save_day_player_change_organization_values,
-    save_pair_organization_values,
+    save_participant_organization_values,
     schedule_referee_conflicts_at_same_order,
     schedule_referee_key,
     schedule_referee_source_key,
@@ -88,7 +88,6 @@ from ..helpers.view import(
     redirect_next_or_default,
     url_with_next,
 )
-from ..constants import PARTICIPANT_ORGANIZATION_INPUT_CODES
 
 # =========================================================
 # 大会の基本表示
@@ -645,11 +644,8 @@ def add_participant(request, code, category_id):
         if form.is_valid():
             participant = form.save(commit=False)
             participant.category = category
-            participant.organization = (
-                form.organization_values().get("org1", "")
-            )
             participant.save()
-            save_pair_organization_values(
+            save_participant_organization_values(
                 tournament,
                 participant,
                 form.organization_values(),
@@ -676,10 +672,6 @@ def add_participant(request, code, category_id):
             "tournament": tournament,
             "category": category,
             "form": form,
-            "org_fields": [
-                form[code]
-                for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
-            ],
             "org_set_options": tournament_pair_organization_sets(tournament),
             "page_title": "参加者追加",
             "submit_label": "追加",
@@ -710,7 +702,7 @@ def edit_participant(request, code, category_id, participant_id):
             request.POST,
             instance=participant,
             tournament=tournament,
-            organization_initials=participant_pair_organization_initials(
+            organization_initials=participant_organization_initials(
                 participant,
             ),
         )
@@ -728,10 +720,6 @@ def edit_participant(request, code, category_id, participant_id):
                         "category": category,
                         "participant": participant,
                         "form": form,
-                        "org_fields": [
-                            form[code]
-                            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
-                        ],
                         "org_set_options": (
                             tournament_pair_organization_sets(tournament)
                         ),
@@ -742,15 +730,13 @@ def edit_participant(request, code, category_id, participant_id):
                 )
 
             participant = form.save(commit=False)
-            participant.organization = (
-                form.organization_values().get("org1", "")
-            )
             participant.save()
-            save_pair_organization_values(
+            save_participant_organization_values(
                 tournament,
                 participant,
                 form.organization_values(),
             )
+            participant.organization_values.update(current_value=None)
             messages.success(
                 request,
                 f"{participant.entry_code} を更新しました。",
@@ -764,7 +750,7 @@ def edit_participant(request, code, category_id, participant_id):
         form = ParticipantForm(
             instance=participant,
             tournament=tournament,
-            organization_initials=participant_pair_organization_initials(
+            organization_initials=participant_organization_initials(
                 participant,
             ),
         )
@@ -777,10 +763,6 @@ def edit_participant(request, code, category_id, participant_id):
             "category": category,
             "participant": participant,
             "form": form,
-            "org_fields": [
-                form[code]
-                for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
-            ],
             "org_set_options": tournament_pair_organization_sets(tournament),
             "page_title": "参加者編集",
             "submit_label": "更新",
