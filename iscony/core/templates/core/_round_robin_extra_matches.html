@@ -15,23 +15,23 @@
                         <a href="{% url input_url_name extra.match.id %}?next={{ next_url }}%23group-{{ group_id }}">
                             {{ extra.match.pair1.pair_code }}
                             {% for line in extra.pair1_display_lines %}
-                                {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                                {% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}{% if not forloop.last %}<br>{% endif %}
                             {% endfor %}
                             vs
                             {{ extra.match.pair2.pair_code }}
                             {% for line in extra.pair2_display_lines %}
-                                {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                                {% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}{% if not forloop.last %}<br>{% endif %}
                             {% endfor %}
                         </a>
                     {% else %}
                         {{ extra.match.pair1.pair_code }}
                         {% for line in extra.pair1_display_lines %}
-                            {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                            {% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}{% if not forloop.last %}<br>{% endif %}
                         {% endfor %}
                         vs
                         {{ extra.match.pair2.pair_code }}
                         {% for line in extra.pair2_display_lines %}
-                            {{ line.text }}{% if not forloop.last %}<br>{% endif %}
+                            {% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}{% if not forloop.last %}<br>{% endif %}
                         {% endfor %}
                     {% endif %}
                 </td>

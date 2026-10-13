@@ -731,8 +731,88 @@ class EntryDisplayHelperTests(TestCase):
         self.assertEqual(
             build_entry_display_lines(entry),
             [
-                {"text": "山田・佐藤", "class": "entry-text"},
+                {
+                    "text": "山田・佐藤",
+                    "class": "entry-text",
+                    "parts": [
+                        {"text": "山田", "changed": False},
+                        {"text": "・", "changed": False},
+                        {"text": "佐藤", "changed": False},
+                    ],
+                },
                 {"text": "（第一クラブ）", "class": "entry-org-text"},
+            ],
+        )
+
+    def test_entry_day_player_change_flags_are_exposed_per_player(self):
+        league_entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+        participant = league_entry.participant
+        participant.has_day_player_change = True
+        participant.current_player2_name = "鈴木　次郎"
+        participant.current_player2_short_name = "鈴木"
+        participant.save()
+
+        tournament_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="1",
+            display_order=1,
+            participant=participant,
+        )
+        source_tournament_entry = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="2",
+            display_order=2,
+            source_pair=league_entry,
+        )
+
+        self.assertFalse(participant.player1_is_day_changed)
+        self.assertTrue(participant.player2_is_day_changed)
+        self.assertFalse(league_entry.display_player1_is_day_changed)
+        self.assertTrue(league_entry.display_player2_is_day_changed)
+        self.assertFalse(tournament_entry.display_player1_is_day_changed)
+        self.assertTrue(tournament_entry.display_player2_is_day_changed)
+        self.assertFalse(source_tournament_entry.display_player1_is_day_changed)
+        self.assertTrue(source_tournament_entry.display_player2_is_day_changed)
+
+    def test_entry_display_lines_mark_only_changed_player_part(self):
+        entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+        participant = entry.participant
+        participant.has_day_player_change = True
+        participant.current_player2_name = "鈴木　次郎"
+        participant.current_player2_short_name = "鈴木"
+        participant.save()
+
+        self.assertEqual(
+            build_entry_display_lines(entry)[0]["parts"],
+            [
+                {"text": "山田", "changed": False},
+                {"text": "・", "changed": False},
+                {"text": "鈴木", "changed": True},
+            ],
+        )
+        self.assertEqual(
+            build_entry_display_lines(
+                entry,
+                mode=ENTRY_DISPLAY_NAME_ORG_2LINE,
+            )[0]["parts"],
+            [
+                {"text": "山田　太郎", "changed": False},
+                {"text": "・", "changed": False},
+                {"text": "鈴木　次郎", "changed": True},
             ],
         )
 
@@ -755,6 +835,12 @@ class EntryDisplayHelperTests(TestCase):
                 {
                     "text": "山田・佐藤（第一クラブ）",
                     "class": "entry-text",
+                    "parts": [
+                        {"text": "山田", "changed": False},
+                        {"text": "・", "changed": False},
+                        {"text": "佐藤", "changed": False},
+                        {"text": "（第一クラブ）", "changed": False},
+                    ],
                 },
             ],
         )
@@ -764,7 +850,15 @@ class EntryDisplayHelperTests(TestCase):
                 mode=ENTRY_DISPLAY_NAME_ORG_2LINE,
             ),
             [
-                {"text": "山田　太郎・佐藤　次郎", "class": "entry-text"},
+                {
+                    "text": "山田　太郎・佐藤　次郎",
+                    "class": "entry-text",
+                    "parts": [
+                        {"text": "山田　太郎", "changed": False},
+                        {"text": "・", "changed": False},
+                        {"text": "佐藤　次郎", "changed": False},
+                    ],
+                },
                 {"text": "第一クラブ", "class": "entry-org-text"},
             ],
         )
@@ -11520,6 +11614,48 @@ class RoundRobinMeetingTests(TestCase):
         self.assertContains(response, "山田　太郎・佐藤　次郎")
         self.assertContains(response, "第一クラブ")
         self.assertNotContains(response, "山田・佐藤")
+
+    def test_category_detail_marks_changed_day_player_name_in_red(self):
+        self.entry1.participant.has_day_player_change = True
+        self.entry1.participant.current_player2_name = "当日選手1B"
+        self.entry1.participant.current_player2_short_name = "当日1B"
+        self.entry1.participant.save()
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '選手1A・<span style="color:red;">当日1B</span>',
+            html=True,
+        )
+
+    def test_category_detail_does_not_mark_normal_player_name_in_red(self):
+        RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'style="color:red;"')
 
     def test_category_detail_can_disable_league_score_colors(self):
         self.tournament.default_league_score_color_mode = (
@@ -30556,6 +30692,57 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "山田・佐藤")
         self.assertContains(response, "（第一クラブ）")
         self.assertContains(response, "entry-org-text")
+
+    def test_tournament_bracket_detail_marks_changed_day_player_name_in_red(self):
+        self.entry1.participant.has_day_player_change = True
+        self.entry1.participant.current_player2_name = "当日選手1B"
+        self.entry1.participant.current_player2_short_name = "当日1B"
+        self.entry1.participant.save()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertContains(response, '<tspan fill="red">当日1B</tspan>')
+        self.assertIn("選手1A・", content)
+
+    def test_tournament_bracket_detail_does_not_mark_normal_player_name_in_red(self):
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "tournament_bracket_detail",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            )
+        )
+
+        self.assertContains(response, "選手1A・選手1B")
+        self.assertNotContains(response, 'fill="red"')
 
     def test_tournament_match_maintenance_links_back_to_stage_overview(self):
         response = self.client.get(

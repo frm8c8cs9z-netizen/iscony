@@ -636,6 +636,20 @@ class Participant(models.Model):
         return self.original_player2_name or self.player2_name
 
     @property
+    def player1_is_day_changed(self):
+        return bool(
+            self.has_day_player_change
+            and self.current_player1_name is not None
+        )
+
+    @property
+    def player2_is_day_changed(self):
+        return bool(
+            self.has_day_player_change
+            and self.current_player2_name is not None
+        )
+
+    @property
     def effective_player1_short_name(self):
         if (
             self.has_day_player_change
@@ -1002,6 +1016,52 @@ class LeagueEntry(models.Model):
     def display_player2_name(self):
         if self.participant:
             return self.participant.effective_player2_name
+
+        source = getattr(
+            self,
+            "advancement_source",
+            None
+        )
+
+        if source:
+            return ""
+
+        return ""
+
+    @property
+    def display_player1_is_day_changed(self):
+        if self.participant:
+            return self.participant.player1_is_day_changed
+
+        return False
+
+    @property
+    def display_player2_is_day_changed(self):
+        if self.participant:
+            return self.participant.player2_is_day_changed
+
+        return False
+
+    @property
+    def display_player1_short_name(self):
+        if self.participant:
+            return self.participant.effective_player1_short_name
+
+        source = getattr(
+            self,
+            "advancement_source",
+            None
+        )
+
+        if source:
+            return source.label
+
+        return "未定"
+
+    @property
+    def display_player2_short_name(self):
+        if self.participant:
+            return self.participant.effective_player2_short_name
 
         source = getattr(
             self,
@@ -1848,6 +1908,64 @@ class TournamentEntry(models.Model):
 
         return ""
     
+    @property
+    def display_player1_is_day_changed(self):
+        if self.participant:
+            return self.participant.player1_is_day_changed
+
+        if self.source_pair:
+            return self.source_pair.display_player1_is_day_changed
+
+        return False
+
+    @property
+    def display_player2_is_day_changed(self):
+        if self.participant:
+            return self.participant.player2_is_day_changed
+
+        if self.source_pair:
+            return self.source_pair.display_player2_is_day_changed
+
+        return False
+
+    @property
+    def display_player1_short_name(self):
+        if self.participant:
+            return self.participant.effective_player1_short_name
+
+        if self.source_pair:
+            return self.source_pair.display_player1_short_name
+
+        source = getattr(
+            self,
+            "advancement_source",
+            None
+        )
+
+        if source:
+            return source.label
+
+        return "未定"
+
+    @property
+    def display_player2_short_name(self):
+        if self.participant:
+            return self.participant.effective_player2_short_name
+
+        if self.source_pair:
+            return self.source_pair.display_player2_short_name
+
+        source = getattr(
+            self,
+            "advancement_source",
+            None
+        )
+
+        if source:
+            return ""
+
+        return ""
+
     @property
     def display_name(self):
 

@@ -61,7 +61,7 @@
                                 x="{{ label.x }}"
                                 y="{{ line.y }}"
                                 {% if line.class %}class="{{ line.class }}"{% endif %}
-                            >{{ line.text }}</tspan>
+                            >{% for part in line.parts %}{% if part.changed %}<tspan fill="red">{{ part.text }}</tspan>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</tspan>
                         {% endfor %}
                     {% else %}
                         {{ label.text }}
@@ -84,7 +84,7 @@
                             x="{{ label.x }}"
                             y="{{ line.y }}"
                             {% if line.class %}class="{{ line.class }}"{% endif %}
-                        >{{ line.text }}</tspan>
+                        >{% for part in line.parts %}{% if part.changed %}<tspan fill="red">{{ part.text }}</tspan>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</tspan>
                     {% endfor %}
                 {% else %}
                     {{ label.text }}

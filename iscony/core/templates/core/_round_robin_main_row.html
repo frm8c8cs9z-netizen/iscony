@@ -12,12 +12,12 @@
         {% if row_pair_link_url %}
             <a href="{{ row_pair_link_url }}">
                 {% for line in row.pair_display_lines %}
-                    <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
+                    <span class="rr-header-inner">{% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</span>{% if not forloop.last %}<br>{% endif %}
                 {% endfor %}
             </a>
         {% else %}
             {% for line in row.pair_display_lines %}
-                <span class="rr-header-inner">{{ line.text }}</span>{% if not forloop.last %}<br>{% endif %}
+                <span class="rr-header-inner">{% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</span>{% if not forloop.last %}<br>{% endif %}
             {% endfor %}
         {% endif %}
     </th>

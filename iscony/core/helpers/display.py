@@ -77,6 +77,39 @@ def format_entry_one_line(entry, *, use_short_name=True, with_organization=True)
     return name
 
 
+def _entry_name_parts(entry, *, use_short_name):
+    """選手1/選手2を独立した部分として返す。各部分に当日変更フラグを付ける。"""
+
+    if not getattr(entry, "participant", None):
+        text = entry.short_name if use_short_name else entry.display_name
+        return [{"text": text, "changed": False}]
+
+    if use_short_name:
+        name1 = entry.display_player1_short_name
+        name2 = entry.display_player2_short_name
+    else:
+        name1 = entry.display_player1_name
+        name2 = entry.display_player2_name
+
+    changed1 = entry.display_player1_is_day_changed
+    changed2 = entry.display_player2_is_day_changed
+
+    if name1 and name2:
+        return [
+            {"text": name1, "changed": changed1},
+            {"text": "・", "changed": False},
+            {"text": name2, "changed": changed2},
+        ]
+
+    if name1:
+        return [{"text": name1, "changed": changed1}]
+
+    if name2:
+        return [{"text": name2, "changed": changed2}]
+
+    return [{"text": "", "changed": False}]
+
+
 def build_entry_display_lines(
         entry,
         *,
@@ -89,10 +122,18 @@ def build_entry_display_lines(
         return []
 
     if mode == ENTRY_DISPLAY_ONE_LINE:
+        parts = _entry_name_parts(entry, use_short_name=True)
+        organization = entry.display_organization
+        if organization:
+            parts = parts + [
+                {"text": f"（{organization}）", "changed": False},
+            ]
+
         return [
             {
                 "text": format_entry_one_line(entry),
                 "class": name_class,
+                "parts": parts,
             }
         ]
 
@@ -103,6 +144,7 @@ def build_entry_display_lines(
             {
                 "text": entry.display_name,
                 "class": name_class,
+                "parts": _entry_name_parts(entry, use_short_name=False),
             }
         ]
 
@@ -118,6 +160,7 @@ def build_entry_display_lines(
         {
             "text": entry.short_name,
             "class": name_class,
+            "parts": _entry_name_parts(entry, use_short_name=True),
         }
     ]
 

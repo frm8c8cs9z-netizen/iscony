@@ -77,7 +77,13 @@ def svg_entry_text_lines(entry, entry_display_mode, *, include_slot_label=False)
 
     if include_slot_label and lines:
         lines = copy.deepcopy(lines)
-        lines[0]["text"] = f"{entry.slot_label} {lines[0]['text']}"
+        prefix = f"{entry.slot_label} "
+        lines[0]["text"] = f"{prefix}{lines[0]['text']}"
+
+        if "parts" in lines[0]:
+            lines[0]["parts"] = [
+                {"text": prefix, "changed": False},
+            ] + lines[0]["parts"]
 
     return lines
 

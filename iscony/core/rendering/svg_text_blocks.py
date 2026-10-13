@@ -397,6 +397,7 @@ def _svg_vertical_block_lines(
         {
             "text": line["text"],
             "class": line["class"],
+            **({"parts": line["parts"]} if "parts" in line else {}),
             "x": start_x - (index * column_gap),
             "y": base_y,
         }
@@ -598,6 +599,7 @@ def _svg_multiline_block_lines(
         {
             "text": line["text"],
             "class": line["class"],
+            **({"parts": line["parts"]} if "parts" in line else {}),
             "y": start_y + (index * line_height),
         }
         for index, line in enumerate(lines)
