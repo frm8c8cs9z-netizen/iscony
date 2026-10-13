@@ -743,18 +743,6 @@ urlpatterns = [
     ),
 
     path(
-        "tournament/<str:code>/bracket/<int:bracket_id>/import-seeds/",
-        tournament.import_bracket_seeds,
-        name="import_bracket_seeds",
-    ),
-
-    path(
-        "tournament/<str:code>/bracket/<int:bracket_id>/import-positions/",
-        tournament.import_bracket_positions,
-        name="import_bracket_positions",
-    ),
-
-    path(
         "tournament/<str:code>/tournament-match/<int:match_id>/score-sheet/",
         tournament.tournament_match_score_sheet,
         name="tournament_match_score_sheet",
@@ -785,18 +773,6 @@ urlpatterns = [
     ),
 
     path(
-        "tournament/<str:code>/bracket/<int:bracket_id>/import/positions/",
-        tournament.import_bracket_positions,
-        name="import_bracket_positions",
-    ),
-
-    path(
-        "tournament/<str:code>/bracket/<int:bracket_id>/import/positions/sample/",
-        tournament.download_bracket_positions_sample,
-        name="download_bracket_positions_sample",
-    ),
-
-    path(
         "tournament/<str:code>/brackets/",
         tournament.bracket_list,
         name="bracket_list",
@@ -812,18 +788,6 @@ urlpatterns = [
         "tournament/<str:code>/bracket/<int:bracket_id>/edit/",
         tournament.edit_tournament_bracket,
         name="edit_tournament_bracket",
-    ),
-
-    path(
-        "tournament/<str:code>/bracket/<int:bracket_id>/import/schedule/",
-        tournament.import_tournament_schedule,
-        name="import_tournament_schedule",
-    ),
-
-    path(
-        "tournament/<str:code>/bracket/<int:bracket_id>/import/schedule/sample/",
-        tournament.download_tournament_schedule_sample,
-        name="download_tournament_schedule_sample",
     ),
 
     path(
