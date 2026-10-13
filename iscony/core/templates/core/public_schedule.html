@@ -277,7 +277,7 @@
                                                     </span>
                                                     {% if match.pair1.display_organization %}
                                                         <span class="schedule-entry-org">
-                                                            （{{ match.pair1.display_organization }}）
+                                                            （{% entry_organization_html match.pair1 %}）
                                                         </span>
                                                     {% endif %}
                                                 </span>
@@ -293,7 +293,7 @@
                                                     </span>
                                                     {% if match.pair2.display_organization %}
                                                         <span class="schedule-entry-org">
-                                                            （{{ match.pair2.display_organization }}）
+                                                            （{% entry_organization_html match.pair2 %}）
                                                         </span>
                                                     {% endif %}
                                                 </span>
@@ -339,7 +339,7 @@
                                                         </span>
                                                         {% if match.pair1.display_organization %}
                                                             <span class="schedule-entry-org">
-                                                                （{{ match.pair1.display_organization }}）
+                                                                （{% entry_organization_html match.pair1 %}）
                                                             </span>
                                                         {% endif %}
                                                     {% else %}
@@ -356,7 +356,7 @@
                                                         </span>
                                                         {% if match.pair2.display_organization %}
                                                             <span class="schedule-entry-org">
-                                                                （{{ match.pair2.display_organization }}）
+                                                                （{% entry_organization_html match.pair2 %}）
                                                             </span>
                                                         {% endif %}
                                                     {% else %}

@@ -465,3 +465,23 @@ def entry_short_name_html(entry):
             html_parts.append(text)
 
     return mark_safe("".join(html_parts))
+
+
+@register.simple_tag
+def entry_organization_html(entry):
+    """参加枠の所属を、当日変更された選手の所属部分だけ赤字にしたHTMLとして返す。"""
+
+    if not entry:
+        return ""
+
+    parts = entry.display_organization_parts
+    html_parts = []
+
+    for part in parts:
+        text = escape(part["text"])
+        if part["changed"]:
+            html_parts.append(f'<span style="color:red;">{text}</span>')
+        else:
+            html_parts.append(text)
+
+    return mark_safe("".join(html_parts))

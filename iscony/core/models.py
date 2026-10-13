@@ -697,7 +697,11 @@ class Participant(models.Model):
         )
 
         return [
-            value.original_value
+            (
+                value.current_value
+                if self.has_day_player_change and value.current_value is not None
+                else value.original_value
+            )
             for value in matched
         ]
 
@@ -710,12 +714,76 @@ class Participant(models.Model):
         return self.effective_organization_values(2)
 
     @property
-    def effective_organization(self):
+    def effective_player1_organization(self):
         values = self.effective_player1_organizations
         if values:
             return values[0]
 
         return self.organization
+
+    @property
+    def effective_player2_organization(self):
+        values = self.effective_player2_organizations
+        if values:
+            return values[0]
+
+        return ""
+
+    @property
+    def player1_organization_is_day_changed(self):
+        if not self.has_day_player_change:
+            return False
+
+        return any(
+            value.current_value is not None
+            for value in self.organization_values.all()
+            if value.player_no == ParticipantOrganizationValue.PLAYER_1
+        )
+
+    @property
+    def player2_organization_is_day_changed(self):
+        if not self.has_day_player_change:
+            return False
+
+        return any(
+            value.current_value is not None
+            for value in self.organization_values.all()
+            if value.player_no == ParticipantOrganizationValue.PLAYER_2
+        )
+
+    @property
+    def organization_display_parts(self):
+        """選手1・選手2の所属を、当日変更フラグ付きの部分リストで返す。"""
+
+        org1 = self.effective_player1_organization
+        org2 = self.effective_player2_organization
+        changed1 = self.player1_organization_is_day_changed
+        changed2 = self.player2_organization_is_day_changed
+
+        if org1 and org2 and org1 != org2:
+            return [
+                {"text": org1, "changed": changed1},
+                {"text": "・", "changed": False},
+                {"text": org2, "changed": changed2},
+            ]
+
+        if org1:
+            return [{"text": org1, "changed": changed1 or changed2}]
+
+        if org2:
+            return [{"text": org2, "changed": changed2}]
+
+        return []
+
+    @property
+    def effective_organization(self):
+        org1 = self.effective_player1_organization
+        org2 = self.effective_player2_organization
+
+        if org1 and org2 and org1 != org2:
+            return f"{org1}・{org2}"
+
+        return org1 or org2
 
     @property
     def display_name(self):
@@ -821,6 +889,13 @@ class ParticipantOrganizationValue(models.Model):
 
     original_value = models.CharField(
         max_length=255,
+    )
+
+    current_value = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        default=None,
     )
 
     class Meta:
@@ -1098,6 +1173,17 @@ class LeagueEntry(models.Model):
             return self.participant.effective_organization
 
         return ""
+
+    @property
+    def display_organization_parts(self):
+        if self.participant:
+            return self.participant.organization_display_parts
+
+        text = self.display_organization
+        if text:
+            return [{"text": text, "changed": False}]
+
+        return []
 
     def __str__(self):
         return (
@@ -2019,6 +2105,20 @@ class TournamentEntry(models.Model):
             return self.source_pair.display_organization
 
         return ""
+
+    @property
+    def display_organization_parts(self):
+        if self.participant:
+            return self.participant.organization_display_parts
+
+        if self.source_pair:
+            return self.source_pair.display_organization_parts
+
+        text = self.display_organization
+        if text:
+            return [{"text": text, "changed": False}]
+
+        return []
     
     @property
     def code(self):

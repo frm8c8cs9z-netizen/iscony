@@ -119,6 +119,78 @@ def save_pair_organization_values(tournament, participant, org_values):
     participant.save(update_fields=["organization"])
 
 
+def participant_day_change_organization_context(participant):
+    """選手変更フォーム用に、所属の元の値と当日の上書き値を選手ごとに返す。"""
+
+    player_keys = {
+        ParticipantOrganizationValue.PLAYER_1: "player1",
+        ParticipantOrganizationValue.PLAYER_2: "player2",
+    }
+    original = {"player1": {}, "player2": {}}
+    current = {
+        "player1": {
+            code: ""
+            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
+        },
+        "player2": {
+            code: ""
+            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
+        },
+    }
+
+    if not participant:
+        return {"original": original, "current": current}
+
+    for value in participant.organization_values.select_related("field").all():
+        if value.field.code not in PARTICIPANT_ORGANIZATION_INPUT_CODES:
+            continue
+
+        player_key = player_keys.get(value.player_no)
+        if not player_key:
+            continue
+
+        original[player_key][value.field.code] = value.original_value
+
+        if value.current_value is not None:
+            current[player_key][value.field.code] = value.current_value
+
+    return {"original": original, "current": current}
+
+
+def save_day_player_change_organization_values(tournament, participant, org_values):
+    """選手変更の所属を、選手ごとにcurrent_valueとして保存する。"""
+
+    player_numbers = {
+        "player1": ParticipantOrganizationValue.PLAYER_1,
+        "player2": ParticipantOrganizationValue.PLAYER_2,
+    }
+
+    for player_key, player_no in player_numbers.items():
+        values_for_player = org_values.get(player_key, {})
+
+        for code in PARTICIPANT_ORGANIZATION_INPUT_CODES:
+            if code not in values_for_player:
+                continue
+
+            value = (values_for_player.get(code, "") or "").strip()
+            field = get_or_create_organization_field(tournament, code)
+
+            obj, _ = ParticipantOrganizationValue.objects.get_or_create(
+                participant=participant,
+                player_no=player_no,
+                field=field,
+                defaults={"original_value": ""},
+            )
+            obj.current_value = value if value else None
+            obj.save(update_fields=["current_value"])
+
+
+def clear_day_player_change_organization_values(participant):
+    """選手変更で上書きした所属を、全選手分まとめて解除する。"""
+
+    participant.organization_values.update(current_value=None)
+
+
 def participant_edit_impact_summary(participant):
     """参加者編集が既存の大会情報表示へ影響する範囲を数える。
 

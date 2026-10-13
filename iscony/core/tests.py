@@ -77,7 +77,7 @@ from .views.tournament import build_tournament_bracket_display_data
 from .views.stage import _validate_stage_slot_setup
 from .rendering.tournament_svg_labels import estimate_svg_row_gap
 from .rendering.tournament_svg_score import resolve_svg_match_code_text_style
-from .templatetags.core_extras import entry_short_name_html
+from .templatetags.core_extras import entry_organization_html, entry_short_name_html
 
 from .services import (
     advance_tournament_bye_winners,
@@ -115,6 +115,8 @@ from .services import (
     league_rank_advances_further,
     resolve_schedule_referee,
     schedule_referee_key,
+    save_day_player_change_organization_values,
+    save_pair_organization_values,
     save_round_robin_score,
     save_tournament_score,
     save_tournament_retirement,
@@ -742,7 +744,15 @@ class EntryDisplayHelperTests(TestCase):
                         {"text": "佐藤", "changed": False},
                     ],
                 },
-                {"text": "（第一クラブ）", "class": "entry-org-text"},
+                {
+                    "text": "（第一クラブ）",
+                    "class": "entry-org-text",
+                    "parts": [
+                        {"text": "（", "changed": False},
+                        {"text": "第一クラブ", "changed": False},
+                        {"text": "）", "changed": False},
+                    ],
+                },
             ],
         )
 
@@ -846,6 +856,173 @@ class EntryDisplayHelperTests(TestCase):
             '山田・<span style="color:red;">鈴木</span>',
         )
 
+    def test_effective_organization_combines_different_player_values(self):
+        entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+        participant = entry.participant
+        save_pair_organization_values(
+            self.tournament,
+            participant,
+            {"org1": "第一クラブ", "org2": ""},
+        )
+
+        participant.refresh_from_db()
+        self.assertEqual(participant.effective_organization, "第一クラブ")
+
+        participant.has_day_player_change = True
+        participant.save()
+        save_day_player_change_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": ""},
+                "player2": {"org1": "第二クラブ"},
+            },
+        )
+
+        participant.refresh_from_db()
+        self.assertEqual(participant.effective_organization, "第一クラブ・第二クラブ")
+
+    def test_organization_day_change_flags_are_exposed_per_player(self):
+        entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+        participant = entry.participant
+        save_pair_organization_values(
+            self.tournament,
+            participant,
+            {"org1": "第一クラブ", "org2": ""},
+        )
+        participant.has_day_player_change = True
+        participant.save()
+        save_day_player_change_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": ""},
+                "player2": {"org1": "第二クラブ"},
+            },
+        )
+
+        participant.refresh_from_db()
+        self.assertFalse(participant.player1_organization_is_day_changed)
+        self.assertTrue(participant.player2_organization_is_day_changed)
+        self.assertEqual(
+            participant.organization_display_parts,
+            [
+                {"text": "第一クラブ", "changed": False},
+                {"text": "・", "changed": False},
+                {"text": "第二クラブ", "changed": True},
+            ],
+        )
+        self.assertEqual(
+            entry_organization_html(entry),
+            '第一クラブ・<span style="color:red;">第二クラブ</span>',
+        )
+
+    def test_entry_display_lines_mark_changed_organization_part(self):
+        entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+        participant = entry.participant
+        save_pair_organization_values(
+            self.tournament,
+            participant,
+            {"org1": "第一クラブ", "org2": ""},
+        )
+        participant.has_day_player_change = True
+        participant.save()
+        save_day_player_change_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": ""},
+                "player2": {"org1": "第二クラブ"},
+            },
+        )
+
+        self.assertEqual(
+            build_entry_display_lines(entry)[1]["parts"],
+            [
+                {"text": "（", "changed": False},
+                {"text": "第一クラブ", "changed": False},
+                {"text": "・", "changed": False},
+                {"text": "第二クラブ", "changed": True},
+                {"text": "）", "changed": False},
+            ],
+        )
+        self.assertEqual(
+            build_entry_display_lines(
+                entry,
+                mode=ENTRY_DISPLAY_NAME_ORG_2LINE,
+            )[1]["parts"],
+            [
+                {"text": "第一クラブ", "changed": False},
+                {"text": "・", "changed": False},
+                {"text": "第二クラブ", "changed": True},
+            ],
+        )
+
+    def test_category_detail_marks_only_changed_organization_part(self):
+        entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+        participant = entry.participant
+        save_pair_organization_values(
+            self.tournament,
+            participant,
+            {"org1": "第一クラブ", "org2": ""},
+        )
+        participant.has_day_player_change = True
+        participant.save()
+        save_day_player_change_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": ""},
+                "player2": {"org1": "第二クラブ"},
+            },
+        )
+
+        response = self.client.get(
+            reverse(
+                "category_detail",
+                kwargs={"category_id": self.category.id},
+            )
+        )
+
+        self.assertContains(response, "第一クラブ")
+        self.assertContains(response, "第二クラブ")
+        self.assertContains(
+            response,
+            '<span style="color:red;">第二クラブ</span>',
+        )
+        self.assertNotContains(
+            response,
+            '<span style="color:red;">第一クラブ</span>',
+        )
+
     def test_entry_display_helper_accepts_tournament_entry(self):
         entry = create_tournament_entry(
             bracket=self.bracket,
@@ -869,7 +1046,9 @@ class EntryDisplayHelperTests(TestCase):
                         {"text": "山田", "changed": False},
                         {"text": "・", "changed": False},
                         {"text": "佐藤", "changed": False},
-                        {"text": "（第一クラブ）", "changed": False},
+                        {"text": "（", "changed": False},
+                        {"text": "第一クラブ", "changed": False},
+                        {"text": "）", "changed": False},
                     ],
                 },
             ],
@@ -889,7 +1068,13 @@ class EntryDisplayHelperTests(TestCase):
                         {"text": "佐藤　次郎", "changed": False},
                     ],
                 },
-                {"text": "第一クラブ", "class": "entry-org-text"},
+                {
+                    "text": "第一クラブ",
+                    "class": "entry-org-text",
+                    "parts": [
+                        {"text": "第一クラブ", "changed": False},
+                    ],
+                },
             ],
         )
 
@@ -24683,6 +24868,62 @@ class ParticipantManagementTests(TestCase):
         self.assertEqual(participant.effective_player1_name, "当日選手1A")
         self.assertEqual(participant.effective_player2_name, "参加者1B")
 
+    def test_day_player_change_save_updates_only_changed_player_organization(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+        )
+        save_pair_organization_values(
+            self.tournament,
+            participant,
+            {"org1": "共通所属", "org2": ""},
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_day_player_change",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            {
+                "current_player1_name": "",
+                "current_player1_short_name": "",
+                "current_player2_name": "",
+                "current_player2_short_name": "",
+                "current_player1_org1": "",
+                "current_player2_org1": "当日所属",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "day_player_change_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertTrue(participant.has_day_player_change)
+        values = {
+            value.player_no: value.current_value
+            for value in participant.organization_values.filter(
+                field__code="org1",
+            )
+        }
+        self.assertIsNone(values[ParticipantOrganizationValue.PLAYER_1])
+        self.assertEqual(
+            values[ParticipantOrganizationValue.PLAYER_2],
+            "当日所属",
+        )
+
     def test_day_player_change_used_participant_requires_impact_confirmation(self):
         participant = Participant.objects.create(
             category=self.category,
@@ -24819,6 +25060,59 @@ class ParticipantManagementTests(TestCase):
         self.assertIsNone(participant.current_player1_short_name)
         self.assertIsNone(participant.current_player2_name)
         self.assertIsNone(participant.current_player2_short_name)
+
+    def test_day_player_change_clear_resets_current_organization_values(self):
+        participant = Participant.objects.create(
+            category=self.category,
+            entry_code="E001",
+            player1_name="参加者1A",
+            player2_name="参加者1B",
+            has_day_player_change=True,
+            current_player2_name="当日選手1B",
+        )
+        save_pair_organization_values(
+            self.tournament,
+            participant,
+            {"org1": "共通所属", "org2": ""},
+        )
+        save_day_player_change_organization_values(
+            self.tournament,
+            participant,
+            {
+                "player1": {"org1": ""},
+                "player2": {"org1": "当日所属"},
+            },
+        )
+
+        response = self.client.post(
+            reverse(
+                "edit_day_player_change",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                    "participant_id": participant.id,
+                },
+            ),
+            {"action": "clear"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "day_player_change_list",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            ),
+        )
+        participant.refresh_from_db()
+        self.assertFalse(participant.has_day_player_change)
+        self.assertFalse(
+            participant.organization_values.filter(
+                current_value__isnull=False,
+            ).exists()
+        )
 
     def test_add_participant_saves_pair_common_organizations(self):
         response = self.client.post(

@@ -66,10 +66,13 @@ from ..services import (
     move_schedule_range,
     move_schedule_range_to_block,
     move_schedule_tail_to_block,
+    clear_day_player_change_organization_values,
     participant_edit_impact_summary,
+    participant_day_change_organization_context,
     participant_pair_organization_initials,
     league_rank_advances_further,
     resolve_schedule_referee,
+    save_day_player_change_organization_values,
     save_pair_organization_values,
     schedule_referee_conflicts_at_same_order,
     schedule_referee_key,
@@ -809,6 +812,9 @@ def edit_day_player_change(request, code, category_id, participant_id):
     original_player2_name = (
         participant.original_player2_name or participant.player2_name
     )
+    organization_context = participant_day_change_organization_context(
+        participant,
+    )
 
     if request.method == "POST":
         if request.POST.get("action") == "clear":
@@ -817,6 +823,7 @@ def edit_day_player_change(request, code, category_id, participant_id):
             participant.current_player1_short_name = None
             participant.current_player2_name = None
             participant.current_player2_short_name = None
+            clear_day_player_change_organization_values(participant)
             participant.save()
             messages.success(
                 request,
@@ -831,8 +838,16 @@ def edit_day_player_change(request, code, category_id, participant_id):
         form = DayPlayerChangeForm(
             request.POST,
             instance=participant,
+            tournament=tournament,
+            organization_initials=organization_context["current"],
         )
         if form.is_valid():
+            org_values = form.organization_values()
+            has_org_change = any(
+                value
+                for player_values in org_values.values()
+                for value in player_values.values()
+            )
             impact_summary = participant_edit_impact_summary(participant)
             if (
                 impact_summary["has_impact"]
@@ -848,6 +863,7 @@ def edit_day_player_change(request, code, category_id, participant_id):
                         "form": form,
                         "original_player1_name": original_player1_name,
                         "original_player2_name": original_player2_name,
+                        "original_organizations": organization_context["original"],
                         "impact_summary": impact_summary,
                     },
                 )
@@ -865,8 +881,14 @@ def edit_day_player_change(request, code, category_id, participant_id):
             changed.has_day_player_change = bool(
                 changed.current_player1_name
                 or changed.current_player2_name
+                or has_org_change
             )
             changed.save()
+            save_day_player_change_organization_values(
+                tournament,
+                changed,
+                org_values,
+            )
             messages.success(
                 request,
                 f"{participant.entry_code} の選手変更を保存しました。",
@@ -877,7 +899,11 @@ def edit_day_player_change(request, code, category_id, participant_id):
                 category_id=category.id,
             )
     else:
-        form = DayPlayerChangeForm(instance=participant)
+        form = DayPlayerChangeForm(
+            instance=participant,
+            tournament=tournament,
+            organization_initials=organization_context["current"],
+        )
 
     return render(
         request,
@@ -889,6 +915,7 @@ def edit_day_player_change(request, code, category_id, participant_id):
             "form": form,
             "original_player1_name": original_player1_name,
             "original_player2_name": original_player2_name,
+            "original_organizations": organization_context["original"],
             "impact_summary": None,
         },
     )

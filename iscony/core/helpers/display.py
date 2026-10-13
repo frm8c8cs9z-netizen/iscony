@@ -125,9 +125,12 @@ def build_entry_display_lines(
         parts = entry_name_parts(entry, use_short_name=True)
         organization = entry.display_organization
         if organization:
-            parts = parts + [
-                {"text": f"（{organization}）", "changed": False},
-            ]
+            parts = (
+                parts
+                + [{"text": "（", "changed": False}]
+                + entry.display_organization_parts
+                + [{"text": "）", "changed": False}]
+            )
 
         return [
             {
@@ -152,6 +155,7 @@ def build_entry_display_lines(
             lines.append({
                 "text": organization,
                 "class": organization_class,
+                "parts": entry.display_organization_parts,
             })
 
         return lines
@@ -168,6 +172,11 @@ def build_entry_display_lines(
         lines.append({
             "text": f"（{entry.display_organization}）",
             "class": organization_class,
+            "parts": (
+                [{"text": "（", "changed": False}]
+                + entry.display_organization_parts
+                + [{"text": "）", "changed": False}]
+            ),
         })
 
     return lines

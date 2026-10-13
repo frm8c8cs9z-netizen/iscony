@@ -360,6 +360,47 @@ class DayPlayerChangeForm(forms.ModelForm):
             ),
         }
 
+    def __init__(
+            self,
+            *args,
+            tournament=None,
+            organization_initials=None,
+            **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tournament = tournament
+
+        field_labels = {}
+        if tournament:
+            field_labels = {
+                field.code: field.label
+                for field in tournament.organization_fields.all()
+            }
+
+        initials = organization_initials or {"player1": {}, "player2": {}}
+
+        for player_no in (1, 2):
+            player_key = f"player{player_no}"
+            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES:
+                field_name = f"current_player{player_no}_{code}"
+                default_label = f"所属{code.removeprefix('org')}"
+                label = f"選手{player_no} 当日の{field_labels.get(code, default_label)}"
+                self.fields[field_name] = forms.CharField(
+                    label=label,
+                    required=False,
+                    initial=initials.get(player_key, {}).get(code, ""),
+                )
+
+    def organization_values(self):
+        result = {"player1": {}, "player2": {}}
+        for player_no in (1, 2):
+            player_key = f"player{player_no}"
+            for code in PARTICIPANT_ORGANIZATION_INPUT_CODES:
+                field_name = f"current_player{player_no}_{code}"
+                result[player_key][code] = (
+                    self.cleaned_data.get(field_name, "") or ""
+                ).strip()
+        return result
+
 
 class TournamentSettingsForm(forms.ModelForm):
 
