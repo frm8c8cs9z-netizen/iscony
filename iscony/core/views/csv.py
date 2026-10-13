@@ -61,12 +61,18 @@ STAGE_REIMPORT_SESSION_KEY = "stage_reimport_pending"
 
 
 def _participant_csv_headers():
+    player_org_columns = [
+        f"player{player_no}_{code}"
+        for player_no in (1, 2)
+        for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
+    ]
     return [
         "category",
         "entry_code",
         "player1_name",
         "player2_name",
         *PARTICIPANT_ORGANIZATION_INPUT_CODES,
+        *player_org_columns,
     ]
 
 

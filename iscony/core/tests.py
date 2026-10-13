@@ -15045,7 +15045,7 @@ class CsvFormatDownloadTests(TestCase):
         self.assertNotIn("pair2", header)
         self.assertIn("meeting_number", header)
 
-    def test_participants_format_uses_two_standard_org_columns(self):
+    def test_participants_format_includes_organization_columns(self):
         response = self._download(
             "participants"
         )
@@ -15058,8 +15058,13 @@ class CsvFormatDownloadTests(TestCase):
         self.assertIn("org2", header)
         self.assertNotIn("organization", header)
         self.assertNotIn("org3", header)
-        self.assertNotIn("player1_org1", header)
-        self.assertNotIn("player2_org1", header)
+        for column in (
+            "player1_org1",
+            "player1_org2",
+            "player2_org1",
+            "player2_org2",
+        ):
+            self.assertIn(column, header)
 
 
 class AdvancementSourceListViewTests(TestCase):

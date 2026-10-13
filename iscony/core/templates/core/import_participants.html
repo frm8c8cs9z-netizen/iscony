@@ -47,7 +47,19 @@
         </tr>
         <tr>
             <td>organization</td>
-            <td>任意。所属チーム、学校、クラブなどを入力します。</td>
+            <td>任意。所属チーム、学校、クラブなどを入力します。選手1・選手2共通の値として扱われます。</td>
+        </tr>
+        <tr>
+            <td>org1, org2</td>
+            <td>任意。所属1・所属2を表す共通列です(organizationと同じ考え方で、選手1・選手2共通の値になります)。</td>
+        </tr>
+        <tr>
+            <td>player1_org1, player1_org2, player2_org1, player2_org2</td>
+            <td>
+                任意。選手1・選手2で所属が異なる場合に、選手ごとに指定します。
+                指定した場合はorganization/org1/org2より優先されます。
+                player1側だけ指定してplayer2側を省略すると、選手1の値が選手2にもコピーされます。
+            </td>
         </tr>
     </table>
 </div>
