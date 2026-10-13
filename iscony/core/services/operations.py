@@ -71,6 +71,22 @@ def consume_stage_advancement_result():
     return result
 
 
+def schedule_import_lock_reason(schedule):
+    """ScheduleがCSV再取込で上書きしてよいかを判定し、理由文言を返す。
+
+    進行状態(呼出/試合中/完了)か結果入力済みのいずれかであれば、
+    理由の文字列を返す。問題なければ空文字列を返す。
+    """
+
+    if schedule.called or schedule.started or schedule.finished:
+        return "進行状態が入っています"
+
+    if schedule.match_has_score:
+        return "試合結果が入力済みです"
+
+    return ""
+
+
 def clone_tournament_without_results(source, *, name, code):
     """大会構成を複製し、結果・進行状態は未入力へ戻す。"""
 

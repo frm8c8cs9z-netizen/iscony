@@ -41,6 +41,7 @@ from ..models import (
 from ..services import (
     advance_tournament_bye_winners,
     auto_apply_stage_advancements_if_ready,
+    schedule_import_lock_reason,
 )
 from ..helpers.brackets import build_display_bracket_slots, get_bracket_size
 from ..constants import (
@@ -981,16 +982,6 @@ def _merged_schedule_flags(existing_flags, match):
     }
 
 
-def _schedule_import_lock_reason(schedule):
-    if schedule.called or schedule.started or schedule.finished:
-        return "進行状態が入っています"
-
-    if schedule.match_has_score:
-        return "試合結果が入力済みです"
-
-    return ""
-
-
 def _schedule_import_block_errors(target_groups, target_brackets):
     """進行済みの範囲をCSV再取込で上書きしないための検査。"""
 
@@ -1008,7 +999,7 @@ def _schedule_import_block_errors(target_groups, target_brackets):
     )
 
     for schedule in league_schedules:
-        reason = _schedule_import_lock_reason(schedule)
+        reason = schedule_import_lock_reason(schedule)
 
         if not reason:
             continue
@@ -1034,7 +1025,7 @@ def _schedule_import_block_errors(target_groups, target_brackets):
     )
 
     for schedule in tournament_schedules:
-        reason = _schedule_import_lock_reason(schedule)
+        reason = schedule_import_lock_reason(schedule)
 
         if not reason:
             continue

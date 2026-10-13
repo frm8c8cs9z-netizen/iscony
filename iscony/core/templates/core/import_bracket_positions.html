@@ -58,16 +58,75 @@
     </ul>
 {% endif %}
 
-<form method="post" enctype="multipart/form-data">
+{% if warnings %}
+    <ul style="color:#b26a00;">
+        {% for warning in warnings %}
+            <li>{{ warning }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
 
-    {% csrf_token %}
+{% if warning_token %}
+    <div class="reimport-warning-overlay">
+        <div class="reimport-warning-panel">
+            <h3>既存の配置・結果を置き換えて取り込みますか</h3>
+            <p>
+                そのまま進めると、既存の配置・結果データは消えて作り直されます。
+            </p>
 
-    {{ form.as_p }}
+            <ul>
+                {% for warning in warnings %}
+                    <li>{{ warning }}</li>
+                {% endfor %}
+            </ul>
 
-    <button type="submit">
-        取込
-    </button>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="reimport_confirm_token" value="{{ warning_token }}">
+                <p>
+                    <label>
+                        <input type="checkbox" id="reimport-confirm-checkbox">
+                        内容を理解しました
+                    </label>
+                </p>
+                <button type="submit" id="reimport-confirm-button" disabled>
+                    置き換えて取り込む
+                </button>
+                <a href="?discard_bracket_positions_reimport=1" style="margin-left: 12px;">
+                    やめる
+                </a>
+            </form>
+        </div>
+    </div>
+{% else %}
+    <form method="post" enctype="multipart/form-data">
 
-</form>
+        {% csrf_token %}
+
+        {{ form.as_p }}
+
+        <button type="submit">
+            取込
+        </button>
+
+    </form>
+{% endif %}
+
+{% if warning_token %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const checkbox = document.getElementById("reimport-confirm-checkbox");
+    const button = document.getElementById("reimport-confirm-button");
+
+    if (!checkbox || !button) {
+        return;
+    }
+
+    checkbox.addEventListener("change", function () {
+        button.disabled = !checkbox.checked;
+    });
+});
+</script>
+{% endif %}
 
 {% endblock %}

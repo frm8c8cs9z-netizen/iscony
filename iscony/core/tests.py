@@ -28188,6 +28188,257 @@ class TournamentScheduleBehaviorTests(TestCase):
         end = start + 1 + next_match.start() if next_match else len(content)
         return content[start:end]
 
+    def _create_tournament_match(self, *, label="決勝"):
+        return TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label=label,
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+
+    def _post_tournament_schedule_csv(self, content, *, token=""):
+        data = {}
+
+        if token:
+            data["reimport_confirm_token"] = token
+        else:
+            data["file"] = SimpleUploadedFile(
+                "tournament_schedule.csv",
+                content.encode("utf-8-sig"),
+                content_type="text/csv",
+            )
+
+        return self.client.post(
+            reverse(
+                "import_tournament_schedule",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            data,
+        )
+
+    def _post_bracket_positions_csv(self, content, *, token=""):
+        data = {}
+
+        if token:
+            data["reimport_confirm_token"] = token
+        else:
+            data["file"] = SimpleUploadedFile(
+                "bracket_positions.csv",
+                content.encode("utf-8-sig"),
+                content_type="text/csv",
+            )
+
+        return self.client.post(
+            reverse(
+                "import_bracket_positions",
+                kwargs={
+                    "code": self.tournament.code,
+                    "bracket_id": self.bracket.id,
+                },
+            ),
+            data,
+        )
+
+    def _create_import_participant(self, entry_code, display_order):
+        return Participant.objects.create(
+            category=self.category,
+            entry_code=entry_code,
+            organization=f"所属{entry_code}",
+            player1_name=f"選手{entry_code}A",
+            player2_name=f"選手{entry_code}B",
+            display_order=display_order,
+        )
+
+    def _bracket_positions_csv(self):
+        self._create_import_participant("E1", 1)
+        self._create_import_participant("E2", 2)
+        return (
+            "pair_code,display_order,entry_code\n"
+            "1,1,E1\n"
+            "2,2,E2\n"
+        )
+
+    def _ensure_first_round_match(self, *, label="決勝"):
+        match = TournamentMatch.objects.filter(
+            bracket=self.bracket,
+            match_code="M1",
+        ).first()
+
+        if match:
+            match.match_label = label
+            match.save()
+            return match
+
+        return self._create_tournament_match(label=label)
+
+    def test_import_tournament_schedule_without_existing_data_runs_directly(self):
+        self._create_tournament_match()
+
+        response = self._post_tournament_schedule_csv(
+            "court,order,match_code,match_label\n"
+            "2,1,M1,決勝\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Schedule.objects.count(), 1)
+        schedule = Schedule.objects.get()
+        self.assertEqual(schedule.court.name, "2")
+        self.assertEqual(schedule.order, 1)
+
+    def test_import_tournament_schedule_warns_then_replaces_existing_schedule(self):
+        match = self._create_tournament_match()
+        Schedule.objects.create(
+            court=self.court,
+            order=1,
+            tournament_match=match,
+        )
+
+        response = self._post_tournament_schedule_csv(
+            "court,order,match_code,match_label\n"
+            "2,3,M1,決勝更新\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("warning_token", response.context)
+        self.assertContains(response, "既存のコート割データが置き換えられます。")
+        self.assertEqual(Schedule.objects.get().order, 1)
+
+        response = self._post_tournament_schedule_csv(
+            "",
+            token=response.context["warning_token"],
+        )
+
+        self.assertEqual(response.status_code, 302)
+        schedule = Schedule.objects.get()
+        self.assertEqual(schedule.court.name, "2")
+        self.assertEqual(schedule.order, 3)
+        match.refresh_from_db()
+        self.assertEqual(match.match_label, "決勝更新")
+
+    def test_import_tournament_schedule_warns_with_started_match_detail(self):
+        match = self._create_tournament_match(label="準決勝A")
+        Schedule.objects.create(
+            court=self.court,
+            order=1,
+            tournament_match=match,
+            started=True,
+        )
+
+        response = self._post_tournament_schedule_csv(
+            "court,order,match_code,match_label\n"
+            "2,4,M1,準決勝A\n"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "準決勝A / 進行状態が入っています")
+
+        response = self._post_tournament_schedule_csv(
+            "",
+            token=response.context["warning_token"],
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Schedule.objects.get().order, 4)
+
+    def test_import_tournament_schedule_rejects_invalid_confirm_token(self):
+        self._create_tournament_match()
+
+        response = self._post_tournament_schedule_csv(
+            "",
+            token="missing-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "再取込用の一時データが見つかりません。")
+
+    def test_import_bracket_positions_without_existing_data_runs_directly(self):
+        TournamentEntry.objects.filter(bracket=self.bracket).delete()
+        TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="決勝",
+        )
+
+        response = self._post_bracket_positions_csv(
+            self._bracket_positions_csv()
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(TournamentEntry.objects.filter(bracket=self.bracket).count(), 2)
+        match = TournamentMatch.objects.get(bracket=self.bracket, match_code="M1")
+        self.assertEqual(match.pair1.pair_code, "1")
+        self.assertEqual(match.pair2.pair_code, "2")
+
+    def test_import_bracket_positions_warns_then_replaces_existing_schedule(self):
+        match = self._ensure_first_round_match()
+        Schedule.objects.create(
+            court=self.court,
+            order=1,
+            tournament_match=match,
+        )
+
+        response = self._post_bracket_positions_csv(
+            self._bracket_positions_csv()
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("warning_token", response.context)
+        self.assertContains(response, "既存の配置・結果データが置き換えられます。")
+
+        response = self._post_bracket_positions_csv(
+            "",
+            token=response.context["warning_token"],
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(TournamentEntry.objects.filter(bracket=self.bracket).count(), 2)
+        match.refresh_from_db()
+        self.assertEqual(match.pair1.pair_code, "1")
+        self.assertEqual(match.pair2.pair_code, "2")
+
+    def test_import_bracket_positions_warns_with_started_match_detail(self):
+        match = self._ensure_first_round_match(label="準決勝A")
+        Schedule.objects.create(
+            court=self.court,
+            order=1,
+            tournament_match=match,
+            started=True,
+        )
+
+        response = self._post_bracket_positions_csv(
+            self._bracket_positions_csv()
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "準決勝A / 進行状態が入っています")
+
+        response = self._post_bracket_positions_csv(
+            "",
+            token=response.context["warning_token"],
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(TournamentEntry.objects.filter(bracket=self.bracket).count(), 2)
+
+    def test_import_bracket_positions_rejects_invalid_confirm_token(self):
+        self._ensure_first_round_match()
+
+        response = self._post_bracket_positions_csv(
+            "",
+            token="missing-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "再取込用の一時データが見つかりません。")
+
     def test_tournament_bracket_detail_links_back_to_stage_overview(self):
         response = self.client.get(
             reverse(

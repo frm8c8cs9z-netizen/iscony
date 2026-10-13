@@ -8,6 +8,9 @@ core.views.tournament
 
 import csv
 import io
+import os
+import secrets
+import tempfile
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -68,6 +71,7 @@ from ..services import (
     move_tournament_entry_participant,
     save_tournament_score,
     save_tournament_retirement,
+    schedule_import_lock_reason,
     tournament_match_has_score,
     unassign_tournament_entry_advancement_piece,
     unassign_tournament_entry_participant,
@@ -1383,6 +1387,59 @@ def import_bracket_seeds(request, code, bracket_id):
     )
 
 
+BRACKET_POSITIONS_REIMPORT_SESSION_KEY = (
+    "bracket_positions_reimport_pending"
+)
+
+
+def _store_bracket_positions_reimport_upload(request, uploaded_file):
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+    try:
+        for chunk in uploaded_file.chunks():
+            temp_file.write(chunk)
+    finally:
+        temp_file.close()
+
+    token = secrets.token_urlsafe(16)
+    request.session[BRACKET_POSITIONS_REIMPORT_SESSION_KEY] = {
+        "token": token,
+        "path": temp_file.name,
+        "name": getattr(uploaded_file, "name", ""),
+    }
+    request.session.modified = True
+    return token
+
+
+def _bracket_positions_reimport_temp_path(request, token):
+    pending = request.session.get(
+        BRACKET_POSITIONS_REIMPORT_SESSION_KEY,
+        {},
+    )
+    if pending.get("token") != token:
+        return ""
+
+    path = pending.get("path", "")
+    if path and os.path.exists(path):
+        return path
+
+    return ""
+
+
+def _clear_bracket_positions_reimport_upload(request):
+    pending = request.session.pop(
+        BRACKET_POSITIONS_REIMPORT_SESSION_KEY,
+        None,
+    )
+    request.session.modified = True
+
+    if not pending:
+        return
+
+    path = pending.get("path")
+    if path and os.path.exists(path):
+        os.unlink(path)
+
+
 def import_bracket_positions(request, code, bracket_id):
     """
     トーナメント初期配置CSVを取り込む。
@@ -1402,6 +1459,14 @@ def import_bracket_positions(request, code, bracket_id):
         category__tournament=tournament
     )
 
+    if request.GET.get("discard_bracket_positions_reimport") == "1":
+        _clear_bracket_positions_reimport_upload(request)
+        return redirect(
+            "import_bracket_positions",
+            code=tournament.code,
+            bracket_id=bracket.id,
+        )
+
     if request.method == "POST":
 
         form = CSVUploadForm(
@@ -1411,11 +1476,39 @@ def import_bracket_positions(request, code, bracket_id):
 
         if form.is_valid():
 
-            csv_file = request.FILES["file"]
-
-            data = csv_file.read().decode(
-                "utf-8-sig"
+            confirm_token = form.cleaned_data.get(
+                "reimport_confirm_token",
+                "",
             )
+
+            if confirm_token:
+                csv_path = _bracket_positions_reimport_temp_path(
+                    request,
+                    confirm_token,
+                )
+
+                if not csv_path:
+                    return render(
+                        request,
+                        "core/import_bracket_positions.html",
+                        {
+                            "tournament": tournament,
+                            "bracket": bracket,
+                            "form": form,
+                            "errors": [
+                                "再取込用の一時データが見つかりません。"
+                            ],
+                        }
+                    )
+
+                with open(csv_path, "rb") as csv_fh:
+                    data = csv_fh.read().decode("utf-8-sig")
+            else:
+                csv_file = request.FILES["file"]
+
+                data = csv_file.read().decode(
+                    "utf-8-sig"
+                )
 
             io_string = io.StringIO(data)
 
@@ -1438,6 +1531,8 @@ def import_bracket_positions(request, code, bracket_id):
             )
 
             if missing_columns:
+                if confirm_token:
+                    _clear_bracket_positions_reimport_upload(request)
 
                 return render(
                     request,
@@ -1544,6 +1639,8 @@ def import_bracket_positions(request, code, bracket_id):
                 )
 
             if errors:
+                if confirm_token:
+                    _clear_bracket_positions_reimport_upload(request)
 
                 return render(
                     request,
@@ -1579,6 +1676,9 @@ def import_bracket_positions(request, code, bracket_id):
                 )
 
             if errors:
+                if confirm_token:
+                    _clear_bracket_positions_reimport_upload(request)
+
                 return render(
                     request,
                     "core/import_bracket_positions.html",
@@ -1587,6 +1687,70 @@ def import_bracket_positions(request, code, bracket_id):
                         "bracket": bracket,
                         "form": form,
                         "errors": errors,
+                    }
+                )
+
+            warnings = []
+
+            if not confirm_token:
+                existing_entries_exist = TournamentEntry.objects.filter(
+                    bracket=bracket
+                ).exists()
+                existing_schedules = list(
+                    Schedule.objects.filter(
+                        tournament_match__bracket=bracket
+                    ).select_related(
+                        "tournament_match"
+                    )
+                )
+
+                if existing_entries_exist or existing_schedules:
+                    locked_details = []
+
+                    for schedule in existing_schedules:
+                        reason = schedule_import_lock_reason(schedule)
+
+                        if not reason:
+                            continue
+
+                        match = schedule.tournament_match
+                        match_label = (
+                            match.match_label
+                            or match.match_code
+                            or f"M{match.match_number}"
+                        )
+                        locked_details.append(
+                            f"{match_label} / {reason}"
+                        )
+
+                    if locked_details:
+                        warnings = [
+                            "進行中・結果入力済みの試合が含まれています。"
+                            "そのまま進めると、配置・結果が失われます。"
+                        ] + locked_details
+                    else:
+                        warnings = [
+                            "既存の配置・結果データが置き換えられます。"
+                        ]
+
+            if warnings:
+                warning_token = _store_bracket_positions_reimport_upload(
+                    request,
+                    request.FILES["file"],
+                )
+
+                return render(
+                    request,
+                    "core/import_bracket_positions.html",
+                    {
+                        "tournament": tournament,
+                        "bracket": bracket,
+                        "form": form,
+                        "warnings": warnings,
+                        "warning_token": warning_token,
+                        "warning_file_name": (
+                            request.FILES["file"].name
+                        ),
                     }
                 )
 
@@ -1643,6 +1807,9 @@ def import_bracket_positions(request, code, bracket_id):
                 advance_tournament_bye_winners(
                     bracket
                 )
+
+            if confirm_token:
+                _clear_bracket_positions_reimport_upload(request)
 
             return redirect(
                 "tournament_match_maintenance",
@@ -1934,12 +2101,66 @@ def edit_tournament_bracket(request, code, bracket_id):
     )
 
 
+TOURNAMENT_SCHEDULE_REIMPORT_SESSION_KEY = (
+    "tournament_schedule_reimport_pending"
+)
+
+
+def _store_tournament_schedule_reimport_upload(request, uploaded_file):
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+    try:
+        for chunk in uploaded_file.chunks():
+            temp_file.write(chunk)
+    finally:
+        temp_file.close()
+
+    token = secrets.token_urlsafe(16)
+    request.session[TOURNAMENT_SCHEDULE_REIMPORT_SESSION_KEY] = {
+        "token": token,
+        "path": temp_file.name,
+        "name": getattr(uploaded_file, "name", ""),
+    }
+    request.session.modified = True
+    return token
+
+
+def _tournament_schedule_reimport_temp_path(request, token):
+    pending = request.session.get(
+        TOURNAMENT_SCHEDULE_REIMPORT_SESSION_KEY,
+        {},
+    )
+    if pending.get("token") != token:
+        return ""
+
+    path = pending.get("path", "")
+    if path and os.path.exists(path):
+        return path
+
+    return ""
+
+
+def _clear_tournament_schedule_reimport_upload(request):
+    pending = request.session.pop(
+        TOURNAMENT_SCHEDULE_REIMPORT_SESSION_KEY,
+        None,
+    )
+    request.session.modified = True
+
+    if not pending:
+        return
+
+    path = pending.get("path")
+    if path and os.path.exists(path):
+        os.unlink(path)
+
+
 def import_tournament_schedule(request, code, bracket_id):
     """
     トーナメント進行CSVを取り込む。
 
     match_code と court/order を紐付け、Schedule を作成する。
-    既に結果が入った試合を壊さないよう、検証してから更新する。
+    既存のコート割に進行中・結果入力済みのものが含まれる場合は、
+    確認を挟んでから上書きする。
     """
 
     tournament = get_object_or_404(
@@ -1953,6 +2174,14 @@ def import_tournament_schedule(request, code, bracket_id):
         category__tournament=tournament
     )
 
+    if request.GET.get("discard_tournament_schedule_reimport") == "1":
+        _clear_tournament_schedule_reimport_upload(request)
+        return redirect(
+            "import_tournament_schedule",
+            code=tournament.code,
+            bracket_id=bracket.id,
+        )
+
     if request.method == "POST":
 
         form = CSVUploadForm(
@@ -1962,11 +2191,39 @@ def import_tournament_schedule(request, code, bracket_id):
 
         if form.is_valid():
 
-            csv_file = request.FILES["file"]
-
-            data = csv_file.read().decode(
-                "utf-8-sig"
+            confirm_token = form.cleaned_data.get(
+                "reimport_confirm_token",
+                "",
             )
+
+            if confirm_token:
+                csv_path = _tournament_schedule_reimport_temp_path(
+                    request,
+                    confirm_token,
+                )
+
+                if not csv_path:
+                    return render(
+                        request,
+                        "core/import_tournament_schedule.html",
+                        {
+                            "tournament": tournament,
+                            "bracket": bracket,
+                            "form": form,
+                            "errors": [
+                                "再取込用の一時データが見つかりません。"
+                            ],
+                        }
+                    )
+
+                with open(csv_path, "rb") as csv_fh:
+                    data = csv_fh.read().decode("utf-8-sig")
+            else:
+                csv_file = request.FILES["file"]
+
+                data = csv_file.read().decode(
+                    "utf-8-sig"
+                )
 
             io_string = io.StringIO(data)
 
@@ -1991,6 +2248,8 @@ def import_tournament_schedule(request, code, bracket_id):
             )
 
             if missing_columns:
+                if confirm_token:
+                    _clear_tournament_schedule_reimport_upload(request)
 
                 return render(
                     request,
@@ -2113,6 +2372,8 @@ def import_tournament_schedule(request, code, bracket_id):
                 )
 
             if errors:
+                if confirm_token:
+                    _clear_tournament_schedule_reimport_upload(request)
 
                 return render(
                     request,
@@ -2122,6 +2383,68 @@ def import_tournament_schedule(request, code, bracket_id):
                         "bracket": bracket,
                         "form": form,
                         "errors": errors,
+                    }
+                )
+
+            warnings = []
+
+            if not confirm_token:
+                existing_schedules = list(
+                    Schedule.objects.filter(
+                        tournament_match__bracket=bracket
+                    ).select_related(
+                        "tournament_match"
+                    )
+                )
+
+                if existing_schedules:
+                    locked_details = []
+
+                    for schedule in existing_schedules:
+                        reason = schedule_import_lock_reason(schedule)
+
+                        if not reason:
+                            continue
+
+                        match = schedule.tournament_match
+                        match_label = (
+                            match.match_label
+                            or match.match_code
+                            or f"M{match.match_number}"
+                        )
+                        locked_details.append(
+                            f"{match_label} / {reason}"
+                        )
+
+                    if locked_details:
+                        warnings = [
+                            "進行中・結果入力済みの試合が含まれています。"
+                            "そのまま進めると、これらのコート割・進行状態は"
+                            "失われます。"
+                        ] + locked_details
+                    else:
+                        warnings = [
+                            "既存のコート割データが置き換えられます。"
+                        ]
+
+            if warnings:
+                warning_token = _store_tournament_schedule_reimport_upload(
+                    request,
+                    request.FILES["file"],
+                )
+
+                return render(
+                    request,
+                    "core/import_tournament_schedule.html",
+                    {
+                        "tournament": tournament,
+                        "bracket": bracket,
+                        "form": form,
+                        "warnings": warnings,
+                        "warning_token": warning_token,
+                        "warning_file_name": (
+                            request.FILES["file"].name
+                        ),
                     }
                 )
 
@@ -2149,6 +2472,9 @@ def import_tournament_schedule(request, code, bracket_id):
                         court=court,
                         order=row["order"],
                     )
+
+            if confirm_token:
+                _clear_tournament_schedule_reimport_upload(request)
 
             return redirect(
                 "schedule_maintenance",
