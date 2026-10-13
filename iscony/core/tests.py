@@ -25,6 +25,7 @@ from .helpers.display import (
     ENTRY_DISPLAY_NAME_ORG_2LINE,
     ENTRY_DISPLAY_ONE_LINE,
     build_entry_display_lines,
+    entry_name_parts,
     format_entry_one_line,
     resolve_entry_display_mode,
 )
@@ -76,6 +77,7 @@ from .views.tournament import build_tournament_bracket_display_data
 from .views.stage import _validate_stage_slot_setup
 from .rendering.tournament_svg_labels import estimate_svg_row_gap
 from .rendering.tournament_svg_score import resolve_svg_match_code_text_style
+from .templatetags.core_extras import entry_short_name_html
 
 from .services import (
     advance_tournament_bye_winners,
@@ -814,6 +816,34 @@ class EntryDisplayHelperTests(TestCase):
                 {"text": "・", "changed": False},
                 {"text": "鈴木　次郎", "changed": True},
             ],
+        )
+
+    def test_entry_short_name_html_marks_only_changed_player_part(self):
+        entry = create_league_entry_with_participant(
+            category=self.category,
+            group=self.group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="山田　太郎",
+            player2_name="佐藤　次郎",
+        )
+        participant = entry.participant
+        participant.has_day_player_change = True
+        participant.current_player2_name = "鈴木　次郎"
+        participant.current_player2_short_name = "鈴木"
+        participant.save()
+
+        self.assertEqual(
+            entry_name_parts(entry, use_short_name=True),
+            [
+                {"text": "山田", "changed": False},
+                {"text": "・", "changed": False},
+                {"text": "鈴木", "changed": True},
+            ],
+        )
+        self.assertEqual(
+            entry_short_name_html(entry),
+            '山田・<span style="color:red;">鈴木</span>',
         )
 
     def test_entry_display_helper_accepts_tournament_entry(self):
@@ -27487,6 +27517,16 @@ class TournamentScheduleBehaviorTests(TestCase):
             pair2=unresolved_entry,
         )
 
+    def _schedule_cell_html(self, response, schedule):
+        content = response.content.decode()
+        start = content.index(f'id="schedule-{schedule.id}"')
+        next_match = re.search(
+            r'id="schedule-\d+"',
+            content[start + 1:],
+        )
+        end = start + 1 + next_match.start() if next_match else len(content)
+        return content[start:end]
+
     def test_tournament_bracket_detail_links_back_to_stage_overview(self):
         response = self.client.get(
             reverse(
@@ -31345,6 +31385,70 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
+    def test_schedule_view_marks_day_changed_player_name_only(self):
+        changed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        normal_entry1 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="3",
+            display_order=3,
+            player1_name="通常1A",
+            player2_name="通常1B",
+        )
+        normal_entry2 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="4",
+            display_order=4,
+            player1_name="通常2A",
+            player2_name="通常2B",
+        )
+        normal_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=normal_entry1,
+            pair2=normal_entry2,
+        )
+        changed_schedule = Schedule.objects.create(
+            court=self.court,
+            order=1,
+            tournament_match=changed_match,
+        )
+        normal_schedule = Schedule.objects.create(
+            court=self.court,
+            order=2,
+            tournament_match=normal_match,
+        )
+        participant = self.entry1.participant
+        participant.has_day_player_change = True
+        participant.current_player2_name = "当日1B"
+        participant.current_player2_short_name = "当日1B"
+        participant.save()
+
+        response = self.client.get(
+            reverse(
+                "schedule_view",
+                kwargs={"tournament_code": self.tournament.code},
+            )
+        )
+        changed_cell = self._schedule_cell_html(response, changed_schedule)
+        normal_cell = self._schedule_cell_html(response, normal_schedule)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'style="color:red;"')
+        self.assertIn(
+            '選手1A・<span style="color:red;">当日1B</span>',
+            changed_cell,
+        )
+        self.assertNotIn('style="color:red;"', normal_cell)
+
     def test_public_schedule_view_is_read_only(self):
         self.entry1.participant.organization = "本戦クラブ1"
         self.entry1.participant.save(update_fields=["organization"])
@@ -31480,6 +31584,70 @@ class TournamentScheduleBehaviorTests(TestCase):
                 kwargs={"schedule_id": league_schedule.id},
             ),
         )
+
+    def test_public_schedule_view_marks_day_changed_player_name_only(self):
+        changed_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            pair1=self.entry1,
+            pair2=self.entry2,
+        )
+        normal_entry1 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="3",
+            display_order=3,
+            player1_name="通常1A",
+            player2_name="通常1B",
+        )
+        normal_entry2 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="4",
+            display_order=4,
+            player1_name="通常2A",
+            player2_name="通常2B",
+        )
+        normal_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=2,
+            match_code="M2",
+            pair1=normal_entry1,
+            pair2=normal_entry2,
+        )
+        changed_schedule = Schedule.objects.create(
+            court=self.court,
+            order=1,
+            tournament_match=changed_match,
+        )
+        normal_schedule = Schedule.objects.create(
+            court=self.court,
+            order=2,
+            tournament_match=normal_match,
+        )
+        participant = self.entry1.participant
+        participant.has_day_player_change = True
+        participant.current_player2_name = "当日1B"
+        participant.current_player2_short_name = "当日1B"
+        participant.save()
+
+        response = self.client.get(
+            reverse(
+                "public_schedule_view",
+                kwargs={"tournament_code": self.tournament.code},
+            )
+        )
+        changed_cell = self._schedule_cell_html(response, changed_schedule)
+        normal_cell = self._schedule_cell_html(response, normal_schedule)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'style="color:red;"')
+        self.assertIn(
+            '選手1A・<span style="color:red;">当日1B</span>',
+            changed_cell,
+        )
+        self.assertNotIn('style="color:red;"', normal_cell)
 
     @override_settings(PUBLIC_VIEW_CACHE_SECONDS=60)
     def test_public_schedule_view_uses_configured_cache_timeout(self):

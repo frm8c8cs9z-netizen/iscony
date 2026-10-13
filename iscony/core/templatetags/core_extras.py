@@ -1,4 +1,8 @@
 from django import template
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
+
+from core.helpers.display import entry_name_parts
 
 from core.models import (
     Category,
@@ -441,3 +445,23 @@ def admin_menu_public_token(context):
             return token
 
     return ""
+
+
+@register.simple_tag
+def entry_short_name_html(entry):
+    """参加枠の短縮表示名を、当日変更された選手部分だけ赤字にしたHTMLとして返す。"""
+
+    if not entry:
+        return ""
+
+    parts = entry_name_parts(entry, use_short_name=True)
+    html_parts = []
+
+    for part in parts:
+        text = escape(part["text"])
+        if part["changed"]:
+            html_parts.append(f'<span style="color:red;">{text}</span>')
+        else:
+            html_parts.append(text)
+
+    return mark_safe("".join(html_parts))

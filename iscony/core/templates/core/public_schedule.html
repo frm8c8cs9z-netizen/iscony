@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load core_extras %}
 
 {% block content %}
 
@@ -272,7 +273,7 @@
                                             <div class="schedule-pair-line">
                                                 <span class="schedule-pair-main">
                                                     <span class="schedule-entry-name">
-                                                        {{ match.pair1.code }} {{ match.pair1.short_name }}
+                                                        {{ match.pair1.code }} {% entry_short_name_html match.pair1 %}
                                                     </span>
                                                     {% if match.pair1.display_organization %}
                                                         <span class="schedule-entry-org">
@@ -288,7 +289,7 @@
                                             <div class="schedule-pair-line">
                                                 <span class="schedule-pair-main">
                                                     <span class="schedule-entry-name">
-                                                        {{ match.pair2.code }} {{ match.pair2.short_name }}
+                                                        {{ match.pair2.code }} {% entry_short_name_html match.pair2 %}
                                                     </span>
                                                     {% if match.pair2.display_organization %}
                                                         <span class="schedule-entry-org">
@@ -334,7 +335,7 @@
                                                 <span class="schedule-pair-main">
                                                     {% if match.pair1 %}
                                                         <span class="schedule-entry-name">
-                                                            {{ match.pair1.code }} {{ match.pair1.short_name }}
+                                                            {{ match.pair1.code }} {% entry_short_name_html match.pair1 %}
                                                         </span>
                                                         {% if match.pair1.display_organization %}
                                                             <span class="schedule-entry-org">
@@ -351,7 +352,7 @@
                                                 <span class="schedule-pair-main">
                                                     {% if match.pair2 %}
                                                         <span class="schedule-entry-name">
-                                                            {{ match.pair2.code }} {{ match.pair2.short_name }}
+                                                            {{ match.pair2.code }} {% entry_short_name_html match.pair2 %}
                                                         </span>
                                                         {% if match.pair2.display_organization %}
                                                             <span class="schedule-entry-org">

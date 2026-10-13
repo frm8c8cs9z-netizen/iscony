@@ -77,7 +77,7 @@ def format_entry_one_line(entry, *, use_short_name=True, with_organization=True)
     return name
 
 
-def _entry_name_parts(entry, *, use_short_name):
+def entry_name_parts(entry, *, use_short_name):
     """選手1/選手2を独立した部分として返す。各部分に当日変更フラグを付ける。"""
 
     if not getattr(entry, "participant", None):
@@ -122,7 +122,7 @@ def build_entry_display_lines(
         return []
 
     if mode == ENTRY_DISPLAY_ONE_LINE:
-        parts = _entry_name_parts(entry, use_short_name=True)
+        parts = entry_name_parts(entry, use_short_name=True)
         organization = entry.display_organization
         if organization:
             parts = parts + [
@@ -144,7 +144,7 @@ def build_entry_display_lines(
             {
                 "text": entry.display_name,
                 "class": name_class,
-                "parts": _entry_name_parts(entry, use_short_name=False),
+                "parts": entry_name_parts(entry, use_short_name=False),
             }
         ]
 
@@ -160,7 +160,7 @@ def build_entry_display_lines(
         {
             "text": entry.short_name,
             "class": name_class,
-            "parts": _entry_name_parts(entry, use_short_name=True),
+            "parts": entry_name_parts(entry, use_short_name=True),
         }
     ]
 
