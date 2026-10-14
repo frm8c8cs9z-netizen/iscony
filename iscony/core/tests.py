@@ -14035,6 +14035,61 @@ class ImportStageSlotsCsvTests(TestCase):
             3,
         )
 
+    def test_stage_slots_csv_sanitizes_formula_like_cells_and_reimports(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="=男子B",
+        )
+        self._create_participant(category, "=E001")
+
+        import_response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "=男子B,+予選リーグ,L,-A,,@1,1,=E001,,,,,\n"
+        )
+        self.assertEqual(import_response.status_code, 302)
+
+        response = self.client.get(
+            reverse(
+                "export_stage_slots",
+                kwargs={
+                    "tournament_code": self.tournament.code,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8-sig")
+        rows = list(csv.DictReader(io.StringIO(content)))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+
+        self.assertEqual(row["category"], "'=男子B")
+        self.assertEqual(row["stage"], "'+予選リーグ")
+        self.assertEqual(row["group"], "'-A")
+        self.assertEqual(row["slot_label"], "'@1")
+        self.assertEqual(row["entry_code"], "'=E001")
+
+        reimport_response = self._post_csv(content)
+        self.assertEqual(reimport_response.status_code, 302)
+
+        category.refresh_from_db()
+        self.assertEqual(category.name, "=男子B")
+        stage = Stage.objects.get(
+            category=category,
+            name="+予選リーグ",
+        )
+        group = Group.objects.get(
+            category=category,
+            stage=stage,
+            name="-A",
+        )
+        entry = LeagueEntry.objects.select_related("participant").get(
+            category=category,
+            group=group,
+            pair_code="@1",
+        )
+        self.assertEqual(entry.participant.entry_code, "=E001")
+
     def test_reimport_source_stage_requires_dependent_stage_in_same_csv(self):
         category = Category.objects.create(
             tournament=self.tournament,

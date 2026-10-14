@@ -328,6 +328,22 @@ def _stage_slot_source_columns(entry):
     ]
 
 
+def _sanitize_csv_cell(value):
+    """
+    Excel等でCSVを開いた際に数式として実行されるのを防ぐため、
+    セル値が `=`/`+`/`-`/`@` で始まる場合は先頭に `'` を付与する。
+    文字列以外の値はそのまま返す。
+    """
+
+    if not isinstance(value, str):
+        return value
+
+    if value[:1] in ("=", "+", "-", "@"):
+        return f"'{value}"
+
+    return value
+
+
 def export_stage_slots(request, tournament_code):
     """現在のStage構成を、修正・再取込可能なCSVとして出力する。"""
 
@@ -452,7 +468,9 @@ def export_stage_slots(request, tournament_code):
         ))
 
     for *_, row in sorted(rows, key=lambda item: item[:-1]):
-        writer.writerow(row)
+        writer.writerow(
+            [_sanitize_csv_cell(value) for value in row]
+        )
 
     return response
 
@@ -520,7 +538,12 @@ def _normalize_source_result(value):
 
 
 def _cell(row, key):
-    return (row.get(key) or "").strip()
+    value = (row.get(key) or "").strip()
+
+    if value.startswith("'"):
+        value = value[1:]
+
+    return value
 
 
 def _read_csv_rows(csv_file):
@@ -533,6 +556,8 @@ def _read_csv_rows(csv_file):
             sample,
             delimiters=",\t"
         )
+        if dialect.quotechar == "'":
+            dialect = csv.excel_tab if dialect.delimiter == "\t" else csv.excel
     except csv.Error:
         dialect = csv.excel
 
