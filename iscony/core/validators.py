@@ -55,3 +55,46 @@ def validate_game_score(
     return None
 
 
+def validate_star_score(
+    pair1_legs,
+    pair2_legs,
+    total_legs
+):
+
+    # --------------------------------------
+    # 数値保証
+    # --------------------------------------
+    if (
+        not isinstance(pair1_legs, int)
+        or not isinstance(pair2_legs, int)
+    ):
+        return "対戦数は数値で入力してください。"
+
+    # --------------------------------------
+    # マイナス禁止
+    # --------------------------------------
+    if pair1_legs < 0 or pair2_legs < 0:
+        return "対戦数にマイナスは登録できません。"
+
+    # --------------------------------------
+    # 対戦数の合計が設定を超えないこと
+    # --------------------------------------
+    if pair1_legs + pair2_legs > total_legs:
+        return "対戦数の合計が設定を超えています。"
+
+    # --------------------------------------
+    # 同点禁止
+    # --------------------------------------
+    if pair1_legs == pair2_legs:
+        return "同点は登録できません。"
+
+    # --------------------------------------
+    # 過半数チェック
+    # --------------------------------------
+    winning_legs = (total_legs + 1) // 2
+
+    if max(pair1_legs, pair2_legs) < winning_legs:
+        return "過半数の星に達していません。"
+
+    return None
+

@@ -36,6 +36,7 @@ from .helpers.league_grouping import (
 from .match_keys import format_match_key_display
 from .form_defs import (
     BracketGenerateForm,
+    CategoryForm,
     LeagueEntryEditForm,
     StageSlotSetupForm,
     TournamentEntryEditForm,
@@ -50,6 +51,7 @@ from .models import (
     LeagueEntry,
     OperationSnapshot,
     RoundRobinMatch,
+    RoundRobinMatchLeg,
     Schedule,
     ScheduleReplacementHistory,
     ScheduleBlock,
@@ -58,6 +60,7 @@ from .models import (
     TournamentBracket,
     TournamentEntry,
     TournamentMatch,
+    TournamentMatchLeg,
     Participant,
     ParticipantOrganizationValue,
     ScoreSheetTemplate,
@@ -78,6 +81,7 @@ from .views.stage import _validate_stage_slot_setup
 from .rendering.tournament_svg_labels import estimate_svg_row_gap
 from .rendering.tournament_svg_score import resolve_svg_match_code_text_style
 from .templatetags.core_extras import entry_organization_html, entry_short_name_html
+from .validators import validate_star_score
 
 from .services import (
     advance_tournament_bye_winners,
@@ -27139,6 +27143,405 @@ class ReceptionMatchSearchTests(TestCase):
             response,
             format_match_key_display(self.tournament_match.match_key),
         )
+
+
+class StarScoringModeTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="星取大会",
+            code="STAR",
+        )
+        self.star_category = Category.objects.create(
+            tournament=self.tournament,
+            name="団体A",
+            scoring_mode=Category.SCORING_MODE_STAR,
+        )
+        self.individual_category = Category.objects.create(
+            tournament=self.tournament,
+            name="個人A",
+        )
+
+        self.league_stage = Stage.objects.create(
+            category=self.star_category,
+            code="L",
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.tournament_stage = Stage.objects.create(
+            category=self.star_category,
+            code="T",
+            name="本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        self.group = Group.objects.create(
+            category=self.star_category,
+            stage=self.league_stage,
+            name="A",
+        )
+        self.league_entry1 = create_league_entry_with_participant(
+            category=self.star_category,
+            group=self.group,
+            pair_code="1",
+            display_order=1,
+            player1_name="団体1",
+            player2_name="",
+        )
+        self.league_entry2 = create_league_entry_with_participant(
+            category=self.star_category,
+            group=self.group,
+            pair_code="2",
+            display_order=2,
+            player1_name="団体2",
+            player2_name="",
+        )
+        self.round_robin_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entry1,
+            pair2=self.league_entry2,
+            match_games=3,
+        )
+
+        self.bracket = TournamentBracket.objects.create(
+            category=self.star_category,
+            stage=self.tournament_stage,
+            name="決勝",
+        )
+        self.tournament_entry1 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="1",
+            display_order=1,
+            player1_name="本戦1",
+            player2_name="",
+        )
+        self.tournament_entry2 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="本戦2",
+            player2_name="",
+        )
+        self.tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="決勝",
+            pair1=self.tournament_entry1,
+            pair2=self.tournament_entry2,
+            match_games=3,
+        )
+
+    def test_validate_star_score_accepts_majority_patterns(self):
+        self.assertIsNone(validate_star_score(2, 0, 3))
+        self.assertIsNone(validate_star_score(2, 1, 3))
+        self.assertIsNone(validate_star_score(3, 0, 3))
+
+        self.assertEqual(
+            validate_star_score(1, 0, 3),
+            "過半数の星に達していません。",
+        )
+        self.assertEqual(
+            validate_star_score(2, 2, 3),
+            "対戦数の合計が設定を超えています。",
+        )
+        self.assertEqual(
+            validate_star_score(1, 1, 3),
+            "同点は登録できません。",
+        )
+
+    def test_round_robin_star_score_post_saves_summary_and_legs(self):
+        response = self.client.post(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            ),
+            {
+                "action": "save",
+                "leg_1": "pair1",
+                "leg_2": "pair2",
+                "leg_3": "pair1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.round_robin_match.refresh_from_db()
+        self.assertEqual(self.round_robin_match.pair1_games, 2)
+        self.assertEqual(self.round_robin_match.pair2_games, 1)
+        self.assertEqual(
+            list(
+                self.round_robin_match.legs.order_by("leg_number").values_list(
+                    "leg_number",
+                    "winner_side",
+                )
+            ),
+            [
+                (1, "pair1"),
+                (2, "pair2"),
+                (3, "pair1"),
+            ],
+        )
+
+    def test_tournament_star_score_post_saves_summary_and_legs(self):
+        response = self.client.post(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            ),
+            {
+                "action": "save",
+                "leg_1": "pair1",
+                "leg_2": "pair2",
+                "leg_3": "pair1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.tournament_match.refresh_from_db()
+        self.assertEqual(self.tournament_match.pair1_games, 2)
+        self.assertEqual(self.tournament_match.pair2_games, 1)
+        self.assertEqual(self.tournament_match.winner, self.tournament_entry1)
+        self.assertEqual(
+            list(
+                self.tournament_match.legs.order_by("leg_number").values_list(
+                    "leg_number",
+                    "winner_side",
+                )
+            ),
+            [
+                (1, "pair1"),
+                (2, "pair2"),
+                (3, "pair1"),
+            ],
+        )
+
+    def test_round_robin_star_score_rejects_score_without_majority(self):
+        response = self.client.post(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            ),
+            {
+                "action": "save",
+                "leg_1": "pair1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "過半数の星に達していません。")
+        self.round_robin_match.refresh_from_db()
+        self.assertIsNone(self.round_robin_match.pair1_games)
+        self.assertIsNone(self.round_robin_match.pair2_games)
+        self.assertEqual(RoundRobinMatchLeg.objects.count(), 0)
+
+    def test_score_input_html_switches_between_star_and_individual_modes(self):
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<table class="star-leg-table">')
+        self.assertNotContains(response, 'id="pair1_loser_buttons"')
+
+        individual_stage = Stage.objects.create(
+            category=self.individual_category,
+            code="IL",
+            name="個人予選",
+            stage_type=Stage.TYPE_LEAGUE,
+        )
+        individual_group = Group.objects.create(
+            category=self.individual_category,
+            stage=individual_stage,
+            name="A",
+        )
+        individual_entry1 = create_league_entry_with_participant(
+            category=self.individual_category,
+            group=individual_group,
+            pair_code="1",
+            display_order=1,
+            player1_name="個人1",
+            player2_name="",
+        )
+        individual_entry2 = create_league_entry_with_participant(
+            category=self.individual_category,
+            group=individual_group,
+            pair_code="2",
+            display_order=2,
+            player1_name="個人2",
+            player2_name="",
+        )
+        individual_match = RoundRobinMatch.objects.create(
+            group=individual_group,
+            pair1=individual_entry1,
+            pair2=individual_entry2,
+            match_games=3,
+        )
+
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": individual_match.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, '<table class="star-leg-table">')
+        self.assertContains(response, 'id="pair1_loser_buttons"')
+
+    def test_saved_star_legs_are_reflected_in_score_input_html(self):
+        RoundRobinMatchLeg.objects.create(
+            match=self.round_robin_match,
+            leg_number=1,
+            winner_side=RoundRobinMatchLeg.WINNER_PAIR1,
+        )
+        RoundRobinMatchLeg.objects.create(
+            match=self.round_robin_match,
+            leg_number=2,
+            winner_side=RoundRobinMatchLeg.WINNER_PAIR2,
+        )
+        TournamentMatchLeg.objects.create(
+            match=self.tournament_match,
+            leg_number=1,
+            winner_side=TournamentMatchLeg.WINNER_PAIR1,
+        )
+        TournamentMatchLeg.objects.create(
+            match=self.tournament_match,
+            leg_number=3,
+            winner_side=TournamentMatchLeg.WINNER_PAIR2,
+        )
+
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            content,
+            re.compile(
+                r'class="leg-button[^"]*selected[^"]*"[^>]*'
+                r'data-leg="1"[^>]*data-side="pair1"',
+                re.S,
+            ),
+        )
+        self.assertRegex(
+            content,
+            re.compile(
+                r'class="leg-button[^"]*selected[^"]*"[^>]*'
+                r'data-leg="2"[^>]*data-side="pair2"',
+                re.S,
+            ),
+        )
+
+        response = self.client.get(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            content,
+            re.compile(
+                r'class="leg-button[^"]*selected[^"]*"[^>]*'
+                r'data-leg="1"[^>]*data-side="pair1"',
+                re.S,
+            ),
+        )
+        self.assertRegex(
+            content,
+            re.compile(
+                r'class="leg-button[^"]*selected[^"]*"[^>]*'
+                r'data-leg="3"[^>]*data-side="pair2"',
+                re.S,
+            ),
+        )
+
+    def test_star_legs_are_deleted_when_scores_are_deleted(self):
+        self.client.post(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            ),
+            {
+                "action": "save",
+                "leg_1": "pair1",
+                "leg_2": "pair2",
+                "leg_3": "pair1",
+            },
+        )
+        self.client.post(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            ),
+            {
+                "action": "save",
+                "leg_1": "pair1",
+                "leg_2": "pair2",
+                "leg_3": "pair1",
+            },
+        )
+
+        self.assertEqual(self.round_robin_match.legs.count(), 3)
+        self.assertEqual(self.tournament_match.legs.count(), 3)
+
+        self.client.post(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            ),
+            {"action": "delete"},
+        )
+        self.client.post(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            ),
+            {"action": "delete"},
+        )
+
+        self.assertEqual(self.round_robin_match.legs.count(), 0)
+        self.assertEqual(self.tournament_match.legs.count(), 0)
+
+    def test_category_form_saves_scoring_mode(self):
+        form = CategoryForm(
+            {
+                "name": "団体B",
+                "display_order": "3",
+                "scoring_mode": Category.SCORING_MODE_STAR,
+            },
+            instance=Category(
+                tournament=self.tournament,
+            ),
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        category = form.save()
+
+        self.assertEqual(category.scoring_mode, Category.SCORING_MODE_STAR)
 
 
 class ResultInputSelectTests(TestCase):

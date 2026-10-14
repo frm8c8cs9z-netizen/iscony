@@ -56,6 +56,7 @@ from ..services import (
     move_empty_league_entry_slot,
     move_league_entry_participant_to_new_slot,
     save_round_robin_score,
+    save_round_robin_star_score,
     undo_schedule_replacement,
     unassign_league_entry_advancement_piece,
     unassign_league_entry_participant,
@@ -822,6 +823,30 @@ def input_match_score(request, match_id):
                 mode="round_robin",
                 back_url=back_url,
             )
+
+        category = match.group.category
+
+        if category.scoring_mode == Category.SCORING_MODE_STAR:
+            legs = [
+                request.POST.get(f"leg_{number}") or ""
+                for number in range(1, match.match_games + 1)
+            ]
+
+            error = save_round_robin_star_score(match, legs)
+
+            if error:
+                return render_score_input(
+                    request=request,
+                    match=match,
+                    winning_games=match.winning_games(),
+                    mode="round_robin",
+                    back_url=back_url,
+                    error=error,
+                )
+
+            _show_stage_advancement_warning(request)
+
+            return redirect_next_or_url(request, back_url)
 
         try:
             pair1_games = int(

@@ -336,6 +336,14 @@ class Tournament(models.Model):
 # =========================================================
 class Category(models.Model):
 
+    SCORING_MODE_INDIVIDUAL = "individual"
+    SCORING_MODE_STAR = "star"
+
+    SCORING_MODE_CHOICES = [
+        (SCORING_MODE_INDIVIDUAL, "個人戦"),
+        (SCORING_MODE_STAR, "団体戦(星取)"),
+    ]
+
     tournament = models.ForeignKey(
         Tournament,
         on_delete=models.CASCADE
@@ -353,6 +361,12 @@ class Category(models.Model):
     )
     
     display_order = models.IntegerField(default=0)
+
+    scoring_mode = models.CharField(
+        max_length=20,
+        choices=SCORING_MODE_CHOICES,
+        default=SCORING_MODE_INDIVIDUAL,
+    )
 
     class Meta:
         unique_together = (
@@ -1368,6 +1382,36 @@ class RoundRobinMatch(models.Model):
         )
 
 
+class RoundRobinMatchLeg(models.Model):
+
+    WINNER_PAIR1 = "pair1"
+    WINNER_PAIR2 = "pair2"
+
+    WINNER_SIDE_CHOICES = [
+        (WINNER_PAIR1, "pair1"),
+        (WINNER_PAIR2, "pair2"),
+    ]
+
+    match = models.ForeignKey(
+        RoundRobinMatch,
+        related_name="legs",
+        on_delete=models.CASCADE,
+    )
+
+    leg_number = models.PositiveSmallIntegerField()
+
+    winner_side = models.CharField(
+        max_length=10,
+        choices=WINNER_SIDE_CHOICES,
+    )
+
+    class Meta:
+        unique_together = (
+            "match",
+            "leg_number",
+        )
+
+
 # =========================================================
 # リーグ順位
 # =========================================================
@@ -2317,6 +2361,36 @@ class TournamentMatch(models.Model):
             return self.pair1
 
         return None
+
+
+class TournamentMatchLeg(models.Model):
+
+    WINNER_PAIR1 = "pair1"
+    WINNER_PAIR2 = "pair2"
+
+    WINNER_SIDE_CHOICES = [
+        (WINNER_PAIR1, "pair1"),
+        (WINNER_PAIR2, "pair2"),
+    ]
+
+    match = models.ForeignKey(
+        TournamentMatch,
+        related_name="legs",
+        on_delete=models.CASCADE,
+    )
+
+    leg_number = models.PositiveSmallIntegerField()
+
+    winner_side = models.CharField(
+        max_length=10,
+        choices=WINNER_SIDE_CHOICES,
+    )
+
+    class Meta:
+        unique_together = (
+            "match",
+            "leg_number",
+        )
 
 
 # =========================================================

@@ -18,6 +18,8 @@ from urllib.parse import urlencode
 
 from django.shortcuts import render, redirect
 
+from ..models import Category
+
 
 def safe_next_url(request):
     """GET next はアプリ内の相対パスだけ戻り先として扱う。"""
@@ -53,10 +55,35 @@ def render_score_input(
     error=None
 ):
 
+    if mode == "round_robin":
+        category = match.group.category
+    else:
+        category = match.bracket.category
+
+    scoring_mode = category.scoring_mode
+
+    legs = []
+
+    if scoring_mode == Category.SCORING_MODE_STAR:
+        existing_legs = {
+            leg.leg_number: leg.winner_side
+            for leg in match.legs.all()
+        }
+
+        legs = [
+            {
+                "number": number,
+                "winner_side": existing_legs.get(number),
+            }
+            for number in range(1, match.match_games + 1)
+        ]
+
     context = {
         "match": match,
         "winning_games": winning_games,
         "loser_score_options": range(winning_games),
+        "scoring_mode": scoring_mode,
+        "legs": legs,
         "mode": mode,
         "back_url": back_url,
         "can_input_score": (
@@ -111,4 +138,3 @@ def url_with_next(url, next_url):
 
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}{urlencode({'next': next_url})}"
-

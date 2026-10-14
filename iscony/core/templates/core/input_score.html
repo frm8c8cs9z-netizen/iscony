@@ -68,6 +68,62 @@
 <form method="post">
     {% csrf_token %}
 
+    {% if scoring_mode == "star" %}
+        <div class="star-score-summary">
+            現在のスコア:
+            <span id="star-score-pair1">0</span>
+            -
+            <span id="star-score-pair2">0</span>
+            (
+                {{ match.pair1.display_player1_name }}
+                vs
+                {{ match.pair2.display_player1_name }}
+            )
+        </div>
+
+        <table class="star-leg-table">
+            <tr>
+                <th>対戦</th>
+                <th>{{ match.pair1.display_player1_name }}</th>
+                <th>{{ match.pair2.display_player1_name }}</th>
+            </tr>
+            {% for leg in legs %}
+            <tr>
+                <td>第{{ leg.number }}戦</td>
+                <td>
+                    <button
+                        type="button"
+                        class="leg-button {% if leg.winner_side == 'pair1' %}selected{% endif %}"
+                        data-leg="{{ leg.number }}"
+                        data-side="pair1"
+                        onclick="toggleLegWinner({{ leg.number }}, 'pair1')"
+                        {% if not can_input_score %}disabled{% endif %}
+                    >
+                        勝ち
+                    </button>
+                </td>
+                <td>
+                    <button
+                        type="button"
+                        class="leg-button {% if leg.winner_side == 'pair2' %}selected{% endif %}"
+                        data-leg="{{ leg.number }}"
+                        data-side="pair2"
+                        onclick="toggleLegWinner({{ leg.number }}, 'pair2')"
+                        {% if not can_input_score %}disabled{% endif %}
+                    >
+                        勝ち
+                    </button>
+                </td>
+                <input
+                    type="hidden"
+                    name="leg_{{ leg.number }}"
+                    id="leg_{{ leg.number }}_input"
+                    value="{{ leg.winner_side|default:'' }}"
+                >
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
     <table>
         <tr>
             <td
@@ -177,6 +233,7 @@
             </td>
         </tr>
     </table>
+    {% endif %}
 
     <p>
         <button
@@ -184,6 +241,7 @@
             name="action"
             value="save"
             class="primary-button"
+            {% if scoring_mode == "star" %}id="star-save-button"{% endif %}
             {% if not can_input_score %}disabled{% endif %}
         >
             保存
@@ -338,9 +396,42 @@
     margin-left: 16px;
     color: #b00020;
 }
+
+.star-score-summary {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.star-leg-table {
+    margin: 0 auto 16px;
+}
+
+.star-leg-table th,
+.star-leg-table td {
+    padding: 6px 12px;
+    text-align: center;
+}
+
+.leg-button {
+    padding: 8px 16px;
+    font-size: 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #f8fafc;
+    cursor: pointer;
+}
+
+.leg-button.selected {
+    background: #2e8b57;
+    color: #fff;
+    border-color: #2e8b57;
+}
 </style>
 
 <script>
+{% if scoring_mode != "star" %}
 function setWinner(winner) {
     {% if not can_input_score %}
         return;
@@ -440,6 +531,79 @@ function initializeSavedScore(winnerSide, loserSide, loserValue) {
         targetButton.classList.add("selected");
     }
 }
+{% endif %}
+
+function toggleLegWinner(legNumber, side) {
+    const input = document.getElementById("leg_" + legNumber + "_input");
+    const newValue = (input.value === side) ? "" : side;
+    input.value = newValue;
+
+    const pair1Button = document.querySelector(
+        '.leg-button[data-leg="' + legNumber + '"][data-side="pair1"]'
+    );
+    const pair2Button = document.querySelector(
+        '.leg-button[data-leg="' + legNumber + '"][data-side="pair2"]'
+    );
+
+    pair1Button.classList.remove("selected");
+    pair2Button.classList.remove("selected");
+
+    if (newValue === "pair1") {
+        pair1Button.classList.add("selected");
+    }
+
+    if (newValue === "pair2") {
+        pair2Button.classList.add("selected");
+    }
+
+    updateStarScoreSummary();
+}
+
+function updateStarScoreSummary() {
+    const totalLegs = {{ match.match_games|default:0 }};
+    let pair1Count = 0;
+    let pair2Count = 0;
+
+    for (let i = 1; i <= totalLegs; i++) {
+        const input = document.getElementById("leg_" + i + "_input");
+        if (!input) {
+            continue;
+        }
+        if (input.value === "pair1") {
+            pair1Count++;
+        }
+        if (input.value === "pair2") {
+            pair2Count++;
+        }
+    }
+
+    const pair1Span = document.getElementById("star-score-pair1");
+    const pair2Span = document.getElementById("star-score-pair2");
+
+    if (pair1Span) {
+        pair1Span.textContent = pair1Count;
+    }
+
+    if (pair2Span) {
+        pair2Span.textContent = pair2Count;
+    }
+
+    const winningLegs = Math.floor(totalLegs / 2) + 1;
+    const saveButton = document.getElementById("star-save-button");
+
+    if (saveButton) {
+        saveButton.disabled = (
+            pair1Count < winningLegs
+            && pair2Count < winningLegs
+        );
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    if (document.querySelector(".star-leg-table")) {
+        updateStarScoreSummary();
+    }
+});
 </script>
 
 {% endblock %}

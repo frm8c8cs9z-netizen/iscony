@@ -39,6 +39,7 @@ from ..models import (
     Participant,
     ParticipantOrganizationValue,
     RoundRobinMatch,
+    RoundRobinMatchLeg,
     Schedule,
     ScheduleBlock,
     ScheduleReplacementHistory,
@@ -48,8 +49,10 @@ from ..models import (
     TournamentOrganizationField,
     TournamentEntry,
     TournamentMatch,
+    TournamentMatchLeg,
 )
 from ..selectors.tournament_brackets import build_tournament_round_data
+from ..validators import validate_star_score
 from .snapshots import create_stage_advancement_snapshot_once
 
 
@@ -2715,6 +2718,7 @@ def delete_round_robin_score(match):
         match.result_type = RoundRobinMatch.RESULT_NORMAL
 
         match.save()
+        match.legs.all().delete()
 
         # --------------------------------------
         # 対応するSchedule状態を未着手へ戻す
@@ -2874,6 +2878,44 @@ def save_round_robin_score(
     return None
 
 
+def save_round_robin_star_score(match, legs):
+    pair1_legs = legs.count("pair1")
+    pair2_legs = legs.count("pair2")
+
+    error = validate_star_score(
+        pair1_legs,
+        pair2_legs,
+        len(legs)
+    )
+
+    if error:
+        return error
+
+    with transaction.atomic():
+        error = save_round_robin_score(
+            match,
+            pair1_legs,
+            pair2_legs
+        )
+
+        if error:
+            return error
+
+        match.legs.all().delete()
+
+        RoundRobinMatchLeg.objects.bulk_create([
+            RoundRobinMatchLeg(
+                match=match,
+                leg_number=index + 1,
+                winner_side=side,
+            )
+            for index, side in enumerate(legs)
+            if side
+        ])
+
+    return None
+
+
 def is_internal_seed_match(match):
     return match.match_code.startswith("S")
 
@@ -2948,6 +2990,7 @@ def delete_tournament_score(match):
         match.result_type = TournamentMatch.RESULT_NORMAL
 
         match.save()
+        match.legs.all().delete()
 
         # --------------------------------------
         # 対応するSchedule状態を未着手へ戻す
@@ -3169,6 +3212,44 @@ def save_tournament_score(
     return None
 
 
+def save_tournament_star_score(match, legs):
+    pair1_legs = legs.count("pair1")
+    pair2_legs = legs.count("pair2")
+
+    error = validate_star_score(
+        pair1_legs,
+        pair2_legs,
+        len(legs)
+    )
+
+    if error:
+        return error
+
+    with transaction.atomic():
+        error = save_tournament_score(
+            match,
+            pair1_legs,
+            pair2_legs
+        )
+
+        if error:
+            return error
+
+        match.legs.all().delete()
+
+        TournamentMatchLeg.objects.bulk_create([
+            TournamentMatchLeg(
+                match=match,
+                leg_number=index + 1,
+                winner_side=side,
+            )
+            for index, side in enumerate(legs)
+            if side
+        ])
+
+    return None
+
+
 def save_tournament_retirement(match, retired_side):
     """トーナメント試合をリタイア結果として保存する。"""
 
@@ -3235,6 +3316,7 @@ def save_tournament_retirement(match, retired_side):
             )
 
         match.save()
+        match.legs.all().delete()
 
         Schedule.objects.filter(
             tournament_match=match

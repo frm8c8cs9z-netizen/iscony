@@ -23,6 +23,7 @@ from ..forms import (
 )
 from ..models import (
     AdvancementSource,
+    Category,
     Court,
     Group,
     Participant,
@@ -61,6 +62,7 @@ from ..services import (
     move_tournament_entry_advancement_piece,
     move_tournament_entry_participant,
     save_tournament_score,
+    save_tournament_star_score,
     save_tournament_retirement,
     tournament_match_has_score,
     unassign_tournament_entry_advancement_piece,
@@ -72,7 +74,7 @@ from ..helpers.brackets import (
     get_best_n_label,
     get_bracket_size,
 )
-from ..validators import validate_game_score
+from ..validators import validate_game_score, validate_star_score
 from ..helpers.view import (
     match_pair_is_determined,
     render_score_input,
@@ -256,20 +258,20 @@ def input_tournament_match_score(request, code, match_id):
 
             return redirect(_tournament_stage_overview_url(match))
 
-        try:
+        category = match.bracket.category
 
-            pair1_games = int(
-                request.POST.get("pair1_games")
-            )
+        if category.scoring_mode == Category.SCORING_MODE_STAR:
+            legs = [
+                request.POST.get(f"leg_{number}") or ""
+                for number in range(1, match.match_games + 1)
+            ]
+            pair1_games = legs.count("pair1")
+            pair2_games = legs.count("pair2")
 
-            pair2_games = int(
-                request.POST.get("pair2_games")
-            )
-
-            error = validate_game_score(
+            error = validate_star_score(
                 pair1_games,
                 pair2_games,
-                winning_games
+                match.match_games
             )
 
             if error:
@@ -283,51 +285,109 @@ def input_tournament_match_score(request, code, match_id):
                     error=error,
                 )
 
-        except (TypeError, ValueError):
-
-            return render_score_input(
-                request=request,
-                tournament=tournament,
-                match=match,
-                winning_games=winning_games,
-                mode="tournament",
-                back_url=back_url,
-                error="ゲーム数を入力してください。",
+            error = validate_tournament_score_change(
+                match,
+                pair1_games,
+                pair2_games
             )
 
-        error = validate_tournament_score_change(
-            match,
-            pair1_games,
-            pair2_games
-        )
+            if error:
+                return render_score_input(
+                    request=request,
+                    tournament=tournament,
+                    match=match,
+                    winning_games=winning_games,
+                    mode="tournament",
+                    back_url=back_url,
+                    error=error,
+                )
 
-        if error:
-            return render_score_input(
-                request=request,
-                tournament=tournament,
-                match=match,
-                winning_games=winning_games,
-                mode="tournament",
-                back_url=back_url,
-                error=error,
+            error = save_tournament_star_score(match, legs)
+
+            if error:
+                return render_score_input(
+                    request=request,
+                    tournament=tournament,
+                    match=match,
+                    winning_games=winning_games,
+                    mode="tournament",
+                    back_url=back_url,
+                    error=error,
+                )
+
+        else:
+            try:
+
+                pair1_games = int(
+                    request.POST.get("pair1_games")
+                )
+
+                pair2_games = int(
+                    request.POST.get("pair2_games")
+                )
+
+                error = validate_game_score(
+                    pair1_games,
+                    pair2_games,
+                    winning_games
+                )
+
+                if error:
+                    return render_score_input(
+                        request=request,
+                        tournament=tournament,
+                        match=match,
+                        winning_games=winning_games,
+                        mode="tournament",
+                        back_url=back_url,
+                        error=error,
+                    )
+
+            except (TypeError, ValueError):
+
+                return render_score_input(
+                    request=request,
+                    tournament=tournament,
+                    match=match,
+                    winning_games=winning_games,
+                    mode="tournament",
+                    back_url=back_url,
+                    error="ゲーム数を入力してください。",
+                )
+
+            error = validate_tournament_score_change(
+                match,
+                pair1_games,
+                pair2_games
             )
 
-        error = save_tournament_score(
-            match,
-            pair1_games,
-            pair2_games
-        )
+            if error:
+                return render_score_input(
+                    request=request,
+                    tournament=tournament,
+                    match=match,
+                    winning_games=winning_games,
+                    mode="tournament",
+                    back_url=back_url,
+                    error=error,
+                )
 
-        if error:
-            return render_score_input(
-                request=request,
-                tournament=tournament,
-                match=match,
-                winning_games=winning_games,
-                mode="tournament",
-                back_url=back_url,
-                error=error,
+            error = save_tournament_score(
+                match,
+                pair1_games,
+                pair2_games
             )
+
+            if error:
+                return render_score_input(
+                    request=request,
+                    tournament=tournament,
+                    match=match,
+                    winning_games=winning_games,
+                    mode="tournament",
+                    back_url=back_url,
+                    error=error,
+                )
 
         _show_stage_advancement_warning(request)
 
