@@ -26968,6 +26968,82 @@ class ReceptionMatchSearchTests(TestCase):
             ),
         )
 
+    def test_round_robin_score_input_shows_loser_score_buttons(self):
+        self.round_robin_match.match_games = 7
+        self.round_robin_match.save()
+
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="pair1_loser_buttons"', content)
+        self.assertIn('id="pair2_loser_buttons"', content)
+
+        for side in ["pair1", "pair2"]:
+            buttons = re.search(
+                rf'id="{side}_loser_buttons".*?</div>',
+                content,
+                re.S,
+            )
+            self.assertIsNotNone(buttons)
+
+            for value in range(4):
+                self.assertIn(f'data-value="{value}"', buttons.group(0))
+
+            self.assertNotIn('data-value="4"', buttons.group(0))
+
+    def test_tournament_score_input_shows_loser_score_buttons(self):
+        self.tournament_match.match_games = 7
+        self.tournament_match.save()
+
+        response = self.client.get(
+            reverse(
+                "input_tournament_match_score",
+                kwargs={
+                    "code": self.tournament.code,
+                    "match_id": self.tournament_match.id,
+                },
+            )
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+
+        for side in ["pair1", "pair2"]:
+            buttons = re.search(
+                rf'id="{side}_loser_buttons".*?</div>',
+                content,
+                re.S,
+            )
+            self.assertIsNotNone(buttons)
+
+            for value in range(4):
+                self.assertIn(f'data-value="{value}"', buttons.group(0))
+
+            self.assertNotIn('data-value="4"', buttons.group(0))
+
+    def test_saved_score_input_outputs_loser_score_button_elements(self):
+        self.round_robin_match.match_games = 7
+        self.round_robin_match.pair1_games = 4
+        self.round_robin_match.pair2_games = 2
+        self.round_robin_match.save()
+
+        response = self.client.get(
+            reverse(
+                "input_match_score",
+                kwargs={"match_id": self.round_robin_match.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "loser-score-buttons")
+        self.assertContains(response, 'data-value="2"')
+
     def test_round_robin_score_save_defaults_back_to_stage_overview(self):
         response = self.client.post(
             reverse(

@@ -56,6 +56,7 @@ def render_score_input(
     context = {
         "match": match,
         "winning_games": winning_games,
+        "loser_score_options": range(winning_games),
         "mode": mode,
         "back_url": back_url,
         "can_input_score": (
@@ -110,5 +111,4 @@ def url_with_next(url, next_url):
 
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}{urlencode({'next': next_url})}"
-
 

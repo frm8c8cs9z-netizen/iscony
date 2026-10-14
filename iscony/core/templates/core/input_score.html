@@ -105,8 +105,21 @@
                     max="{{ winning_games }}"
                     value="{{ match.pair1_games|default_if_none:'' }}"
                     class="score-input"
+                    readonly
                     {% if not can_input_score %}disabled{% endif %}
                 >
+
+                <div class="loser-score-buttons" id="pair1_loser_buttons" style="display:none;">
+                    {% for n in loser_score_options %}
+                        <button
+                            type="button"
+                            class="loser-score-button"
+                            data-value="{{ n }}"
+                            onclick="selectLoserScore('pair1', {{ n }}, this)"
+                            {% if not can_input_score %}disabled{% endif %}
+                        >{{ n }}</button>
+                    {% endfor %}
+                </div>
             </td>
 
             <td rowspan="2">vs</td>
@@ -120,8 +133,21 @@
                     max="{{ winning_games }}"
                     value="{{ match.pair2_games|default_if_none:'' }}"
                     class="score-input"
+                    readonly
                     {% if not can_input_score %}disabled{% endif %}
                 >
+
+                <div class="loser-score-buttons" id="pair2_loser_buttons" style="display:none;">
+                    {% for n in loser_score_options %}
+                        <button
+                            type="button"
+                            class="loser-score-button"
+                            data-value="{{ n }}"
+                            onclick="selectLoserScore('pair2', {{ n }}, this)"
+                            {% if not can_input_score %}disabled{% endif %}
+                        >{{ n }}</button>
+                    {% endfor %}
+                </div>
             </td>
 
             <td
@@ -256,6 +282,30 @@
     text-align: center;
 }
 
+.loser-score-buttons {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+}
+
+.loser-score-button {
+    min-width: 36px;
+    padding: 6px 10px;
+    font-size: 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #f8fafc;
+    cursor: pointer;
+}
+
+.loser-score-button.selected {
+    background: #2e8b57;
+    color: #fff;
+    border-color: #2e8b57;
+}
+
 .winner-box {
     background: #e8ffe8;
     border: 2px solid #2e8b57;
@@ -304,8 +354,8 @@ function setWinner(winner) {
     const pair1Box = document.getElementById("pair1_box");
     const pair2Box = document.getElementById("pair2_box");
 
-    pair1Input.readOnly = false;
-    pair2Input.readOnly = false;
+    const pair1Buttons = document.getElementById("pair1_loser_buttons");
+    const pair2Buttons = document.getElementById("pair2_loser_buttons");
 
     pair1Box.classList.remove("winner-box", "loser-box");
     pair2Box.classList.remove("winner-box", "loser-box");
@@ -314,29 +364,80 @@ function setWinner(winner) {
         pair1Input.value = winningGames;
         pair2Input.value = "";
 
-        pair1Input.readOnly = true;
-        pair2Input.focus();
-
         pair1Box.classList.add("winner-box");
         pair2Box.classList.add("loser-box");
+
+        pair1Buttons.style.display = "none";
+        pair2Buttons.style.display = "";
+        clearLoserButtonSelection(pair1Buttons);
+        clearLoserButtonSelection(pair2Buttons);
     }
 
     if (winner === "pair2") {
         pair2Input.value = winningGames;
         pair1Input.value = "";
 
-        pair2Input.readOnly = true;
-        pair1Input.focus();
-
         pair2Box.classList.add("winner-box");
         pair1Box.classList.add("loser-box");
+
+        pair2Buttons.style.display = "none";
+        pair1Buttons.style.display = "";
+        clearLoserButtonSelection(pair1Buttons);
+        clearLoserButtonSelection(pair2Buttons);
     }
+}
+
+function clearLoserButtonSelection(buttonsContainer) {
+    buttonsContainer
+        .querySelectorAll(".loser-score-button")
+        .forEach(function (button) {
+            button.classList.remove("selected");
+        });
+}
+
+function selectLoserScore(side, value, buttonEl) {
+    const input = document.getElementById(side + "_games");
+    input.value = value;
+
+    clearLoserButtonSelection(buttonEl.closest(".loser-score-buttons"));
+    buttonEl.classList.add("selected");
 }
 
 function handleWinnerCellKey(event, winner) {
     if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         setWinner(winner);
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    const pair1Games = {{ match.pair1_games|default_if_none:"null" }};
+    const pair2Games = {{ match.pair2_games|default_if_none:"null" }};
+
+    if (pair1Games === null || pair2Games === null) {
+        return;
+    }
+
+    if (pair1Games > pair2Games) {
+        initializeSavedScore("pair1", "pair2", pair2Games);
+    } else {
+        initializeSavedScore("pair2", "pair1", pair1Games);
+    }
+});
+
+function initializeSavedScore(winnerSide, loserSide, loserValue) {
+    document.getElementById(winnerSide + "_box").classList.add("winner-box");
+    document.getElementById(loserSide + "_box").classList.add("loser-box");
+
+    const loserButtons = document.getElementById(loserSide + "_loser_buttons");
+    loserButtons.style.display = "";
+
+    const targetButton = loserButtons.querySelector(
+        '[data-value="' + loserValue + '"]'
+    );
+
+    if (targetButton) {
+        targetButton.classList.add("selected");
     }
 }
 </script>
