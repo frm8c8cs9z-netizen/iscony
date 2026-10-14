@@ -2170,6 +2170,152 @@ def order_maintenance(request, code, category_id=None, stage_id=None):
     )
 
 
+def bracket_name_maintenance(request, code, category_id=None):
+    """トーナメントブラケットの名前をまとめて編集する。"""
+
+    tournament = get_object_or_404(
+        Tournament,
+        code=code
+    )
+
+    if category_id is not None:
+        category = get_object_or_404(
+            Category,
+            id=category_id,
+            tournament=tournament,
+        )
+    else:
+        category = None
+
+    brackets = TournamentBracket.objects.filter(
+        category__tournament=tournament
+    ).select_related(
+        "category",
+        "stage",
+    ).order_by(
+        "category__display_order",
+        "category__name",
+        "stage__display_order",
+        "stage__name",
+        "display_order",
+        "name",
+    )
+
+    if category is not None:
+        brackets = brackets.filter(category=category)
+
+    if request.method == "POST":
+        pending_renames = []
+        has_blank_name_error = False
+
+        for bracket in brackets:
+            new_name = request.POST.get(
+                f"bracket_name_{bracket.id}"
+            )
+
+            if new_name is None:
+                continue
+
+            new_name = new_name.strip()
+
+            if not new_name:
+                messages.error(
+                    request,
+                    (
+                        f"{bracket.category.name} / {bracket.name} の"
+                        "名前を空にすることはできません。"
+                    ),
+                )
+                has_blank_name_error = True
+                continue
+
+            if new_name != bracket.name:
+                pending_renames.append((bracket, new_name))
+
+        if has_blank_name_error:
+            return redirect(
+                request.path
+            )
+
+        if pending_renames:
+            final_names_by_scope = defaultdict(dict)
+
+            for bracket in brackets:
+                final_names_by_scope[
+                    (bracket.category_id, bracket.stage_id)
+                ][bracket.id] = bracket.name
+
+            for bracket, new_name in pending_renames:
+                final_names_by_scope[
+                    (bracket.category_id, bracket.stage_id)
+                ][bracket.id] = new_name
+
+            duplicate_names = set()
+
+            for names_by_id in final_names_by_scope.values():
+                seen_names = set()
+
+                for name in names_by_id.values():
+                    if name in seen_names:
+                        duplicate_names.add(name)
+
+                    seen_names.add(name)
+
+            if duplicate_names:
+                messages.error(
+                    request,
+                    (
+                        "同じカテゴリ・Stage内でブラケット名が"
+                        "重複しています: "
+                        + "、".join(sorted(duplicate_names))
+                    ),
+                )
+                return redirect(
+                    request.path
+                )
+
+            with transaction.atomic():
+                for bracket, new_name in pending_renames:
+                    bracket.name = f"__rename_tmp_{bracket.id}__"
+                    bracket.save(update_fields=["name"])
+
+                for bracket, new_name in pending_renames:
+                    bracket.name = new_name
+                    bracket.save(update_fields=["name"])
+
+        return redirect(
+            request.path
+        )
+
+    grouped_rows = []
+    current_key = None
+    current_entry = None
+
+    for bracket in brackets:
+        key = (bracket.category_id, bracket.stage_id)
+
+        if key != current_key:
+            current_entry = {
+                "category": bracket.category,
+                "stage": bracket.stage,
+                "brackets": [],
+            }
+            grouped_rows.append(current_entry)
+            current_key = key
+
+        current_entry["brackets"].append(bracket)
+
+    return render(
+        request,
+        "core/bracket_name_maintenance.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "grouped_rows": grouped_rows,
+        }
+    )
+
+
 def update_schedule_status(request, schedule_id, status):
     """
     進行表から呼出済・試合中・完了などの状態を更新する。

@@ -1,0 +1,66 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+
+<h2>
+    {% if category %}
+        {{ category.name }} のトーナメント名称メンテナンス
+    {% else %}
+        {{ tournament.name }} トーナメント名称メンテナンス
+    {% endif %}
+</h2>
+
+<form method="post">
+
+    {% csrf_token %}
+
+    {% for entry in grouped_rows %}
+        <h3>
+            {% if category %}
+                {{ entry.stage.name|default:"Stage未設定" }}
+            {% else %}
+                {{ entry.category.name }} / {{ entry.stage.name|default:"Stage未設定" }}
+            {% endif %}
+        </h3>
+
+        <table>
+            <tr>
+                <th>トーナメント</th>
+            </tr>
+
+            {% for bracket in entry.brackets %}
+            <tr>
+                <td>
+                    <input
+                        type="text"
+                        name="bracket_name_{{ bracket.id }}"
+                        value="{{ bracket.name }}"
+                        style="width:160px;"
+                    >
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% empty %}
+        <p>対象のトーナメントがありません。</p>
+    {% endfor %}
+
+    <button type="submit">
+        保存
+    </button>
+
+</form>
+
+<p>
+    {% if category %}
+        <a class="button-link" href="{% url 'category_stage_management' tournament.code category.id %}">
+            Stage管理へ戻る
+        </a>
+    {% else %}
+        <a class="button-link" href="{% url 'bracket_list' tournament.code %}">
+            トーナメント一覧へ戻る
+        </a>
+    {% endif %}
+</p>
+
+{% endblock %}

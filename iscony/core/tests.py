@@ -6884,6 +6884,214 @@ class OrderMaintenanceTests(TestCase):
         self.assertNotContains(response, "管理メニューへ戻る")
 
 
+class BracketNameMaintenanceTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="ブラケット名称テスト大会",
+            code="BRACKETNAME",
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子A",
+            display_order=1,
+        )
+        self.other_category = Category.objects.create(
+            tournament=self.tournament,
+            name="女子A",
+            display_order=2,
+        )
+        self.stage = Stage.objects.create(
+            category=self.category,
+            name="決勝",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        self.other_stage = Stage.objects.create(
+            category=self.category,
+            name="順位戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        self.other_category_stage = Stage.objects.create(
+            category=self.other_category,
+            name="決勝",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=1,
+        )
+        self.bracket_a = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="A",
+            display_order=1,
+        )
+        self.bracket_b = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.stage,
+            name="B",
+            display_order=2,
+        )
+        self.other_stage_bracket = TournamentBracket.objects.create(
+            category=self.category,
+            stage=self.other_stage,
+            name="順位戦A",
+            display_order=1,
+        )
+        self.other_category_bracket = TournamentBracket.objects.create(
+            category=self.other_category,
+            stage=self.other_category_stage,
+            name="女子A",
+            display_order=1,
+        )
+        self.url = reverse(
+            "bracket_name_maintenance",
+            kwargs={"code": self.tournament.code},
+        )
+
+    def test_global_get_shows_all_category_and_stage_brackets(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "男子A / 決勝")
+        self.assertContains(response, "男子A / 順位戦")
+        self.assertContains(response, "女子A / 決勝")
+        self.assertContains(
+            response,
+            f'name="bracket_name_{self.bracket_a.id}"',
+        )
+        self.assertContains(
+            response,
+            f'name="bracket_name_{self.other_stage_bracket.id}"',
+        )
+        self.assertContains(
+            response,
+            f'name="bracket_name_{self.other_category_bracket.id}"',
+        )
+
+    def test_category_scoped_get_shows_only_category_brackets(self):
+        response = self.client.get(
+            reverse(
+                "category_bracket_name_maintenance",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "決勝")
+        self.assertContains(
+            response,
+            f'name="bracket_name_{self.bracket_a.id}"',
+        )
+        self.assertContains(
+            response,
+            f'name="bracket_name_{self.other_stage_bracket.id}"',
+        )
+        self.assertNotContains(
+            response,
+            f'name="bracket_name_{self.other_category_bracket.id}"',
+        )
+
+    def test_bracket_name_can_be_updated(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"bracket_name_{self.bracket_a.id}": "C",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.bracket_a.refresh_from_db()
+        self.assertEqual(self.bracket_a.name, "C")
+
+    def test_blank_bracket_name_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"bracket_name_{self.bracket_a.id}": "",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "男子A / A の名前を空にすることはできません。",
+        )
+        self.bracket_a.refresh_from_db()
+        self.assertEqual(self.bracket_a.name, "A")
+
+    def test_duplicate_bracket_name_in_same_category_and_stage_is_rejected(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"bracket_name_{self.bracket_a.id}": "C",
+                f"bracket_name_{self.bracket_b.id}": "C",
+            },
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "同じカテゴリ・Stage内でブラケット名が重複しています: C",
+        )
+        self.bracket_a.refresh_from_db()
+        self.bracket_b.refresh_from_db()
+        self.assertEqual(self.bracket_a.name, "A")
+        self.assertEqual(self.bracket_b.name, "B")
+
+    def test_same_bracket_name_is_allowed_in_different_category_or_stage(self):
+        response = self.client.post(
+            self.url,
+            {
+                f"bracket_name_{self.bracket_a.id}": "共通",
+                f"bracket_name_{self.other_stage_bracket.id}": "共通",
+                f"bracket_name_{self.other_category_bracket.id}": "共通",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.bracket_a.refresh_from_db()
+        self.other_stage_bracket.refresh_from_db()
+        self.other_category_bracket.refresh_from_db()
+        self.assertEqual(self.bracket_a.name, "共通")
+        self.assertEqual(self.other_stage_bracket.name, "共通")
+        self.assertEqual(self.other_category_bracket.name, "共通")
+
+    def test_entry_links_are_shown(self):
+        global_url = reverse(
+            "bracket_name_maintenance",
+            kwargs={"code": self.tournament.code},
+        )
+        category_url = reverse(
+            "category_bracket_name_maintenance",
+            kwargs={
+                "code": self.tournament.code,
+                "category_id": self.category.id,
+            },
+        )
+
+        bracket_response = self.client.get(
+            reverse(
+                "bracket_list",
+                kwargs={"code": self.tournament.code},
+            )
+        )
+        stage_response = self.client.get(
+            reverse(
+                "category_stage_management",
+                kwargs={
+                    "code": self.tournament.code,
+                    "category_id": self.category.id,
+                },
+            )
+        )
+
+        self.assertContains(bracket_response, global_url)
+        self.assertContains(stage_response, category_url)
+
+
 class CategoryOrderMaintenanceTests(TestCase):
 
     def setUp(self):

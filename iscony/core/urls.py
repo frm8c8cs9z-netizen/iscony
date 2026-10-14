@@ -536,6 +536,18 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/maintenance/bracket-name/",
+        dashboard.bracket_name_maintenance,
+        name="bracket_name_maintenance",
+    ),
+
+    path(
+        "tournament/<str:code>/category/<int:category_id>/maintenance/bracket-name/",
+        dashboard.bracket_name_maintenance,
+        name="category_bracket_name_maintenance",
+    ),
+
+    path(
         (
             "tournament/<str:code>/category/<int:category_id>/"
             "stage/<int:stage_id>/maintenance/order/"
