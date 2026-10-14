@@ -338,22 +338,27 @@ def create_tournament_stage_bracket(stage, pair_count):
     return brackets[0]
 
 
-def generate_tournament_bracket_matches(bracket, match_games):
+def generate_tournament_bracket_matches(bracket, match_games, *, entries=None):
     """
     TournamentEntryの表示順から、1回戦から決勝までのTournamentMatchを
     作り直す。
 
     呼び出し側で、結果入力済みチェック等の安全確認を済ませてから
     呼ぶこと(このロジック自体は無条件に削除・再作成する)。
+
+    entries を明示的に渡した場合は、そのリストをそのまま使う
+    (呼び出し側で独自の並び順を決めている場合のため)。
+    渡さなければ、display_order順にDBから取得する。
     """
 
-    entries = list(
-        TournamentEntry.objects.filter(
-            bracket=bracket,
-        ).order_by(
-            "display_order",
+    if entries is None:
+        entries = list(
+            TournamentEntry.objects.filter(
+                bracket=bracket,
+            ).order_by(
+                "display_order",
+            )
         )
-    )
 
     entry_count = len(entries)
 

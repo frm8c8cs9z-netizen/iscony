@@ -13690,6 +13690,112 @@ class ImportStageSlotsCsvTests(TestCase):
 
         self.assertEqual(tournament_entry.display_name, "A－1位")
 
+    def test_tournament_import_uses_sorted_entries_for_seed_byes(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+
+        for entry_code in [
+            "E001",
+            "E002",
+            "E003",
+        ]:
+            self._create_participant(
+                category,
+                entry_code,
+            )
+
+        response = self._post_csv(
+            "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"
+            "男子B,決勝トーナメント,T,,本戦,C,3,E003,,,,,\n"
+            "男子B,決勝トーナメント,T,,本戦,B,2,E002,,,,,\n"
+            "男子B,決勝トーナメント,T,,本戦,A,1,E001,,,,,\n"
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        seed_match = TournamentMatch.objects.select_related(
+            "pair1",
+            "pair2",
+            "winner",
+        ).get(
+            bracket__category=category,
+            bracket__name="本戦",
+            match_code="S1",
+        )
+
+        self.assertEqual(seed_match.pair1.pair_code, "A")
+        self.assertIsNone(seed_match.pair2)
+        self.assertEqual(seed_match.winner, seed_match.pair1)
+
+    def test_generate_tournament_matches_uses_provided_entry_order(self):
+        category = Category.objects.create(
+            tournament=self.tournament,
+            name="男子B",
+        )
+        stage = Stage.objects.create(
+            category=category,
+            name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=category,
+            stage=stage,
+            name="本戦",
+        )
+        entries = []
+
+        for display_order, pair_code in enumerate(
+            [
+                "C",
+                "B",
+                "A",
+            ],
+            start=1,
+        ):
+            participant = self._create_participant(
+                category,
+                f"E00{display_order}",
+            )
+            entries.append(
+                TournamentEntry.objects.create(
+                    bracket=bracket,
+                    participant=participant,
+                    pair_code=pair_code,
+                    display_order=display_order,
+                )
+            )
+
+        for entry in entries:
+            entry.display_order = 1
+
+        sorted_entries = sorted(
+            entries,
+            key=lambda entry: (
+                entry.display_order,
+                entry.pair_code,
+            ),
+        )
+
+        generate_tournament_bracket_matches(
+            bracket,
+            7,
+            entries=sorted_entries,
+        )
+
+        seed_match = TournamentMatch.objects.select_related(
+            "pair1",
+            "winner",
+        ).get(
+            bracket=bracket,
+            match_code="S1",
+        )
+
+        self.assertEqual(seed_match.pair1.pair_code, "A")
+        self.assertIsNone(seed_match.pair2)
+        self.assertEqual(seed_match.winner, seed_match.pair1)
+
     def test_stage_slots_reject_unavailable_league_rank_source(self):
         response = self._post_csv(
             "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code,source_type,source_stage,source_group,source_rank,source_match,source_result\n"

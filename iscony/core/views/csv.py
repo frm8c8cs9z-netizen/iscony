@@ -39,11 +39,9 @@ from ..models import (
     TournamentMatch,
 )
 from ..services import (
-    advance_tournament_bye_winners,
-    auto_apply_stage_advancements_if_ready,
+    generate_tournament_bracket_matches,
     schedule_import_lock_reason,
 )
-from ..helpers.brackets import build_display_bracket_slots, get_bracket_size
 from ..constants import (
     PARTICIPANT_ORGANIZATION_CODES,
     PARTICIPANT_ORGANIZATION_INPUT_CODES,
@@ -568,109 +566,19 @@ def _create_tournament_matches_for_bracket(bracket, entries, match_games=7):
     """
     TournamentEntry の表示順からトーナメントの試合枠を作り直す。
 
-    個別のトーナメント生成画面と同じ考え方で、参加枠数から山の
-    サイズを決め、1回戦に初期配置したうえで bye 通過を反映する。
+    個別のトーナメント生成画面と同じロジック
+    (generate_tournament_bracket_matches)を、呼び出し側で決めた
+    並び順(entries)のまま使う。
     """
 
-    entry_count = len(entries)
-
-    if entry_count < 2:
+    if len(entries) < 2:
         return
 
-    size = get_bracket_size(entry_count)
-
-    TournamentMatch.objects.filter(
-        bracket=bracket
-    ).delete()
-
-    rounds_count = 0
-    temp_size = size
-
-    while temp_size > 1:
-        rounds_count += 1
-        temp_size = temp_size // 2
-
-    slots = build_display_bracket_slots(
-        entries,
-        size,
+    generate_tournament_bracket_matches(
+        bracket,
+        match_games,
+        entries=entries,
     )
-
-    m_number = 1
-    s_number = 1
-    created_matches = {}
-
-    for round_number in range(1, rounds_count + 1):
-
-        matches_count = size // (2 ** round_number)
-
-        for match_number in range(1, matches_count + 1):
-
-            is_seed_match = False
-
-            if round_number == 1:
-                slot1 = slots[(match_number - 1) * 2]
-                slot2 = slots[(match_number - 1) * 2 + 1]
-
-                is_seed_match = (
-                    (slot1 and not slot2)
-                    or
-                    (slot2 and not slot1)
-                )
-
-            if is_seed_match:
-                match_code = f"S{s_number}"
-                s_number += 1
-            else:
-                match_code = f"M{m_number}"
-                m_number += 1
-
-            match = TournamentMatch.objects.create(
-                bracket=bracket,
-                round_number=round_number,
-                match_number=match_number,
-                match_games=match_games,
-                match_code=match_code,
-                match_label=match_code,
-            )
-
-            created_matches[(round_number, match_number)] = match
-
-    for round_number in range(1, rounds_count):
-
-        matches_count = size // (2 ** round_number)
-
-        for match_number in range(1, matches_count + 1):
-
-            match = created_matches[(round_number, match_number)]
-            next_match_number = (match_number + 1) // 2
-            next_match = created_matches[
-                (round_number + 1, next_match_number)
-            ]
-
-            match.next_match = next_match
-            match.next_slot = (
-                "pair1"
-                if match_number % 2 == 1
-                else "pair2"
-            )
-            match.save()
-
-    first_round_matches = list(
-        TournamentMatch.objects.filter(
-            bracket=bracket,
-            round_number=1,
-        ).order_by(
-            "match_number"
-        )
-    )
-
-    for index, match in enumerate(first_round_matches):
-        match.pair1 = slots[index * 2]
-        match.pair2 = slots[index * 2 + 1]
-        match.save()
-
-    advance_tournament_bye_winners(bracket)
-    auto_apply_stage_advancements_if_ready(bracket.stage)
 
 
 def _get_source_group(
