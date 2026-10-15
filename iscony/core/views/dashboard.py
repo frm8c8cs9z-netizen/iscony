@@ -60,6 +60,10 @@ from ..services import (
     auto_assign_tournament_range_to_court,
     clone_tournament_without_results,
     day_of_referee_status_map,
+    group_deletion_impact,
+    delete_group,
+    tournament_bracket_deletion_impact,
+    delete_tournament_bracket,
     is_internal_seed_match,
     merge_schedule_blocks,
     move_schedule,
@@ -86,6 +90,7 @@ from ..services import (
 
 from ..helpers.view import(
     redirect_next_or_default,
+    safe_next_url,
     url_with_next,
 )
 
@@ -1997,6 +2002,86 @@ def category_order_maintenance(request, code):
             "tournament": tournament,
             "categories": categories,
         }
+    )
+
+
+def delete_group_confirm(request, group_id):
+    """リーグ(グループ)単体の削除確認・実削除を行う。"""
+
+    group = get_object_or_404(Group, id=group_id)
+    category = group.category
+    tournament = category.tournament
+
+    back_url = safe_next_url(request) or reverse(
+        "category_stage_management",
+        kwargs={"code": tournament.code, "category_id": category.id},
+    )
+    impact = group_deletion_impact(group)
+    has_serious_impact = (
+        bool(impact["completed_matches"]) or bool(impact["affected_stages"])
+    )
+
+    if request.method == "POST":
+        if has_serious_impact and request.POST.get("confirmed") != "1":
+            messages.error(request, "内容を確認したうえで削除してください。")
+        else:
+            name = group.name
+            delete_group(group)
+            messages.success(request, f"{name} を削除しました。")
+            return redirect(back_url)
+
+    return render(
+        request,
+        "core/delete_group_confirm.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "group": group,
+            "impact": impact,
+            "has_serious_impact": has_serious_impact,
+            "back_url": back_url,
+        },
+    )
+
+
+def delete_tournament_bracket_confirm(request, code, bracket_id):
+    """トーナメント表(ブラケット)単体の削除確認・実削除を行う。"""
+
+    tournament = get_object_or_404(Tournament, code=code)
+    bracket = get_object_or_404(
+        TournamentBracket, id=bracket_id, category__tournament=tournament,
+    )
+    category = bracket.category
+
+    back_url = safe_next_url(request) or reverse(
+        "category_stage_management",
+        kwargs={"code": tournament.code, "category_id": category.id},
+    )
+    impact = tournament_bracket_deletion_impact(bracket)
+    has_serious_impact = (
+        bool(impact["scored_matches"]) or bool(impact["affected_stages"])
+    )
+
+    if request.method == "POST":
+        if has_serious_impact and request.POST.get("confirmed") != "1":
+            messages.error(request, "内容を確認したうえで削除してください。")
+        else:
+            name = bracket.name
+            delete_tournament_bracket(bracket)
+            messages.success(request, f"{name} を削除しました。")
+            return redirect(back_url)
+
+    return render(
+        request,
+        "core/delete_tournament_bracket_confirm.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "bracket": bracket,
+            "impact": impact,
+            "has_serious_impact": has_serious_impact,
+            "back_url": back_url,
+        },
     )
 
 

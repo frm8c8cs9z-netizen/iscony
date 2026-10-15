@@ -26,6 +26,7 @@
         <table>
             <tr>
                 <th>トーナメント</th>
+                <th>操作</th>
             </tr>
 
             {% for bracket in entry.brackets %}
@@ -37,6 +38,11 @@
                         value="{{ bracket.name }}"
                         style="width:160px;"
                     >
+                </td>
+                <td>
+                    <a href="{% url 'delete_tournament_bracket' tournament.code bracket.id %}?next={{ request.path|urlencode }}">
+                        削除
+                    </a>
                 </td>
             </tr>
             {% endfor %}

@@ -29,6 +29,7 @@
             <tr>
                 <th>表示順</th>
                 <th>リーグ</th>
+                <th>操作</th>
             </tr>
 
             {% for group in entry.groups %}
@@ -48,6 +49,11 @@
                         value="{{ group.name }}"
                         style="width:100px;"
                     >リーグ
+                </td>
+                <td>
+                    <a href="{% url 'delete_group' group.id %}?next={{ request.path|urlencode }}">
+                        削除
+                    </a>
                 </td>
             </tr>
             {% endfor %}

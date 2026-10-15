@@ -2952,6 +2952,86 @@ def tournament_match_has_score(match):
     )
 
 
+def _advancement_target_stage(source):
+    if source.target_league_entry_id:
+        return source.target_league_entry.group.stage
+
+    if source.target_tournament_entry_id:
+        return source.target_tournament_entry.bracket.stage
+
+    return None
+
+
+def _advancement_impact_for_sources(sources):
+    affected = {}
+
+    for source in sources:
+        target_stage = _advancement_target_stage(source)
+        if not target_stage:
+            continue
+
+        data = affected.setdefault(
+            target_stage.id,
+            {"stage": target_stage, "count": 0},
+        )
+        data["count"] += 1
+
+    return sorted(
+        affected.values(),
+        key=lambda data: (data["stage"].display_order, data["stage"].name),
+    )
+
+
+def group_deletion_impact(group):
+    entries = LeagueEntry.objects.filter(group=group)
+    matches = RoundRobinMatch.objects.filter(group=group).select_related(
+        "pair1", "pair2",
+    )
+    completed_matches = [match for match in matches if match.completed]
+    sources = AdvancementSource.objects.filter(source_group=group).select_related(
+        "target_league_entry__group__stage",
+        "target_tournament_entry__bracket__stage",
+    )
+    return {
+        "entry_count": entries.count(),
+        "filled_entry_count": entries.filter(participant__isnull=False).count(),
+        "match_count": matches.count(),
+        "completed_matches": completed_matches,
+        "affected_stages": _advancement_impact_for_sources(sources),
+    }
+
+
+def delete_group(group):
+    with transaction.atomic():
+        group.delete()
+
+
+def tournament_bracket_deletion_impact(bracket):
+    entries = TournamentEntry.objects.filter(bracket=bracket)
+    matches = TournamentMatch.objects.filter(bracket=bracket).select_related(
+        "pair1", "pair2",
+    )
+    scored_matches = [match for match in matches if tournament_match_has_score(match)]
+    sources = AdvancementSource.objects.filter(
+        source_match__bracket=bracket,
+    ).select_related(
+        "target_league_entry__group__stage",
+        "target_tournament_entry__bracket__stage",
+    )
+    return {
+        "entry_count": entries.count(),
+        "filled_entry_count": entries.filter(participant__isnull=False).count(),
+        "match_count": matches.count(),
+        "scored_matches": scored_matches,
+        "affected_stages": _advancement_impact_for_sources(sources),
+    }
+
+
+def delete_tournament_bracket(bracket):
+    with transaction.atomic():
+        bracket.delete()
+
+
 def get_single_tournament_entry(match):
     if match.pair1 and not match.pair2:
         return match.pair1

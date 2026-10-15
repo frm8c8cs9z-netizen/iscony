@@ -528,6 +528,16 @@ urlpatterns = [
         dashboard.order_maintenance,
         name="order_maintenance",
     ),
+    path(
+        "group/<int:group_id>/delete/",
+        dashboard.delete_group_confirm,
+        name="delete_group",
+    ),
+    path(
+        "tournament/<str:code>/bracket/<int:bracket_id>/delete/",
+        dashboard.delete_tournament_bracket_confirm,
+        name="delete_tournament_bracket",
+    ),
 
     path(
         "tournament/<str:code>/category/<int:category_id>/maintenance/order/",
