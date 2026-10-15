@@ -1,0 +1,80 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<style>
+.score-input-safety-note {
+    max-width: 820px;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border-left: 4px solid #d0a100;
+    background: #fff8db;
+    color: #4d3b00;
+    line-height: 1.5;
+}
+.danger-button { color: #b00020; }
+</style>
+
+<h2>{{ stage.name }} の削除確認</h2>
+<p>{{ category.name }}</p>
+
+{% if impact.downstream_stages %}
+    <div class="score-input-safety-note">
+        <p>
+            このStageを削除すると、以下の後続Stageも進出元として参照しているため
+            丸ごと削除されます(各Stageの枠・試合・結果もすべて削除されます)。
+        </p>
+        <ul>
+            {% for downstream in impact.downstream_stages %}
+                <li>{{ downstream.category.name }} / {{ downstream.name }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endif %}
+
+{% if impact.stages_with_results %}
+    <div class="score-input-safety-note">
+        <p>
+            以下のStageには既に結果が入力されているため、この削除はブロックされます。
+            先に結果を削除してください。
+        </p>
+        <ul>
+            {% for item in impact.stages_with_results %}
+                <li>{{ item.category.name }} / {{ item.name }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endif %}
+
+{% if impact.affected_stages %}
+    <div class="score-input-safety-note">
+        <p>
+            この操作により、以下の後続Stage(丸ごと削除される範囲とは別の、
+            進出元リンクのみで繋がっているStage)の進出元設定が失われます
+            (後続の枠自体は残りますが、進出元の紐付けと参加者割当はクリアされます)。
+        </p>
+        {% if impact.downstream_has_results %}
+            <p>後続枠に結果が入力済みのため削除できません。先に結果を削除してください。</p>
+        {% endif %}
+        <ul>
+            {% for data in impact.affected_stages %}
+                <li>
+                    {{ data.stage.category.name }} / {{ data.stage.name }}
+                    ({{ data.count }}件)
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endif %}
+
+{% if impact.blocked %}
+    <p class="score-input-safety-note">結果が入力済みのため削除できません。先に結果を削除してください。</p>
+{% else %}
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" id="delete-button" class="danger-button" onclick="return confirm('{{ stage.name|escapejs }} を削除しますか？');">
+            削除する
+        </button>
+    </form>
+{% endif %}
+<p><a class="secondary-button" href="{{ back_url }}">やめる</a></p>
+{% endblock %}

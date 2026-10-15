@@ -2982,6 +2982,108 @@ def _advancement_impact_for_sources(sources):
     )
 
 
+def _stage_has_results(stage):
+    if stage.stage_type == Stage.TYPE_LEAGUE:
+        return RoundRobinMatch.objects.filter(
+            group__stage=stage,
+            completed=True,
+        ).exists()
+
+    return TournamentMatch.objects.filter(
+        bracket__stage=stage,
+    ).filter(
+        Q(pair1_games__isnull=False)
+        | Q(pair2_games__isnull=False)
+    ).exists()
+
+
+def _collect_downstream_stages(stage, collected=None):
+    if collected is None:
+        collected = []
+
+    for downstream in stage.advancement_target_stages.all():
+        if downstream not in collected:
+            collected.append(downstream)
+            _collect_downstream_stages(downstream, collected)
+
+    return collected
+
+
+def stage_deletion_impact(stage):
+    downstream_stages = _collect_downstream_stages(stage)
+    strong_set = [stage] + downstream_stages
+    strong_set_ids = {item.id for item in strong_set}
+
+    stages_with_results = [
+        item for item in strong_set if _stage_has_results(item)
+    ]
+
+    sources = list(
+        AdvancementSource.objects.filter(
+            Q(source_stage_id__in=strong_set_ids)
+            | Q(source_group__stage_id__in=strong_set_ids)
+            | Q(source_match__bracket__stage_id__in=strong_set_ids)
+        ).select_related(
+            "target_league_entry__group__stage",
+            "target_tournament_entry__bracket__stage",
+        )
+    )
+
+    weak_sources = [
+        source for source in sources
+        if _advancement_target_stage(source)
+        and _advancement_target_stage(source).id not in strong_set_ids
+    ]
+
+    downstream_has_results = any(
+        _target_has_score(_advancement_target(source))
+        for source in weak_sources
+        if _advancement_target(source)
+    )
+
+    return {
+        "downstream_stages": downstream_stages,
+        "stages_with_results": stages_with_results,
+        "affected_stages": _advancement_impact_for_sources(weak_sources),
+        "downstream_has_results": downstream_has_results,
+        "blocked": bool(stages_with_results) or downstream_has_results,
+    }
+
+
+def delete_stage(stage):
+    with transaction.atomic():
+        downstream_stages = _collect_downstream_stages(stage)
+        strong_set_ids = {stage.id} | {item.id for item in downstream_stages}
+
+        sources = AdvancementSource.objects.filter(
+            Q(source_stage_id__in=strong_set_ids)
+            | Q(source_group__stage_id__in=strong_set_ids)
+            | Q(source_match__bracket__stage_id__in=strong_set_ids)
+        )
+
+        for source in sources:
+            target = _advancement_target(source)
+
+            if not target:
+                continue
+
+            target_stage = _advancement_target_stage(source)
+
+            if target_stage and target_stage.id in strong_set_ids:
+                continue
+
+            target.participant = None
+            update_fields = ["participant"]
+
+            if isinstance(target, TournamentEntry):
+                target.source_pair = None
+                update_fields.append("source_pair")
+
+            target.save(update_fields=update_fields)
+
+        stage.delete()
+
+
 def group_deletion_impact(group):
     entries = LeagueEntry.objects.filter(group=group)
     matches = RoundRobinMatch.objects.filter(group=group).select_related(

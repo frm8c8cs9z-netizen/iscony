@@ -10,6 +10,7 @@ from django.urls import reverse
 
 from .league import build_category_group_data
 from ..forms import StageEditForm, StageForm, StageSlotSetupForm
+from ..helpers.view import safe_next_url
 from ..helpers.brackets import get_bracket_size
 from ..helpers.league_grouping import (
     build_group_count_candidates,
@@ -36,6 +37,8 @@ from ..services import (
     create_tournament_stage_brackets,
     generate_tournament_bracket_matches,
     inspect_stage_advancement_readiness,
+    stage_deletion_impact,
+    delete_stage,
 )
 from .tournament import build_tournament_bracket_display_data
 
@@ -977,6 +980,53 @@ def add_stage(request, code, category_id):
             "submit_label": "保存",
             "selected_group_count": slot_form["group_count"].value(),
             **_stage_setup_preview(preview_pair_count),
+        },
+    )
+
+
+def delete_stage_confirm(request, code, category_id, stage_id):
+    """Stage単体の削除確認・実削除を行う。"""
+
+    tournament = get_object_or_404(Tournament, code=code)
+    category = get_object_or_404(
+        Category,
+        id=category_id,
+        tournament=tournament,
+    )
+    stage = get_object_or_404(
+        Stage,
+        id=stage_id,
+        category=category,
+    )
+
+    back_url = safe_next_url(request) or reverse(
+        "category_stage_management",
+        kwargs={"code": tournament.code, "category_id": category.id},
+    )
+
+    impact = stage_deletion_impact(stage)
+
+    if request.method == "POST":
+        if impact["blocked"]:
+            messages.error(
+                request,
+                "結果が入力済みのため削除できません。先に結果を削除してください。",
+            )
+        else:
+            name = stage.name
+            delete_stage(stage)
+            messages.success(request, f"{name} を削除しました。")
+            return redirect(back_url)
+
+    return render(
+        request,
+        "core/delete_stage_confirm.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "stage": stage,
+            "impact": impact,
+            "back_url": back_url,
         },
     )
 

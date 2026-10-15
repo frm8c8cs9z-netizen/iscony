@@ -33892,3 +33892,208 @@ class DeleteTournamentBracketTests(StructureDeletionTestMixin, TestCase):
         self.assertEqual(self.client.get(url).status_code, 404)
         self.assertEqual(self.client.post(url, {"confirmed": "1"}).status_code, 404)
         self.assertTrue(self.container_model.objects.filter(pk=self.container.pk).exists())
+
+
+class StageDeletionTestMixin(StructureDeletionTestMixin):
+    """両競技方式のStage削除・再帰削除・弱いリンクを検証する。"""
+
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("delete_stage", args=[
+            self.tournament.code, self.category.pk, self.stage.pk,
+        ])
+
+    def assert_deleted(self):
+        self.assertFalse(Stage.objects.filter(pk=self.stage.pk).exists())
+        self.assertFalse(self.container_model.objects.filter(pk=self.container.pk).exists())
+        self.assertFalse(self.entry_model.objects.filter(
+            pk__in=[entry.pk for entry in self.entries],
+        ).exists())
+        self.assertFalse(self.match_model.objects.filter(pk=self.match.pk).exists())
+        self.assertFalse(Schedule.objects.filter(pk=self.schedule.pk).exists())
+        self.assertTrue(Category.objects.filter(pk=self.category.pk).exists())
+        self.assertTrue(Tournament.objects.filter(pk=self.tournament.pk).exists())
+        self.assertEqual(Participant.objects.filter(
+            pk__in=[p.pk for p in self.participants],
+        ).count(), 2)
+
+    def structure_state(self):
+        return {
+            model.__name__: list(model.objects.order_by("pk").values())
+            for model in (
+                Tournament, Category, Stage, Group, TournamentBracket,
+                LeagueEntry, TournamentEntry, RoundRobinMatch, TournamentMatch,
+                AdvancementSource, Participant, Schedule,
+            )
+        }
+
+    def assert_blocked_without_changes(self):
+        original = self.structure_state()
+        response = self.client.get(self.url)
+        self.assertTrue(response.context["impact"]["blocked"])
+        self.assertNotContains(response, '<form method="post">')
+        self.assertNotContains(response, 'id="delete-button"')
+        response = self.client.post(self.url)
+        self.assertContains(response, "結果が入力済みのため削除できません。先に結果を削除してください。")
+        self.assertEqual(self.structure_state(), original)
+        return response
+
+    def test_unscored_confirmation_and_cascade_deletion(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, f"{self.stage.name} の削除確認")
+        self.assertContains(response, 'id="delete-button"')
+        self.assertContains(response, "return confirm(")
+        self.assertFalse(response.context["impact"]["blocked"])
+        self.assertTrue(Stage.objects.filter(pk=self.stage.pk).exists())
+        response = self.client.post(self.url)
+        self.assertRedirects(response, self.back_url)
+        self.assertEqual([str(m) for m in get_messages(response.wsgi_request)],
+                         [f"{self.stage.name} を削除しました。"])
+        self.assert_deleted()
+
+    def test_scored_match_blocks_deletion(self):
+        if self.stage_type == Stage.TYPE_LEAGUE:
+            self.match.completed = True
+        else:
+            self.match.pair2_games = 0
+        self.match.save()
+        response = self.assert_blocked_without_changes()
+        self.assertEqual(response.context["impact"]["stages_with_results"], [self.stage])
+
+    def test_maintenance_screen_has_delete_link(self):
+        self.assertContains(self.client.get(self.back_url), f'href="{self.url}"')
+
+    def make_strong_chain(self):
+        league, bracket, group, container, targets, sources = self.make_downstream_targets()
+        league.advancement_source_stage = self.stage
+        league.save(update_fields=["advancement_source_stage"])
+        bracket.advancement_source_stage = league
+        bracket.save(update_fields=["advancement_source_stage"])
+        league_match = RoundRobinMatch.objects.create(
+            group=group, pair1=targets[0], pair2=targets[1],
+        )
+        tournament_match = TournamentMatch.objects.create(
+            bracket=container, pair1=targets[-1], round_number=1,
+            match_number=1, match_code="CHAIN1",
+        )
+        return league, bracket, targets, sources, league_match, tournament_match
+
+    def test_strong_chain_recursively_deletes_stages_and_contents(self):
+        league, bracket, targets, sources, league_match, tournament_match = self.make_strong_chain()
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["impact"]["downstream_stages"], [league, bracket])
+        self.assertEqual(response.context["impact"]["affected_stages"], [])
+        self.assertContains(response, "丸ごと削除されます")
+        self.assertContains(response, league.name)
+        self.assertContains(response, bracket.name)
+        self.assertRedirects(self.client.post(self.url), self.back_url)
+        self.assert_deleted()
+        self.assertFalse(Stage.objects.filter(pk__in=[league.pk, bracket.pk]).exists())
+        self.assertFalse(Group.objects.filter(pk=targets[0].group_id).exists())
+        self.assertFalse(TournamentBracket.objects.filter(pk=targets[-1].bracket_id).exists())
+        for target in targets:
+            self.assertFalse(type(target).objects.filter(pk=target.pk).exists())
+        self.assertFalse(RoundRobinMatch.objects.filter(pk=league_match.pk).exists())
+        self.assertFalse(TournamentMatch.objects.filter(pk=tournament_match.pk).exists())
+        self.assertFalse(AdvancementSource.objects.filter(pk__in=[s.pk for s in sources]).exists())
+
+    def test_results_at_each_strong_chain_depth_block_all_changes(self):
+        league, bracket, _, _, league_match, tournament_match = self.make_strong_chain()
+        for stage, match, field, value in (
+            (league, league_match, "completed", True),
+            (bracket, tournament_match, "pair1_games", 0),
+        ):
+            with self.subTest(stage=stage.name):
+                setattr(match, field, value)
+                match.save(update_fields=[field])
+                response = self.assert_blocked_without_changes()
+                self.assertEqual(response.context["impact"]["stages_with_results"], [stage])
+                setattr(match, field, False if field == "completed" else None)
+                match.save(update_fields=[field])
+
+    def test_weak_sources_without_source_stage_are_cleared(self):
+        _, _, _, _, targets, sources = self.make_downstream_targets()
+        AdvancementSource.objects.filter(pk__in=[s.pk for s in sources]).update(source_stage=None)
+        self.assertRedirects(self.client.post(self.url), self.back_url)
+        self.assert_deleted()
+        self.assertFalse(AdvancementSource.objects.filter(pk__in=[s.pk for s in sources]).exists())
+        for target in targets:
+            target.refresh_from_db()
+            self.assertIsNone(target.participant_id)
+            if isinstance(target, TournamentEntry):
+                self.assertIsNone(target.source_pair_id)
+
+    def test_weak_link_from_recursive_downstream_blocks_then_clears(self):
+        _, bracket, _, _, _, match = self.make_strong_chain()
+        weak_stage = Stage.objects.create(
+            category=self.category, name="連鎖外Stage", stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        weak_bracket = TournamentBracket.objects.create(
+            category=self.category, stage=weak_stage, name="連鎖外ブラケット",
+        )
+        target = TournamentEntry.objects.create(
+            bracket=weak_bracket, pair_code="W1", display_order=1,
+            participant=self.participants[0],
+        )
+        source = AdvancementSource.objects.create(
+            source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            source_match=match, source_result=AdvancementSource.RESULT_WINNER,
+            target_tournament_entry=target,
+        )
+        weak_match = TournamentMatch.objects.create(
+            bracket=weak_bracket, pair1=target, round_number=1,
+            match_number=1, match_code="WEAK1", pair1_games=0,
+        )
+        response = self.assert_blocked_without_changes()
+        self.assertTrue(response.context["impact"]["downstream_has_results"])
+        self.assertEqual(response.context["impact"]["affected_stages"], [
+            {"stage": weak_stage, "count": 1},
+        ])
+        weak_match.pair1_games = None
+        weak_match.save(update_fields=["pair1_games"])
+        self.assertRedirects(self.client.post(self.url), self.back_url)
+        target.refresh_from_db()
+        self.assertIsNone(target.participant_id)
+        self.assertIsNone(target.source_pair_id)
+        self.assertTrue(Stage.objects.filter(pk=weak_stage.pk).exists())
+        self.assertFalse(Stage.objects.filter(pk=bracket.pk).exists())
+        self.assertFalse(AdvancementSource.objects.filter(pk=source.pk).exists())
+
+    def test_stage_from_other_category_is_not_accessible(self):
+        category = Category.objects.create(tournament=self.tournament, name="別カテゴリ")
+        url = reverse("delete_stage", args=[self.tournament.code, category.pk, self.stage.pk])
+        original = self.structure_state()
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(self.client.post(url).status_code, 404)
+        self.assertEqual(self.structure_state(), original)
+
+    def test_result_entered_after_confirmation_blocks_post(self):
+        self.assertContains(self.client.get(self.url), 'id="delete-button"')
+        if self.stage_type == Stage.TYPE_LEAGUE:
+            self.match.completed = True
+        else:
+            self.match.pair1_games = 0
+        self.match.save()
+        self.assert_blocked_without_changes()
+
+
+class DeleteStageTests(StageDeletionTestMixin, TestCase):
+    container_model = Group
+    entry_model = LeagueEntry
+    match_model = RoundRobinMatch
+    stage_type = Stage.TYPE_LEAGUE
+    container_field = "group"
+    schedule_match_field = "round_robin_match"
+    delete_url_name = "delete_group"
+    maintenance_url_name = "order_maintenance"
+
+
+class DeleteTournamentStageTests(StageDeletionTestMixin, TestCase):
+    container_model = TournamentBracket
+    entry_model = TournamentEntry
+    match_model = TournamentMatch
+    stage_type = Stage.TYPE_TOURNAMENT
+    container_field = "bracket"
+    schedule_match_field = "tournament_match"
+    delete_url_name = "delete_tournament_bracket"
+    maintenance_url_name = "bracket_name_maintenance"

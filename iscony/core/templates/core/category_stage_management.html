@@ -63,6 +63,10 @@
                 <a href="{% url 'edit_stage' tournament.code category.id row.stage.id %}">
                     Stage編集
                 </a>
+                ／
+                <a href="{% url 'delete_stage' tournament.code category.id row.stage.id %}">
+                    削除
+                </a>
 
                 {% if row.stage.stage_type == "league" %}
                     ／
