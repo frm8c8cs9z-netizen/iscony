@@ -57,6 +57,7 @@ from ..services import (
     move_league_entry_participant_to_new_slot,
     save_round_robin_score,
     save_round_robin_star_score,
+    save_round_robin_star_summary_score,
     undo_schedule_replacement,
     unassign_league_entry_advancement_piece,
     unassign_league_entry_participant,
@@ -827,13 +828,34 @@ def input_match_score(request, match_id):
         category = match.group.category
 
         if category.scoring_mode == Category.SCORING_MODE_STAR:
-            legs = [
-                request.POST.get(f"leg_{number}") or ""
-                for number in range(1, match.match_games + 1)
-            ]
+            if category.star_entry_mode == Category.STAR_ENTRY_DETAILED:
+                legs = [
+                    request.POST.get(f"leg_{number}") or ""
+                    for number in range(1, match.match_games + 1)
+                ]
 
-            error = save_round_robin_star_score(match, legs)
+                error = save_round_robin_star_score(match, legs)
 
+            else:
+                try:
+                    pair1_games = int(request.POST.get("pair1_games"))
+                    pair2_games = int(request.POST.get("pair2_games"))
+                except (TypeError, ValueError):
+                    error = "星の数を入力してください。"
+                    return render_score_input(
+                        request=request,
+                        match=match,
+                        winning_games=match.winning_games(),
+                        mode="round_robin",
+                        back_url=back_url,
+                        error=error,
+                    )
+
+                error = save_round_robin_star_summary_score(
+                    match,
+                    pair1_games,
+                    pair2_games
+                )
             if error:
                 return render_score_input(
                     request=request,

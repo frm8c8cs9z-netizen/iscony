@@ -39,6 +39,7 @@ class CategoryForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["scoring_mode"].required = False
+        self.fields["star_entry_mode"].required = False
 
     class Meta:
 
@@ -48,12 +49,19 @@ class CategoryForm(forms.ModelForm):
             "name",
             "display_order",
             "scoring_mode",
+            "star_entry_mode",
         ]
 
     def clean_scoring_mode(self):
         return (
             self.cleaned_data.get("scoring_mode")
             or Category.SCORING_MODE_INDIVIDUAL
+        )
+
+    def clean_star_entry_mode(self):
+        return (
+            self.cleaned_data.get("star_entry_mode")
+            or Category.STAR_ENTRY_SUMMARY
         )
 
 

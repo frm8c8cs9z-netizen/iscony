@@ -368,6 +368,20 @@ class Category(models.Model):
         default=SCORING_MODE_INDIVIDUAL,
     )
 
+    STAR_ENTRY_SUMMARY = "summary"
+    STAR_ENTRY_DETAILED = "detailed"
+
+    STAR_ENTRY_MODE_CHOICES = [
+        (STAR_ENTRY_SUMMARY, "簡易入力(集計のみ)"),
+        (STAR_ENTRY_DETAILED, "詳細入力(各戦タップ)"),
+    ]
+
+    star_entry_mode = models.CharField(
+        max_length=20,
+        choices=STAR_ENTRY_MODE_CHOICES,
+        default=STAR_ENTRY_SUMMARY,
+    )
+
     class Meta:
         unique_together = (
             "tournament",

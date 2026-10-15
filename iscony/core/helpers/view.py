@@ -61,28 +61,35 @@ def render_score_input(
         category = match.bracket.category
 
     scoring_mode = category.scoring_mode
+    star_entry_mode = category.star_entry_mode
 
     legs = []
+    star_count_options = []
 
     if scoring_mode == Category.SCORING_MODE_STAR:
-        existing_legs = {
-            leg.leg_number: leg.winner_side
-            for leg in match.legs.all()
-        }
-
-        legs = [
-            {
-                "number": number,
-                "winner_side": existing_legs.get(number),
+        if star_entry_mode == Category.STAR_ENTRY_DETAILED:
+            existing_legs = {
+                leg.leg_number: leg.winner_side
+                for leg in match.legs.all()
             }
-            for number in range(1, match.match_games + 1)
-        ]
+
+            legs = [
+                {
+                    "number": number,
+                    "winner_side": existing_legs.get(number),
+                }
+                for number in range(1, match.match_games + 1)
+            ]
+        else:
+            star_count_options = list(range(match.match_games + 1))
 
     context = {
         "match": match,
         "winning_games": winning_games,
         "loser_score_options": range(winning_games),
         "scoring_mode": scoring_mode,
+        "star_entry_mode": star_entry_mode,
+        "star_count_options": star_count_options,
         "legs": legs,
         "mode": mode,
         "back_url": back_url,

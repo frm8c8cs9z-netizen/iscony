@@ -2916,6 +2916,31 @@ def save_round_robin_star_score(match, legs):
     return None
 
 
+def save_round_robin_star_summary_score(match, pair1_legs, pair2_legs):
+    error = validate_star_score(
+        pair1_legs,
+        pair2_legs,
+        match.match_games
+    )
+
+    if error:
+        return error
+
+    with transaction.atomic():
+        error = save_round_robin_score(
+            match,
+            pair1_legs,
+            pair2_legs
+        )
+
+        if error:
+            return error
+
+        match.legs.all().delete()
+
+    return None
+
+
 def is_internal_seed_match(match):
     return match.match_code.startswith("S")
 
@@ -3246,6 +3271,31 @@ def save_tournament_star_score(match, legs):
             for index, side in enumerate(legs)
             if side
         ])
+
+    return None
+
+
+def save_tournament_star_summary_score(match, pair1_legs, pair2_legs):
+    error = validate_star_score(
+        pair1_legs,
+        pair2_legs,
+        match.match_games
+    )
+
+    if error:
+        return error
+
+    with transaction.atomic():
+        error = save_tournament_score(
+            match,
+            pair1_legs,
+            pair2_legs
+        )
+
+        if error:
+            return error
+
+        match.legs.all().delete()
 
     return None
 

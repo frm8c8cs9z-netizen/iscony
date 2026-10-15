@@ -27156,6 +27156,7 @@ class StarScoringModeTests(TestCase):
             tournament=self.tournament,
             name="団体A",
             scoring_mode=Category.SCORING_MODE_STAR,
+            star_entry_mode=Category.STAR_ENTRY_DETAILED,
         )
         self.individual_category = Category.objects.create(
             tournament=self.tournament,
@@ -27542,6 +27543,254 @@ class StarScoringModeTests(TestCase):
         category = form.save()
 
         self.assertEqual(category.scoring_mode, Category.SCORING_MODE_STAR)
+
+
+class StarSummaryEntryModeTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="星取大会",
+            code="STAR",
+        )
+        self.star_category = Category.objects.create(
+            tournament=self.tournament,
+            name="団体A",
+            scoring_mode=Category.SCORING_MODE_STAR,
+        )
+        self.individual_category = Category.objects.create(
+            tournament=self.tournament,
+            name="個人A",
+        )
+
+        self.league_stage = Stage.objects.create(
+            category=self.star_category,
+            code="L",
+            name="予選",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.tournament_stage = Stage.objects.create(
+            category=self.star_category,
+            code="T",
+            name="本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        self.group = Group.objects.create(
+            category=self.star_category,
+            stage=self.league_stage,
+            name="A",
+        )
+        self.league_entry1 = create_league_entry_with_participant(
+            category=self.star_category,
+            group=self.group,
+            pair_code="1",
+            display_order=1,
+            player1_name="団体1",
+            player2_name="",
+        )
+        self.league_entry2 = create_league_entry_with_participant(
+            category=self.star_category,
+            group=self.group,
+            pair_code="2",
+            display_order=2,
+            player1_name="団体2",
+            player2_name="",
+        )
+        self.round_robin_match = RoundRobinMatch.objects.create(
+            group=self.group,
+            pair1=self.league_entry1,
+            pair2=self.league_entry2,
+            match_games=3,
+        )
+
+        self.bracket = TournamentBracket.objects.create(
+            category=self.star_category,
+            stage=self.tournament_stage,
+            name="決勝",
+        )
+        self.tournament_entry1 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="1",
+            display_order=1,
+            player1_name="本戦1",
+            player2_name="",
+        )
+        self.tournament_entry2 = create_tournament_entry(
+            bracket=self.bracket,
+            pair_code="2",
+            display_order=2,
+            player1_name="本戦2",
+            player2_name="",
+        )
+        self.tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket,
+            round_number=1,
+            match_number=1,
+            match_code="M1",
+            match_label="決勝",
+            pair1=self.tournament_entry1,
+            pair2=self.tournament_entry2,
+            match_games=3,
+        )
+
+    def score_inputs(self):
+        return [
+            (
+                self.round_robin_match,
+                reverse("input_match_score", kwargs={"match_id": self.round_robin_match.id}),
+                RoundRobinMatchLeg,
+            ),
+            (
+                self.tournament_match,
+                reverse(
+                    "input_tournament_match_score",
+                    kwargs={"code": self.tournament.code, "match_id": self.tournament_match.id},
+                ),
+                TournamentMatchLeg,
+            ),
+        ]
+
+    def test_default_summary_posts_save_scores_without_legs(self):
+        self.assertEqual(self.star_category.star_entry_mode, Category.STAR_ENTRY_SUMMARY)
+        for match, url, leg_model in self.score_inputs():
+            with self.subTest(model=type(match).__name__):
+                response = self.client.post(
+                    url, {"action": "save", "pair1_games": "2", "pair2_games": "1"}
+                )
+                self.assertEqual(response.status_code, 302)
+                match.refresh_from_db()
+                self.assertEqual((match.pair1_games, match.pair2_games), (2, 1))
+                self.assertEqual(leg_model.objects.count(), 0)
+                if isinstance(match, TournamentMatch):
+                    self.assertEqual(match.winner, match.pair1)
+                else:
+                    self.assertTrue(match.completed)
+
+    def test_summary_can_save_pair2_as_winner(self):
+        for match, url, _ in self.score_inputs():
+            with self.subTest(model=type(match).__name__):
+                response = self.client.post(
+                    url, {"action": "save", "pair1_games": "0", "pair2_games": "3"}
+                )
+                self.assertEqual(response.status_code, 302)
+                match.refresh_from_db()
+                self.assertEqual((match.pair1_games, match.pair2_games), (0, 3))
+                self.assertFalse(match.legs.exists())
+                if isinstance(match, TournamentMatch):
+                    self.assertEqual(match.winner, match.pair2)
+
+    def test_summary_rejects_invalid_scores_without_saving(self):
+        cases = [
+            ("1", "0", "過半数の星に達していません。"),
+            ("1", "1", "同点は登録できません。"),
+            ("3", "1", "対戦数の合計が設定を超えています。"),
+            ("-1", "2", "対戦数にマイナスは登録できません。"),
+            ("", "2", "星の数を入力してください。"),
+            ("2", "abc", "星の数を入力してください。"),
+            (None, "2", "星の数を入力してください。"),
+        ]
+        for match, url, _ in self.score_inputs():
+            for pair1, pair2, error in cases:
+                with self.subTest(model=type(match).__name__, pair1=pair1, pair2=pair2):
+                    data = {"action": "save", "pair2_games": pair2}
+                    if pair1 is not None:
+                        data["pair1_games"] = pair1
+                    response = self.client.post(url, data)
+                    self.assertContains(response, error)
+                    match.refresh_from_db()
+                    self.assertIsNone(match.pair1_games)
+                    self.assertIsNone(match.pair2_games)
+                    self.assertFalse(match.legs.exists())
+
+    def test_summary_save_clears_preexisting_details(self):
+        for match, url, leg_model in self.score_inputs():
+            with self.subTest(model=type(match).__name__):
+                leg_model.objects.create(match=match, leg_number=1, winner_side="pair1")
+                response = self.client.post(
+                    url, {"action": "save", "pair1_games": "2", "pair2_games": "1"}
+                )
+                self.assertEqual(response.status_code, 302)
+                self.assertFalse(match.legs.exists())
+
+    def test_invalid_summary_keeps_preexisting_details(self):
+        for match, url, leg_model in self.score_inputs():
+            with self.subTest(model=type(match).__name__):
+                leg = leg_model.objects.create(match=match, leg_number=1, winner_side="pair1")
+                response = self.client.post(
+                    url, {"action": "save", "pair1_games": "1", "pair2_games": "0"}
+                )
+                self.assertContains(response, "過半数の星に達していません。")
+                self.assertTrue(match.legs.filter(pk=leg.pk).exists())
+
+    def test_input_html_switches_between_summary_and_detailed(self):
+        for entry_mode in [Category.STAR_ENTRY_SUMMARY, Category.STAR_ENTRY_DETAILED]:
+            self.star_category.star_entry_mode = entry_mode
+            self.star_category.save(update_fields=["star_entry_mode"])
+            for match, url, _ in self.score_inputs():
+                with self.subTest(mode=entry_mode, model=type(match).__name__):
+                    response = self.client.get(url)
+                    self.assertContains(response, '<table class="star-leg-table">')
+                    content = response.content.decode()
+                    table = re.search(r'<table class="star-leg-table">.*?</table>', content, re.S)
+                    self.assertIsNotNone(table)
+                    if entry_mode == Category.STAR_ENTRY_SUMMARY:
+                        self.assertIn('class="star-count-button ', table.group(0))
+                        self.assertNotIn('class="leg-button ', table.group(0))
+                        self.assertEqual(response.context["star_count_options"], [0, 1, 2, 3])
+                        self.assertEqual(response.context["legs"], [])
+                    else:
+                        self.assertIn('class="leg-button ', table.group(0))
+                        self.assertNotIn('class="star-count-button ', table.group(0))
+                        self.assertEqual(response.context["star_count_options"], [])
+
+    def test_summary_save_requires_both_scores_and_majority_in_js(self):
+        for match, url, _ in self.score_inputs():
+            with self.subTest(model=type(match).__name__):
+                response = self.client.get(url)
+                self.assertContains(response, 'id="star-save-button"')
+                self.assertRegex(
+                    response.content.decode(),
+                    r"const hasMajority = \(\s*"
+                    r"pair1Value !== null\s*&& pair2Value !== null\s*"
+                    r"&& \(pair1Value >= winningLegs \|\| pair2Value >= winningLegs\)",
+                )
+
+    def test_saved_summary_is_reflected_in_input_html(self):
+        for match, url, _ in self.score_inputs():
+            with self.subTest(model=type(match).__name__):
+                self.client.post(url, {"action": "save", "pair1_games": "2", "pair2_games": "0"})
+                response = self.client.get(url)
+                content = response.content.decode()
+                for side, value in [("pair1", 2), ("pair2", 0)]:
+                    self.assertRegex(
+                        content,
+                        re.compile(
+                            rf'id="{side}_star_buttons">.*?class="star-count-button selected"\s+'
+                            rf'data-value="{value}"',
+                            re.S,
+                        ),
+                    )
+                    self.assertRegex(
+                        content,
+                        re.compile(rf'id="{side}_games"\s+value="{value}"', re.S),
+                    )
+
+    def test_category_form_saves_entry_modes_and_defaults_empty_to_summary(self):
+        for entry_mode in [Category.STAR_ENTRY_DETAILED, Category.STAR_ENTRY_SUMMARY, "", None]:
+            with self.subTest(entry_mode=entry_mode):
+                data = {
+                    "name": "団体A",
+                    "display_order": "1",
+                    "scoring_mode": Category.SCORING_MODE_STAR,
+                }
+                if entry_mode is not None:
+                    data["star_entry_mode"] = entry_mode
+                form = CategoryForm(data, instance=self.star_category)
+                self.assertTrue(form.is_valid(), form.errors)
+                category = form.save()
+                category.refresh_from_db()
+                self.assertEqual(category.star_entry_mode, entry_mode or Category.STAR_ENTRY_SUMMARY)
 
 
 class ResultInputSelectTests(TestCase):

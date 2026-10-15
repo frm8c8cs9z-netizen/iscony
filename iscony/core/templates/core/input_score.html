@@ -69,6 +69,7 @@
     {% csrf_token %}
 
     {% if scoring_mode == "star" %}
+        {% if star_entry_mode == "detailed" %}
         <div class="star-score-summary">
             現在のスコア:
             <span id="star-score-pair1">0</span>
@@ -123,6 +124,60 @@
             </tr>
             {% endfor %}
         </table>
+        {% else %}
+        <div class="star-score-summary">
+            現在のスコア:
+            <span id="star-score-pair1">0</span>
+            -
+            <span id="star-score-pair2">0</span>
+        </div>
+
+        <table class="star-leg-table">
+            <tr>
+                <td id="pair1_box" class="winner-select-cell">
+                    <strong>{{ match.pair1.display_player1_name }}</strong>
+                    <div class="star-count-buttons" id="pair1_star_buttons">
+                        {% for n in star_count_options %}
+                            <button
+                                type="button"
+                                class="star-count-button {% if match.pair1_games == n %}selected{% endif %}"
+                                data-value="{{ n }}"
+                                onclick="selectStarCount('pair1', {{ n }}, this)"
+                                {% if not can_input_score %}disabled{% endif %}
+                            >{{ n }}</button>
+                        {% endfor %}
+                    </div>
+                    <input
+                        type="hidden"
+                        name="pair1_games"
+                        id="pair1_games"
+                        value="{{ match.pair1_games|default_if_none:'' }}"
+                    >
+                </td>
+                <td>vs</td>
+                <td id="pair2_box" class="winner-select-cell">
+                    <strong>{{ match.pair2.display_player1_name }}</strong>
+                    <div class="star-count-buttons" id="pair2_star_buttons">
+                        {% for n in star_count_options %}
+                            <button
+                                type="button"
+                                class="star-count-button {% if match.pair2_games == n %}selected{% endif %}"
+                                data-value="{{ n }}"
+                                onclick="selectStarCount('pair2', {{ n }}, this)"
+                                {% if not can_input_score %}disabled{% endif %}
+                            >{{ n }}</button>
+                        {% endfor %}
+                    </div>
+                    <input
+                        type="hidden"
+                        name="pair2_games"
+                        id="pair2_games"
+                        value="{{ match.pair2_games|default_if_none:'' }}"
+                    >
+                </td>
+            </tr>
+        </table>
+        {% endif %}
     {% else %}
     <table>
         <tr>
@@ -428,6 +483,30 @@
     color: #fff;
     border-color: #2e8b57;
 }
+
+.star-count-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.star-count-button {
+    min-width: 36px;
+    padding: 8px 12px;
+    font-size: 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #f8fafc;
+    cursor: pointer;
+}
+
+.star-count-button.selected {
+    background: #2e8b57;
+    color: #fff;
+    border-color: #2e8b57;
+}
 </style>
 
 <script>
@@ -602,6 +681,85 @@ function updateStarScoreSummary() {
 document.addEventListener("DOMContentLoaded", function () {
     if (document.querySelector(".star-leg-table")) {
         updateStarScoreSummary();
+    }
+});
+
+function selectStarCount(side, value, buttonEl) {
+    const input = document.getElementById(side + "_games");
+    input.value = value;
+
+    const buttonsContainer = buttonEl.closest(".star-count-buttons");
+    buttonsContainer
+        .querySelectorAll(".star-count-button")
+        .forEach(function (button) {
+            button.classList.remove("selected");
+        });
+    buttonEl.classList.add("selected");
+
+    updateStarSummaryMode();
+}
+
+function updateStarSummaryMode() {
+    const pair1Input = document.getElementById("pair1_games");
+    const pair2Input = document.getElementById("pair2_games");
+
+    if (!pair1Input || !pair2Input) {
+        return;
+    }
+
+    const pair1Value = pair1Input.value === "" ? null : parseInt(pair1Input.value, 10);
+    const pair2Value = pair2Input.value === "" ? null : parseInt(pair2Input.value, 10);
+
+    const pair1Span = document.getElementById("star-score-pair1");
+    const pair2Span = document.getElementById("star-score-pair2");
+
+    if (pair1Span) {
+        pair1Span.textContent = pair1Value === null ? 0 : pair1Value;
+    }
+
+    if (pair2Span) {
+        pair2Span.textContent = pair2Value === null ? 0 : pair2Value;
+    }
+
+    const pair1Box = document.getElementById("pair1_box");
+    const pair2Box = document.getElementById("pair2_box");
+
+    if (pair1Box && pair2Box) {
+        pair1Box.classList.remove("winner-box", "loser-box");
+        pair2Box.classList.remove("winner-box", "loser-box");
+
+        if (pair1Value !== null && pair2Value !== null && pair1Value !== pair2Value) {
+            if (pair1Value > pair2Value) {
+                pair1Box.classList.add("winner-box");
+                pair2Box.classList.add("loser-box");
+            } else {
+                pair2Box.classList.add("winner-box");
+                pair1Box.classList.add("loser-box");
+            }
+        }
+    }
+
+    const totalLegs = {{ match.match_games|default:0 }};
+    // 過半数チェック(保存ボタンの活性化制御): 通常は過半数到達を必須とするが、
+    // リタイア等のイレギュラー対応で過半数未達のまま勝敗確定したいケースが
+    // 将来的に出てくる可能性があるため、その場合はこのクライアント側チェックを
+    // 緩和・無効化する対応を検討する必要があるかもしれない。
+    const winningLegs = Math.floor(totalLegs / 2) + 1;
+    const saveButton = document.getElementById("star-save-button");
+
+    if (saveButton) {
+        const hasMajority = (
+            pair1Value !== null
+            && pair2Value !== null
+            && (pair1Value >= winningLegs || pair2Value >= winningLegs)
+        );
+        saveButton.disabled = !hasMajority;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    if (document.querySelector(".star-count-buttons")) {
+        updateStarSummaryMode();
     }
 });
 </script>
