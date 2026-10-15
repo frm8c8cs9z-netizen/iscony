@@ -2988,9 +2988,16 @@ def group_deletion_impact(group):
         "pair1", "pair2",
     )
     completed_matches = [match for match in matches if match.completed]
-    sources = AdvancementSource.objects.filter(source_group=group).select_related(
-        "target_league_entry__group__stage",
-        "target_tournament_entry__bracket__stage",
+    sources = list(
+        AdvancementSource.objects.filter(source_group=group).select_related(
+            "target_league_entry__group__stage",
+            "target_tournament_entry__bracket__stage",
+        )
+    )
+    downstream_has_results = any(
+        _target_has_score(_advancement_target(source))
+        for source in sources
+        if _advancement_target(source)
     )
     return {
         "entry_count": entries.count(),
@@ -2998,11 +3005,30 @@ def group_deletion_impact(group):
         "match_count": matches.count(),
         "completed_matches": completed_matches,
         "affected_stages": _advancement_impact_for_sources(sources),
+        "downstream_has_results": downstream_has_results,
+        "blocked": bool(completed_matches) or downstream_has_results,
     }
 
 
 def delete_group(group):
     with transaction.atomic():
+        sources = AdvancementSource.objects.filter(source_group=group)
+
+        for source in sources:
+            target = _advancement_target(source)
+
+            if not target:
+                continue
+
+            target.participant = None
+            update_fields = ["participant"]
+
+            if isinstance(target, TournamentEntry):
+                target.source_pair = None
+                update_fields.append("source_pair")
+
+            target.save(update_fields=update_fields)
+
         group.delete()
 
 
@@ -3012,11 +3038,18 @@ def tournament_bracket_deletion_impact(bracket):
         "pair1", "pair2",
     )
     scored_matches = [match for match in matches if tournament_match_has_score(match)]
-    sources = AdvancementSource.objects.filter(
-        source_match__bracket=bracket,
-    ).select_related(
-        "target_league_entry__group__stage",
-        "target_tournament_entry__bracket__stage",
+    sources = list(
+        AdvancementSource.objects.filter(
+            source_match__bracket=bracket,
+        ).select_related(
+            "target_league_entry__group__stage",
+            "target_tournament_entry__bracket__stage",
+        )
+    )
+    downstream_has_results = any(
+        _target_has_score(_advancement_target(source))
+        for source in sources
+        if _advancement_target(source)
     )
     return {
         "entry_count": entries.count(),
@@ -3024,11 +3057,30 @@ def tournament_bracket_deletion_impact(bracket):
         "match_count": matches.count(),
         "scored_matches": scored_matches,
         "affected_stages": _advancement_impact_for_sources(sources),
+        "downstream_has_results": downstream_has_results,
+        "blocked": bool(scored_matches) or downstream_has_results,
     }
 
 
 def delete_tournament_bracket(bracket):
     with transaction.atomic():
+        sources = AdvancementSource.objects.filter(source_match__bracket=bracket)
+
+        for source in sources:
+            target = _advancement_target(source)
+
+            if not target:
+                continue
+
+            target.participant = None
+            update_fields = ["participant"]
+
+            if isinstance(target, TournamentEntry):
+                target.source_pair = None
+                update_fields.append("source_pair")
+
+            target.save(update_fields=update_fields)
+
         bracket.delete()
 
 

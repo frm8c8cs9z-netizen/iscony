@@ -22,8 +22,8 @@
 {% if impact.completed_matches %}
     <div class="score-input-safety-note">
         <p>
-            以下の試合は結果が入力済みです。削除するとこれらの結果も失われ、
-            元に戻せません。削除前にスナップショットの取得を推奨します。
+            以下の試合には既に結果が入力されているため、このグループは削除できません。
+            先に結果を削除してください。
         </p>
         <ul>
             {% for match in impact.completed_matches %}
@@ -41,9 +41,11 @@
     <div class="score-input-safety-note">
         <p>
             この操作により、以下の後続Stageの進出元設定が失われます
-            (後続の枠自体や、既に反映済みの参加者は削除されません。
-            進出元の紐付けだけが切れます)。
+            (後続の枠自体は残りますが、進出元の紐付けと参加者割当はクリアされます)。
         </p>
+        {% if impact.downstream_has_results %}
+            <p>後続枠に結果が入力済みのため削除できません。先に結果を削除してください。</p>
+        {% endif %}
         <ul>
             {% for data in impact.affected_stages %}
                 <li>
@@ -55,24 +57,15 @@
     </div>
 {% endif %}
 
-<form method="post">
-    {% csrf_token %}
-    {% if has_serious_impact %}
-        <p>
-            <label>
-                <input type="checkbox" id="confirm-checkbox" onchange="document.getElementById('delete-button').disabled = !this.checked;">
-                上記の内容を確認し、削除します
-            </label>
-        </p>
-        <input type="hidden" name="confirmed" value="1">
-        <button type="submit" id="delete-button" class="danger-button" disabled>
-            削除する
-        </button>
-    {% else %}
+{% if impact.blocked %}
+    <p class="score-input-safety-note">結果が入力済みのため削除できません。先に結果を削除してください。</p>
+{% else %}
+    <form method="post">
+        {% csrf_token %}
         <button type="submit" id="delete-button" class="danger-button" onclick="return confirm('{{ group.name|escapejs }} を削除しますか？');">
             削除する
         </button>
-    {% endif %}
-</form>
+    </form>
+{% endif %}
 <p><a class="secondary-button" href="{{ back_url }}">やめる</a></p>
 {% endblock %}

@@ -33666,8 +33666,8 @@ class StructureDeletionTestMixin:
         self.assertContains(response, "試合数: 1(結果入力済み: 0)")
         self.assertContains(response, "return confirm(")
         self.assertNotContains(response, 'id="confirm-checkbox"')
-        self.assertNotContains(response, "以下の試合は結果が入力済みです")
-        self.assertFalse(response.context["has_serious_impact"])
+        self.assertNotContains(response, "以下の試合には既に結果が入力されているため")
+        self.assertFalse(response.context["impact"]["blocked"])
         self.assertTrue(self.container_model.objects.filter(pk=self.container.pk).exists())
         response = self.client.post(self.url)
         self.assertRedirects(response, self.back_url)
@@ -33675,30 +33675,36 @@ class StructureDeletionTestMixin:
                          ["削除対象 を削除しました。"])
         self.assert_deleted()
 
-    def test_scored_match_requires_confirmation(self):
+    def test_scored_match_blocks_deletion(self):
         self.match.pair1_games = 4
         self.match.pair2_games = 2
         if self.container_field == "group":
             self.match.completed = True
         self.match.save()
         response = self.client.get(self.url)
-        self.assertContains(response, "以下の試合は結果が入力済みです")
+        self.assertContains(response, "以下の試合には既に結果が入力されているため")
         self.assertContains(response, '(4-2)')
         self.assertContains(response, self.entries[0].display_name)
         self.assertContains(response, self.entries[1].display_name)
-        self.assertContains(response, 'id="confirm-checkbox"')
-        self.assertContains(response, 'class="danger-button" disabled')
+        self.assertTrue(response.context["impact"]["blocked"])
+        self.assertNotContains(response, '<form method="post">')
+        self.assertNotContains(response, 'id="delete-button"')
         self.assertEqual(list(response.context["impact"][self.results_key]), [self.match])
         response = self.client.post(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "内容を確認したうえで削除してください。")
+        self.assertContains(response, "結果が入力済みのため削除できません。先に結果を削除してください。")
         self.assertTrue(self.container_model.objects.filter(pk=self.container.pk).exists())
         self.assertTrue(Schedule.objects.filter(pk=self.schedule.pk).exists())
         response = self.client.post(self.url, {"confirmed": "1"})
-        self.assertRedirects(response, self.back_url)
-        self.assert_deleted()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(self.container_model.objects.filter(pk=self.container.pk).exists())
+        self.match.refresh_from_db()
+        self.assertEqual((self.match.pair1_games, self.match.pair2_games), (4, 2))
+        self.assertEqual(self.entry_model.objects.filter(
+            pk__in=[entry.pk for entry in self.entries],
+        ).count(), 2)
 
-    def test_downstream_sources_removed_but_slots_and_participants_remain(self):
+    def make_downstream_targets(self):
         league_stage = Stage.objects.create(
             category=self.category, name="後続リーグ", stage_type=Stage.TYPE_LEAGUE,
             display_order=3,
@@ -33736,7 +33742,16 @@ class StructureDeletionTestMixin:
                 fields.update(source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
                               source_match=self.match, source_result=AdvancementSource.RESULT_WINNER)
             sources.append(AdvancementSource.objects.create(**fields))
+        targets[-1].source_pair = targets[0]
+        targets[-1].save(update_fields=["source_pair"])
+        return league_stage, bracket_stage, group, bracket, targets, sources
+
+    def test_downstream_sources_and_assignments_cleared_but_slots_remain(self):
+        league_stage, bracket_stage, group, bracket, targets, sources = self.make_downstream_targets()
         response = self.client.get(self.url)
+        self.assertFalse(response.context["impact"]["blocked"])
+        self.assertFalse(response.context["impact"]["downstream_has_results"])
+        self.assertContains(response, "return confirm(")
         self.assertContains(response, "後続リーグ")
         self.assertContains(response, "後続トーナメント")
         self.assertContains(response, "(2件)")
@@ -33744,21 +33759,74 @@ class StructureDeletionTestMixin:
         self.assertEqual(response.context["impact"]["affected_stages"], [
             {"stage": bracket_stage, "count": 1}, {"stage": league_stage, "count": 2},
         ])
-        self.assertContains(response, "進出元の紐付けだけが切れます")
+        self.assertContains(response, "進出元の紐付けと参加者割当はクリアされます")
         response = self.client.post(self.url)
-        self.assertContains(response, "内容を確認したうえで削除してください。")
-        self.assertEqual(AdvancementSource.objects.filter(pk__in=[s.pk for s in sources]).count(), 3)
-        response = self.client.post(self.url, {"confirmed": "1"})
         self.assertRedirects(response, self.back_url)
         self.assert_deleted()
         self.assertFalse(AdvancementSource.objects.filter(pk__in=[s.pk for s in sources]).exists())
         for target in targets:
-            participant_id = target.participant_id
             target.refresh_from_db()
-            self.assertEqual(target.participant_id, participant_id)
+            self.assertIsNone(target.participant_id)
+            if isinstance(target, TournamentEntry):
+                self.assertIsNone(target.source_pair_id)
         self.assertTrue(Group.objects.filter(pk=group.pk).exists())
         self.assertTrue(TournamentBracket.objects.filter(pk=bracket.pk).exists())
         self.assertEqual(Stage.objects.filter(pk__in=[league_stage.pk, bracket_stage.pk]).count(), 2)
+
+    def test_downstream_results_block_deletion(self):
+        _, _, _, bracket, targets, sources = self.make_downstream_targets()
+        for target_kind in ("league", "tournament"):
+            with self.subTest(target_kind=target_kind):
+                if target_kind == "league":
+                    downstream_match = RoundRobinMatch.objects.create(
+                        group=targets[0].group, pair1=targets[0], pair2=targets[1],
+                        pair1_games=0,
+                    )
+                else:
+                    downstream_match = TournamentMatch.objects.create(
+                        bracket=bracket, pair1=targets[-1], round_number=1,
+                        match_number=1, match_code="DOWN1", pair2_games=0,
+                    )
+                original_targets = [
+                    (target.pk, target.participant_id, getattr(target, "source_pair_id", None))
+                    for target in targets
+                ]
+                original_sources = [
+                    AdvancementSource.objects.values().get(pk=source.pk)
+                    for source in sources
+                ]
+                response = self.client.get(self.url)
+                self.assertTrue(response.context["impact"]["blocked"])
+                self.assertTrue(response.context["impact"]["downstream_has_results"])
+                self.assertContains(response, "後続枠に結果が入力済みのため削除できません。")
+                self.assertNotContains(response, '<form method="post">')
+                for data in ({}, {"confirmed": "1"}):
+                    response = self.client.post(self.url, data)
+                    self.assertContains(response, "結果が入力済みのため削除できません。")
+                    self.assertTrue(self.container_model.objects.filter(pk=self.container.pk).exists())
+                    self.assertTrue(Schedule.objects.filter(pk=self.schedule.pk).exists())
+                    self.match.refresh_from_db()
+                    self.assertIsNone(self.match.pair1_games)
+                    self.assertIsNone(self.match.pair2_games)
+                    self.assertEqual(self.entry_model.objects.filter(
+                        pk__in=[entry.pk for entry in self.entries],
+                    ).count(), 2)
+                    for target, original in zip(targets, original_targets):
+                        target.refresh_from_db()
+                        self.assertEqual(
+                            (target.pk, target.participant_id, getattr(target, "source_pair_id", None)),
+                            original,
+                        )
+                    self.assertEqual([
+                        AdvancementSource.objects.values().get(pk=source.pk)
+                        for source in sources
+                    ], original_sources)
+                downstream_match.refresh_from_db()
+                self.assertEqual(
+                    downstream_match.pair1_games if target_kind == "league"
+                    else downstream_match.pair2_games, 0,
+                )
+                downstream_match.delete()
 
     def test_maintenance_screen_has_delete_link(self):
         maintenance_url = reverse(self.maintenance_url_name, args=[self.tournament.code])
@@ -33795,10 +33863,10 @@ class DeleteGroupTests(StructureDeletionTestMixin, TestCase):
         self.match.pair1_games = 0
         self.match.pair2_games = 0
         self.match.save()
-        self.assertFalse(self.client.get(self.url).context["has_serious_impact"])
+        self.assertFalse(self.client.get(self.url).context["impact"]["blocked"])
         self.match.completed = True
         self.match.save()
-        self.assertTrue(self.client.get(self.url).context["has_serious_impact"])
+        self.assertTrue(self.client.get(self.url).context["impact"]["blocked"])
 
 
 class DeleteTournamentBracketTests(StructureDeletionTestMixin, TestCase):
@@ -33812,11 +33880,11 @@ class DeleteTournamentBracketTests(StructureDeletionTestMixin, TestCase):
     maintenance_url_name = "bracket_name_maintenance"
     results_key = "scored_matches"
 
-    def test_partial_zero_score_requires_confirmation(self):
+    def test_partial_zero_score_blocks_deletion(self):
         self.match.pair2_games = 0
         self.match.save()
-        self.assertTrue(self.client.get(self.url).context["has_serious_impact"])
-        self.assertContains(self.client.post(self.url), "内容を確認したうえで削除してください。")
+        self.assertTrue(self.client.get(self.url).context["impact"]["blocked"])
+        self.assertContains(self.client.post(self.url), "結果が入力済みのため削除できません。先に結果を削除してください。")
 
     def test_bracket_from_other_tournament_is_not_accessible(self):
         other = Tournament.objects.create(name="別大会", code="OTHERDELETE")

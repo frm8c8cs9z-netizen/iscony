@@ -2017,13 +2017,13 @@ def delete_group_confirm(request, group_id):
         kwargs={"code": tournament.code, "category_id": category.id},
     )
     impact = group_deletion_impact(group)
-    has_serious_impact = (
-        bool(impact["completed_matches"]) or bool(impact["affected_stages"])
-    )
 
     if request.method == "POST":
-        if has_serious_impact and request.POST.get("confirmed") != "1":
-            messages.error(request, "内容を確認したうえで削除してください。")
+        if impact["blocked"]:
+            messages.error(
+                request,
+                "結果が入力済みのため削除できません。先に結果を削除してください。",
+            )
         else:
             name = group.name
             delete_group(group)
@@ -2038,7 +2038,6 @@ def delete_group_confirm(request, group_id):
             "category": category,
             "group": group,
             "impact": impact,
-            "has_serious_impact": has_serious_impact,
             "back_url": back_url,
         },
     )
@@ -2058,13 +2057,13 @@ def delete_tournament_bracket_confirm(request, code, bracket_id):
         kwargs={"code": tournament.code, "category_id": category.id},
     )
     impact = tournament_bracket_deletion_impact(bracket)
-    has_serious_impact = (
-        bool(impact["scored_matches"]) or bool(impact["affected_stages"])
-    )
 
     if request.method == "POST":
-        if has_serious_impact and request.POST.get("confirmed") != "1":
-            messages.error(request, "内容を確認したうえで削除してください。")
+        if impact["blocked"]:
+            messages.error(
+                request,
+                "結果が入力済みのため削除できません。先に結果を削除してください。",
+            )
         else:
             name = bracket.name
             delete_tournament_bracket(bracket)
@@ -2079,7 +2078,6 @@ def delete_tournament_bracket_confirm(request, code, bracket_id):
             "category": category,
             "bracket": bracket,
             "impact": impact,
-            "has_serious_impact": has_serious_impact,
             "back_url": back_url,
         },
     )
