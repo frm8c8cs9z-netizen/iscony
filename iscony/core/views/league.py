@@ -62,6 +62,7 @@ from ..services import (
     unassign_league_entry_advancement_piece,
     unassign_league_entry_participant,
     update_group_ranking,
+    auto_apply_stage_advancements_if_ready,
 )
 from ..validators import validate_game_score
 from ..helpers.view import (
@@ -645,6 +646,10 @@ def add_extra_round_robin_match(request, group_id):
         id=group_id,
     )
     tournament = group.category.tournament
+    back_url = safe_next_url(request) or (
+        f"{reverse('category_detail', kwargs={'category_id': group.category_id})}"
+        f"#group-{group.id}"
+    )
     blocks = ScheduleBlock.objects.filter(
         tournament=tournament,
     ).order_by(
@@ -689,10 +694,7 @@ def add_extra_round_robin_match(request, group_id):
                             order=form.cleaned_data["order"],
                         )
 
-                return redirect(
-                    f"{reverse('category_detail', kwargs={'category_id': group.category_id})}"
-                    f"#group-{group.id}"
-                )
+                return redirect(back_url)
 
             except ValidationError as exc:
                 form.add_error(None, exc.message)
@@ -749,6 +751,7 @@ def add_extra_round_robin_match(request, group_id):
             "tournament": tournament,
             "group": group,
             "form": form,
+            "back_url": back_url,
         },
     )
 
@@ -972,43 +975,35 @@ def edit_group_ranking(request, group_id):
         id=group_id
     )
 
+    back_url = safe_next_url(request) or reverse(
+        "category_detail", kwargs={"category_id": group.category_id}
+    )
+
     if request.method == "POST":
+        recalculate = "recalculate" in request.POST
 
-        if "recalculate" in request.POST:
+        try:
+            with transaction.atomic():
+                if recalculate:
+                    update_group_ranking(group, reset_rank=True)
+                else:
+                    rankings = GroupRanking.objects.filter(
+                        group=group
+                    ).select_related("pair")
 
-            update_group_ranking(
-                group,
-                reset_rank=True
-            )
+                    for ranking in rankings:
+                        rank_value = request.POST.get(f"rank_{ranking.id}")
+                        ranking.rank = None if rank_value == "" else int(rank_value)
+                        ranking.save()
 
-            return redirect(
-                "edit_group_ranking",
-                group_id=group.id
-            )
+                if group.stage_id:
+                    auto_apply_stage_advancements_if_ready(group.stage)
+        except ValidationError as exc:
+            messages.error(request, " / ".join(exc.messages))
+            return redirect(request.get_full_path())
 
-        rankings = GroupRanking.objects.filter(
-            group=group
-        ).select_related(
-            "pair"
-        )
-
-        for ranking in rankings:
-
-            rank_value = request.POST.get(
-                f"rank_{ranking.id}"
-            )
-
-            if rank_value == "":
-                ranking.rank = None
-            else:
-                ranking.rank = int(rank_value)
-
-            ranking.save()
-
-        return redirect(
-            "category_detail",
-            category_id=group.category.id
-        )
+        _show_stage_advancement_warning(request)
+        return redirect(request.get_full_path() if recalculate else back_url)
 
     rankings = GroupRanking.objects.filter(
         group=group
@@ -1025,6 +1020,7 @@ def edit_group_ranking(request, group_id):
         {
             "group": group,
             "rankings": rankings,
+            "back_url": back_url,
         }
     )
 

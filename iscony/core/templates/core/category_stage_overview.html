@@ -260,6 +260,10 @@
                 {% for data in row.display_groups %}
                     <div class="group-box" id="group-{{ data.group.id }}">
                         <h4>{{ data.group.name }}リーグ</h4>
+                        <p>
+                            <a href="{% url 'edit_group_ranking' data.group.id %}?next={{ data.group_score_link_next_url }}%23group-{{ data.group.id }}">順位入力</a>
+                            / <a href="{% url 'add_extra_round_robin_match' data.group.id %}?next={{ data.group_score_link_next_url }}%23group-{{ data.group.id }}">追加対戦</a>
+                        </p>
 
                         <div class="table-wrapper">
                             {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="input" row_score_link_view_name="input_match_score" use_league_score_colors=use_league_score_colors self_cell_html="-" score_blank_html="&nbsp;" table_kind="main" %}

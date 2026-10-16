@@ -35348,3 +35348,207 @@ class ClearStageResultsTests(TestCase):
         self.assertRedirects(response, self.back_url)
         self.assertIn(f"{self.stage.name} ほか、合わせて3件のStageの結果を削除しました。",
                       [str(m) for m in get_messages(response.wsgi_request)])
+
+
+class LeagueOperationNavigationTests(TestCase):
+    """横断表示からのリーグ操作と順位更新時の進出反映。"""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.tournament = Tournament.objects.create(
+            name="リーグ操作大会", code="LEAGUEOPNAV", is_public=True,
+        )
+        self.category = Category.objects.create(tournament=self.tournament, name="女子A")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        self.group = Group.objects.create(category=self.category, stage=self.stage, name="A")
+        self.entries = [
+            create_league_entry_with_participant(
+                category=self.category, group=self.group,
+                pair_code=f"A{index}", display_order=index,
+                player1_name=f"選手{index}", player2_name="",
+            )
+            for index in range(1, 4)
+        ]
+        # 三すくみで勝敗・得失ゲーム数が同じになり、順位は未確定。
+        for index in range(3):
+            RoundRobinMatch.objects.create(
+                group=self.group, pair1=self.entries[index],
+                pair2=self.entries[(index + 1) % 3],
+                pair1_games=4, pair2_games=2, completed=True,
+            )
+        update_group_ranking(self.group, reset_rank=True)
+        self.rankings = list(
+            GroupRanking.objects.filter(group=self.group).order_by("pair__display_order")
+        )
+        final_stage = Stage.objects.create(
+            category=self.category, name="決勝", stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        self.final_group = Group.objects.create(
+            category=self.category, stage=final_stage, name="決勝A",
+        )
+        self.target = LeagueEntry.objects.create(
+            category=self.category, group=self.final_group, pair_code="F1", display_order=1,
+        )
+        AdvancementSource.objects.create(
+            target_league_entry=self.target,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage, source_group=self.group, source_rank=1,
+        )
+        self.overview_url = reverse(
+            "category_stage_overview", kwargs={"category_id": self.category.id},
+        )
+        self.next_url = f"{self.overview_url}#group-{self.group.id}"
+        self.category_url = reverse("category_detail", kwargs={"category_id": self.category.id})
+        self.ranking_url = reverse("edit_group_ranking", kwargs={"group_id": self.group.id})
+        self.extra_url = reverse("add_extra_round_robin_match", kwargs={"group_id": self.group.id})
+
+    def _ranking_data(self):
+        return {
+            f"rank_{ranking.id}": str(index)
+            for index, ranking in enumerate(self.rankings, start=1)
+        }
+
+    def test_overview_links_return_to_each_group_and_are_not_public(self):
+        response = self.client.get(self.overview_url)
+        self.assertEqual(response.status_code, 200)
+        public_response = self.client.get(reverse(
+            "public_category_results",
+            kwargs={"code": self.tournament.code, "category_id": self.category.id},
+        ))
+        self.assertEqual(public_response.status_code, 200)
+        for group in (self.group, self.final_group):
+            for view_name in ("edit_group_ranking", "add_extra_round_robin_match"):
+                with self.subTest(group=group.id, view=view_name):
+                    url = reverse(view_name, kwargs={"group_id": group.id})
+                    self.assertContains(
+                        response, f'href="{url}?next={self.overview_url}%23group-{group.id}"',
+                    )
+                    self.assertNotContains(public_response, url)
+
+    def test_ranking_save_redirects_and_back_link(self):
+        for next_url in (self.next_url, None, "//example.com", "https://example.com"):
+            with self.subTest(next_url=next_url):
+                url = self.ranking_url
+                if next_url is not None:
+                    url += "?" + urlencode({"next": next_url})
+                expected = self.next_url if next_url == self.next_url else self.category_url
+                page = self.client.get(url)
+                self.assertContains(page, f'href="{expected}"')
+                self.assertContains(page, '<form method="post">')
+                response = self.client.post(url, self._ranking_data())
+                self.assertRedirects(response, expected, fetch_redirect_response=False)
+
+    def test_manual_ranking_advances_and_recalculation_clears_target(self):
+        self.assertTrue(all(ranking.rank is None for ranking in self.rankings))
+        self.assertIsNone(self.target.participant_id)
+        url = self.ranking_url + "?" + urlencode({"next": self.next_url})
+        response = self.client.post(url, self._ranking_data())
+        self.assertRedirects(response, self.next_url, fetch_redirect_response=False)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.participant_id, self.entries[0].participant_id)
+        self.assertEqual(
+            list(GroupRanking.objects.filter(group=self.group)
+                 .order_by("pair__display_order").values_list("rank", flat=True)),
+            [1, 2, 3],
+        )
+        response = self.client.post(url, {"recalculate": "1"})
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        self.target.refresh_from_db()
+        self.assertIsNone(self.target.participant_id)
+        self.assertFalse(GroupRanking.objects.filter(group=self.group, rank__isnull=False).exists())
+
+    def test_recalculation_without_next_returns_to_ranking(self):
+        response = self.client.post(self.ranking_url, {"recalculate": "1"})
+        self.assertRedirects(response, self.ranking_url, fetch_redirect_response=False)
+
+    def test_advancement_error_rolls_back_ranking_and_target(self):
+        from unittest.mock import patch
+
+        url = self.ranking_url + "?" + urlencode({"next": self.next_url})
+        for recalculate in (False, True):
+            with self.subTest(recalculate=recalculate):
+                for index, ranking in enumerate(self.rankings, start=1):
+                    ranking.rank = index if recalculate else None
+                    ranking.save()
+                self.target.participant = None
+                self.target.save()
+
+                def fail_after_target_update(stage):
+                    self.assertEqual(stage.pk, self.stage.pk)
+                    self.target.participant = self.entries[0].participant
+                    self.target.save()
+                    raise ValidationError(["進出反映エラー1", "進出反映エラー2"])
+
+                with patch(
+                    "core.views.league.auto_apply_stage_advancements_if_ready",
+                    side_effect=fail_after_target_update,
+                ):
+                    response = self.client.post(
+                        url, {"recalculate": "1"} if recalculate else self._ranking_data(),
+                    )
+                self.assertRedirects(response, url, fetch_redirect_response=False)
+                errors = [str(message) for message in get_messages(response.wsgi_request)]
+                self.assertTrue(any("進出反映エラー1 / 進出反映エラー2" in error for error in errors))
+                for index, ranking in enumerate(self.rankings, start=1):
+                    ranking.refresh_from_db()
+                    self.assertEqual(ranking.rank, index if recalculate else None)
+                self.target.refresh_from_db()
+                self.assertIsNone(self.target.participant_id)
+
+    def test_success_displays_partial_advancement_warning(self):
+        from unittest.mock import patch
+
+        for recalculate in (False, True):
+            with self.subTest(recalculate=recalculate), patch(
+                "core.views.league.consume_stage_advancement_result",
+                return_value={"applied_count": 1, "blockers": ["進出先の試合が開始済み"]},
+            ):
+                response = self.client.post(
+                    self.ranking_url,
+                    {"recalculate": "1"} if recalculate else self._ranking_data(),
+                )
+                warnings = [str(message) for message in get_messages(response.wsgi_request)]
+                self.assertTrue(any("進出先の試合が開始済み" in warning for warning in warnings))
+
+    def test_ranking_without_stage_can_be_saved_and_recalculated(self):
+        self.group.stage = None
+        self.group.save()
+        response = self.client.post(self.ranking_url, self._ranking_data())
+        self.assertRedirects(response, self.category_url, fetch_redirect_response=False)
+        response = self.client.post(self.ranking_url, {"recalculate": "1"})
+        self.assertRedirects(response, self.ranking_url, fetch_redirect_response=False)
+
+    def test_extra_match_redirects_and_back_link(self):
+        for next_url in (self.next_url, None, "//example.com"):
+            with self.subTest(next_url=next_url):
+                url = self.extra_url
+                if next_url is not None:
+                    url += "?" + urlencode({"next": next_url})
+                expected = (
+                    self.next_url if next_url == self.next_url
+                    else f"{self.category_url}#group-{self.group.id}"
+                )
+                page = self.client.get(url)
+                self.assertContains(page, f'href="{expected}"')
+                self.assertContains(page, '<form method="post">')
+                response = self.client.post(url, {
+                    "pair1": self.entries[0].id, "pair2": self.entries[1].id,
+                    "counts_for_ranking": "on", "note": "順位決定の追加対戦",
+                })
+                self.assertRedirects(response, expected, fetch_redirect_response=False)
+        self.assertEqual(RoundRobinMatch.objects.filter(group=self.group).count(), 6)
+
+    def test_invalid_extra_match_preserves_next_for_retry(self):
+        url = self.extra_url + "?" + urlencode({"next": self.next_url})
+        response = self.client.post(url, {
+            "pair1": self.entries[0].id, "pair2": self.entries[0].id,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "異なる2枠を選択してください。")
+        self.assertContains(response, '<form method="post">')
+        self.assertContains(response, f'href="{self.next_url}"')
