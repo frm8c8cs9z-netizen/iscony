@@ -9,11 +9,11 @@
     <tr><th>種別</th><td>{{ backup.get_kind_display }}</td></tr>
     <tr><th>件数</th><td>{{ backup.object_count }}</td></tr>
 </table>
-<h3>モデルごとの件数</h3>
+<h3>データの種類ごとの件数</h3>
 <table>
-    <tr><th>モデル</th><th>バックアップ時点の件数</th><th>現在の件数</th></tr>
+    <tr><th>データの種類</th><th>バックアップ時点の件数</th><th>現在の件数</th></tr>
     {% for row in count_rows %}
-    <tr><td>{{ row.model }}</td><td>{{ row.backup_count }}</td><td>{{ row.current_count }}</td></tr>
+    <tr><td>{% if row.changed %}<strong>{{ row.display_name }}</strong>{% else %}{{ row.display_name }}{% endif %}</td><td>{% if row.changed %}<strong>{{ row.backup_count }}</strong>{% else %}{{ row.backup_count }}{% endif %}</td><td>{% if row.changed %}<strong>{{ row.current_count }}</strong>{% else %}{{ row.current_count }}{% endif %}</td></tr>
     {% endfor %}
 </table>
 <p>この時点の状態に大会全体が戻ります。これ以降に行った変更(結果入力・構造の変更を含む)はすべて失われます。復元直前の状態は自動でバックアップされるので、復元自体を取り消すこともできます。</p>

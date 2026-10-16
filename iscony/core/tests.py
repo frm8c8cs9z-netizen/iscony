@@ -34383,11 +34383,12 @@ class TournamentBackupTests(TestCase):
         response = self.client.get(self.backup_url("restore", backup))
         self.assertContains(response, "バックアップ時点の件数")
         self.assertContains(response, "現在の件数")
-        self.assertContains(response, "core.stage")
-        self.assertEqual(response.context["count_rows"], [
-            {"model": model, "backup_count": count, "current_count": count}
-            for model, count in self.backups.backup_model_counts(backup).items()
-        ])
+        self.assertContains(response, "Stage")
+        counts = self.backups.backup_model_counts(backup)
+        self.assertEqual(
+            response.context["count_rows"],
+            self.backups.build_backup_count_rows(counts, counts),
+        )
         Category.objects.filter(pk=self.category.pk).update(name="変更")
         response = self.client.post(self.backup_url("restore", backup), follow=True)
         self.assertContains(response, f"{backup.object_count}件")
@@ -34409,6 +34410,78 @@ class TournamentBackupTests(TestCase):
         self.assertTrue(self.backup_model.objects.filter(pk=backup.pk).exists())
         self.assertRedirects(self.client.post(delete_url), url)
         self.assertFalse(self.backup_model.objects.filter(pk=backup.pk).exists())
+
+    def test_backup_list_defers_payload_for_every_backup(self):
+        self.create_backup()
+        self.create_backup()
+        response = self.client.get(reverse(
+            "tournament_backup_list", args=[self.tournament.code],
+        ))
+        self.assertEqual(response.status_code, 200)
+        backups = list(response.context["backups"])
+        self.assertEqual(len(backups), 2)
+        for backup in backups:
+            self.assertIn("payload", backup.get_deferred_fields())
+
+    def test_restore_confirmation_displays_japanese_names_and_highlights_changed_counts(self):
+        backup = self.create_backup()
+        Category.objects.create(tournament=self.tournament, name="追加カテゴリ")
+        response = self.client.get(self.backup_url("restore", backup))
+        self.assertContains(response, "データの種類")
+        self.assertContains(response, "リーグ枠")
+        self.assertContains(response, "トーナメント試合")
+        for label in self.backups.MODEL_DISPLAY_NAMES:
+            self.assertNotContains(response, label)
+        self.assertContains(
+            response,
+            "<tr><td><strong>カテゴリ</strong></td><td><strong>1</strong></td>"
+            "<td><strong>2</strong></td></tr>",
+            html=True,
+        )
+        self.assertContains(
+            response, "<tr><td>大会</td><td>1</td><td>1</td></tr>", html=True,
+        )
+        self.assertEqual(
+            [row["model"] for row in response.context["count_rows"]],
+            [label for label in self.backups.MODEL_DISPLAY_NAMES
+             if label in self.backups.backup_model_counts(backup)],
+        )
+
+    def test_backup_count_rows_follow_display_order_then_unknown_label_order(self):
+        saved_counts = {label: 2 for label in reversed(self.backups.MODEL_DISPLAY_NAMES)}
+        saved_counts["core.zfuture"] = 3
+        current_counts = {"core.afuture": 4, "core.tournament": 2}
+        rows = self.backups.build_backup_count_rows(saved_counts, current_counts)
+        self.assertEqual(
+            [row["model"] for row in rows],
+            list(self.backups.MODEL_DISPLAY_NAMES) + ["core.afuture", "core.zfuture"],
+        )
+        self.assertEqual(rows[-2:], [
+            {"model": "core.afuture", "display_name": "core.afuture",
+             "backup_count": 0, "current_count": 4, "changed": True},
+            {"model": "core.zfuture", "display_name": "core.zfuture",
+             "backup_count": 3, "current_count": 0, "changed": True},
+        ])
+        self.assertFalse(rows[0]["changed"])
+        self.assertEqual(self.backups.build_backup_count_rows({}, {}), [])
+
+    def test_backup_download_filename_uses_local_creation_time(self):
+        from datetime import datetime, timezone as datetime_timezone
+        from django.utils import timezone
+
+        backup = self.create_backup()
+        self.backup_model.objects.filter(pk=backup.pk).update(
+            created_at=datetime(2026, 10, 15, 18, 23, 45, tzinfo=datetime_timezone.utc),
+        )
+        backup.refresh_from_db()
+        with timezone.override("Asia/Tokyo"):
+            response = self.client.get(self.backup_url("download", backup))
+            timestamp = timezone.localtime(backup.created_at).strftime("%Y%m%d_%H%M%S")
+        self.assertEqual(timestamp, "20261016_032345")
+        self.assertEqual(
+            response["Content-Disposition"],
+            f'attachment; filename="iscony_backup_BACKUP_{timestamp}.json"',
+        )
 
     def test_other_tournament_backup_ids_are_not_accessible(self):
         backup = self.create_backup()

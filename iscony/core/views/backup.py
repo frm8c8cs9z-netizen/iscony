@@ -12,6 +12,7 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 from ..models import Tournament, TournamentBackup
 from ..services.backups import (
     backup_model_counts,
+    build_backup_count_rows,
     create_tournament_backup,
     current_model_counts,
     current_schema_version,
@@ -41,7 +42,7 @@ def tournament_backup_list(request, code):
         return redirect("tournament_backup_list", code=tournament.code)
     return render(request, "core/tournament_backup_list.html", {
         "tournament": tournament,
-        "backups": TournamentBackup.objects.filter(tournament=tournament),
+        "backups": TournamentBackup.objects.filter(tournament=tournament).defer("payload"),
     })
 
 
@@ -72,10 +73,7 @@ def tournament_backup_restore(request, code, backup_id):
         saved_counts = {}
         schema_error = "バックアップのデータが壊れています。"
     counts = current_model_counts(tournament)
-    rows = [
-        {"model": model, "backup_count": saved_counts.get(model, 0), "current_count": counts.get(model, 0)}
-        for model in sorted(saved_counts.keys() | counts.keys())
-    ]
+    rows = build_backup_count_rows(saved_counts, counts)
     return render(request, "core/tournament_backup_restore_confirm.html", {
         "tournament": tournament, "backup": backup,
         "count_rows": rows, "schema_error": schema_error,
@@ -99,7 +97,7 @@ def tournament_backup_download(request, code, backup_id):
     }, encoder=DjangoJSONEncoder, json_dumps_params={"ensure_ascii": False})
     filename = (
         f"iscony_backup_{backup.tournament_code}_"
-        f"{backup.created_at.strftime('%Y%m%d_%H%M%S')}.json"
+        f"{timezone.localtime(backup.created_at).strftime('%Y%m%d_%H%M%S')}.json"
     )
     response["Content-Disposition"] = content_disposition_header(True, filename)
     return response

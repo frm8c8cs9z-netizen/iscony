@@ -14,6 +14,47 @@ from django.db.migrations.recorder import MigrationRecorder
 from ..models import OperationSnapshot, Tournament, TournamentBackup
 
 
+MODEL_DISPLAY_NAMES = {
+    "core.tournament": "大会",
+    "core.category": "カテゴリ",
+    "core.stage": "Stage",
+    "core.group": "リーグ(グループ)",
+    "core.leagueentry": "リーグ枠",
+    "core.roundrobinmatch": "リーグ試合",
+    "core.roundrobinmatchleg": "リーグ試合の対戦明細",
+    "core.groupranking": "リーグ順位",
+    "core.tournamentbracket": "トーナメント表",
+    "core.tournamententry": "トーナメント枠",
+    "core.tournamentmatch": "トーナメント試合",
+    "core.tournamentmatchleg": "トーナメント試合の対戦明細",
+    "core.advancementsource": "進出元設定",
+    "core.participant": "参加者",
+    "core.participantorganizationvalue": "参加者の所属",
+    "core.tournamentorganizationfield": "所属項目",
+    "core.court": "コート",
+    "core.scheduleblock": "日程区分",
+    "core.schedule": "進行表の枠",
+    "core.schedulereplacementhistory": "進行表の差し替え履歴",
+}
+
+
+def build_backup_count_rows(saved_counts, current_counts):
+    """既知のデータは表示用の順序、未知のデータはラベル順で件数を比較する。"""
+    labels = saved_counts.keys() | current_counts.keys()
+    ordered_labels = [label for label in MODEL_DISPLAY_NAMES if label in labels]
+    ordered_labels.extend(sorted(labels - MODEL_DISPLAY_NAMES.keys()))
+    return [
+        {
+            "model": label,
+            "display_name": MODEL_DISPLAY_NAMES.get(label, label),
+            "backup_count": saved_counts.get(label, 0),
+            "current_count": current_counts.get(label, 0),
+            "changed": saved_counts.get(label, 0) != current_counts.get(label, 0),
+        }
+        for label in ordered_labels
+    ]
+
+
 def collect_tournament_objects(tournament):
     collector = NestedObjects(using=router.db_for_write(Tournament))
     collector.collect([tournament])
