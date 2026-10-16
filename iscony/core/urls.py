@@ -15,6 +15,9 @@ from .views import (
 
 
 urlpatterns = [
+    path("tournament/<str:code>/delete/", dashboard.delete_tournament_confirm, name="delete_tournament"),
+    path("backups/<int:backup_id>/revive/", backup.tournament_backup_revive, name="tournament_backup_revive"),
+    path("backups/import/", backup.tournament_backup_import, name="tournament_backup_import"),
 
     # =====================================================
     # 大会一覧

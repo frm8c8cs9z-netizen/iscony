@@ -3726,3 +3726,30 @@ def validate_tournament_score_change(
         return "次の試合に結果が入力されているため、勝敗が変わる修正はできません。"
 
     return None
+
+
+def tournament_deletion_impact(tournament):
+    from ..models import OperationSnapshot
+
+    league_matches = RoundRobinMatch.objects.filter(group__category__tournament=tournament)
+    bracket_matches = TournamentMatch.objects.filter(bracket__category__tournament=tournament)
+    return {
+        "category_count": Category.objects.filter(tournament=tournament).count(),
+        "participant_count": Participant.objects.filter(category__tournament=tournament).count(),
+        "round_robin_match_count": league_matches.count(),
+        "tournament_match_count": bracket_matches.count(),
+        "result_match_count": league_matches.filter(completed=True).count() + bracket_matches.filter(
+            Q(pair1_games__isnull=False) | Q(pair2_games__isnull=False)
+        ).count(),
+        "snapshot_count": OperationSnapshot.objects.filter(tournament=tournament).count(),
+        "backup_count": TournamentBackup.objects.filter(tournament=tournament).count(),
+    }
+
+
+def delete_tournament(tournament):
+    with transaction.atomic():
+        create_tournament_backup(
+            tournament, label=f"削除前自動: 大会「{tournament.name}」",
+            kind=TournamentBackup.KIND_AUTO_BEFORE_DELETE,
+        )
+        tournament.delete()

@@ -23,6 +23,7 @@ from django.shortcuts import (
 
 from ..models import (
     Tournament,
+    TournamentBackup,
     Category,
     Stage,
     Participant,
@@ -62,6 +63,8 @@ from ..services import (
     day_of_referee_status_map,
     category_deletion_impact,
     delete_category,
+    tournament_deletion_impact,
+    delete_tournament,
     group_deletion_impact,
     delete_group,
     tournament_bracket_deletion_impact,
@@ -110,7 +113,10 @@ def tournament_list(request):
         request,
         "core/tournament_list.html",
         {
-            "tournaments": tournaments
+            "tournaments": tournaments,
+            "deleted_backups": TournamentBackup.objects.filter(
+                tournament__isnull=True,
+            ).defer("payload").order_by("-created_at", "-pk"),
         }
     )
 
@@ -4784,4 +4790,22 @@ def move_schedule_slot_api(request, schedule_id):
         "success": True,
         "schedule_id": schedule.id,
         "court_id": target_court.id,
+    })
+
+
+def delete_tournament_confirm(request, code):
+    if request.method not in ("GET", "POST"):
+        return HttpResponseNotAllowed(["GET", "POST"])
+    tournament = get_object_or_404(Tournament, code=code)
+    if request.method == "POST":
+        if request.POST.get("confirm_code", "").strip() == tournament.code:
+            name = tournament.name
+            delete_tournament(tournament)
+            messages.success(
+                request, f"{name}({code})を削除しました。大会一覧の「削除した大会」から復活できます。",
+            )
+            return redirect("tournament_list")
+        messages.error(request, "大会コードが一致しません。削除していません。")
+    return render(request, "core/delete_tournament_confirm.html", {
+        "tournament": tournament, "impact": tournament_deletion_impact(tournament),
     })

@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, time
 import json
 
+from django.apps import apps
 from django.contrib.admin.utils import NestedObjects
 from django.core import serializers
 from django.core.exceptions import ValidationError
@@ -115,7 +116,7 @@ def current_model_counts(tournament):
     ).items()))
 
 
-def _deserialize_backup(backup, using):
+def _deserialize_backup(backup, using, *, tournament_pk=None):
     """削除前に形式・対象大会・重複IDを確認する。"""
     if not isinstance(backup.payload, list):
         raise ValidationError("バックアップのデータが壊れています。")
@@ -132,7 +133,7 @@ def _deserialize_backup(backup, using):
             raise ValidationError("バックアップのデータが壊れています。")
         keys.add(key)
         if isinstance(obj, Tournament):
-            if obj.pk != backup.tournament_id:
+            if obj.pk != (backup.tournament_id if tournament_pk is None else tournament_pk):
                 raise ValidationError("バックアップの大会が一致しません。")
             tournament_count += 1
     if tournament_count != 1:
@@ -214,3 +215,135 @@ def restore_tournament_backup(backup):
         raise ValidationError(
             f"復元中にエラーが発生したため、何も変更していません: {error}"
         ) from error
+
+
+def backup_tournament_identity(payload):
+    """payloadの唯一の大会から元のID・コード・名前を取得する。"""
+    try:
+        tournaments = [item for item in payload if item["model"] == "core.tournament"]
+        if len(tournaments) != 1:
+            raise ValueError
+        item = tournaments[0]
+        pk = item["pk"]
+        code, name = item["fields"]["code"], item["fields"]["name"]
+        if (
+            not isinstance(pk, int) or isinstance(pk, bool)
+            or not isinstance(code, str) or not code or len(code) > 20
+            or not isinstance(name, str) or not name or len(name) > 100
+        ):
+            raise ValueError
+        return pk, code, name
+    except (TypeError, KeyError, ValueError) as error:
+        raise ValidationError("バックアップに対象大会のデータがありません。") from error
+
+
+def _validate_schema_version(version):
+    current = current_schema_version()
+    if version != current:
+        raise ValidationError(
+            "バックアップ作成時とデータ構造のバージョンが異なるため復元できません"
+            f" (バックアップ: {version} / 現在: {current})"
+        )
+
+
+def _validate_payload_models(payload):
+    allowed = {
+        model._meta.label_lower for model in apps.get_app_config("core").get_models()
+    } - {"core.operationsnapshot", "core.tournamentbackup", "core.scoresheettemplate"}
+    if not isinstance(payload, list) or any(
+        not isinstance(item, dict) or not isinstance(item.get("model"), str)
+        or item["model"] not in allowed
+        for item in payload
+    ):
+        raise ValidationError("大会のデータ以外が含まれているため読み込めません。")
+
+
+def revive_tournament_from_backup(backup):
+    using = router.db_for_write(Tournament)
+    try:
+        with transaction.atomic(using=using):
+            if backup.tournament_id is not None:
+                raise ValidationError("この大会は削除されていません。通常の復元を使ってください。")
+            _validate_schema_version(backup.schema_version)
+            _validate_payload_models(backup.payload)
+            pk, code, name = backup_tournament_identity(backup.payload)
+            objects, keys = _deserialize_backup(backup, using, tournament_pk=pk)
+            if Tournament.objects.using(using).filter(code=code).exists():
+                raise ValidationError(f"同じ大会コード({code})の大会が既にあります。")
+            by_model = defaultdict(list)
+            for item in objects:
+                by_model[type(item.object)].append(item.object.pk)
+            for model, pks in by_model.items():
+                if model._base_manager.using(using).filter(pk__in=pks).exists():
+                    raise ValidationError("復元対象のIDが他の大会のデータと重複しています。")
+            notices = []
+            for item in objects:
+                obj = item.object
+                if isinstance(obj, Tournament) and obj.score_sheet_template_id:
+                    model = Tournament._meta.get_field("score_sheet_template").remote_field.model
+                    if not model.objects.using(using).filter(pk=obj.score_sheet_template_id).exists():
+                        obj.score_sheet_template_id = None
+                        notices.append("採点票テンプレートが見つからないため、未設定として復元しました。")
+                item.save(using=using)
+            connections[using].check_constraints()
+            tournament = Tournament.objects.using(using).get(pk=pk)
+            restored_keys = {
+                (obj._meta.label_lower, obj.pk)
+                for obj in collect_tournament_objects(tournament)
+            }
+            if restored_keys != keys:
+                raise ValidationError("バックアップに大会外または不整合なデータが含まれています。")
+            relinked = TournamentBackup.objects.using(using).filter(
+                tournament__isnull=True,
+                payload__contains=[{"model": "core.tournament", "pk": pk}],
+            ).update(tournament=tournament)
+            return {
+                "tournament": tournament, "restored_objects": len(objects),
+                "relinked_backups": relinked, "notices": notices,
+            }
+    except ValidationError:
+        raise
+    except Exception as error:
+        raise ValidationError(
+            f"復元中にエラーが発生したため、何も変更していません: {error}"
+        ) from error
+
+
+def import_backup_file(uploaded_file):
+    limit = 20 * 1024 * 1024
+    if uploaded_file.size > limit:
+        raise ValidationError("バックアップファイルは20MB以内にしてください。")
+    try:
+        raw = uploaded_file.read(limit + 1)
+        if len(raw) > limit:
+            raise ValidationError("バックアップファイルは20MB以内にしてください。")
+        data = json.loads(raw)
+    except (ValueError, UnicodeError, RecursionError) as error:
+        raise ValidationError("JSONファイルとして読み込めません。") from error
+    if not isinstance(data, dict) or (
+        data.get("format") != "iscony-tournament-backup" or data.get("format_version") != 1
+    ):
+        raise ValidationError("大会バックアップのファイル形式またはバージョンが異なります。")
+    _validate_schema_version(data.get("schema_version"))
+    payload = data.get("objects")
+    _validate_payload_models(payload)
+    pk, code, name = backup_tournament_identity(payload)
+    # 表示用メタデータと実際の復元対象が異なるファイルを受け付けない。
+    if data.get("tournament_code") != code or data.get("tournament_name") != name:
+        raise ValidationError("バックアップの大会が一致しません。")
+    candidate = TournamentBackup(payload=payload, tournament_id=pk)
+    try:
+        _deserialize_backup(candidate, router.db_for_write(Tournament))
+    except Exception as error:
+        raise ValidationError("バックアップのデータが壊れています。") from error
+    tournament = Tournament.objects.filter(pk=pk).first()
+    if tournament and tournament.code != code:
+        raise ValidationError(
+            f"このファイルの大会IDは、別の大会(コード: {tournament.code})で使われているため読み込めません。"
+        )
+    return TournamentBackup.objects.create(
+        tournament=tournament, tournament_code=code, tournament_name=name,
+        schema_version=data["schema_version"], kind=TournamentBackup.KIND_MANUAL,
+        label=f"ファイル読み込み: {data.get('label', '')}"[:200],
+        object_count=len(payload), payload=payload,
+    )

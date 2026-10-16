@@ -34717,3 +34717,193 @@ class SnapshotRestoreAfterDeletionTests(CategoryDeletionFixtureMixin, TestCase):
         self.assertRedirects(response, reverse("tournament_snapshot_list", args=[self.tournament.code]))
         self.assertEqual([str(m) for m in get_messages(response.wsgi_request)], [self.deleted_message])
         self.assertEqual(self.serialized_state(), before)
+
+
+class TournamentBackupStageTwoTests(TestCase):
+    setUp = TournamentBackupTests.setUp
+    create_backup = TournamentBackupTests.create_backup
+    serialized_state = TournamentBackupTests.serialized_state
+    backup_url = TournamentBackupTests.backup_url
+
+    def delete_url(self):
+        return reverse("delete_tournament", args=[self.tournament.code])
+
+    def delete_via_view(self):
+        return self.client.post(self.delete_url(), {"confirm_code": self.tournament.code})
+
+    def downloaded_data(self, backup):
+        import json
+        return json.loads(self.client.get(self.backup_url("download", backup)).content)
+
+    def upload(self, data):
+        import json
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        content = data if isinstance(data, bytes) else json.dumps(data).encode()
+        return self.client.post(reverse("tournament_backup_import"), {
+            "backup_file": SimpleUploadedFile("backup.json", content, content_type="application/json"),
+        })
+
+    def test_confirmation_wrong_code_and_menu(self):
+        snapshot = create_tournament_snapshot(self.tournament, label="保存")
+        self.create_backup()
+        state = self.serialized_state()
+        response = self.client.get(self.delete_url())
+        for text in (self.tournament.name, self.tournament.code, "スナップショット(1件)", "大会バックアップ(1件", 'class="danger-button" disabled'):
+            self.assertContains(response, text)
+        self.assertEqual(response.context["impact"], {
+            "category_count": 1, "participant_count": 2,
+            "round_robin_match_count": 1, "tournament_match_count": 1,
+            "result_match_count": 0, "snapshot_count": 1, "backup_count": 1,
+        })
+        self.assertContains(self.client.get(reverse("maintenance_menu", args=[self.tournament.code])), self.delete_url())
+        response = self.client.post(self.delete_url(), {"confirm_code": "wrong"})
+        self.assertContains(response, "大会コードが一致しません。削除していません。")
+        self.assertEqual(self.serialized_state(), state)
+        self.assertTrue(OperationSnapshot.objects.filter(pk=snapshot.pk).exists())
+        self.assertEqual(self.backup_model.objects.count(), 1)
+
+    def test_delete_results_revive_original_ids_relinks_and_deferred_list(self):
+        self.match.completed = True
+        self.match.save(update_fields=["completed"])
+        self.final_match.pair1_games = 2
+        self.final_match.save(update_fields=["pair1_games"])
+        snapshot = create_tournament_snapshot(self.tournament, label="保存")
+        manual = self.create_backup()
+        state, other_state = self.serialized_state(), self.serialized_state(self.other)
+        pk = self.tournament.pk
+        self.assertEqual(self.client.get(self.delete_url()).context["impact"]["result_match_count"], 2)
+        self.assertRedirects(self.delete_via_view(), reverse("tournament_list"))
+        self.assertFalse(Tournament.objects.filter(pk=pk).exists())
+        self.assertFalse(OperationSnapshot.objects.filter(pk=snapshot.pk).exists())
+        for model in (Category, Stage, Group, Participant, RoundRobinMatch, TournamentBracket, TournamentMatch, Schedule, ScheduleReplacementHistory):
+            self.assertFalse(model.objects.filter(pk__in=[item["pk"] for item in manual.payload if item["model"] == model._meta.label_lower]).exists())
+        self.assertEqual(self.serialized_state(self.other), other_state)
+        self.assertEqual(self.backup_model.objects.filter(tournament__isnull=True).count(), 2)
+        automatic = self.backup_model.objects.get(kind=self.backup_model.KIND_AUTO_BEFORE_DELETE)
+        self.assertEqual(automatic.label, f"削除前自動: 大会「{self.tournament.name}」")
+        listing = self.client.get(reverse("tournament_list"))
+        self.assertContains(listing, "削除した大会")
+        url = reverse("tournament_backup_revive", args=[automatic.pk])
+        self.assertContains(listing, url)
+        for backup in listing.context["deleted_backups"]:
+            self.assertIn("payload", backup.get_deferred_fields())
+        self.assertContains(self.client.get(url), "スナップショットは戻りません。")
+        self.assertRedirects(self.client.post(url), reverse("maintenance_menu", args=[self.tournament.code]))
+        self.assertEqual(self.serialized_state(), state)
+        self.assertEqual(self.serialized_state(self.other), other_state)
+        self.assertEqual(self.backup_model.objects.filter(tournament_id=pk).count(), 2)
+        self.assertFalse(OperationSnapshot.objects.filter(tournament_id=pk).exists())
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_revive_rejects_existing_tournament_schema_and_duplicate_code(self):
+        backup = self.create_backup()
+        url = reverse("tournament_backup_revive", args=[backup.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+        with self.assertRaisesMessage(ValidationError, "この大会は削除されていません"):
+            self.backups.revive_tournament_from_backup(backup)
+        self.delete_via_view()
+        backup.refresh_from_db()
+        version = backup.schema_version
+        backup.schema_version = "old"
+        backup.save(update_fields=["schema_version"])
+        self.assertNotContains(self.client.get(url), '<button type="submit">')
+        self.assertRedirects(self.client.post(url), url)
+        backup.schema_version = version
+        backup.save(update_fields=["schema_version"])
+        Tournament.objects.create(code=self.tournament.code, name="同コード")
+        with self.assertRaisesMessage(ValidationError, "同じ大会コード(BACKUP)の大会が既にあります。"):
+            self.backups.revive_tournament_from_backup(backup)
+
+    def test_import_download_before_and_after_delete_and_revive(self):
+        data = self.downloaded_data(self.create_backup())
+        response = self.upload(data)
+        imported = self.backup_model.objects.first()
+        self.assertEqual(imported.kind, self.backup_model.KIND_MANUAL)
+        self.assertEqual(imported.label, "ファイル読み込み: 開始前")
+        self.assertEqual(imported.tournament_id, self.tournament.pk)
+        self.assertRedirects(response, self.backup_url("restore", imported))
+        state = self.serialized_state()
+        self.delete_via_view()
+        response = self.upload(data)
+        imported = self.backup_model.objects.first()
+        self.assertIsNone(imported.tournament_id)
+        url = reverse("tournament_backup_revive", args=[imported.pk])
+        self.assertRedirects(response, url)
+        self.assertRedirects(self.client.post(url), reverse("maintenance_menu", args=[self.tournament.code]))
+        self.assertEqual(self.serialized_state(), state)
+
+    def test_invalid_imports_create_no_backup(self):
+        from copy import deepcopy
+        from django.contrib.messages import get_messages
+        data = self.downloaded_data(self.create_backup())
+        invalid = [b"not JSON", [], {"format": "wrong"}]
+        for payload in (None, [{"model": []}], [None]):
+            item = deepcopy(data)
+            item["objects"] = payload
+            invalid.append(item)
+        for key, value in (("format", "wrong"), ("format_version", 2), ("schema_version", "old")):
+            item = deepcopy(data)
+            item[key] = value
+            invalid.append(item)
+        for model in ("auth.user", "core.operationsnapshot", "core.tournamentbackup", "core.scoresheettemplate", "core.unknown"):
+            item = deepcopy(data)
+            item["objects"].append({"model": model, "pk": 99, "fields": {}})
+            invalid.append(item)
+        for count in (0, 2):
+            item = deepcopy(data)
+            tournament = next(obj for obj in item["objects"] if obj["model"] == "core.tournament")
+            item["objects"] = [obj for obj in item["objects"] if obj["model"] != "core.tournament"] + [tournament] * count
+            invalid.append(item)
+        for index, item in enumerate(invalid):
+            with self.subTest(index=index):
+                response = self.upload(item)
+                self.assertRedirects(response, reverse("tournament_list"))
+                self.assertTrue(list(get_messages(response.wsgi_request)))
+                self.assertEqual(self.backup_model.objects.count(), 1)
+        self.tournament.code = "DIFFERENT"
+        self.tournament.save(update_fields=["code"])
+        response = self.upload(data)
+        self.assertRedirects(response, reverse("tournament_list"))
+        self.assertIn("別の大会(コード: DIFFERENT)", str(list(get_messages(response.wsgi_request))[0]))
+        self.assertEqual(self.backup_model.objects.count(), 1)
+        self.assertRedirects(self.client.post(reverse("tournament_backup_import")), reverse("tournament_list"))
+        self.assertEqual(self.client.get(reverse("tournament_backup_import")).status_code, 405)
+
+    def test_revive_corruption_and_collisions_roll_back(self):
+        from copy import deepcopy
+        backup = self.create_backup()
+        self.delete_via_view()
+        backup.refresh_from_db()
+        valid = deepcopy(backup.payload)
+        category = next(obj for obj in backup.payload if obj["model"] == "core.category")
+        category["pk"] = self.other_category.pk
+        with self.assertRaisesMessage(ValidationError, "復元対象のID"):
+            self.backups.revive_tournament_from_backup(backup)
+        for change in ("duplicate", "foreign", "token"):
+            backup.payload = deepcopy(valid)
+            if change == "duplicate":
+                backup.payload.append(deepcopy(backup.payload[0]))
+            elif change == "foreign":
+                next(obj for obj in backup.payload if obj["model"] == "core.category")["fields"]["tournament"] = self.other.pk
+            else:
+                next(obj for obj in backup.payload if obj["model"] == "core.tournament")["fields"]["public_token"] = str(self.other.public_token)
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                self.backups.revive_tournament_from_backup(backup)
+            self.assertFalse(Tournament.objects.filter(pk=self.tournament.pk).exists())
+            self.assertTrue(self.backup_model.objects.filter(pk=backup.pk, tournament__isnull=True).exists())
+        backup.payload = valid
+        self.assertEqual(self.backups.revive_tournament_from_backup(backup)["relinked_backups"], 2)
+
+    def test_size_limit_and_missing_template_notice(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        large = SimpleUploadedFile("large.json", b"{}")
+        large.size = 20 * 1024 * 1024 + 1
+        with self.assertRaisesMessage(ValidationError, "20MB"):
+            self.backups.import_backup_file(large)
+        backup = self.create_backup()
+        self.delete_via_view()
+        backup.refresh_from_db()
+        next(obj for obj in backup.payload if obj["model"] == "core.tournament")["fields"]["score_sheet_template"] = 999999
+        result = self.backups.revive_tournament_from_backup(backup)
+        self.assertIsNone(result["tournament"].score_sheet_template_id)
+        self.assertTrue(result["notices"])

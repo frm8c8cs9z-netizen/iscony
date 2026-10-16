@@ -1,0 +1,24 @@
+{% extends "core/base.html" %}
+{% block title %}削除した大会の復活確認{% endblock %}
+{% block content %}
+<h2>{{ backup.tournament_name }} の復活確認</h2>
+<p>大会コード: {{ backup.tournament_code }}</p>
+<p>ラベル: {{ backup.label }}</p>
+<p>作成日時: {{ backup.created_at|date:"Y-m-d H:i" }}</p>
+<table>
+    <tr><th>データの種類</th><th>バックアップ時点の件数</th></tr>
+    {% for row in count_rows %}
+    <tr><td>{{ row.display_name }}</td><td>{{ row.backup_count }}</td></tr>
+    {% endfor %}
+</table>
+<p class="score-input-safety-note">この大会を、バックアップの時点の状態で復活させます。スナップショットは戻りません。</p>
+{% if schema_error %}
+<p role="alert">{{ schema_error }}</p>
+{% else %}
+<form method="post">
+    {% csrf_token %}
+    <button type="submit">大会を復活</button>
+</form>
+{% endif %}
+<p><a href="{% url 'tournament_list' %}">大会一覧へ戻る</a></p>
+{% endblock %}

@@ -38,4 +38,25 @@
 
 </ul>
 
+<h3>バックアップファイルから読み込む</h3>
+<form method="post" enctype="multipart/form-data" action="{% url 'tournament_backup_import' %}">
+    {% csrf_token %}
+    <input type="file" name="backup_file" accept=".json">
+    <button type="submit">読み込む</button>
+</form>
+{% if deleted_backups %}
+<h3>削除した大会</h3>
+<table>
+    <tr><th>大会名</th><th>大会コード</th><th>ラベル</th><th>作成日時</th><th>件数</th><th>操作</th></tr>
+    {% for backup in deleted_backups %}
+    <tr>
+        <td>{{ backup.tournament_name }}</td><td>{{ backup.tournament_code }}</td>
+        <td>{{ backup.label }}</td><td>{{ backup.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ backup.object_count }}</td>
+        <td><a href="{% url 'tournament_backup_revive' backup.pk %}">復活</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
 {% endblock %}

@@ -250,6 +250,11 @@
         </td>
         <td>既存大会から新しい大会を作成します。</td>
     </tr>
+    <tr>
+        <td>大会の削除</td>
+        <td><a href="{% url 'delete_tournament' tournament.code %}">大会削除</a></td>
+        <td>この大会を削除します。削除の直前に自動で大会バックアップを取るので、大会一覧から復活できます。</td>
+    </tr>
 </table>
 
 {% endblock %}
