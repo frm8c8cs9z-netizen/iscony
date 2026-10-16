@@ -60,6 +60,8 @@ from ..services import (
     auto_assign_tournament_range_to_court,
     clone_tournament_without_results,
     day_of_referee_status_map,
+    category_deletion_impact,
+    delete_category,
     group_deletion_impact,
     delete_group,
     tournament_bracket_deletion_impact,
@@ -485,6 +487,40 @@ def edit_category(request, code, category_id):
             "form": form,
             "page_title": "カテゴリ編集",
             "submit_label": "更新",
+        },
+    )
+
+
+def delete_category_confirm(request, code, category_id):
+    """カテゴリの削除確認・実削除を行う。"""
+
+    tournament = get_object_or_404(Tournament, code=code)
+    category = get_object_or_404(Category, id=category_id, tournament=tournament)
+    back_url = safe_next_url(request) or reverse(
+        "category_management", kwargs={"code": tournament.code},
+    )
+    impact = category_deletion_impact(category)
+
+    if request.method == "POST":
+        if impact["blocked"]:
+            messages.error(
+                request,
+                "結果が入力済みのため削除できません。先に結果を削除してください。",
+            )
+        else:
+            name = category.name
+            delete_category(category)
+            messages.success(request, f"{name} を削除しました。")
+            return redirect(back_url)
+
+    return render(
+        request,
+        "core/delete_category_confirm.html",
+        {
+            "tournament": tournament,
+            "category": category,
+            "impact": impact,
+            "back_url": back_url,
         },
     )
 

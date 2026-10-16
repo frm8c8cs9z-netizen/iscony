@@ -3091,6 +3091,40 @@ def delete_stage(stage):
         stage.delete()
 
 
+def category_deletion_impact(category):
+    stages = list(
+        Stage.objects.filter(category=category).order_by("display_order", "name")
+    )
+    stages_with_results = [stage for stage in stages if _stage_has_results(stage)]
+
+    return {
+        "stages": stages,
+        "participant_count": Participant.objects.filter(category=category).count(),
+        "league_entry_count": LeagueEntry.objects.filter(category=category).count(),
+        "tournament_entry_count": TournamentEntry.objects.filter(
+            bracket__category=category,
+        ).count(),
+        "round_robin_match_count": RoundRobinMatch.objects.filter(
+            group__category=category,
+        ).count(),
+        "tournament_match_count": TournamentMatch.objects.filter(
+            bracket__category=category,
+        ).count(),
+        "stages_with_results": stages_with_results,
+        "blocked": bool(stages_with_results),
+    }
+
+
+def delete_category(category):
+    with transaction.atomic():
+        create_tournament_backup(
+            category.tournament,
+            label=f"削除前自動: カテゴリ「{category.name}」",
+            kind=TournamentBackup.KIND_AUTO_BEFORE_DELETE,
+        )
+        category.delete()
+
+
 def group_deletion_impact(group):
     entries = LeagueEntry.objects.filter(group=group)
     matches = RoundRobinMatch.objects.filter(group=group).select_related(

@@ -20,7 +20,7 @@
 """
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -43,6 +43,12 @@ from ..models import (
 
 
 AUTO_TYPE_STAGE_ADVANCEMENT = "before_stage_advancement"
+
+SNAPSHOT_STRUCTURE_DELETED_MESSAGE = (
+    "このスナップショットを取ったあとで、カテゴリ・リーグ・トーナメント表のどれかが"
+    "削除されています。そのため、このスナップショットでは元に戻せません。"
+    "「大会バックアップ」画面から戻してください。"
+)
 
 
 def _category_schedule_queryset(category):
@@ -594,7 +600,14 @@ def restore_category_from_tournament_snapshot(snapshot, category):
 
     payload = _find_category_payload(snapshot, category)
 
-    return _restore_category_payload(category, payload)
+    try:
+        with transaction.atomic():
+            result = _restore_category_payload(category, payload)
+            connection.check_constraints()
+    except IntegrityError as error:
+        raise ValidationError(SNAPSHOT_STRUCTURE_DELETED_MESSAGE) from error
+
+    return result
 
 
 def restore_tournament_snapshot(snapshot):
@@ -628,7 +641,7 @@ def restore_tournament_snapshot(snapshot):
 
     if missing_category_ids:
         raise ValidationError(
-            "スナップショット内のカテゴリが現在の大会に見つかりません。"
+            SNAPSHOT_STRUCTURE_DELETED_MESSAGE
         )
 
     totals = {
@@ -644,30 +657,34 @@ def restore_tournament_snapshot(snapshot):
         "deleted_extra_matches": 0,
     }
 
-    with transaction.atomic():
-        for category in categories.values():
-            _category_schedule_queryset(category).delete()
+    try:
+        with transaction.atomic():
+            for category in categories.values():
+                _category_schedule_queryset(category).delete()
 
-        for category_payload in category_payloads:
-            category = categories[category_payload["category_id"]]
-            result = _restore_category_payload(
-                category,
-                category_payload,
-                validate_conflicts=False,
-                delete_existing_schedules=False,
-            )
-            totals["categories"] += 1
-            totals["league_entries"] += result["league_entries"]
-            totals["tournament_entries"] += result["tournament_entries"]
-            totals["round_robin_matches"] += result["round_robin_matches"]
-            totals["tournament_matches"] += result["tournament_matches"]
-            totals["group_rankings"] += result["group_rankings"]
-            totals["schedules"] += result["schedules"]
-            totals["schedule_replacement_histories"] += result[
-                "schedule_replacement_histories"
-            ]
-            totals["advancement_sources"] += result["advancement_sources"]
-            totals["deleted_extra_matches"] += result["deleted_extra_matches"]
+            for category_payload in category_payloads:
+                category = categories[category_payload["category_id"]]
+                result = _restore_category_payload(
+                    category,
+                    category_payload,
+                    validate_conflicts=False,
+                    delete_existing_schedules=False,
+                )
+                totals["categories"] += 1
+                totals["league_entries"] += result["league_entries"]
+                totals["tournament_entries"] += result["tournament_entries"]
+                totals["round_robin_matches"] += result["round_robin_matches"]
+                totals["tournament_matches"] += result["tournament_matches"]
+                totals["group_rankings"] += result["group_rankings"]
+                totals["schedules"] += result["schedules"]
+                totals["schedule_replacement_histories"] += result[
+                    "schedule_replacement_histories"
+                ]
+                totals["advancement_sources"] += result["advancement_sources"]
+                totals["deleted_extra_matches"] += result["deleted_extra_matches"]
+            connection.check_constraints()
+    except IntegrityError as error:
+        raise ValidationError(SNAPSHOT_STRUCTURE_DELETED_MESSAGE) from error
 
     return totals
 
@@ -700,26 +717,30 @@ def restore_category_schedule_block_from_tournament_snapshot(
 
     _validate_schedule_restore_conflicts(category, schedule_items)
 
-    with transaction.atomic():
-        _category_schedule_queryset(category).filter(
-            schedule_block=schedule_block,
-        ).delete()
+    try:
+        with transaction.atomic():
+            _category_schedule_queryset(category).filter(
+                schedule_block=schedule_block,
+            ).delete()
 
-        created_count = 0
+            created_count = 0
 
-        for item in schedule_items:
-            Schedule.objects.create(
-                id=item["id"],
-                schedule_block_id=item["schedule_block_id"],
-                court_id=item["court_id"],
-                order=item["order"],
-                round_robin_match_id=item["round_robin_match_id"],
-                tournament_match_id=item["tournament_match_id"],
-                called=item["called"],
-                started=item["started"],
-                finished=item["finished"],
-            )
-            created_count += 1
+            for item in schedule_items:
+                Schedule.objects.create(
+                    id=item["id"],
+                    schedule_block_id=item["schedule_block_id"],
+                    court_id=item["court_id"],
+                    order=item["order"],
+                    round_robin_match_id=item["round_robin_match_id"],
+                    tournament_match_id=item["tournament_match_id"],
+                    called=item["called"],
+                    started=item["started"],
+                    finished=item["finished"],
+                )
+                created_count += 1
+            connection.check_constraints()
+    except IntegrityError as error:
+        raise ValidationError(SNAPSHOT_STRUCTURE_DELETED_MESSAGE) from error
 
     return {
         "schedules": created_count,

@@ -881,5 +881,10 @@ urlpatterns = [
         dashboard.edit_category,
         name="edit_category",
     ),
+    path(
+        "tournament/<str:code>/category/<int:category_id>/delete/",
+        dashboard.delete_category_confirm,
+        name="delete_category",
+    ),
 
 ]

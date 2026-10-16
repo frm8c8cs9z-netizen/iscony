@@ -53,6 +53,10 @@
                 <a href="{% url 'category_stage_management' tournament.code category.id %}">
                     Stage管理
                 </a>
+                ／
+                <a href="{% url 'delete_category' tournament.code category.id %}">
+                    削除
+                </a>
             </td>
         </tr>
     {% empty %}

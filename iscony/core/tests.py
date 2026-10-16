@@ -34524,3 +34524,196 @@ class TournamentBackupTests(TestCase):
         self.assertEqual(self.serialized_state(), original)
         self.assertEqual(self.serialized_state(self.other), other_original)
         self.assertEqual(self.backup_model.objects.count(), count)
+
+
+class CategoryDeletionFixtureMixin:
+    """リーグ・トーナメント・進行表を持つカテゴリ削除用の構成。"""
+
+    setUp = TournamentBackupTests.setUp
+    serialized_state = TournamentBackupTests.serialized_state
+
+    def category_delete_url(self):
+        return reverse("delete_category", args=[self.tournament.code, self.category.pk])
+
+
+class DeleteCategoryTests(CategoryDeletionFixtureMixin, TestCase):
+    def test_deletion_cascades_and_preserves_other_category_snapshots_and_backups(self):
+        from .services.operations import category_deletion_impact
+
+        other_category = Category.objects.create(tournament=self.tournament, name="残すカテゴリ")
+        other_stage = Stage.objects.create(
+            category=other_category, name="残すStage", stage_type=Stage.TYPE_LEAGUE,
+        )
+        other_group = Group.objects.create(
+            category=other_category, stage=other_stage, name="残すリーグ",
+        )
+        other_entry = create_league_entry_with_participant(
+            category=other_category, group=other_group, pair_code="OTHER",
+            display_order=1, player1_name="残す選手", player2_name="",
+        )
+        other_entry2 = create_league_entry_with_participant(
+            category=other_category, group=other_group, pair_code="OTHER2",
+            display_order=2, player1_name="残す選手2", player2_name="",
+        )
+        other_match = RoundRobinMatch.objects.create(
+            group=other_group, pair1=other_entry, pair2=other_entry2,
+        )
+        other_schedule = Schedule.objects.create(
+            schedule_block=self.block, court=self.court, order=3,
+            round_robin_match=other_match,
+        )
+        GroupRanking.objects.create(group=self.group, pair=self.entries[0], rank=1)
+        snapshot = create_tournament_snapshot(self.tournament, label="削除前")
+        backup = self.backups.create_tournament_backup(self.tournament, label="手動保存")
+        before = self.serialized_state()
+        other_before = self.serialized_state(self.other)
+        deleted_keys = {
+            (item["model"], item["pk"]) for item in before
+            if item["model"] in {
+                "core.category", "core.stage", "core.group", "core.tournamentbracket",
+                "core.participant", "core.leagueentry", "core.tournamententry",
+                "core.roundrobinmatch", "core.tournamentmatch", "core.schedule",
+                "core.advancementsource", "core.groupranking", "core.schedulereplacementhistory",
+            }
+        }
+        preserved_keys = {
+            (obj._meta.label_lower, obj.pk) for obj in (
+                other_category, other_stage, other_group, other_entry,
+                other_entry.participant, other_entry2, other_entry2.participant,
+                other_match, other_schedule,
+            )
+        }
+        deleted_keys -= preserved_keys
+        impact = category_deletion_impact(self.category)
+        self.assertEqual(impact["stages"], [self.stage, self.final_stage])
+        self.assertFalse(impact["blocked"])
+        response = self.client.post(self.category_delete_url())
+        self.assertRedirects(response, reverse("category_management", args=[self.tournament.code]))
+        self.assertEqual([str(m) for m in get_messages(response.wsgi_request)], ["女子A を削除しました。"])
+        after = self.serialized_state()
+        after_keys = {(item["model"], item["pk"]) for item in after}
+        self.assertFalse(deleted_keys & after_keys)
+        self.assertEqual(after, [
+            item for item in before if (item["model"], item["pk"]) not in deleted_keys
+        ])
+        self.assertEqual(self.serialized_state(self.other), other_before)
+        self.assertTrue(OperationSnapshot.objects.filter(pk=snapshot.pk, category=None).exists())
+        self.assertTrue(self.backup_model.objects.filter(pk=backup.pk).exists())
+        auto = self.backup_model.objects.get(kind=self.backup_model.KIND_AUTO_BEFORE_DELETE)
+        self.assertEqual(self.backup_model.objects.count(), 2)
+        self.assertEqual(auto.label, "削除前自動: カテゴリ「女子A」")
+        self.backups.restore_tournament_backup(auto)
+        self.assertEqual(self.serialized_state(), before)
+        self.assertTrue(OperationSnapshot.objects.filter(pk=snapshot.pk).exists())
+        self.assertTrue(self.backup_model.objects.filter(pk=backup.pk).exists())
+
+    def assert_results_block_deletion(self, stage):
+        before = self.serialized_state()
+        for response in (self.client.get(self.category_delete_url()),
+                         self.client.post(self.category_delete_url())):
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, '<form method="post">')
+            self.assertNotContains(response, 'id="delete-button"')
+            self.assertContains(response, "結果が入力済みのため削除できません。先に結果を削除してください。")
+            self.assertEqual(response.context["impact"]["stages_with_results"], [stage])
+            self.assertEqual(self.serialized_state(), before)
+            self.assertEqual(self.backup_model.objects.count(), 0)
+
+    def test_league_results_block_get_and_post_without_backup(self):
+        RoundRobinMatch.objects.filter(pk=self.match.pk).update(completed=True)
+        self.assert_results_block_deletion(self.stage)
+
+    def test_tournament_results_block_get_and_post_without_backup(self):
+        TournamentMatch.objects.filter(pk=self.final_match.pk).update(pair1_games=0)
+        self.assert_results_block_deletion(self.final_stage)
+
+    def test_confirmation_counts_warnings_and_management_link(self):
+        response = self.client.get(self.category_delete_url())
+        for text in (
+            "女子A の削除確認", "予選 (リーグ)", "決勝 (トーナメント)",
+            "参加者数: 2", "リーグ枠数: 2", "トーナメント枠数: 2",
+            "リーグ試合数: 1", "トーナメント試合数: 1",
+            "このカテゴリの公開ページのURLは使えなくなります。",
+            "削除したあとは、大会スナップショットからの復元はできなくなります。",
+            "削除の直前に自動で大会バックアップを取ります。",
+            'id="delete-button"', 'class="danger-button"', "return confirm(",
+        ):
+            self.assertContains(response, text)
+        self.assertEqual(self.backup_model.objects.count(), 0)
+        self.assertContains(
+            self.client.get(reverse("category_management", args=[self.tournament.code])),
+            f'href="{self.category_delete_url()}"',
+        )
+
+    def test_other_tournament_category_is_404_for_get_and_post(self):
+        url = reverse("delete_category", args=[self.tournament.code, self.other_category.pk])
+        for method in (self.client.get, self.client.post):
+            self.assertEqual(method(url).status_code, 404)
+        self.assertEqual(self.backup_model.objects.count(), 0)
+
+    def test_safe_next_and_external_next(self):
+        default = reverse("category_management", args=[self.tournament.code])
+        url = self.category_delete_url() + "?" + urlencode({"next": "https://example.com/"})
+        self.assertEqual(self.client.get(url).context["back_url"], default)
+        target = reverse("maintenance_menu", args=[self.tournament.code])
+        url = self.category_delete_url() + "?" + urlencode({"next": target})
+        self.assertEqual(self.client.get(url).context["back_url"], target)
+        self.assertRedirects(self.client.post(url), target)
+
+
+class SnapshotRestoreAfterDeletionTests(CategoryDeletionFixtureMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        from .services.snapshots import SNAPSHOT_STRUCTURE_DELETED_MESSAGE
+
+        self.deleted_message = SNAPSHOT_STRUCTURE_DELETED_MESSAGE
+        self.snapshot = create_tournament_snapshot(self.tournament, label="構造削除前")
+
+    def delete_group_and_change_remaining_data(self):
+        from .services.operations import delete_group
+
+        delete_group(self.group)
+        # 復元途中で残存データを書き戻しても、失敗時にすべて戻ることを確認する。
+        TournamentEntry.objects.filter(pk=self.final_entries[1].pk).update(display_order=7)
+        TournamentMatch.objects.filter(pk=self.final_match.pk).update(pair1_games=3)
+        Schedule.objects.filter(tournament_match=self.final_match).update(called=True)
+
+    def assert_failed_restore_changes_nothing(self, restore):
+        before = self.serialized_state()
+        snapshots_before = list(OperationSnapshot.objects.order_by("pk").values())
+        backups_before = list(self.backup_model.objects.order_by("pk").values())
+        with self.assertRaisesMessage(ValidationError, self.deleted_message):
+            restore()
+        self.assertEqual(self.serialized_state(), before)
+        self.assertEqual(list(OperationSnapshot.objects.order_by("pk").values()), snapshots_before)
+        self.assertEqual(list(self.backup_model.objects.order_by("pk").values()), backups_before)
+        connection.check_constraints()
+
+    def test_deleted_group_rejects_all_three_restore_scopes_and_rolls_back(self):
+        self.delete_group_and_change_remaining_data()
+        restores = [
+            lambda: restore_tournament_snapshot(self.snapshot),
+            lambda: restore_category_from_tournament_snapshot(self.snapshot, self.category),
+            lambda: restore_category_schedule_block_from_tournament_snapshot(
+                self.snapshot, self.category, self.block,
+            ),
+        ]
+        for scope, restore in enumerate(restores):
+            with self.subTest(scope=scope):
+                self.assert_failed_restore_changes_nothing(restore)
+
+    def test_deleted_category_uses_structure_deleted_message(self):
+        from .services.operations import delete_category
+
+        delete_category(self.category)
+        self.assert_failed_restore_changes_nothing(
+            lambda: restore_tournament_snapshot(self.snapshot),
+        )
+
+    def test_restore_post_redirects_with_error_after_group_deletion(self):
+        self.delete_group_and_change_remaining_data()
+        before = self.serialized_state()
+        response = self.client.post(reverse("restore_tournament_snapshot", args=[self.snapshot.pk]))
+        self.assertRedirects(response, reverse("tournament_snapshot_list", args=[self.tournament.code]))
+        self.assertEqual([str(m) for m in get_messages(response.wsgi_request)], [self.deleted_message])
+        self.assertEqual(self.serialized_state(), before)
