@@ -1,0 +1,70 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<style>
+.score-input-safety-note {
+    max-width: 820px;
+    margin: 0 0 16px;
+    padding: 10px 12px;
+    border-left: 4px solid #d0a100;
+    background: #fff8db;
+    color: #4d3b00;
+    line-height: 1.5;
+}
+.danger-button { color: #b00020; }
+#confirm-code-display { font-size: 2rem; font-weight: bold; letter-spacing: .2em; }
+</style>
+
+<h2>{{ stage.name }} の結果をまとめて削除</h2>
+<p>{{ category.name }}</p>
+<table>
+    <thead><tr><th>Stage名</th><th>種別</th><th>結果が入っている試合数</th><th>リタイアの枠数</th></tr></thead>
+    <tbody>
+        {% for row in impact.rows %}
+            <tr>
+                <td>{{ row.stage.name }}{% if row.stage.id != stage.id %} (後続){% endif %}</td>
+                <td>{{ row.stage.get_stage_type_display }}</td>
+                <td>{{ row.result_match_count }}</td><td>{{ row.retired_entry_count }}</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<div class="score-input-safety-note">
+    <p>上の表のStageの結果をすべて削除し、組み合わせを作った直後の状態に戻します。後のStageは、このStageの結果で出場者が決まるため、一緒に結果を削除します。</p>
+    <p>削除するもの: 試合のスコア・勝敗、リタイア(不戦の結果とリタイアの設定)、トーナメントの勝ち上がり、後のStageに進んだ出場者、進行表の呼出・試合中・終了の状態</p>
+    <p>残るもの: カテゴリ・Stage・リーグ・トーナメント表・参加者・組み合わせ・追加対戦の試合・進行表のコートと順番</p>
+    <p>削除の直前に自動で大会バックアップを取ります。「大会バックアップ」画面から削除前の状態に戻せます。</p>
+</div>
+{% if impact.blocked %}
+    <p class="score-input-safety-note">リタイアによる追加対戦への差し替えが残っています。先にリーグ表の「差し替えを取り消す」で戻してください。</p>
+    <ul>
+        {% for history in impact.active_replacements %}
+            <li>{{ history.original_match.group.name }}: 元の試合 {{ history.original_match }} → 追加試合 {{ history.replacement_match|default:history.replacement_label }}</li>
+        {% endfor %}
+    </ul>
+{% elif step == 1 %}
+    <form method="post" action="{{ confirm_url }}">
+        {% csrf_token %}
+        <input type="hidden" name="step" value="1">
+        <button type="submit" id="clear-step1-button" class="danger-button">結果を削除する</button>
+    </form>
+{% else %}
+    <p id="confirm-code-display">{{ confirm_code }}</p>
+    <form method="post" action="{{ confirm_url }}">
+        {% csrf_token %}
+        <input type="hidden" name="step" value="2">
+        <label for="confirm-code">確認のため、上の4桁の数字を入力してください。</label>
+        <input id="confirm-code" name="confirm_code" inputmode="numeric" maxlength="4" autocomplete="off">
+        <button type="submit" id="clear-button" class="danger-button" disabled>結果を削除する</button>
+    </form>
+    <script>
+    (() => {
+        const input = document.getElementById("confirm-code");
+        const button = document.getElementById("clear-button");
+        const code = "{{ confirm_code|escapejs }}";
+        input.addEventListener("input", () => { button.disabled = input.value !== code; });
+    })();
+    </script>
+{% endif %}
+<p><a class="secondary-button" href="{{ back_url }}">やめる</a></p>
+{% endblock %}

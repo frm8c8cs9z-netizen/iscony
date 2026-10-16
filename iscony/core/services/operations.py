@@ -3052,6 +3052,118 @@ def stage_deletion_impact(stage):
     }
 
 
+def _collect_result_clear_stages(stage):
+    """進出関係を幅優先でたどり、結果を消すStageを重複なく返す。"""
+    stages = [stage]
+    seen = {stage.pk}
+    for current in stages:
+        targets = list(current.advancement_target_stages.all())
+        sources = AdvancementSource.objects.filter(
+            Q(source_stage=current)
+            | Q(source_group__stage=current)
+            | Q(source_match__bracket__stage=current)
+        ).select_related(
+            "target_league_entry__group__stage",
+            "target_tournament_entry__bracket__stage",
+        )
+        targets.extend(_advancement_target_stage(source) for source in sources)
+        for target in targets:
+            if target is not None and target.pk not in seen:
+                seen.add(target.pk)
+                stages.append(target)
+    return stages
+
+
+def stage_result_clear_impact(stage):
+    stages = _collect_result_clear_stages(stage)
+    rows = []
+    for item in stages:
+        if item.stage_type == Stage.TYPE_LEAGUE:
+            count = RoundRobinMatch.objects.filter(group__stage=item).filter(
+                Q(completed=True)
+                | Q(pair1_games__isnull=False)
+                | Q(pair2_games__isnull=False)
+            ).count()
+            retired_count = LeagueEntry.objects.filter(
+                group__stage=item, retired=True,
+            ).count()
+        else:
+            count = TournamentMatch.objects.filter(bracket__stage=item).filter(
+                Q(pair1_games__isnull=False) | Q(pair2_games__isnull=False)
+            ).count()
+            retired_count = 0
+        rows.append({
+            "stage": item,
+            "result_match_count": count,
+            "retired_entry_count": retired_count,
+        })
+    active_replacements = list(ScheduleReplacementHistory.objects.filter(
+        original_match__group__stage__in=stages,
+        reverted_at__isnull=True,
+    ).select_related(
+        "original_match__group", "original_match__pair1", "original_match__pair2",
+        "replacement_match__pair1", "replacement_match__pair2",
+    ))
+    return {
+        "stages": stages,
+        "rows": rows,
+        "total_result_match_count": sum(row["result_match_count"] for row in rows),
+        "active_replacements": active_replacements,
+        "blocked": bool(active_replacements),
+    }
+
+
+def clear_stage_results(stage):
+    """構造と組み合わせを残し、後続Stageを含めて結果を初期化する。"""
+    with transaction.atomic():
+        impact = stage_result_clear_impact(stage)
+        if impact["blocked"]:
+            raise ValidationError(
+                "リタイアによる追加対戦への差し替えが残っています。"
+                "先にリーグ表の「差し替えを取り消す」で戻してください。"
+            )
+        stages = impact["stages"]
+        create_tournament_backup(
+            stage.category.tournament,
+            label=f"結果削除前自動: Stage「{stage.name}」",
+            kind=TournamentBackup.KIND_AUTO_BEFORE_DELETE,
+        )
+        for item in stages:
+            if item.stage_type == Stage.TYPE_LEAGUE:
+                LeagueEntry.objects.filter(group__stage=item).update(
+                    retired=False, retired_reason="",
+                )
+                matches = RoundRobinMatch.objects.filter(group__stage=item)
+                RoundRobinMatchLeg.objects.filter(match__in=matches).delete()
+                matches.update(
+                    pair1_games=None, pair2_games=None, completed=False,
+                    result_type=RoundRobinMatch.RESULT_NORMAL,
+                )
+                for group in Group.objects.filter(stage=item):
+                    update_group_ranking(group, reset_rank=True)
+            else:
+                matches = TournamentMatch.objects.filter(bracket__stage=item)
+                TournamentMatchLeg.objects.filter(match__in=matches).delete()
+                matches.update(
+                    pair1_games=None, pair2_games=None, winner=None,
+                    result_type=TournamentMatch.RESULT_NORMAL,
+                )
+                for match in matches.exclude(next_match=None):
+                    if match.next_slot in ("pair1", "pair2"):
+                        TournamentMatch.objects.filter(pk=match.next_match_id).update(
+                            **{match.next_slot: None},
+                        )
+                for bracket in TournamentBracket.objects.filter(stage=item):
+                    advance_tournament_bye_winners(bracket)
+            Schedule.objects.filter(
+                Q(round_robin_match__group__stage=item)
+                | Q(tournament_match__bracket__stage=item)
+            ).update(called=False, started=False, finished=False)
+        for item in stages:
+            auto_apply_stage_advancements_if_ready(item)
+        return len(stages)
+
+
 def delete_stage(stage):
     with transaction.atomic():
         create_tournament_backup(

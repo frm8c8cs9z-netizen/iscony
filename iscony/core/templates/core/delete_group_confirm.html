@@ -59,6 +59,9 @@
 
 {% if impact.blocked %}
     <p class="score-input-safety-note">結果が入力済みのため削除できません。先に結果を削除してください。</p>
+    {% if group.stage %}
+    <p><a href="{% url 'clear_stage_results' tournament.code group.stage.category_id group.stage.id %}?next={{ request.get_full_path|urlencode:"" }}">このStageの結果をまとめて削除する</a></p>
+    {% endif %}
 {% else %}
     <p>削除の直前に自動で大会バックアップを取ります。「大会バックアップ」画面から削除前の状態に戻せます。</p>
     <form method="post">

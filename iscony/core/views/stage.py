@@ -1,8 +1,11 @@
 """カテゴリ内のリーグ・トーナメントをStage順に扱う運用画面。"""
 
 import json
+import secrets
+from urllib.parse import urlencode
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -38,6 +41,8 @@ from ..services import (
     generate_tournament_bracket_matches,
     inspect_stage_advancement_readiness,
     stage_deletion_impact,
+    clear_stage_results,
+    stage_result_clear_impact,
     delete_stage,
 )
 from .tournament import build_tournament_bracket_display_data
@@ -982,6 +987,65 @@ def add_stage(request, code, category_id):
             **_stage_setup_preview(preview_pair_count),
         },
     )
+
+
+def clear_stage_results_confirm(request, code, category_id, stage_id):
+    tournament = get_object_or_404(Tournament, code=code)
+    category = get_object_or_404(Category, id=category_id, tournament=tournament)
+    stage = get_object_or_404(Stage, id=stage_id, category=category)
+    next_url = safe_next_url(request)
+    back_url = next_url or reverse(
+        "category_stage_management",
+        kwargs={"code": tournament.code, "category_id": category.id},
+    )
+    confirm_url = reverse("clear_stage_results", kwargs={
+        "code": tournament.code, "category_id": category.id, "stage_id": stage.id,
+    })
+    if next_url:
+        confirm_url += "?" + urlencode({"next": next_url})
+    impact = stage_result_clear_impact(stage)
+    blocked_message = (
+        "リタイアによる追加対戦への差し替えが残っています。"
+        "先にリーグ表の「差し替えを取り消す」で戻してください。"
+    )
+    step = 1
+    confirm_code = None
+    if request.method == "POST":
+        codes = request.session.get("stage_result_clear_codes", {}).copy()
+        if request.POST.get("step") == "2":
+            expected = codes.pop(str(stage.id), None)
+            request.session["stage_result_clear_codes"] = codes
+            if expected is None or request.POST.get("confirm_code") != expected:
+                messages.error(request, "確認番号が一致しません。結果は削除していません。")
+                return redirect(confirm_url)
+            impact = stage_result_clear_impact(stage)
+            if impact["blocked"]:
+                messages.error(request, blocked_message)
+                return redirect(confirm_url)
+            try:
+                count = clear_stage_results(stage)
+            except ValidationError as error:
+                messages.error(request, " / ".join(error.messages))
+                return redirect(confirm_url)
+            message = (
+                f"{stage.name} の結果を削除しました。" if count == 1
+                else f"{stage.name} ほか、合わせて{count}件のStageの結果を削除しました。"
+            )
+            messages.success(request, message)
+            return redirect(back_url)
+        elif request.POST.get("step") == "1":
+            if impact["blocked"]:
+                messages.error(request, blocked_message)
+            else:
+                confirm_code = f"{secrets.randbelow(10000):04d}"
+                codes[str(stage.id)] = confirm_code
+                request.session["stage_result_clear_codes"] = codes
+                step = 2
+    return render(request, "core/clear_stage_results_confirm.html", {
+        "tournament": tournament, "category": category, "stage": stage,
+        "impact": impact, "back_url": back_url, "confirm_url": confirm_url,
+        "step": step, "confirm_code": confirm_code,
+    })
 
 
 def delete_stage_confirm(request, code, category_id, stage_id):

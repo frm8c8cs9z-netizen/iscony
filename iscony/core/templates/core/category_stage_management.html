@@ -67,6 +67,7 @@
                 <a href="{% url 'delete_stage' tournament.code category.id row.stage.id %}">
                     削除
                 </a>
+                ／ <a href="{% url 'clear_stage_results' tournament.code category.id row.stage.id %}">結果削除</a>
 
                 {% if row.stage.stage_type == "league" %}
                     ／

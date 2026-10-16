@@ -98,6 +98,12 @@ urlpatterns = [
     ),
 
     path(
+        "tournament/<str:code>/category/<int:category_id>/stage/<int:stage_id>/clear-results/",
+        stage.clear_stage_results_confirm,
+        name="clear_stage_results",
+    ),
+
+    path(
         "tournament/<str:code>/stage-overview/",
         stage.tournament_stage_overview_index,
         name="tournament_stage_overview_index",

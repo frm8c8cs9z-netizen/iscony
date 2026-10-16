@@ -34907,3 +34907,366 @@ class TournamentBackupStageTwoTests(TestCase):
         result = self.backups.revive_tournament_from_backup(backup)
         self.assertIsNone(result["tournament"].score_sheet_template_id)
         self.assertTrue(result["notices"])
+
+
+class ClearStageResultsTests(TestCase):
+    """構造を保持した結果削除と、二段階確認・復元の回帰テスト。"""
+
+    container_model = Group
+    entry_model = LeagueEntry
+    match_model = RoundRobinMatch
+    stage_type = Stage.TYPE_LEAGUE
+    container_field = "group"
+    schedule_match_field = "round_robin_match"
+    delete_url_name = "delete_group"
+    make_entry = StructureDeletionTestMixin.make_entry
+
+    def setUp(self):
+        from .services import clear_stage_results, stage_result_clear_impact
+        from .models import TournamentBackup
+        StructureDeletionTestMixin.setUp(self)
+        self.clear = clear_stage_results
+        self.impact = stage_result_clear_impact
+        self.backup_model = TournamentBackup
+        self.url = reverse("clear_stage_results", args=[
+            self.tournament.code, self.category.pk, self.stage.pk,
+        ])
+        self.score_league()
+
+    def score_league(self):
+        self.match.pair1_games = 4
+        self.match.pair2_games = 2
+        self.match.completed = True
+        self.match.save()
+        update_group_ranking(self.container, reset_rank=True)
+
+    def assert_unscored(self):
+        self.match.refresh_from_db()
+        self.assertEqual((self.match.pair1_games, self.match.pair2_games,
+                          self.match.completed, self.match.result_type),
+                         (None, None, False, RoundRobinMatch.RESULT_NORMAL))
+
+    def make_history(self, replacement=None):
+        return ScheduleReplacementHistory.objects.create(
+            schedule=self.schedule, original_match=self.match,
+            replacement_match=replacement, replacement_label="追加対戦",
+            original_schedule_block=self.schedule.schedule_block,
+            original_court=self.schedule.court, original_order=self.schedule.order,
+        )
+
+    def test_league_results_retirements_extra_legs_and_schedule_are_reset(self):
+        from .services import group_deletion_impact, stage_deletion_impact
+        self.entries[0].retired = True
+        self.entries[0].retired_reason = "負傷"
+        self.entries[0].save()
+        retirement = RoundRobinMatch.objects.create(
+            group=self.container, pair1=self.entries[0], pair2=self.entries[1],
+            pair1_games=0, pair2_games=4, completed=True, meeting_number=2,
+            result_type=RoundRobinMatch.RESULT_RETIREMENT,
+        )
+        extra = RoundRobinMatch.objects.create(
+            group=self.container, pair1=self.entries[0], pair2=self.entries[1],
+            pair1_games=3, pair2_games=4, completed=True, counts_for_ranking=False, meeting_number=3,
+        )
+        for match in (self.match, retirement, extra):
+            RoundRobinMatchLeg.objects.create(match=match, leg_number=1, winner_side="pair1")
+        self.schedule.called = self.schedule.started = self.schedule.finished = True
+        self.schedule.referee_participant = self.participants[1]
+        self.schedule.save()
+        original_schedule = (self.schedule.court_id, self.schedule.order,
+                             self.schedule.referee_participant_id, self.schedule.schedule_block_id)
+        impact = self.impact(self.stage)
+        self.assertEqual(impact["rows"], [{
+            "stage": self.stage, "result_match_count": 3, "retired_entry_count": 1,
+        }])
+        self.assertEqual(impact["total_result_match_count"], 3)
+        self.assertEqual(self.clear(self.stage), 1)
+        self.assert_unscored()
+        for match in (retirement, extra):
+            match.refresh_from_db()
+            self.assertEqual((match.pair1_games, match.pair2_games, match.completed,
+                              match.result_type), (None, None, False, "normal"))
+        self.assertFalse(RoundRobinMatchLeg.objects.filter(match__group=self.container).exists())
+        self.assertEqual(RoundRobinMatch.objects.filter(group=self.container).count(), 3)
+        extra.refresh_from_db()
+        self.assertFalse(extra.counts_for_ranking)
+        self.entries[0].refresh_from_db()
+        self.assertEqual((self.entries[0].retired, self.entries[0].retired_reason), (False, ""))
+        self.assertFalse(GroupRanking.objects.filter(group=self.container, rank__isnull=False).exists())
+        self.schedule.refresh_from_db()
+        self.assertEqual((self.schedule.called, self.schedule.started, self.schedule.finished),
+                         (False, False, False))
+        self.assertEqual((self.schedule.court_id, self.schedule.order,
+                          self.schedule.referee_participant_id, self.schedule.schedule_block_id),
+                         original_schedule)
+        self.assertFalse(stage_deletion_impact(self.stage)["blocked"])
+        self.assertFalse(group_deletion_impact(self.container)["blocked"])
+
+    def make_bracket(self):
+        stage = Stage.objects.create(
+            category=self.category, name="決勝", stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(category=self.category, stage=stage, name="本戦")
+        entries = [TournamentEntry.objects.create(
+            bracket=bracket, pair_code=f"T{i}", display_order=i,
+            participant=self.participants[(i-1) % 2],
+        ) for i in range(1, 4)]
+        final = TournamentMatch.objects.create(
+            bracket=bracket, round_number=2, match_number=1, match_code="M2",
+            pair1=entries[0], pair2=entries[2], winner=entries[0],
+            pair1_games=4, pair2_games=0, result_type=TournamentMatch.RESULT_RETIREMENT,
+        )
+        first = TournamentMatch.objects.create(
+            bracket=bracket, round_number=1, match_number=1, match_code="M1",
+            pair1=entries[0], pair2=entries[1], winner=entries[0],
+            pair1_games=4, pair2_games=2, next_match=final, next_slot="pair1",
+        )
+        seed = TournamentMatch.objects.create(
+            bracket=bracket, round_number=1, match_number=2, match_code="S1",
+            pair1=entries[2], winner=entries[2], next_match=final, next_slot="pair2",
+        )
+        return stage, bracket, entries, first, final, seed
+
+    def test_tournament_preserves_first_round_and_reapplies_seed_byes(self):
+        stage, bracket, entries, first, final, seed = self.make_bracket()
+        for match in (first, final):
+            TournamentMatchLeg.objects.create(match=match, leg_number=1, winner_side="pair1")
+        schedule = Schedule.objects.create(
+            court=self.schedule.court, order=2, tournament_match=final,
+            called=True, started=True, finished=True,
+        )
+        self.assertEqual(self.impact(stage)["total_result_match_count"], 2)
+        self.clear(stage)
+        for match in (first, final, seed):
+            match.refresh_from_db()
+            self.assertEqual((match.pair1_games, match.pair2_games, match.result_type),
+                             (None, None, TournamentMatch.RESULT_NORMAL))
+            self.assertFalse(match.legs.exists())
+        self.assertIsNone(first.winner_id)
+        self.assertIsNone(final.winner_id)
+        self.assertEqual((first.pair1_id, first.pair2_id), (entries[0].pk, entries[1].pk))
+        self.assertEqual((final.pair1_id, final.pair2_id), (None, entries[2].pk))
+        self.assertEqual((seed.pair1_id, seed.winner_id), (entries[2].pk, entries[2].pk))
+        schedule.refresh_from_db()
+        self.assertEqual((schedule.called, schedule.started, schedule.finished), (False, False, False))
+
+    def make_advancement(self):
+        stage, bracket, entries, first, final, seed = self.make_bracket()
+        stage.advancement_source_stage = self.stage
+        stage.save()
+        for rank, entry in enumerate(entries, 1):
+            entry.source_pair = self.entries[(rank-1) % 2]
+            entry.save()
+            AdvancementSource.objects.create(
+                source_stage=self.stage, source_group=self.container,
+                source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+                source_rank=rank, target_tournament_entry=entry,
+            )
+        return stage, entries, first
+
+    def test_upstream_clear_removes_downstream_results_and_assignments(self):
+        downstream, entries, first = self.make_advancement()
+        self.assertEqual(self.impact(self.stage)["stages"], [self.stage, downstream])
+        self.assertEqual(self.clear(self.stage), 2)
+        self.assert_unscored()
+        first.refresh_from_db()
+        self.assertIsNone(first.pair1_games)
+        for entry in entries:
+            entry.refresh_from_db()
+            self.assertEqual((entry.participant_id, entry.source_pair_id), (None, None))
+
+    def test_downstream_clear_keeps_upstream_results_and_incoming_assignments(self):
+        downstream, entries, first = self.make_advancement()
+        self.assertEqual(self.clear(downstream), 1)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.pair1_games, 4)
+        for entry in entries:
+            entry.refresh_from_db()
+            self.assertIsNotNone(entry.participant_id)
+            self.assertIsNotNone(entry.source_pair_id)
+
+    def test_collection_includes_group_and_match_sources_recursively_without_duplicates(self):
+        from .services.operations import _collect_result_clear_stages
+        downstream, bracket, entries, first, final, seed = self.make_bracket()
+        tail = Stage.objects.create(category=self.category, name="後続", stage_type="league")
+        group = Group.objects.create(category=self.category, stage=tail, name="後続G")
+        entry = self.make_entry(group, 1, self.participants[0])
+        AdvancementSource.objects.create(
+            source_group=self.container, target_tournament_entry=entries[0],
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK, source_rank=1,
+        )
+        AdvancementSource.objects.create(
+            source_match=first, target_league_entry=entry,
+            source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            source_result=AdvancementSource.RESULT_WINNER,
+        )
+        downstream.advancement_source_stage = self.stage
+        downstream.save()
+        # A cycle must not revisit the requested Stage.
+        self.stage.advancement_source_stage = tail
+        self.stage.save()
+        self.assertEqual(_collect_result_clear_stages(self.stage), [self.stage, downstream, tail])
+
+    def test_active_replacement_blocks_before_backup_and_reverted_history_allows_clear(self):
+        from django.utils import timezone
+        history = self.make_history()
+        self.assertEqual(self.impact(self.stage)["active_replacements"], [history])
+        with self.assertRaisesMessage(ValidationError, "先にリーグ表の「差し替えを取り消す」"):
+            self.clear(self.stage)
+        self.assertFalse(self.backup_model.objects.filter(tournament=self.tournament).exists())
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.pair1_games, 4)
+        history.reverted_at = timezone.now()
+        history.save()
+        self.assertFalse(self.impact(self.stage)["blocked"])
+        self.clear(self.stage)
+        self.assert_unscored()
+
+    def test_backup_restores_results_and_failed_clear_rolls_back(self):
+        from .services.backups import restore_tournament_backup
+        from unittest.mock import patch
+        with patch("core.services.operations.update_group_ranking", side_effect=ValidationError("失敗")):
+            with self.assertRaises(ValidationError):
+                self.clear(self.stage)
+        self.assertFalse(self.backup_model.objects.filter(tournament=self.tournament).exists())
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.pair1_games, 4)
+        self.clear(self.stage)
+        backup = self.backup_model.objects.get(tournament=self.tournament)
+        self.assertEqual(backup.kind, self.backup_model.KIND_AUTO_BEFORE_DELETE)
+        self.assertEqual(backup.label, f"結果削除前自動: Stage「{self.stage.name}」")
+        restore_tournament_backup(backup)
+        self.match.refresh_from_db()
+        self.assertEqual((self.match.pair1_games, self.match.pair2_games, self.match.completed), (4, 2, True))
+
+    def request_code(self, url=None, value=427):
+        from unittest.mock import patch
+        with patch("core.views.stage.secrets.randbelow", return_value=value):
+            response = self.client.post(url or self.url, {"step": "1"})
+        code = f"{value:04d}"
+        self.assertEqual(self.client.session["stage_result_clear_codes"][str(self.stage.pk)], code)
+        self.assertContains(response, f'id="confirm-code-display">{code}</p>')
+        self.assertContains(response, 'id="clear-button" class="danger-button" disabled')
+        return code
+
+    def test_two_steps_success_and_code_cannot_be_reused(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["step"], 1)
+        self.assertNotIn("stage_result_clear_codes", self.client.session)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.pair1_games, 4)
+        self.assertFalse(self.backup_model.objects.filter(tournament=self.tournament).exists())
+        code = self.request_code()
+        response = self.client.post(self.url, {"step": "2", "confirm_code": code})
+        self.assertRedirects(response, self.back_url)
+        self.assertEqual([str(m) for m in get_messages(response.wsgi_request)],
+                         [f"{self.stage.name} の結果を削除しました。"])
+        self.assert_unscored()
+        self.score_league()
+        response = self.client.post(self.url, {"step": "2", "confirm_code": code})
+        self.assertRedirects(response, self.url)
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.pair1_games, 4)
+        self.assertEqual(self.backup_model.objects.filter(tournament=self.tournament).count(), 1)
+
+    def test_wrong_missing_and_reissued_codes(self):
+        self.request_code()
+        for data in ({"step": "2", "confirm_code": "9999"},
+                     {"step": "2", "confirm_code": "0427"}):
+            response = self.client.post(self.url, data)
+            self.assertRedirects(response, self.url)
+            self.assertEqual([str(m) for m in get_messages(response.wsgi_request)],
+                             ["確認番号が一致しません。結果は削除していません。"])
+            self.assertNotIn(str(self.stage.pk), self.client.session["stage_result_clear_codes"])
+            self.match.refresh_from_db()
+            self.assertEqual(self.match.pair1_games, 4)
+        self.request_code(value=1)
+        self.request_code(value=2)
+        self.client.post(self.url, {"step": "2", "confirm_code": "0001"})
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.pair1_games, 4)
+
+    def test_next_is_preserved_and_external_next_ignored(self):
+        next_url = reverse("delete_stage", args=[self.tournament.code, self.category.pk, self.stage.pk])
+        url = self.url + "?" + urlencode({"next": next_url})
+        response = self.client.get(url)
+        self.assertEqual(response.context["back_url"], next_url)
+        self.assertContains(response, f'action="{url}"')
+        code = self.request_code(url)
+        response = self.client.post(url, {"step": "2", "confirm_code": code})
+        self.assertRedirects(response, next_url)
+        self.assertEqual(self.client.get(self.url + "?next=//example.com").context["back_url"], self.back_url)
+        self.assertEqual(self.client.get(self.url + "?next=https://example.com").context["back_url"], self.back_url)
+
+    def test_blocked_steps_and_execution_recheck(self):
+        code = self.request_code()
+        history = self.make_history()
+        response = self.client.post(self.url, {"step": "2", "confirm_code": code})
+        self.assertRedirects(response, self.url)
+        self.assertNotIn(str(self.stage.pk), self.client.session["stage_result_clear_codes"])
+        response = self.client.post(self.url, {"step": "1"})
+        self.assertEqual(response.context["step"], 1)
+        self.assertContains(response, "差し替えを取り消す")
+        self.assertContains(response, "追加対戦")
+        self.assertNotContains(response, 'id="clear-step1-button"')
+        self.assertNotContains(response, 'id="clear-button"')
+        self.assertFalse(self.backup_model.objects.filter(tournament=self.tournament).exists())
+        self.match.refresh_from_db()
+        self.assertEqual(self.match.pair1_games, 4)
+        history.delete()
+        self.request_code()
+        from unittest.mock import patch
+        with patch("core.views.stage.clear_stage_results", side_effect=ValidationError("検証エラー")):
+            response = self.client.post(self.url, {"step": "2", "confirm_code": "0427"})
+        self.assertRedirects(response, self.url)
+        self.assertIn("検証エラー", [str(m) for m in get_messages(response.wsgi_request)])
+
+    def test_other_tournament_is_404(self):
+        other = Tournament.objects.create(name="別大会", code="CLEAROTHER")
+        url = reverse("clear_stage_results", args=[other.code, self.category.pk, self.stage.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(self.client.post(url, {"step": "1"}).status_code, 404)
+        self.assertEqual(self.client.post(url, {"step": "2", "confirm_code": "0427"}).status_code, 404)
+
+    def test_management_and_blocked_delete_pages_link_to_clear_with_return_url(self):
+        response = self.client.get(self.back_url)
+        self.assertContains(response, self.url)
+        downstream, bracket, entries, first, final, seed = self.make_bracket()
+        bracket_url = reverse("delete_tournament_bracket", args=[self.tournament.code, bracket.pk])
+        bracket_clear = reverse("clear_stage_results", args=[
+            self.tournament.code, self.category.pk, downstream.pk,
+        ])
+        for delete_url, clear_url in [
+            (reverse("delete_group", args=[self.container.pk]), self.url),
+            (reverse("delete_stage", args=[self.tournament.code, self.category.pk, self.stage.pk]), self.url),
+            (reverse("delete_category", args=[self.tournament.code, self.category.pk]), self.url),
+            (bracket_url, bracket_clear),
+        ]:
+            with self.subTest(delete_url=delete_url):
+                response = self.client.get(delete_url)
+                self.assertTrue(response.context["impact"]["blocked"])
+                self.assertContains(response, clear_url + "?next=" + urlencode({"": delete_url})[1:])
+        response = self.client.get(reverse("delete_category", args=[self.tournament.code, self.category.pk]))
+        self.assertContains(response, bracket_clear)
+
+    def test_downstream_active_replacement_blocks_upstream_and_success_message_counts_stages(self):
+        downstream, entries, first = self.make_advancement()
+        tail = Stage.objects.create(category=self.category, name="追加リーグ", stage_type="league",
+                                    advancement_source_stage=downstream)
+        group = Group.objects.create(category=self.category, stage=tail, name="追加G")
+        entry1 = self.make_entry(group, 1, self.participants[0])
+        entry2 = self.make_entry(group, 2, self.participants[1])
+        match = RoundRobinMatch.objects.create(group=group, pair1=entry1, pair2=entry2)
+        history = self.make_history()
+        history.original_match = match
+        history.save()
+        self.assertTrue(self.impact(self.stage)["blocked"])
+        with self.assertRaises(ValidationError):
+            self.clear(self.stage)
+        self.assertFalse(self.backup_model.objects.filter(tournament=self.tournament).exists())
+        history.delete()
+        code = self.request_code()
+        response = self.client.post(self.url, {"step": "2", "confirm_code": code})
+        self.assertRedirects(response, self.back_url)
+        self.assertIn(f"{self.stage.name} ほか、合わせて3件のStageの結果を削除しました。",
+                      [str(m) for m in get_messages(response.wsgi_request)])
