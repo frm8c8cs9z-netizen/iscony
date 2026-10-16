@@ -28646,7 +28646,7 @@ class CategoryStageOverviewTests(TestCase):
         self.assertNotContains(response, "大会スナップショット")
         self.assertContains(response, "試合進行表")
 
-    def test_public_category_results_renders_tie_table_in_round_robin_style(self):
+    def test_public_category_results_hides_tie_table(self):
         tournament = Tournament.objects.create(
             name="公開同率補助表大会",
             code="PUBLICTIESTYLE",
@@ -28727,15 +28727,93 @@ class CategoryStageOverviewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("同率順位決定補助表", response.content.decode())
-        self.assertGreaterEqual(
-            response.content.decode().count('rr-stat-col rr-header">順位'),
-            2,
+        self.assertNotContains(response, "同率順位決定補助表")
+        self.assertContains(response, 'class="round-robin-table"', count=1)
+        self.assertNotContains(response, 'rr-stat-col rr-header">得')
+
+    def test_category_stage_overview_renders_tie_table_in_round_robin_style(self):
+        tournament = Tournament.objects.create(
+            name="公開同率補助表大会",
+            code="PUBLICTIESTYLE",
         )
-        self.assertGreaterEqual(
-            response.content.decode().count('class="round-robin-table"'),
-            2,
+        category = Category.objects.create(
+            tournament=tournament,
+            name="女子A",
         )
+        stage = Stage.objects.create(
+            category=category,
+            name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE,
+            display_order=1,
+        )
+        group = Group.objects.create(
+            category=category,
+            stage=stage,
+            name="A",
+        )
+        entry1 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A1",
+            display_order=1,
+            player1_name="予選1",
+            player2_name="予選2",
+        )
+        entry2 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A2",
+            display_order=2,
+            player1_name="予選3",
+            player2_name="予選4",
+        )
+        entry3 = create_league_entry_with_participant(
+            category=category,
+            group=group,
+            pair_code="A3",
+            display_order=3,
+            player1_name="予選5",
+            player2_name="予選6",
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry1,
+            pair2=entry2,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry2,
+            pair2=entry3,
+            pair1_games=3,
+            pair2_games=0,
+            completed=True,
+        )
+        RoundRobinMatch.objects.create(
+            group=group,
+            pair1=entry3,
+            pair2=entry1,
+            pair1_games=3,
+            pair2_games=2,
+            completed=True,
+        )
+        update_group_ranking(group, reset_rank=True)
+
+        response = self.client.get(
+            reverse(
+                "category_stage_overview",
+                kwargs={"category_id": category.id},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "同率順位決定補助表（1勝）")
+        self.assertContains(response, 'class="round-robin-table"', count=2)
+        self.assertContains(response, 'rr-stat-col rr-header">順位', count=2)
+        for header in ("得", "失", "差"):
+            self.assertContains(response, f'rr-stat-col rr-header">{header}', count=1)
 
     def test_public_category_results_can_disable_league_score_colors(self):
         tournament = Tournament.objects.create(

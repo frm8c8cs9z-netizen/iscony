@@ -266,6 +266,11 @@
                         </div>
 
                         {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches title="追加試合" link_kind="input" input_url_name="input_match_score" next_url=data.group_score_link_next_url group_id=data.group.id table_border=False %}
+
+                        {% for tie_table in data.tie_tables %}
+                            <h4>同率順位決定補助表（{{ tie_table.wins }}勝）</h4>
+                            {% include "core/_round_robin_table.html" with data=data pairs=tie_table.pairs rows=tie_table.rows row_template="core/_round_robin_tie_row.html" use_league_score_colors=use_league_score_colors self_cell_html="&nbsp;" table_kind="tie" %}
+                        {% endfor %}
                     </div>
                 {% empty %}
                     <p>リーグがありません。</p>
