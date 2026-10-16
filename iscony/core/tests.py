@@ -34097,3 +34097,357 @@ class DeleteTournamentStageTests(StageDeletionTestMixin, TestCase):
     schedule_match_field = "tournament_match"
     delete_url_name = "delete_tournament_bracket"
     maintenance_url_name = "bracket_name_maintenance"
+
+
+class TournamentBackupTests(TestCase):
+    """構造・結果・IDの往復、削除前保存、復元の原子性と画面を検証する。"""
+
+    def setUp(self):
+        from .models import TournamentBackup
+        from .services import backups
+
+        self.backups = backups
+        self.backup_model = TournamentBackup
+        self.tournament = Tournament.objects.create(name="バックアップ大会", code="BACKUP")
+        self.category = Category.objects.create(tournament=self.tournament, name="女子A")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(category=self.category, stage=self.stage, name="A")
+        self.entries = [
+            create_league_entry_with_participant(
+                category=self.category, group=self.group, pair_code=str(i),
+                display_order=i, player1_name=f"選手{i}", player2_name="",
+            ) for i in (1, 2)
+        ]
+        self.match = RoundRobinMatch.objects.create(
+            group=self.group, pair1=self.entries[0], pair2=self.entries[1],
+        )
+        self.final_stage = Stage.objects.create(
+            category=self.category, name="決勝", stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category, stage=self.final_stage, name="決勝",
+        )
+        self.final_entries = [
+            TournamentEntry.objects.create(
+                bracket=self.bracket, pair_code=f"F{i}", display_order=i,
+                participant=entry.participant,
+            ) for i, entry in enumerate(self.entries, 1)
+        ]
+        self.final_match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            pair1=self.final_entries[0], pair2=self.final_entries[1],
+        )
+        self.source = AdvancementSource.objects.create(
+            target_tournament_entry=self.final_entries[0],
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage, source_group=self.group, source_rank=1,
+        )
+        self.block = ScheduleBlock.objects.create(tournament=self.tournament, name="1日目")
+        self.court = Court.objects.create(tournament=self.tournament, name="1コート")
+        self.schedule = Schedule.objects.create(
+            schedule_block=self.block, court=self.court, order=1,
+            round_robin_match=self.match,
+        )
+        Schedule.objects.create(
+            schedule_block=self.block, court=self.court, order=2,
+            tournament_match=self.final_match,
+        )
+        # 日時を持つモデルも収集・保存・復元されることを確かめる。
+        self.history = ScheduleReplacementHistory.objects.create(
+            schedule=self.schedule, original_match=self.match,
+            original_schedule_block=self.block, original_court=self.court,
+            original_order=1,
+        )
+        self.other = Tournament.objects.create(name="別大会", code="OTHERBACKUP")
+        self.other_category = Category.objects.create(tournament=self.other, name="別カテゴリ")
+
+    def create_backup(self):
+        return self.backups.create_tournament_backup(self.tournament, label="開始前")
+
+    def serialized_state(self, tournament=None):
+        from django.core import serializers
+
+        tournament = Tournament.objects.get(pk=(tournament or self.tournament).pk)
+        return serializers.serialize(
+            "python", self.backups.collect_tournament_objects(tournament),
+        )
+
+    def backup_url(self, action, backup, tournament=None):
+        return reverse(f"tournament_backup_{action}", args=[
+            (tournament or self.tournament).code, backup.pk,
+        ])
+
+    def test_collect_and_create_include_structure_and_exclude_snapshots_and_other_tournament(self):
+        snapshot = create_tournament_snapshot(self.tournament, label="結果保存")
+        first = self.create_backup()
+        backup = self.create_backup()
+        backup.refresh_from_db()
+        objects = self.backups.collect_tournament_objects(self.tournament)
+        self.assertEqual(backup.object_count, len(objects))
+        models = {item["model"] for item in backup.payload}
+        self.assertTrue({
+            "core.tournament", "core.category", "core.stage", "core.group",
+            "core.tournamentbracket", "core.participant", "core.leagueentry",
+            "core.tournamententry", "core.roundrobinmatch", "core.tournamentmatch",
+            "core.schedule", "core.advancementsource", "core.schedulereplacementhistory",
+        }.issubset(models))
+        self.assertNotIn("core.operationsnapshot", models)
+        self.assertNotIn("core.tournamentbackup", models)
+        self.assertNotIn(self.other, objects)
+        self.assertNotIn(self.other_category, objects)
+        self.assertTrue(OperationSnapshot.objects.filter(pk=snapshot.pk).exists())
+        self.assertTrue(self.backup_model.objects.filter(pk=first.pk).exists())
+        self.assertEqual(backup.tournament_code, self.tournament.code)
+        self.assertEqual(backup.tournament_name, self.tournament.name)
+        self.assertEqual(backup.schema_version, self.backups.current_schema_version())
+        self.assertEqual(sum(self.backups.backup_model_counts(backup).values()), len(objects))
+        self.assertEqual(self.backups.backup_model_counts(backup), self.backups.current_model_counts(self.tournament))
+        keys = [(obj._meta.label_lower, obj.pk) for obj in objects]
+        self.assertEqual(keys, sorted(keys))
+
+    def test_round_trip_restores_all_values_and_ids_and_undo_restores_pre_restore_state(self):
+        from .services.operations import delete_stage
+
+        backup = self.create_backup()
+        original = self.serialized_state()
+        other_original = self.serialized_state(self.other)
+        Category.objects.filter(pk=self.category.pk).update(name="変更後")
+        extra = Category.objects.create(tournament=self.tournament, name="追加")
+        # 残る決勝試合のスコアも変更する。
+        TournamentMatch.objects.filter(pk=self.final_match.pk).update(pair1_games=4, pair2_games=1)
+        stage_pk = self.stage.pk
+        delete_stage(self.stage)
+        self.assertFalse(Stage.objects.filter(pk=stage_pk).exists())
+        before_restore = self.serialized_state()
+        backup.refresh_from_db()
+        result = self.backups.restore_tournament_backup(backup)
+        self.assertEqual(self.serialized_state(), original)
+        self.assertEqual(self.serialized_state(self.other), other_original)
+        self.assertFalse(Category.objects.filter(pk=extra.pk).exists())
+        self.assertTrue(Stage.objects.filter(pk=stage_pk).exists())
+        self.assertEqual(result["restored_objects"], backup.object_count)
+        automatic = result["pre_restore_backup"]
+        self.assertEqual(automatic.kind, self.backup_model.KIND_AUTO_BEFORE_RESTORE)
+        self.backups.restore_tournament_backup(automatic)
+        self.assertEqual(self.serialized_state(), before_restore)
+        self.assertTrue(self.backup_model.objects.filter(pk=backup.pk).exists())
+
+    def test_stage_restore_preserves_tournament_snapshot_and_makes_it_restorable(self):
+        from .services.operations import delete_stage
+
+        snapshot = create_tournament_snapshot(self.tournament, label="削除前")
+        backup = self.create_backup()
+        delete_stage(self.stage)
+        self.backups.restore_tournament_backup(backup)
+        self.assertTrue(OperationSnapshot.objects.filter(pk=snapshot.pk).exists())
+        RoundRobinMatch.objects.filter(pk=self.match.pk).update(
+            pair1_games=4, pair2_games=0, completed=True,
+        )
+        restore_tournament_snapshot(snapshot)
+        self.match.refresh_from_db()
+        self.assertIsNone(self.match.pair1_games)
+        self.assertFalse(self.match.completed)
+
+    def test_deletion_services_create_one_backup_before_cascade_and_assignment_clear(self):
+        from .services.operations import delete_group, delete_stage, delete_tournament_bracket
+
+        cases = [
+            (delete_group, self.group, "グループ「A」"),
+            (delete_tournament_bracket, self.bracket, "トーナメント表「決勝」"),
+            (delete_stage, self.stage, "Stage「予選」"),
+        ]
+        for delete, obj, label in cases:
+            with self.subTest(label=label):
+                before = self.serialized_state()
+                count = self.backup_model.objects.count()
+                delete(obj)
+                self.assertEqual(self.backup_model.objects.count(), count + 1)
+                backup = self.backup_model.objects.first()
+                self.assertEqual(backup.kind, self.backup_model.KIND_AUTO_BEFORE_DELETE)
+                self.assertEqual(backup.label, f"削除前自動: {label}")
+                self.backups.restore_tournament_backup(backup)
+                self.assertEqual(self.serialized_state(), before)
+                # delete()は渡したインスタンスのpkを消すので読み直す。
+                self.group = Group.objects.get(name="A", category=self.category)
+                self.bracket = TournamentBracket.objects.get(name="決勝", category=self.category)
+                self.stage = Stage.objects.get(name="予選", category=self.category)
+
+    def test_blocked_deletions_do_not_create_backup(self):
+        RoundRobinMatch.objects.filter(pk=self.match.pk).update(completed=True, pair1_games=4, pair2_games=1)
+        TournamentMatch.objects.filter(pk=self.final_match.pk).update(pair1_games=4, pair2_games=1)
+        urls = [
+            reverse("delete_group", args=[self.group.pk]),
+            reverse("delete_tournament_bracket", args=[self.tournament.code, self.bracket.pk]),
+            reverse("delete_stage", args=[self.tournament.code, self.category.pk, self.stage.pk]),
+        ]
+        before = self.serialized_state()
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.post(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["impact"]["blocked"])
+                self.assertEqual(self.backup_model.objects.count(), 0)
+                self.assertEqual(self.serialized_state(), before)
+
+    def test_schema_mismatch_changes_nothing_and_disables_restore_button(self):
+        backup = self.create_backup()
+        backup.schema_version = "old-schema"
+        backup.save(update_fields=["schema_version"])
+        before = self.serialized_state()
+        count = self.backup_model.objects.count()
+        with self.assertRaisesMessage(ValidationError, "old-schema"):
+            self.backups.restore_tournament_backup(backup)
+        self.assertEqual(self.serialized_state(), before)
+        self.assertEqual(self.backup_model.objects.count(), count)
+        url = self.backup_url("restore", backup)
+        response = self.client.get(url)
+        self.assertContains(response, "データ構造のバージョンが異なる")
+        self.assertNotContains(response, '<button type="submit">大会全体を復元</button>')
+        response = self.client.post(url, follow=True)
+        self.assertContains(response, "old-schema")
+        self.assertEqual(self.serialized_state(), before)
+
+    def test_missing_shared_score_sheet_template_is_cleared_with_notice(self):
+        template = ScoreSheetTemplate.objects.create(name="共用採点票")
+        self.tournament.score_sheet_template = template
+        self.tournament.save(update_fields=["score_sheet_template"])
+        backup = self.create_backup()
+        self.assertNotIn("core.scoresheettemplate", self.backups.backup_model_counts(backup))
+        template.delete()
+        result = self.backups.restore_tournament_backup(backup)
+        self.tournament.refresh_from_db()
+        self.assertIsNone(self.tournament.score_sheet_template_id)
+        self.assertEqual(result["notices"], ["採点票テンプレートが見つからないため、未設定として復元しました。"])
+
+    def test_invalid_foreign_key_rolls_back_all_data_and_pre_restore_backup(self):
+        backup = self.create_backup()
+        for item in backup.payload:
+            if item["model"] == "core.roundrobinmatch":
+                item["fields"]["group"] = 999999999
+        backup.save(update_fields=["payload"])
+        Category.objects.filter(pk=self.category.pk).update(name="復元直前")
+        before = self.serialized_state()
+        backup_ids = list(self.backup_model.objects.values_list("pk", flat=True))
+        with self.assertRaisesMessage(ValidationError, "何も変更していません"):
+            self.backups.restore_tournament_backup(backup)
+        self.assertEqual(self.serialized_state(), before)
+        self.assertEqual(list(self.backup_model.objects.values_list("pk", flat=True)), backup_ids)
+        response = self.client.post(self.backup_url("restore", backup), follow=True)
+        self.assertContains(response, "何も変更していません")
+        self.assertEqual(self.serialized_state(), before)
+        self.assertEqual(list(self.backup_model.objects.values_list("pk", flat=True)), backup_ids)
+
+    def test_malformed_payload_and_missing_tournament_are_rejected_without_changes(self):
+        from copy import deepcopy
+
+        backup = self.create_backup()
+        valid = deepcopy(backup.payload)
+        payloads = [
+            {},
+            [{"model": "core.not_a_model", "pk": 1, "fields": {}}],
+            [item for item in valid if item["model"] != "core.tournament"],
+            valid + [deepcopy(valid[0])],
+        ]
+        for payload in payloads:
+            with self.subTest(payload_type=type(payload)):
+                backup.payload = payload
+                before = self.serialized_state()
+                count = self.backup_model.objects.count()
+                with self.assertRaises(ValidationError):
+                    self.backups.restore_tournament_backup(backup)
+                self.assertEqual(self.serialized_state(), before)
+                self.assertEqual(self.backup_model.objects.count(), count)
+
+    def test_deleted_tournament_backup_is_retained_but_cannot_be_restored(self):
+        backup = self.create_backup()
+        self.tournament.delete()
+        backup.refresh_from_db()
+        self.assertIsNone(backup.tournament_id)
+        self.assertEqual(backup.tournament_code, "BACKUP")
+        with self.assertRaisesMessage(ValidationError, "この大会は削除済みのため、段階1では復元できません。"):
+            self.backups.restore_tournament_backup(backup)
+
+    def test_backup_screens_create_restore_download_delete_and_menu_link(self):
+        url = reverse("tournament_backup_list", args=[self.tournament.code])
+        self.assertContains(self.client.get(url), "バックアップを作成")
+        response = self.client.post(url, {"label": "画面保存"})
+        self.assertRedirects(response, url)
+        backup = self.backup_model.objects.get(label="画面保存")
+        self.assertEqual(backup.kind, self.backup_model.KIND_MANUAL)
+        self.assertContains(self.client.get(url), "画面保存")
+        self.client.post(url, {"label": "  "})
+        self.assertTrue(self.backup_model.objects.first().label.startswith("手動バックアップ "))
+        response = self.client.get(self.backup_url("restore", backup))
+        self.assertContains(response, "バックアップ時点の件数")
+        self.assertContains(response, "現在の件数")
+        self.assertContains(response, "core.stage")
+        self.assertEqual(response.context["count_rows"], [
+            {"model": model, "backup_count": count, "current_count": count}
+            for model, count in self.backups.backup_model_counts(backup).items()
+        ])
+        Category.objects.filter(pk=self.category.pk).update(name="変更")
+        response = self.client.post(self.backup_url("restore", backup), follow=True)
+        self.assertContains(response, f"{backup.object_count}件")
+        self.category.refresh_from_db()
+        self.assertEqual(self.category.name, "女子A")
+        response = self.client.get(self.backup_url("download", backup))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('attachment;', response["Content-Disposition"])
+        self.assertIn("iscony_backup_BACKUP_", response["Content-Disposition"])
+        data = response.json()
+        self.assertEqual(data["format"], "iscony-tournament-backup")
+        self.assertEqual(data["format_version"], 1)
+        self.assertEqual(len(data["objects"]), backup.object_count)
+        self.assertEqual(data["objects"], backup.payload)
+        menu = self.client.get(reverse("maintenance_menu", args=[self.tournament.code]))
+        self.assertContains(menu, f'href="{url}"')
+        delete_url = self.backup_url("delete", backup)
+        self.assertEqual(self.client.get(delete_url).status_code, 405)
+        self.assertTrue(self.backup_model.objects.filter(pk=backup.pk).exists())
+        self.assertRedirects(self.client.post(delete_url), url)
+        self.assertFalse(self.backup_model.objects.filter(pk=backup.pk).exists())
+
+    def test_other_tournament_backup_ids_are_not_accessible(self):
+        backup = self.create_backup()
+        for action in ["restore", "download", "delete"]:
+            url = self.backup_url(action, backup, tournament=self.other)
+            with self.subTest(action=action):
+                method = self.client.post if action == "delete" else self.client.get
+                self.assertEqual(method(url).status_code, 404)
+                if action == "restore":
+                    self.assertEqual(self.client.post(url).status_code, 404)
+        self.assertTrue(self.backup_model.objects.filter(pk=backup.pk).exists())
+
+    def test_restoring_original_tournament_code_redirects_to_restored_code(self):
+        backup = self.create_backup()
+        Tournament.objects.filter(pk=self.tournament.pk).update(code="RENAMEDBACKUP")
+        response = self.client.post(reverse(
+            "tournament_backup_restore", args=["RENAMEDBACKUP", backup.pk],
+        ))
+        self.assertRedirects(response, reverse("tournament_backup_list", args=["BACKUP"]))
+
+    def test_missing_template_notice_is_displayed_after_restore(self):
+        template = ScoreSheetTemplate.objects.create(name="削除される採点票")
+        self.tournament.score_sheet_template = template
+        self.tournament.save(update_fields=["score_sheet_template"])
+        backup = self.create_backup()
+        template.delete()
+        response = self.client.post(self.backup_url("restore", backup), follow=True)
+        self.assertContains(response, "採点票テンプレートが見つからないため、未設定として復元しました。")
+
+    def test_payload_cannot_overwrite_another_tournaments_existing_id(self):
+        backup = self.create_backup()
+        category_payload = next(item for item in backup.payload if item["model"] == "core.category")
+        category_payload["pk"] = self.other_category.pk
+        category_payload["fields"]["name"] = "上書き不可"
+        original = self.serialized_state()
+        other_original = self.serialized_state(self.other)
+        count = self.backup_model.objects.count()
+        with self.assertRaisesMessage(ValidationError, "大会外のデータと重複"):
+            self.backups.restore_tournament_backup(backup)
+        self.assertEqual(self.serialized_state(), original)
+        self.assertEqual(self.serialized_state(self.other), other_original)
+        self.assertEqual(self.backup_model.objects.count(), count)

@@ -79,6 +79,11 @@
         </td>
         <td>リタイア対応や反映処理の前後で、進行・結果を退避・復元します。</td>
     </tr>
+    <tr>
+        <td>バックアップ・復元</td>
+        <td><a href="{% url 'tournament_backup_list' tournament.code %}">大会バックアップ</a></td>
+        <td>大会の構造(カテゴリ・Stage・参加者など)と結果を丸ごと保存・復元します。削除操作の直前には自動で保存されます。</td>
+    </tr>
 </table>
 
 <p class="subtle-text">

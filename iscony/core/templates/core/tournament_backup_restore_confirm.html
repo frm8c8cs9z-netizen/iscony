@@ -1,0 +1,28 @@
+{% extends "core/base.html" %}
+{% block title %}大会バックアップの復元確認{% endblock %}
+{% block content %}
+<h2>{{ tournament.name }} 大会バックアップの復元確認</h2>
+<p><a class="button-link" href="{% url 'tournament_backup_list' tournament.code %}">大会バックアップへ戻る</a></p>
+<table>
+    <tr><th>ラベル</th><td>{{ backup.label }}</td></tr>
+    <tr><th>作成日時</th><td>{{ backup.created_at|date:"Y-m-d H:i" }}</td></tr>
+    <tr><th>種別</th><td>{{ backup.get_kind_display }}</td></tr>
+    <tr><th>件数</th><td>{{ backup.object_count }}</td></tr>
+</table>
+<h3>モデルごとの件数</h3>
+<table>
+    <tr><th>モデル</th><th>バックアップ時点の件数</th><th>現在の件数</th></tr>
+    {% for row in count_rows %}
+    <tr><td>{{ row.model }}</td><td>{{ row.backup_count }}</td><td>{{ row.current_count }}</td></tr>
+    {% endfor %}
+</table>
+<p>この時点の状態に大会全体が戻ります。これ以降に行った変更(結果入力・構造の変更を含む)はすべて失われます。復元直前の状態は自動でバックアップされるので、復元自体を取り消すこともできます。</p>
+{% if schema_error %}
+<p role="alert">{{ schema_error }}</p>
+{% else %}
+<form method="post">
+    {% csrf_token %}
+    <button type="submit">大会全体を復元</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -2917,3 +2917,44 @@ class OperationSnapshot(models.Model):
             f"{self.get_scope_type_display()} "
             f"{self.label}"
         )
+
+
+class TournamentBackup(models.Model):
+    """大会に紐づく全データ(構造+結果)を丸ごと保存するバックアップ。"""
+
+    KIND_MANUAL = "manual"
+    KIND_AUTO_BEFORE_DELETE = "auto_before_delete"
+    KIND_AUTO_BEFORE_RESTORE = "auto_before_restore"
+
+    KIND_CHOICES = [
+        (KIND_MANUAL, "手動"),
+        (KIND_AUTO_BEFORE_DELETE, "削除前自動"),
+        (KIND_AUTO_BEFORE_RESTORE, "復元前自動"),
+    ]
+
+    tournament = models.ForeignKey(
+        Tournament,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="backups",
+    )
+    tournament_code = models.CharField(max_length=20)
+    tournament_name = models.CharField(max_length=100)
+    kind = models.CharField(
+        max_length=30,
+        choices=KIND_CHOICES,
+        default=KIND_MANUAL,
+    )
+    label = models.CharField(max_length=200)
+    note = models.TextField(blank=True)
+    schema_version = models.CharField(max_length=255)
+    object_count = models.PositiveIntegerField(default=0)
+    payload = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.tournament_name} - {self.label}"

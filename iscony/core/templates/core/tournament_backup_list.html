@@ -1,0 +1,35 @@
+{% extends "core/base.html" %}
+{% block title %}大会バックアップ{% endblock %}
+{% block content %}
+<h2>{{ tournament.name }} 大会バックアップ</h2>
+<p><a class="button-link" href="{% url 'maintenance_menu' tournament.code %}">管理メニューへ戻る</a></p>
+<p>大会の構造(カテゴリ・Stage・参加者など)と結果を丸ごと保存・復元します。削除操作の直前には自動で保存されます。</p>
+<h3>作成</h3>
+<form method="post">
+    {% csrf_token %}
+    <p><label>ラベル <input type="text" name="label" maxlength="200" placeholder="例: 大会開始前"></label></p>
+    <button type="submit">バックアップを作成</button>
+</form>
+<h3>一覧</h3>
+<table>
+    <tr><th>作成日時</th><th>種別</th><th>ラベル</th><th>件数</th><th>操作</th></tr>
+    {% for backup in backups %}
+    <tr>
+        <td>{{ backup.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ backup.get_kind_display }}</td>
+        <td>{{ backup.label }}</td>
+        <td>{{ backup.object_count }}</td>
+        <td>
+            <a href="{% url 'tournament_backup_restore' tournament.code backup.id %}">復元</a>
+            <a href="{% url 'tournament_backup_download' tournament.code backup.id %}">ダウンロード</a>
+            <form method="post" action="{% url 'tournament_backup_delete' tournament.code backup.id %}">
+                {% csrf_token %}
+                <button type="submit" onclick="return confirm('この大会バックアップを削除しますか？');">削除</button>
+            </form>
+        </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">バックアップはまだありません。</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

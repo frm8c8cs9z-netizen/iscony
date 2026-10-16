@@ -69,6 +69,7 @@
 {% if impact.blocked %}
     <p class="score-input-safety-note">結果が入力済みのため削除できません。先に結果を削除してください。</p>
 {% else %}
+    <p>削除の直前に自動で大会バックアップを取ります。「大会バックアップ」画面から削除前の状態に戻せます。</p>
     <form method="post">
         {% csrf_token %}
         <button type="submit" id="delete-button" class="danger-button" onclick="return confirm('{{ stage.name|escapejs }} を削除しますか？');">

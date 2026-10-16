@@ -3,6 +3,7 @@ from django.urls import path
 from .helpers.cache import public_view_cache
 from .views import (
     advancement,
+    backup,
     csv,
     dashboard,
     league,
@@ -127,6 +128,30 @@ urlpatterns = [
         "category/<int:category_id>/snapshots/",
         snapshot.category_snapshot_list,
         name="category_snapshot_list",
+    ),
+
+    path(
+        "tournament/<str:code>/backups/",
+        backup.tournament_backup_list,
+        name="tournament_backup_list",
+    ),
+
+    path(
+        "tournament/<str:code>/backups/<int:backup_id>/restore/",
+        backup.tournament_backup_restore,
+        name="tournament_backup_restore",
+    ),
+
+    path(
+        "tournament/<str:code>/backups/<int:backup_id>/download/",
+        backup.tournament_backup_download,
+        name="tournament_backup_download",
+    ),
+
+    path(
+        "tournament/<str:code>/backups/<int:backup_id>/delete/",
+        backup.tournament_backup_delete,
+        name="tournament_backup_delete",
     ),
 
     path(

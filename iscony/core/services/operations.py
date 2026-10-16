@@ -46,6 +46,7 @@ from ..models import (
     Stage,
     Tournament,
     TournamentBracket,
+    TournamentBackup,
     TournamentOrganizationField,
     TournamentEntry,
     TournamentMatch,
@@ -53,6 +54,7 @@ from ..models import (
 )
 from ..selectors.tournament_brackets import build_tournament_round_data
 from ..validators import validate_star_score
+from .backups import create_tournament_backup
 from .snapshots import create_stage_advancement_snapshot_once
 
 
@@ -3052,6 +3054,11 @@ def stage_deletion_impact(stage):
 
 def delete_stage(stage):
     with transaction.atomic():
+        create_tournament_backup(
+            stage.category.tournament,
+            label=f"削除前自動: Stage「{stage.name}」",
+            kind=TournamentBackup.KIND_AUTO_BEFORE_DELETE,
+        )
         downstream_stages = _collect_downstream_stages(stage)
         strong_set_ids = {stage.id} | {item.id for item in downstream_stages}
 
@@ -3114,6 +3121,11 @@ def group_deletion_impact(group):
 
 def delete_group(group):
     with transaction.atomic():
+        create_tournament_backup(
+            group.category.tournament,
+            label=f"削除前自動: グループ「{group.name}」",
+            kind=TournamentBackup.KIND_AUTO_BEFORE_DELETE,
+        )
         sources = AdvancementSource.objects.filter(source_group=group)
 
         for source in sources:
@@ -3166,6 +3178,11 @@ def tournament_bracket_deletion_impact(bracket):
 
 def delete_tournament_bracket(bracket):
     with transaction.atomic():
+        create_tournament_backup(
+            bracket.category.tournament,
+            label=f"削除前自動: トーナメント表「{bracket.name}」",
+            kind=TournamentBackup.KIND_AUTO_BEFORE_DELETE,
+        )
         sources = AdvancementSource.objects.filter(source_match__bracket=bracket)
 
         for source in sources:
