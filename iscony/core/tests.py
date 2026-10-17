@@ -27351,6 +27351,7 @@ class StarScoringModeTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="star-keypad"')
         self.assertContains(response, '<table class="star-leg-table">')
         self.assertNotContains(response, 'id="pair1_loser_buttons"')
 
@@ -27396,6 +27397,7 @@ class StarScoringModeTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="star-keypad"')
         self.assertNotContains(response, '<table class="star-leg-table">')
         self.assertContains(response, 'id="pair1_loser_buttons"')
 
@@ -27737,14 +27739,69 @@ class StarSummaryEntryModeTests(TestCase):
                     table = re.search(r'<table class="star-leg-table">.*?</table>', content, re.S)
                     self.assertIsNotNone(table)
                     if entry_mode == Category.STAR_ENTRY_SUMMARY:
-                        self.assertIn('class="star-count-button ', table.group(0))
+                        self.assertContains(response, 'id="star-keypad"')
+                        self.assertIn('inputmode="none"', table.group(0))
+                        self.assertNotContains(response, 'star-count-button')
                         self.assertNotIn('class="leg-button ', table.group(0))
                         self.assertEqual(response.context["star_count_options"], [0, 1, 2, 3])
                         self.assertEqual(response.context["legs"], [])
                     else:
                         self.assertIn('class="leg-button ', table.group(0))
-                        self.assertNotIn('class="star-count-button ', table.group(0))
+                        self.assertNotContains(response, 'id="star-keypad"')
                         self.assertEqual(response.context["star_count_options"], [])
+
+    def test_summary_inputs_and_keypad_respect_match_games(self):
+        for match, url, _ in self.score_inputs():
+            for match_games in [3, 5]:
+                with self.subTest(model=type(match).__name__, match_games=match_games):
+                    match.match_games = match_games
+                    match.save(update_fields=["match_games"])
+                    response = self.client.get(url)
+                    content = response.content.decode()
+                    for side in ["pair1", "pair2"]:
+                        field = re.search(rf'<input\s+[^>]*id="{side}_games"[^>]*>', content)
+                        self.assertIsNotNone(field)
+                        for attribute in [
+                            'type="text"', f'name="{side}_games"', 'inputmode="none"',
+                            'autocomplete="off"', 'maxlength="1"', 'value=""',
+                        ]:
+                            self.assertIn(attribute, field.group(0))
+                        self.assertNotIn("disabled", field.group(0))
+                    keypad = re.search(r'<div id="star-keypad"[^>]*>(.*?)</div>', content, re.S)
+                    self.assertIsNotNone(keypad)
+                    keys = re.findall(
+                        r'<button([^>]*)data-star-value="(\d)"([^>]*)>(\d)</button>',
+                        keypad.group(1),
+                    )
+                    self.assertEqual([value for _, value, _, _ in keys], list("7894561230"))
+                    for before, value, after, label in keys:
+                        self.assertIn('type="button"', before)
+                        self.assertEqual(value, label)
+                        self.assertEqual("disabled" in after, int(value) > match_games)
+                    clear = re.search(r'<button[^>]*data-star-clear[^>]*>消す</button>', keypad.group(1))
+                    self.assertIsNotNone(clear)
+                    self.assertIn('type="button"', clear.group(0))
+                    self.assertNotIn("disabled", clear.group(0))
+                    self.assertNotContains(response, "star-count-button")
+
+    def test_summary_inputs_and_keypad_are_disabled_without_opponent(self):
+        match = self.tournament_match
+        match.pair2 = None
+        match.save(update_fields=["pair2"])
+        url = self.score_inputs()[1][1]
+        response = self.client.get(url)
+        self.assertFalse(response.context["can_input_score"])
+        content = response.content.decode()
+        for side in ["pair1", "pair2"]:
+            field = re.search(rf'<input\s+[^>]*id="{side}_games"[^>]*>', content)
+            self.assertIsNotNone(field)
+            self.assertIn("disabled", field.group(0))
+        keypad = re.search(r'<div id="star-keypad"[^>]*>(.*?)</div>', content, re.S)
+        self.assertIsNotNone(keypad)
+        buttons = re.findall(r'<button[^>]*>', keypad.group(1))
+        self.assertEqual(len(buttons), 11)
+        for button in buttons:
+            self.assertIn("disabled", button)
 
     def test_summary_save_requires_both_scores_and_majority_in_js(self):
         for match, url, _ in self.score_inputs():
@@ -27765,14 +27822,6 @@ class StarSummaryEntryModeTests(TestCase):
                 response = self.client.get(url)
                 content = response.content.decode()
                 for side, value in [("pair1", 2), ("pair2", 0)]:
-                    self.assertRegex(
-                        content,
-                        re.compile(
-                            rf'id="{side}_star_buttons">.*?class="star-count-button selected"\s+'
-                            rf'data-value="{value}"',
-                            re.S,
-                        ),
-                    )
                     self.assertRegex(
                         content,
                         re.compile(rf'id="{side}_games"\s+value="{value}"', re.S),

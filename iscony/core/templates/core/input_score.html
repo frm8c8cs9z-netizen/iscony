@@ -136,47 +136,47 @@
             <tr>
                 <td id="pair1_box" class="winner-select-cell">
                     <strong>{{ match.pair1.display_player1_name }}</strong>
-                    <div class="star-count-buttons" id="pair1_star_buttons">
-                        {% for n in star_count_options %}
-                            <button
-                                type="button"
-                                class="star-count-button {% if match.pair1_games == n %}selected{% endif %}"
-                                data-value="{{ n }}"
-                                onclick="selectStarCount('pair1', {{ n }}, this)"
-                                {% if not can_input_score %}disabled{% endif %}
-                            >{{ n }}</button>
-                        {% endfor %}
-                    </div>
                     <input
-                        type="hidden"
+                        type="text"
                         name="pair1_games"
                         id="pair1_games"
                         value="{{ match.pair1_games|default_if_none:'' }}"
+                        inputmode="none"
+                        autocomplete="off"
+                        maxlength="1"
+                        class="star-score-input"
+                        aria-label="{{ match.pair1.display_player1_name }}の星数"
+                        {% if not can_input_score %}disabled{% endif %}
                     >
                 </td>
                 <td>vs</td>
                 <td id="pair2_box" class="winner-select-cell">
                     <strong>{{ match.pair2.display_player1_name }}</strong>
-                    <div class="star-count-buttons" id="pair2_star_buttons">
-                        {% for n in star_count_options %}
-                            <button
-                                type="button"
-                                class="star-count-button {% if match.pair2_games == n %}selected{% endif %}"
-                                data-value="{{ n }}"
-                                onclick="selectStarCount('pair2', {{ n }}, this)"
-                                {% if not can_input_score %}disabled{% endif %}
-                            >{{ n }}</button>
-                        {% endfor %}
-                    </div>
                     <input
-                        type="hidden"
+                        type="text"
                         name="pair2_games"
                         id="pair2_games"
                         value="{{ match.pair2_games|default_if_none:'' }}"
+                        inputmode="none"
+                        autocomplete="off"
+                        maxlength="1"
+                        class="star-score-input"
+                        aria-label="{{ match.pair2.display_player1_name }}の星数"
+                        {% if not can_input_score %}disabled{% endif %}
                     >
                 </td>
             </tr>
         </table>
+        <div id="star-keypad" class="star-keypad" aria-label="星数のテンキー">
+            {% for n in "7894561230"|make_list %}
+                <button
+                    type="button"
+                    data-star-value="{{ n }}"
+                    {% if n|add:"0" > match.match_games or not can_input_score %}disabled{% endif %}
+                >{{ n }}</button>
+            {% endfor %}
+            <button type="button" data-star-clear {% if not can_input_score %}disabled{% endif %}>消す</button>
+        </div>
         {% endif %}
     {% else %}
     <table>
@@ -484,28 +484,50 @@
     border-color: #2e8b57;
 }
 
-.star-count-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    justify-content: center;
-    margin-top: 8px;
+.star-score-input {
+    display: block;
+    box-sizing: border-box;
+    width: 90px;
+    margin: 12px auto 0;
+    padding: 8px;
+    font-size: 36px;
+    text-align: center;
+    border: 2px solid #94a3b8;
+    border-radius: 6px;
+    background: #fff;
 }
 
-.star-count-button {
-    min-width: 36px;
-    padding: 8px 12px;
-    font-size: 16px;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
+.star-score-input.star-input-active {
+    border-color: #2563eb;
+    outline: 3px solid #bfdbfe;
+    background: #eff6ff;
+}
+
+.star-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    max-width: 300px;
+    margin: 16px auto;
+}
+
+.star-keypad button {
+    min-height: 48px;
+    font-size: 24px;
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
     background: #f8fafc;
     cursor: pointer;
 }
 
-.star-count-button.selected {
-    background: #2e8b57;
-    color: #fff;
-    border-color: #2e8b57;
+.star-keypad [data-star-clear] {
+    grid-column: span 2;
+}
+
+.star-keypad button:disabled,
+.star-score-input:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 </style>
 
@@ -684,21 +706,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 });
 
-function selectStarCount(side, value, buttonEl) {
-    const input = document.getElementById(side + "_games");
-    input.value = value;
-
-    const buttonsContainer = buttonEl.closest(".star-count-buttons");
-    buttonsContainer
-        .querySelectorAll(".star-count-button")
-        .forEach(function (button) {
-            button.classList.remove("selected");
-        });
-    buttonEl.classList.add("selected");
-
-    updateStarSummaryMode();
-}
-
 function updateStarSummaryMode() {
     const pair1Input = document.getElementById("pair1_games");
     const pair2Input = document.getElementById("pair2_games");
@@ -758,9 +765,72 @@ function updateStarSummaryMode() {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-    if (document.querySelector(".star-count-buttons")) {
-        updateStarSummaryMode();
+    const keypad = document.getElementById("star-keypad");
+    if (!keypad) {
+        return;
     }
+    const inputs = Array.from(document.querySelectorAll(".star-score-input"));
+    const totalLegs = {{ match.match_games|default:0 }};
+    let activeInput = inputs[0];
+
+    function selectInput(input, moveFocus = false) {
+        activeInput = input;
+        inputs.forEach(function (field) {
+            field.classList.toggle("star-input-active", field === input && !field.disabled);
+        });
+        if (moveFocus) {
+            input.focus();
+        }
+    }
+
+    function enterValue(value) {
+        if (activeInput.disabled || (value !== "" && !isValidValue(value))) {
+            return;
+        }
+        activeInput.value = value;
+        updateStarSummaryMode();
+        selectInput(value !== "" && activeInput === inputs[0] ? inputs[1] : activeInput, true);
+    }
+
+    function isValidValue(value) {
+        return /^[0-9]$/.test(value) && Number(value) <= totalLegs;
+    }
+
+    inputs.forEach(function (input) {
+        input.addEventListener("focus", function () { selectInput(input); });
+        input.addEventListener("click", function () { selectInput(input); });
+        input.addEventListener("keydown", function (event) {
+            if (event.ctrlKey || event.metaKey || event.altKey) {
+                return;
+            }
+            if (/^[0-9]$/.test(event.key)) {
+                event.preventDefault();
+                enterValue(event.key);
+            } else if (event.key === "Backspace" || event.key === "Delete") {
+                event.preventDefault();
+                enterValue("");
+            } else if (event.key === "Enter") {
+                if (document.getElementById("star-save-button").disabled) {
+                    event.preventDefault();
+                }
+            } else if (event.key.length === 1) {
+                event.preventDefault();
+            }
+        });
+        input.addEventListener("input", function () {
+            selectInput(input);
+            enterValue(isValidValue(input.value) ? input.value : "");
+        });
+    });
+    keypad.querySelectorAll("button").forEach(function (button) {
+        button.addEventListener("click", function () {
+            if (!button.disabled) {
+                enterValue(button.hasAttribute("data-star-clear") ? "" : button.dataset.starValue);
+            }
+        });
+    });
+    selectInput(inputs[0]);
+    updateStarSummaryMode();
 });
 </script>
 
