@@ -110,18 +110,20 @@
   - 先に「差し替えを取り消す」で戻してもらう運用にします。
 - **スナップショット / 大会バックアップ:** 差し替え履歴も保存・復元の対象です。
 
-## 気付いた点(未対応)
+## 対応済みの問題
 
-- 「リタイアにする」(`views/league.py` の `retire_pair`)は、次の2点がリタイア取消と揃っていません。いずれも以前からの動作で、今回の変更によるものではありません。
-  - トランザクションで囲まれていません。
-  - 後続Stageへの進出の自動反映(`auto_apply_stage_advancements_if_ready`)を呼んでいません。取消側は呼んでいます。
-- このため、リタイアでリーグの全試合が埋まっても、後続Stageへの進出がその場では反映されない可能性があります。
+- 「リタイアにする」は、以前はトランザクションで囲まれておらず、後続Stageへの進出の自動反映も呼んでいませんでした。そのため、リタイアでリーグの全試合が埋まっても、後続の枠が空のままでした。
+- 2026-10-17 に直しました(`b11766c`)。処理は `services/operations.py` の `retire_league_entry` に移り、1つのトランザクションの中で次のことをします。
+  - 不戦結果を入れる
+  - 順位を計算し直す
+  - 後続Stageへ進出を反映する
+- すでにリタイアの枠をもう一度リタイアにしようとすると、エラーで止まります。
 
 ## コード上の対応
 
 | 機能 | 場所 |
 |---|---|
-| リタイア | `views/league.py` `retire_pair` |
+| リタイア | `services/operations.py` `retire_league_entry` / 画面 `views/league.py` `retire_pair` |
 | リタイア取消 | `services/operations.py` `cancel_pair_retirement` |
 | 追加対戦の作成 | `services/operations.py` `create_extra_round_robin_match` / 画面 `views/league.py` `add_extra_round_robin_match` |
 | 差し替え・挿入 | `services/operations.py` `insert_round_robin_schedule` |
