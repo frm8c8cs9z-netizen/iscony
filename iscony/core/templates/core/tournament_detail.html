@@ -2,6 +2,8 @@
 
 {% block title %}{{ tournament.name }}{% endblock %}
 
+{% block site_brand_url %}{% if public_mode %}{% url 'public_tournament_detail' tournament.public_token %}{% else %}{{ block.super }}{% endif %}{% endblock %}
+
 {% block content %}
 
 {% if public_mode %}

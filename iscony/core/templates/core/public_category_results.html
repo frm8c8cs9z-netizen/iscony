@@ -2,6 +2,8 @@
 
 {% block title %}{{ category.name }} 結果{% endblock %}
 
+{% block site_brand_url %}{% url 'public_tournament_detail' tournament.public_token %}{% endblock %}
+
 {% block content %}
 
 <style>

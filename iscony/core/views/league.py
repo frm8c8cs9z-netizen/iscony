@@ -279,12 +279,14 @@ def build_category_group_data(
         table_rows = []
 
         for row_pair in pairs:
-            row_pair_link_url = reverse(
-                "league_entry_action",
-                kwargs={
-                    "pair_id": row_pair.id,
-                },
-            )
+            row_pair_link_url = None
+            if include_operations:
+                row_pair_link_url = reverse(
+                    "league_entry_action",
+                    kwargs={
+                        "pair_id": row_pair.id,
+                    },
+                )
             row_score_next_url = group_score_next_url
 
             row_scores = []

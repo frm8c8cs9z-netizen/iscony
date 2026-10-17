@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+from html.parser import HTMLParser
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -36235,3 +36236,154 @@ class StageOverviewQueryCountTests(TestCase):
             "bracket": self.bracket, "entry_count": 0, "match_count": 0,
             "finished_count": 0, "matches_complete": False,
         }])
+
+
+@override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+class PublicPagesNoOperatorLinksTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.tournament = Tournament.objects.create(
+            name="公開リンク検証大会", code="PUBLICLINKS", is_public=True,
+        )
+        cls.category = Category.objects.create(tournament=cls.tournament, name="一般男子")
+        league_stage = Stage.objects.create(
+            category=cls.category, name="予選リーグ",
+            stage_type=Stage.TYPE_LEAGUE, display_order=1,
+        )
+        tournament_stage = Stage.objects.create(
+            category=cls.category, name="決勝トーナメント",
+            stage_type=Stage.TYPE_TOURNAMENT, display_order=2,
+        )
+        group = Group.objects.create(category=cls.category, stage=league_stage, name="同率A")
+        cls.entries = [
+            create_league_entry_with_participant(
+                category=cls.category, group=group, pair_code=f"A{i}", display_order=i,
+                player1_name=f"選手{i}甲", player2_name=f"選手{i}乙",
+            ) for i in range(1, 4)
+        ]
+        matches = []
+        # 三つ巴の同勝数で、運営側には同率順位決定補助表が出る。
+        for first, second, score in ((0, 1, 0), (1, 2, 0), (2, 0, 2)):
+            matches.append(RoundRobinMatch.objects.create(
+                group=group, pair1=cls.entries[first], pair2=cls.entries[second],
+                pair1_games=3, pair2_games=score, completed=True,
+            ))
+        update_group_ranking(group, reset_rank=True)
+        matches.append(RoundRobinMatch.objects.create(
+            group=group, pair1=cls.entries[0], pair2=cls.entries[1],
+            meeting_number=2, counts_for_ranking=False,
+            pair1_games=4, pair2_games=2, completed=True,
+            note="公開リンク確認用追加試合",
+        ))
+        retired_group = Group.objects.create(
+            category=cls.category, stage=league_stage, name="棄権B", display_order=2,
+        )
+        cls.retired_entry = create_league_entry_with_participant(
+            category=cls.category, group=retired_group, pair_code="B1", display_order=1,
+            player1_name="棄権選手甲", player2_name="棄権選手乙",
+        )
+        cls.retired_entry.retired = True
+        cls.retired_entry.save(update_fields=["retired"])
+        opponent = create_league_entry_with_participant(
+            category=cls.category, group=retired_group, pair_code="B2", display_order=2,
+            player1_name="対戦選手甲", player2_name="対戦選手乙",
+        )
+        matches.append(RoundRobinMatch.objects.create(
+            group=retired_group, pair1=cls.retired_entry, pair2=opponent,
+            pair1_games=0, pair2_games=3, completed=True,
+        ))
+        update_group_ranking(retired_group, reset_rank=True)
+        bracket = TournamentBracket.objects.create(
+            category=cls.category, stage=tournament_stage, name="本戦",
+        )
+        finalists = [
+            create_tournament_entry(
+                bracket=bracket, pair_code=f"T{i}", display_order=i,
+                player1_name=f"本戦{i}甲", player2_name=f"本戦{i}乙",
+            ) for i in range(1, 3)
+        ]
+        final = TournamentMatch.objects.create(
+            bracket=bracket, round_number=1, match_number=1,
+            match_code="M1", match_label="決勝", pair1=finalists[0], pair2=finalists[1],
+            pair1_games=4, pair2_games=2, winner=finalists[0],
+        )
+        court = Court.objects.create(tournament=cls.tournament, name="1")
+        block = ScheduleBlock.objects.create(tournament=cls.tournament, name="午前")
+        cls.schedules = [
+            Schedule.objects.create(
+                court=court, schedule_block=block, order=i, round_robin_match=match,
+            ) for i, match in enumerate(matches, start=1)
+        ]
+        Schedule.objects.create(
+            court=court, schedule_block=block, order=len(matches) + 1, tournament_match=final,
+        )
+
+    def assert_brand_url(self, response, expected):
+        brand = re.search(r'<h1 class="site-brand">(.*?)</h1>', response.content.decode(), re.S)
+        self.assertIsNotNone(brand)
+        self.assertIn(f'href="{expected}"', brand.group(1))
+
+    def assert_public_links(self, response):
+        class HrefParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.hrefs = []
+
+            def handle_starttag(self, tag, attrs):
+                self.hrefs.extend(value for key, value in attrs if key == "href")
+
+        self.assertEqual(response.status_code, 200)
+        parser = HrefParser()
+        parser.feed(response.content.decode())
+        self.assertTrue(parser.hrefs)
+        for href in parser.hrefs:
+            with self.subTest(href=href):
+                self.assertTrue(
+                    href and href.startswith(("/public/", "/static/", "#")),
+                    f"公開ページに運営側または外部へのリンク: {href!r}",
+                )
+        self.assert_brand_url(response, reverse(
+            "public_tournament_detail", args=[self.tournament.public_token],
+        ))
+
+    def test_all_public_page_urls_have_only_public_links(self):
+        token = self.tournament.public_token
+        urls = [
+            reverse("public_tournament_detail", args=[token]),
+            reverse("public_schedule_view_token", args=[token]),
+            reverse("public_schedule_view", args=[self.tournament.code]),
+        ]
+        category_urls = [
+            reverse("public_category_results", args=[self.tournament.code, self.category.id]),
+            reverse("public_category_results_id_token", args=[token, self.category.id]),
+            reverse("public_category_results_token", args=[token, self.category.public_token]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                self.assert_public_links(self.client.get(url))
+        for url in category_urls:
+            # 進行表から戻る導線も、すべてのURL形式で検証する。
+            for query in ({}, {"from_schedule": self.schedules[0].id}):
+                with self.subTest(url=url, query=query):
+                    response = self.client.get(url, query)
+                    self.assert_public_links(response)
+                    for entry in [*self.entries, self.retired_entry]:
+                        self.assertNotContains(response, reverse("league_entry_action", args=[entry.id]))
+                    self.assertContains(response, "棄権選手甲")
+                    self.assertContains(response, "公開リンク確認用追加試合")
+                    self.assertContains(response, "<svg")
+                    # 公開結果では既存仕様どおり補助表は表示しない。
+                    self.assertNotContains(response, "同率順位決定補助表")
+
+    def test_operator_pages_keep_entry_links_and_brand_destination(self):
+        for name in ("category_stage_overview", "category_detail"):
+            with self.subTest(view=name):
+                response = self.client.get(reverse(name, args=[self.category.id]))
+                self.assertEqual(response.status_code, 200)
+                self.assert_brand_url(response, reverse("tournament_list"))
+                for entry in [*self.entries, self.retired_entry]:
+                    self.assertContains(response, reverse("league_entry_action", args=[entry.id]))
+                self.assertContains(response, "同率順位決定補助表")
+        response = self.client.get(reverse("tournament_detail", args=[self.tournament.code]))
+        self.assertEqual(response.status_code, 200)
+        self.assert_brand_url(response, reverse("tournament_list"))
