@@ -1,5 +1,6 @@
 {% extends "core/base.html" %}
 {% block content %}
+<style>.danger-button { color: #b00020; }</style>
 <h2>追加試合の編集</h2>
 <p>{{ tournament.name }} / {{ group.category.name }} / {% if group.stage %}{{ group.stage.name }} / {% endif %}{{ group.name }}リーグ</p>
 <p>{{ match.pair1.pair_code }} {{ match.pair1.display_name }} vs {{ match.pair2.pair_code }} {{ match.pair2.display_name }}</p>

@@ -35769,10 +35769,32 @@ class ExtraRoundRobinMatchEditTests(TestCase):
         schedule = self.schedule(self.extra)
         later = self.schedule(self.base, 2)
         with patch("core.services.operations.update_group_ranking", side_effect=RuntimeError("failure")):
-            with self.assertRaises(ValidationError):
+            with self.assertRaisesMessage(RuntimeError, "failure"):
                 self.delete(self.extra)
         self.assertTrue(RoundRobinMatch.objects.filter(pk=self.extra.pk).exists())
         self.assertTrue(Schedule.objects.filter(pk=schedule.pk).exists())
+        later.refresh_from_db()
+        self.assertEqual(later.order, 2)
+
+    def test_delete_propagates_unexpected_error_and_rolls_back_schedule_unassignment(self):
+        from unittest.mock import patch
+        from .services.operations import unassign_schedule
+
+        schedule = self.schedule(self.extra)
+        later = self.schedule(self.base, 2)
+        match_before = RoundRobinMatch.objects.values().get(pk=self.extra.pk)
+        schedule_before = Schedule.objects.values().get(pk=schedule.pk)
+
+        def unassign_then_fail(item):
+            unassign_schedule(item)
+            raise RuntimeError("unassignment failed")
+
+        with patch("core.services.operations.unassign_schedule", side_effect=unassign_then_fail):
+            with self.assertRaisesMessage(RuntimeError, "unassignment failed"):
+                self.delete(self.extra)
+
+        self.assertEqual(RoundRobinMatch.objects.values().get(pk=self.extra.pk), match_before)
+        self.assertEqual(Schedule.objects.values().get(pk=schedule.pk), schedule_before)
         later.refresh_from_db()
         self.assertEqual(later.order, 2)
 

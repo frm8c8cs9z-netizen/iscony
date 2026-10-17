@@ -1769,32 +1769,27 @@ def extra_round_robin_match_deletion_block_reason(match):
 
 def delete_extra_round_robin_match(match):
     """追加試合を削除し、進行枠・順位・進出先を更新する。"""
-    try:
-        with transaction.atomic():
-            match = RoundRobinMatch.objects.select_for_update().get(pk=match.pk)
-            schedules = list(Schedule.objects.select_for_update().filter(
-                round_robin_match=match,
-            ))
-            reason = extra_round_robin_match_deletion_block_reason(match)
-            if reason:
-                raise ValidationError(reason)
-            group = match.group
-            history = ScheduleReplacementHistory.objects.select_for_update().filter(
-                replacement_match=match, reverted_at__isnull=True,
-            ).first()
-            if history:
-                undo_schedule_replacement(history)
-            else:
-                for schedule in schedules:
-                    unassign_schedule(schedule)
-                match.delete()
-            update_group_ranking(group, reset_rank=False)
-            if group.stage_id:
-                auto_apply_stage_advancements_if_ready(group.stage)
-    except ValidationError:
-        raise
-    except Exception as exc:
-        raise ValidationError("追加試合を削除できませんでした。状態を確認してください。") from exc
+    with transaction.atomic():
+        match = RoundRobinMatch.objects.select_for_update().get(pk=match.pk)
+        schedules = list(Schedule.objects.select_for_update().filter(
+            round_robin_match=match,
+        ))
+        reason = extra_round_robin_match_deletion_block_reason(match)
+        if reason:
+            raise ValidationError(reason)
+        group = match.group
+        history = ScheduleReplacementHistory.objects.select_for_update().filter(
+            replacement_match=match, reverted_at__isnull=True,
+        ).first()
+        if history:
+            undo_schedule_replacement(history)
+        else:
+            for schedule in schedules:
+                unassign_schedule(schedule)
+            match.delete()
+        update_group_ranking(group, reset_rank=False)
+        if group.stage_id:
+            auto_apply_stage_advancements_if_ready(group.stage)
 
 
 def undo_schedule_replacement(history):
