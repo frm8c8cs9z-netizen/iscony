@@ -33592,7 +33592,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                             schedule.match.pair1.short_name
                             schedule.match.group.category.name
 
-        self.assertLessEqual(len(captured), 2)
+        self.assertLessEqual(len(captured), 6)
         self.assertEqual(len(block_tables), 1)
         self.assertEqual(len(block_tables[0]["courts"]), 3)
         self.assertEqual(len(block_tables[0]["table"]), 5)
@@ -35808,3 +35808,151 @@ class ExtraRoundRobinMatchEditTests(TestCase):
         history.refresh_from_db()
         self.assertIsNone(history.reverted_at)
         self.assertTrue(RoundRobinMatch.objects.filter(pk=self.extra.pk).exists())
+
+
+@override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+class OrganizationPrefetchQueryCountTests(TestCase):
+    """所属の項目数・当日変更を含め、表示件数によるクエリ増加を防ぐ。"""
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="所属先読み大会", code="ORG_PREFETCH", is_public=True,
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament, name="所属カテゴリ",
+        )
+        stage = Stage.objects.create(
+            category=self.category, name="リーグ", stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category, stage=stage, name="A",
+        )
+        tournament_stage = Stage.objects.create(
+            category=self.category, name="本戦",
+            stage_type=Stage.TYPE_TOURNAMENT, display_order=2,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category, stage=tournament_stage, name="本戦",
+        )
+        self.court = Court.objects.create(tournament=self.tournament, name="1")
+        self.block = ScheduleBlock.objects.create(
+            tournament=self.tournament, name="進行",
+        )
+        self.fields = [
+            TournamentOrganizationField.objects.create(
+                tournament=self.tournament, code=f"org{index}",
+                label=label, display_order=index,
+            )
+            for index, label in enumerate(("クラブ", "地域"), start=1)
+        ]
+        self._add_pairs_and_matches(1)
+        self.urls = {
+            "public_schedule": reverse("public_schedule_view_token", kwargs={
+                "public_token": self.tournament.public_token,
+            }),
+            "schedule": reverse("schedule_view", kwargs={
+                "tournament_code": self.tournament.code,
+            }),
+            "overview": reverse("category_stage_overview", kwargs={
+                "category_id": self.category.id,
+            }),
+            "public_results": reverse("public_category_results", kwargs={
+                "code": self.tournament.code,
+                "category_id": self.category.id,
+            }),
+        }
+
+    def _add_pairs_and_matches(self, batch):
+        pairs = []
+        for player_index in (1, 2):
+            number = (batch - 1) * 2 + player_index
+            pair = create_league_entry_with_participant(
+                category=self.category, group=self.group,
+                pair_code=f"L{number}", display_order=number,
+                player1_name=f"選手{number}A", player2_name=f"選手{number}B",
+            )
+            participant = pair.participant
+            changed = player_index == 1
+            participant.has_day_player_change = changed
+            participant.current_player1_name = "当日選手" if changed else None
+            participant.save()
+            for player_no in (1, 2):
+                for field in self.fields:
+                    ParticipantOrganizationValue.objects.create(
+                        participant=participant, player_no=player_no, field=field,
+                        original_value=f"元所属{number}-{player_no}-{field.code}",
+                        current_value=(
+                            f"当日所属{number}-{field.code}"
+                            if changed and player_no == 1 else None
+                        ),
+                    )
+            pairs.append(pair)
+            GroupRanking.objects.create(group=self.group, pair=pair, wins=1)
+
+        for meeting_number in (1, 2):
+            match = RoundRobinMatch.objects.create(
+                group=self.group, pair1=pairs[0], pair2=pairs[1],
+                meeting_number=meeting_number,
+                counts_for_ranking=meeting_number == 1,
+            )
+            Schedule.objects.create(
+                court=self.court, schedule_block=self.block,
+                order=(batch - 1) * 3 + meeting_number,
+                round_robin_match=match,
+            )
+        entries = [
+            create_tournament_entry(
+                bracket=self.bracket, participant=pair.participant,
+                pair_code=f"T{pair.display_order}", display_order=pair.display_order,
+            )
+            for pair in pairs
+        ]
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=batch,
+            match_code=f"M{batch}", pair1=entries[0], pair2=entries[1],
+        )
+        Schedule.objects.create(
+            court=self.court, schedule_block=self.block, order=batch * 3,
+            tournament_match=match,
+        )
+
+    def _query_count(self, screen):
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(self.urls[screen])
+        self.assertEqual(response.status_code, 200)
+        if screen != "schedule":
+            self.assertContains(
+                response,
+                '<span style="color:red;">当日所属1-org1</span>',
+                html=False,
+            )
+            self.assertContains(response, "元所属1-2-org1")
+        return len(captured)
+
+    def _assert_constant_queries(self, screen, *, finished=False):
+        if finished:
+            RoundRobinMatch.objects.update(pair1_games=4, pair2_games=2)
+        small = self._query_count(screen)
+        self._add_pairs_and_matches(2)
+        if finished:
+            RoundRobinMatch.objects.update(pair1_games=4, pair2_games=2)
+        large = self._query_count(screen)
+        self.assertEqual(small, large, f"{screen}: {small} -> {large}")
+
+    def test_public_schedule_queries_stay_constant(self):
+        self._assert_constant_queries("public_schedule")
+
+    def test_operations_schedule_queries_stay_constant(self):
+        self._assert_constant_queries("schedule")
+
+    def test_stage_overview_queries_stay_constant(self):
+        self._assert_constant_queries("overview")
+
+    def test_public_category_results_queries_stay_constant(self):
+        self._assert_constant_queries("public_results")
+
+    def test_finished_stage_overview_with_tie_table_queries_stay_constant(self):
+        self._assert_constant_queries("overview", finished=True)
+
+    def test_finished_public_results_with_tie_table_queries_stay_constant(self):
+        self._assert_constant_queries("public_results", finished=True)

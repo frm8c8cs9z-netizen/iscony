@@ -156,6 +156,10 @@ def build_category_group_data(
         )
         pairs = LeagueEntry.objects.filter(
             group=group
+        ).select_related(
+            "participant",
+        ).prefetch_related(
+            "participant__organization_values__field",
         ).order_by(
             "display_order",
             "pair_code"
@@ -165,8 +169,11 @@ def build_category_group_data(
             group=group,
             meeting_number=1,
         ).select_related(
-            "pair1",
-            "pair2",
+            "pair1__participant",
+            "pair2__participant",
+        ).prefetch_related(
+            "pair1__participant__organization_values__field",
+            "pair2__participant__organization_values__field",
         )
 
         extra_matches = RoundRobinMatch.objects.filter(
@@ -175,8 +182,11 @@ def build_category_group_data(
             Q(meeting_number__gt=1)
             | Q(counts_for_ranking=False)
         ).select_related(
-            "pair1",
-            "pair2",
+            "pair1__participant",
+            "pair2__participant",
+        ).prefetch_related(
+            "pair1__participant__organization_values__field",
+            "pair2__participant__organization_values__field",
         ).order_by(
             "meeting_number",
             "pair1__display_order",
@@ -230,6 +240,15 @@ def build_category_group_data(
         for match in matches:
             match_map[(match.pair1.id, match.pair2.id)] = match
             match_map[(match.pair2.id, match.pair1.id)] = match
+
+        rankings = GroupRanking.objects.filter(
+            group=group,
+        ).select_related(
+            "pair__participant",
+        ).prefetch_related(
+            "pair__participant__organization_values__field",
+        )
+        ranking_map = {ranking.pair_id: ranking for ranking in rankings}
 
         # リーグ表の各行。セルごとに「自分から見た得ゲーム」を入れる。
         table_rows = []
@@ -311,10 +330,7 @@ def build_category_group_data(
                     "retired_self": row_pair.retired,
                 })
 
-            ranking = GroupRanking.objects.filter(
-                group=group,
-                pair=row_pair
-            ).first()
+            ranking = ranking_map.get(row_pair.id)
 
             table_rows.append({
                 "pair": row_pair,
@@ -337,11 +353,6 @@ def build_category_group_data(
         )
 
         if all_matches_finished:
-            rankings = GroupRanking.objects.filter(
-                group=group
-            ).select_related(
-                "pair"
-            )
             tie_tables = _build_round_robin_tie_tables(
                 group=group,
                 rankings=rankings,
@@ -476,7 +487,7 @@ def _build_round_robin_tie_tables(
             pair1__id__in=tied_pair_ids,
             pair2__id__in=tied_pair_ids,
             counts_for_ranking=True,
-        )
+        ).select_related("pair1", "pair2")
 
         for match in related_matches:
 

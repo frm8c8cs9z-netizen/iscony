@@ -289,6 +289,12 @@ def _schedule_block_tables(tournament):
             "tournament_match__bracket__stage",
             "tournament_match__bracket__category",
         )
+        .prefetch_related(
+            "round_robin_match__pair1__participant__organization_values__field",
+            "round_robin_match__pair2__participant__organization_values__field",
+            "tournament_match__pair1__participant__organization_values__field",
+            "tournament_match__pair2__participant__organization_values__field",
+        )
     )
     schedule_list = list(schedules)
 
