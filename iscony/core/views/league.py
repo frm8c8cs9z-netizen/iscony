@@ -1082,21 +1082,69 @@ def edit_group_ranking(request, group_id):
         "category_detail", kwargs={"category_id": group.category_id}
     )
 
+    rankings = list(GroupRanking.objects.filter(
+        group=group
+    ).select_related(
+        "pair"
+    ).order_by(
+        "pair__display_order",
+        "pair__pair_code",
+    ))
+    for ranking in rankings:
+        ranking.input_rank = ranking.rank
+        ranking.rank_error = False
+
+    context = {
+        "group": group,
+        "rankings": rankings,
+        "back_url": back_url,
+    }
+
     if request.method == "POST":
         recalculate = "recalculate" in request.POST
+
+        if not recalculate:
+            errors = []
+            parsed_ranks = {}
+            rankings_by_rank = {}
+            for ranking in rankings:
+                rank_value = request.POST.get(f"rank_{ranking.id}", "")
+                ranking.input_rank = rank_value
+                if rank_value == "":
+                    parsed_ranks[ranking.id] = None
+                    continue
+                try:
+                    rank = int(rank_value)
+                    if not 1 <= rank <= len(rankings):
+                        raise ValueError
+                except ValueError:
+                    ranking.rank_error = True
+                    errors.append(
+                        f"{ranking.pair.code}: 順位は1〜{len(rankings)}の数字で入力してください。"
+                    )
+                    continue
+                parsed_ranks[ranking.id] = rank
+                rankings_by_rank.setdefault(rank, []).append(ranking)
+
+            for rank, same_rankings in rankings_by_rank.items():
+                if len(same_rankings) > 1:
+                    for ranking in same_rankings:
+                        ranking.rank_error = True
+                    codes = "・".join(ranking.pair.code for ranking in same_rankings)
+                    errors.append(f"{rank}位が{codes}に重複しています。")
+
+            if errors:
+                for error in errors:
+                    messages.error(request, error)
+                return render(request, "core/edit_group_ranking.html", context)
 
         try:
             with transaction.atomic():
                 if recalculate:
                     update_group_ranking(group, reset_rank=True)
                 else:
-                    rankings = GroupRanking.objects.filter(
-                        group=group
-                    ).select_related("pair")
-
                     for ranking in rankings:
-                        rank_value = request.POST.get(f"rank_{ranking.id}")
-                        ranking.rank = None if rank_value == "" else int(rank_value)
+                        ranking.rank = parsed_ranks[ranking.id]
                         ranking.save()
 
                 if group.stage_id:
@@ -1108,24 +1156,7 @@ def edit_group_ranking(request, group_id):
         _show_stage_advancement_warning(request)
         return redirect(request.get_full_path() if recalculate else back_url)
 
-    rankings = GroupRanking.objects.filter(
-        group=group
-    ).select_related(
-        "pair"
-    ).order_by(
-        "pair__display_order",
-        "pair__pair_code",
-    )
-
-    return render(
-        request,
-        "core/edit_group_ranking.html",
-        {
-            "group": group,
-            "rankings": rankings,
-            "back_url": back_url,
-        }
-    )
+    return render(request, "core/edit_group_ranking.html", context)
 
 
 def retire_pair(request, pair_id):

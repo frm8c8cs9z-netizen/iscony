@@ -21,7 +21,7 @@
         </tr>
 
         {% for ranking in rankings %}
-        <tr>
+        <tr{% if ranking.rank_error %} class="ranking-error" style="background-color:#ffe0e0;"{% endif %}>
             <td>{{ ranking.pair.code }}</td>
             <td>{{ ranking.pair.display_organization }}</td>
             <td>
@@ -31,10 +31,11 @@
             <td>{{ ranking.losses }}</td>
             <td>
                 <input
-                    type="number"
+                    type="text"
+                    inputmode="numeric"
                     name="rank_{{ ranking.id }}"
-                    value="{{ ranking.rank|default_if_none:'' }}"
-                    min="1"
+                    value="{{ ranking.input_rank|default_if_none:'' }}"
+                    {% if ranking.rank_error %}aria-invalid="true"{% endif %}
                     style="width:70px; text-align:center;"
                 >
             </td>

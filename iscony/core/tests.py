@@ -36580,3 +36580,93 @@ class RetireLeagueEntryTests(TestCase):
         self.assertEqual(retire_league_entry(self.pair), 2)
         self.pair.refresh_from_db()
         self.assertTrue(self.pair.retired)
+
+
+class GroupRankingInputValidationTests(TestCase):
+    def setUp(self):
+        self.tournament = Tournament.objects.create(name="順位検証", code="RANK_VALIDATION")
+        self.category = Category.objects.create(tournament=self.tournament, name="女子A")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(category=self.category, stage=self.stage, name="A")
+        self.rankings = []
+        for index, rank in enumerate((3, 1, 2), start=1):
+            entry = LeagueEntry.objects.create(
+                category=self.category, group=self.group,
+                pair_code=f"A{index}", display_order=index,
+            )
+            self.rankings.append(GroupRanking.objects.create(
+                group=self.group, pair=entry, rank=rank,
+            ))
+        self.next_url = reverse("category_stage_overview", kwargs={"category_id": self.category.id})
+        self.url = reverse("edit_group_ranking", kwargs={"group_id": self.group.id})
+        self.url += "?" + urlencode({"next": self.next_url})
+
+    def _data(self, values):
+        return {f"rank_{ranking.id}": value for ranking, value in zip(self.rankings, values)}
+
+    def _assert_ranks(self, expected):
+        for ranking, rank in zip(self.rankings, expected):
+            ranking.refresh_from_db()
+            self.assertEqual(ranking.rank, rank)
+
+    def _assert_input_values(self, response, values):
+        for ranking, value in zip(self.rankings, values):
+            self.assertRegex(
+                response.content.decode(),
+                rf'name="rank_{ranking.id}"\s+value="{re.escape(value)}"',
+            )
+
+    def test_duplicate_ranks_preserve_inputs_without_saving_or_advancing(self):
+        from unittest.mock import patch
+
+        values = ("2", "2", "")
+        with patch("core.views.league.auto_apply_stage_advancements_if_ready") as advance:
+            response = self.client.post(self.url, self._data(values))
+        self.assertContains(response, "2位がA1・A2に重複しています。")
+        self.assertEqual(response.content.decode().count('class="ranking-error"'), 2)
+        self._assert_ranks((3, 1, 2))
+        self._assert_input_values(response, values)
+        advance.assert_not_called()
+
+    def test_invalid_ranks_preserve_inputs_without_saving_or_advancing(self):
+        from unittest.mock import patch
+
+        for invalid in ("0", "4", "abc", "-1", "1.5"):
+            with self.subTest(invalid=invalid), patch(
+                "core.views.league.auto_apply_stage_advancements_if_ready",
+            ) as advance:
+                values = ("1", invalid, "")
+                response = self.client.post(self.url, self._data(values))
+                self.assertContains(response, "A2: 順位は1〜3の数字で入力してください。")
+                self._assert_ranks((3, 1, 2))
+                self._assert_input_values(response, values)
+                advance.assert_not_called()
+
+    def test_all_validation_errors_are_displayed_together(self):
+        response = self.client.post(self.url, self._data(("2", "2", "abc")))
+        self.assertContains(response, "2位がA1・A2に重複しています。")
+        self.assertContains(response, "A3: 順位は1〜3の数字で入力してください。")
+        self.assertEqual(response.content.decode().count('class="ranking-error"'), 3)
+        self._assert_ranks((3, 1, 2))
+
+    def test_valid_ranks_with_blank_save_and_redirect_to_next(self):
+        from unittest.mock import patch
+
+        with patch("core.views.league.auto_apply_stage_advancements_if_ready") as advance:
+            response = self.client.post(self.url, self._data(("1", "", "3")))
+        self.assertRedirects(response, self.next_url, fetch_redirect_response=False)
+        self._assert_ranks((1, None, 3))
+        advance.assert_called_once_with(self.stage)
+
+    def test_recalculate_ignores_invalid_manual_inputs(self):
+        from unittest.mock import patch
+
+        data = self._data(("abc", "0", "4"))
+        data["recalculate"] = "1"
+        with patch("core.views.league.auto_apply_stage_advancements_if_ready") as advance:
+            response = self.client.post(self.url, data)
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        self._assert_ranks((None, None, None))
+        advance.assert_called_once_with(self.stage)
