@@ -22,6 +22,7 @@ from ..helpers.display import (
     resolve_entry_display_mode,
 )
 from ..forms import ExtraRoundRobinMatchForm, LeagueEntryEditForm
+from ..form_defs.league import ExtraRoundRobinMatchEditForm
 from ..models import (
     AdvancementSource,
     Category,
@@ -46,6 +47,9 @@ from ..services import (
     assign_participant_to_league_entry,
     assign_participant_with_shift,
     create_extra_round_robin_match,
+    update_extra_round_robin_match,
+    delete_extra_round_robin_match,
+    extra_round_robin_match_deletion_block_reason,
     delete_round_robin_score,
     insert_round_robin_schedule,
     group_base_size,
@@ -754,6 +758,57 @@ def add_extra_round_robin_match(request, group_id):
             "back_url": back_url,
         },
     )
+
+
+def edit_extra_round_robin_match(request, match_id):
+    """追加試合の順位算入・理由の編集と削除。"""
+    match = get_object_or_404(
+        RoundRobinMatch.objects.select_related(
+            "group__category__tournament", "group__stage",
+            "pair1__participant", "pair2__participant",
+        ).filter(Q(meeting_number__gt=1) | Q(counts_for_ranking=False)),
+        pk=match_id,
+    )
+    group = match.group
+    back_url = safe_next_url(request) or (
+        f"{reverse('category_detail', kwargs={'category_id': group.category_id})}"
+        f"#group-{group.id}"
+    )
+    form = ExtraRoundRobinMatchEditForm(initial={
+        "counts_for_ranking": match.counts_for_ranking, "note": match.note,
+    })
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "delete":
+            try:
+                delete_extra_round_robin_match(match)
+            except ValidationError as exc:
+                messages.error(request, " ".join(exc.messages))
+                return redirect(request.get_full_path())
+            _show_stage_advancement_warning(request)
+            messages.success(request, "追加試合を削除しました。")
+            return redirect(back_url)
+        if action == "save":
+            form = ExtraRoundRobinMatchEditForm(request.POST)
+            if form.is_valid():
+                try:
+                    update_extra_round_robin_match(match, **form.cleaned_data)
+                except ValidationError as exc:
+                    messages.error(request, " ".join(exc.messages))
+                else:
+                    _show_stage_advancement_warning(request)
+                    messages.success(request, "追加試合を保存しました。")
+                    return redirect(back_url)
+    scheduled = Schedule.objects.filter(round_robin_match=match).exists()
+    return render(request, "core/edit_extra_round_robin_match.html", {
+        "match": match, "group": group, "tournament": group.category.tournament,
+        "form": form, "back_url": back_url,
+        "deletion_block_reason": extra_round_robin_match_deletion_block_reason(match),
+        "scheduled": scheduled,
+        "active_replacement": scheduled and ScheduleReplacementHistory.objects.filter(
+            replacement_match=match, reverted_at__isnull=True,
+        ).exists(),
+    })
 
 
 def undo_extra_match_replacement(request, history_id):

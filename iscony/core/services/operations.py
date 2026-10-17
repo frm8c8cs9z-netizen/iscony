@@ -1734,6 +1734,69 @@ def insert_round_robin_schedule(
         )
 
 
+def update_extra_round_robin_match(match, *, counts_for_ranking, note):
+    """追加試合の理由と順位計算への算入を変更する。"""
+    with transaction.atomic():
+        match = RoundRobinMatch.objects.select_for_update().get(pk=match.pk)
+        if match.meeting_number <= 1 and match.counts_for_ranking:
+            raise ValidationError("追加試合ではありません。")
+        ranking_changed = match.counts_for_ranking != counts_for_ranking
+        match.note = note
+        fields = ["note"]
+        if ranking_changed:
+            match.counts_for_ranking = counts_for_ranking
+            fields.append("counts_for_ranking")
+        match.save(update_fields=fields)
+        if ranking_changed:
+            update_group_ranking(match.group, reset_rank=True)
+            if match.group.stage_id:
+                auto_apply_stage_advancements_if_ready(match.group.stage)
+
+
+def extra_round_robin_match_deletion_block_reason(match):
+    """追加試合を削除できない理由を返す。削除可能ならNone。"""
+    if match.meeting_number <= 1:
+        return "リーグの総当たりの試合は削除できません。2回目以降の追加対戦だけ削除できます。"
+    if (match.pair1_games is not None or match.pair2_games is not None
+            or match.completed):
+        return "結果が入力済みのため削除できません。先に結果を削除してください。"
+    if Schedule.objects.filter(round_robin_match=match).filter(
+        Q(called=True) | Q(started=True) | Q(finished=True)
+    ).exists():
+        return "進行が始まっているため削除できません。"
+    return None
+
+
+def delete_extra_round_robin_match(match):
+    """追加試合を削除し、進行枠・順位・進出先を更新する。"""
+    try:
+        with transaction.atomic():
+            match = RoundRobinMatch.objects.select_for_update().get(pk=match.pk)
+            schedules = list(Schedule.objects.select_for_update().filter(
+                round_robin_match=match,
+            ))
+            reason = extra_round_robin_match_deletion_block_reason(match)
+            if reason:
+                raise ValidationError(reason)
+            group = match.group
+            history = ScheduleReplacementHistory.objects.select_for_update().filter(
+                replacement_match=match, reverted_at__isnull=True,
+            ).first()
+            if history:
+                undo_schedule_replacement(history)
+            else:
+                for schedule in schedules:
+                    unassign_schedule(schedule)
+                match.delete()
+            update_group_ranking(group, reset_rank=False)
+            if group.stage_id:
+                auto_apply_stage_advancements_if_ready(group.stage)
+    except ValidationError:
+        raise
+    except Exception as exc:
+        raise ValidationError("追加試合を削除できませんでした。状態を確認してください。") from exc
+
+
 def undo_schedule_replacement(history):
     """未開始の追加対戦を削除し、差し替え前の進行枠へ戻す。"""
 

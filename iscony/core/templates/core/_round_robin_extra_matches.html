@@ -7,6 +7,7 @@
             <th>結果</th>
             <th>順位計算</th>
             <th>理由</th>
+            {% if link_kind == "input" %}<th>操作</th>{% endif %}
         </tr>
         {% for extra in extra_matches %}
             <tr>
@@ -45,6 +46,9 @@
                     {% endif %}
                 </td>
                 <td>{{ extra.match.note|default:"-" }}</td>
+                {% if link_kind == "input" %}
+                    <td><a href="{% url 'edit_extra_round_robin_match' extra.match.id %}?next={{ next_url }}%23group-{{ group_id }}">編集</a></td>
+                {% endif %}
             </tr>
         {% endfor %}
     </table>

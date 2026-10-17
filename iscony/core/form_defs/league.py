@@ -7,7 +7,7 @@ participants from another category or tournament.
 
 from django import forms
 
-from ..models import Court, LeagueEntry, Participant, ScheduleBlock
+from ..models import Court, LeagueEntry, Participant, RoundRobinMatch, ScheduleBlock
 from ..services.participants import find_conflicting_league_entry
 from .fields import LeagueEntryChoiceField
 
@@ -159,3 +159,14 @@ class LeagueEntryEditForm(forms.ModelForm):
                 )
 
         return cleaned_data
+
+
+class ExtraRoundRobinMatchEditForm(forms.Form):
+    counts_for_ranking = forms.BooleanField(
+        required=False, label="順位計算に含める",
+        help_text="結果が入っている試合で切り替えると、順位を計算し直します。",
+    )
+    note = forms.CharField(
+        required=False, label="理由",
+        max_length=RoundRobinMatch._meta.get_field("note").max_length,
+    )

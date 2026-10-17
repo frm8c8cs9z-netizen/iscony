@@ -257,6 +257,12 @@ urlpatterns = [
         league.add_extra_round_robin_match,
         name='add_extra_round_robin_match'
     ),
+
+    path(
+        'round-robin-match/<int:match_id>/extra/edit/',
+        league.edit_extra_round_robin_match,
+        name='edit_extra_round_robin_match',
+    ),
     
     path(
         "tournament/<str:tournament_code>/schedule/",

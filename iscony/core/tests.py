@@ -35552,3 +35552,237 @@ class LeagueOperationNavigationTests(TestCase):
         self.assertContains(response, "異なる2枠を選択してください。")
         self.assertContains(response, '<form method="post">')
         self.assertContains(response, f'href="{self.next_url}"')
+
+
+class ExtraRoundRobinMatchEditTests(TestCase):
+    def setUp(self):
+        from .services import (
+            delete_extra_round_robin_match, update_extra_round_robin_match,
+            extra_round_robin_match_deletion_block_reason,
+        )
+        self.delete = delete_extra_round_robin_match
+        self.update = update_extra_round_robin_match
+        self.reason = extra_round_robin_match_deletion_block_reason
+        self.tournament = Tournament.objects.create(name="追加試合大会", code="EXTRAEDIT")
+        self.category = Category.objects.create(tournament=self.tournament, name="一般")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(category=self.category, stage=self.stage, name="A")
+        self.entries = []
+        for i in range(2):
+            participant = Participant.objects.create(
+                category=self.category, entry_code=f"E{i}",
+                player1_name=f"選手{i}", player2_name=f"相方{i}",
+            )
+            self.entries.append(LeagueEntry.objects.create(
+                category=self.category, group=self.group, participant=participant,
+                pair_code=f"A{i + 1}", display_order=i + 1,
+            ))
+        self.base = self.make_match(1)
+        self.extra = self.make_match(2)
+        self.block = ScheduleBlock.objects.create(tournament=self.tournament, name="午前")
+        self.court = Court.objects.create(tournament=self.tournament, name="1コート")
+        self.url = reverse("edit_extra_round_robin_match", args=[self.extra.pk])
+        self.back = reverse("category_detail", args=[self.category.pk]) + f"#group-{self.group.pk}"
+
+    def make_match(self, number, **kwargs):
+        return RoundRobinMatch.objects.create(
+            group=self.group, pair1=self.entries[0], pair2=self.entries[1],
+            meeting_number=number, **kwargs,
+        )
+
+    def schedule(self, match, order=1, **kwargs):
+        return Schedule.objects.create(
+            schedule_block=self.block, court=self.court, order=order,
+            round_robin_match=match, **kwargs,
+        )
+
+    def finish(self, match):
+        match.pair1_games, match.pair2_games, match.completed = 4, 0, True
+        match.save()
+
+    def history(self, schedule):
+        return ScheduleReplacementHistory.objects.create(
+            schedule=schedule, original_match=self.base, replacement_match=self.extra,
+            original_schedule_block=self.block, original_court=self.court,
+            original_order=1, original_called=True, original_started=True,
+            original_finished=True,
+        )
+
+    def test_note_preserves_manual_ranks_and_toggle_recalculates_wins(self):
+        self.finish(self.base)
+        self.finish(self.extra)
+        update_group_ranking(self.group, reset_rank=True)
+        GroupRanking.objects.filter(group=self.group, pair=self.entries[0]).update(rank=7)
+        self.update(self.extra, counts_for_ranking=True, note="理由変更")
+        self.extra.refresh_from_db()
+        self.assertEqual(self.extra.note, "理由変更")
+        ranking = GroupRanking.objects.get(group=self.group, pair=self.entries[0])
+        self.assertEqual((ranking.rank, ranking.wins), (7, 2))
+        self.update(self.extra, counts_for_ranking=False, note="対象外")
+        ranking.refresh_from_db()
+        self.assertEqual((ranking.rank, ranking.wins), (1, 1))
+        self.assertEqual(GroupRanking.objects.get(group=self.group, pair=self.entries[1]).losses, 1)
+
+    def test_delete_without_schedule_cascades_legs(self):
+        pk = self.extra.pk
+        RoundRobinMatchLeg.objects.create(match=self.extra, leg_number=1, winner_side=1)
+        self.delete(self.extra)
+        self.assertFalse(RoundRobinMatch.objects.filter(pk=pk).exists())
+        self.assertFalse(RoundRobinMatchLeg.objects.filter(match_id=pk).exists())
+
+    def test_delete_inserted_match_compacts_only_same_block_and_court(self):
+        schedule = self.schedule(self.extra)
+        later = [self.schedule(self.make_match(i + 3), i + 2) for i in range(2)]
+        other_court = Court.objects.create(tournament=self.tournament, name="2コート")
+        other_block = ScheduleBlock.objects.create(tournament=self.tournament, name="午後")
+        untouched = [Schedule.objects.create(
+            schedule_block=block, court=court, order=2,
+            round_robin_match=self.make_match(i + 5),
+        ) for i, (block, court) in enumerate([
+            (self.block, other_court), (other_block, self.court),
+        ])]
+        self.assertContains(self.client.get(self.url), "後ろの試合を1つずつ前に詰めます。")
+        self.delete(self.extra)
+        self.assertFalse(Schedule.objects.filter(pk=schedule.pk).exists())
+        self.assertFalse(RoundRobinMatch.objects.filter(pk=self.extra.pk).exists())
+        for expected, item in enumerate(later, 1):
+            item.refresh_from_db()
+            self.assertEqual(item.order, expected)
+        for item in untouched:
+            item.refresh_from_db()
+            self.assertEqual(item.order, 2)
+
+    def test_delete_replacement_restores_original_schedule_and_history(self):
+        self.finish(self.base)
+        self.base.result_type = RoundRobinMatch.RESULT_RETIREMENT
+        self.base.save()
+        schedule = self.schedule(self.extra)
+        history = self.history(schedule)
+        self.assertContains(self.client.get(self.url), "その進行枠は元の不戦試合に戻ります。")
+        self.delete(self.extra)
+        schedule.refresh_from_db()
+        history.refresh_from_db()
+        self.assertEqual(schedule.round_robin_match, self.base)
+        self.assertEqual((schedule.called, schedule.started, schedule.finished), (True, True, True))
+        self.assertIsNotNone(history.reverted_at)
+        self.assertFalse(RoundRobinMatch.objects.filter(pk=self.extra.pk).exists())
+
+    def test_blocked_deletion_is_unchanged_and_hides_button(self):
+        for fields, scheduled in [
+            ({"pair1_games": 0}, {}), ({"pair2_games": 0}, {}),
+            ({"completed": True}, {}), ({}, {"called": True}),
+            ({}, {"started": True}), ({}, {"finished": True}),
+            ({"meeting_number": 1, "counts_for_ranking": False}, {}),
+        ]:
+            with self.subTest(fields=fields, scheduled=scheduled):
+                # The first-meeting case uses the existing base row.
+                match = self.base if fields.get("meeting_number") == 1 else self.extra
+                for name, value in fields.items():
+                    setattr(match, name, value)
+                match.save()
+                schedule = self.schedule(match, **scheduled)
+                before = RoundRobinMatch.objects.values().get(pk=match.pk)
+                reason = self.reason(match)
+                self.assertIsNotNone(reason)
+                with self.assertRaisesMessage(ValidationError, reason):
+                    self.delete(match)
+                self.assertEqual(RoundRobinMatch.objects.values().get(pk=match.pk), before)
+                url = reverse("edit_extra_round_robin_match", args=[match.pk])
+                response = self.client.get(url)
+                self.assertContains(response, reason)
+                self.assertNotContains(response, 'class="danger-button"')
+                response = self.client.post(url + "?next=%2Freturn%2F", {"action": "delete"})
+                self.assertRedirects(response, url + "?next=%2Freturn%2F", fetch_redirect_response=False)
+                self.assertTrue(Schedule.objects.filter(pk=schedule.pk).exists())
+                schedule.delete()
+                match.pair1_games = match.pair2_games = None
+                match.completed = False
+                match.save()
+
+    def test_delete_unfinished_extra_completes_group_and_applies_advancement(self):
+        final = Stage.objects.create(category=self.category, name="決勝", stage_type=Stage.TYPE_LEAGUE)
+        group = Group.objects.create(category=self.category, stage=final, name="決勝")
+        target = LeagueEntry.objects.create(category=self.category, group=group, pair_code="F1")
+        AdvancementSource.objects.create(
+            target_league_entry=target, source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage, source_group=self.group, source_rank=1,
+        )
+        self.finish(self.base)
+        update_group_ranking(self.group, reset_rank=True)
+        self.assertFalse(GroupRanking.objects.filter(group=self.group, rank__isnull=False).exists())
+        self.delete(self.extra)
+        self.assertEqual(GroupRanking.objects.get(group=self.group, pair=self.entries[0]).rank, 1)
+        target.refresh_from_db()
+        self.assertEqual(target.participant, self.entries[0].participant)
+
+    def test_save_and_delete_redirects_and_rejects_external_next(self):
+        for next_url in [None, "/return/#group-1", "https://example.com/", "//example.com/"]:
+            with self.subTest(next_url=next_url):
+                url = self.url + ("?" + urlencode({"next": next_url}) if next_url else "")
+                expected = next_url if next_url == "/return/#group-1" else self.back
+                response = self.client.post(url, {"action": "save", "counts_for_ranking": "on", "note": "保存"})
+                self.assertRedirects(response, expected, fetch_redirect_response=False)
+                self.extra.refresh_from_db()
+                self.assertEqual(self.extra.note, "保存")
+                response = self.client.post(url, {"action": "delete"})
+                self.assertRedirects(response, expected, fetch_redirect_response=False)
+                self.extra = self.make_match(2)
+                self.url = reverse("edit_extra_round_robin_match", args=[self.extra.pk])
+
+    def test_form_validation_get_and_non_extra_404(self):
+        response = self.client.get(self.url + "?next=%2Freturn%2F")
+        self.assertContains(response, "追加試合の編集")
+        self.assertContains(response, self.entries[0].display_name)
+        self.assertContains(response, 'href="/return/"')
+        self.assertNotContains(response, '<form method="post" action=')
+        response = self.client.post(self.url, {"action": "save", "note": "長" * 201})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].errors)
+        self.extra.refresh_from_db()
+        self.assertEqual(self.extra.note, "")
+        url = reverse("edit_extra_round_robin_match", args=[self.base.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(self.client.post(url, {"action": "delete"}).status_code, 404)
+        with self.assertRaisesMessage(ValidationError, "追加試合ではありません。"):
+            self.update(self.base, counts_for_ranking=False, note="不可")
+
+    def test_edit_links_on_operator_pages_only(self):
+        for name in ["category_detail", "category_stage_overview"]:
+            url = reverse(name, args=[self.category.pk])
+            response = self.client.get(url)
+            self.assertContains(response, self.url + "?next=")
+            self.assertContains(response, f"%23group-{self.group.pk}")
+        response = self.client.get(reverse("public_category_results", kwargs={
+            "code": self.tournament.code, "category_id": self.category.pk,
+        }))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.url)
+        rendered = Template('{% include "core/_round_robin_extra_matches.html" %}').render(Context({
+            "extra_matches": [{"match": self.extra}], "link_kind": "plain",
+        }))
+        self.assertNotIn("操作", rendered)
+
+    def test_delete_rolls_back_when_followup_fails(self):
+        from unittest.mock import patch
+        schedule = self.schedule(self.extra)
+        later = self.schedule(self.base, 2)
+        with patch("core.services.operations.update_group_ranking", side_effect=RuntimeError("failure")):
+            with self.assertRaises(ValidationError):
+                self.delete(self.extra)
+        self.assertTrue(RoundRobinMatch.objects.filter(pk=self.extra.pk).exists())
+        self.assertTrue(Schedule.objects.filter(pk=schedule.pk).exists())
+        later.refresh_from_db()
+        self.assertEqual(later.order, 2)
+
+    def test_changed_replacement_slot_validation_is_preserved(self):
+        schedule = self.schedule(self.extra)
+        history = self.history(schedule)
+        schedule.round_robin_match = self.base
+        schedule.save()
+        with self.assertRaisesMessage(ValidationError, "進行枠がその後変更されているため取り消せません。"):
+            self.delete(self.extra)
+        history.refresh_from_db()
+        self.assertIsNone(history.reverted_at)
+        self.assertTrue(RoundRobinMatch.objects.filter(pk=self.extra.pk).exists())
