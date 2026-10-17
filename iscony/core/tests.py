@@ -35956,3 +35956,282 @@ class OrganizationPrefetchQueryCountTests(TestCase):
 
     def test_finished_public_results_with_tie_table_queries_stay_constant(self):
         self._assert_constant_queries("public_results", finished=True)
+
+
+@override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+class StageOverviewQueryCountTests(TestCase):
+    """リーグ・進出元の増加に対して読み取りクエリを一定に保つ。"""
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="横断性能大会", code="OVERVIEW_QUERIES", is_public=True,
+        )
+        self.category = Category.objects.create(tournament=self.tournament, name="女子B")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.next_stage = Stage.objects.create(
+            category=self.category, name="二次予選", stage_type=Stage.TYPE_LEAGUE,
+            display_order=2,
+        )
+        self.target_group = Group.objects.create(
+            category=self.category, stage=self.next_stage, name="後続",
+        )
+        self.tournament_stage = Stage.objects.create(
+            category=self.category, name="本戦", stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=3,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category, stage=self.tournament_stage, name="決勝",
+        )
+        self.entries = [create_tournament_entry(
+            bracket=self.bracket, pair_code=f"T{i}", display_order=i,
+            player1_name=f"本戦{i}", player2_name="選手",
+        ) for i in (1, 2)]
+        self.final = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1, match_code="F",
+            pair1=self.entries[0], pair2=self.entries[1], winner=self.entries[0],
+            pair1_games=4, pair2_games=2,
+        )
+        self.court = Court.objects.create(tournament=self.tournament, name="1")
+        self.block = ScheduleBlock.objects.create(tournament=self.tournament, name="進行")
+        self.groups = []
+        self.sources = []
+        self._add_groups(2)
+
+    def _add_groups(self, count):
+        for _ in range(count):
+            number = len(self.groups) + 1
+            group = Group.objects.create(
+                category=self.category, stage=self.stage, name=f"G{number}",
+                display_order=number,
+            )
+            self.groups.append(group)
+            pairs = [create_league_entry_with_participant(
+                category=self.category, group=group, pair_code=f"G{number}-{rank}",
+                display_order=rank, player1_name=f"選手{number}-{rank}", player2_name="相方",
+            ) for rank in (1, 2)]
+            match = RoundRobinMatch.objects.create(
+                group=group, pair1=pairs[0], pair2=pairs[1],
+                pair1_games=4, pair2_games=2,
+            )
+            extra = RoundRobinMatch.objects.create(
+                group=group, pair1=pairs[0], pair2=pairs[1], meeting_number=2,
+                counts_for_ranking=False,
+            )
+            schedule = Schedule.objects.create(
+                court=self.court, schedule_block=self.block,
+                order=number, round_robin_match=extra,
+            )
+            ScheduleReplacementHistory.objects.create(
+                schedule=schedule, original_match=match, replacement_match=extra,
+                original_schedule_block=self.block, original_court=self.court,
+                original_order=number,
+            )
+            for rank, pair in enumerate(pairs, 1):
+                # 同勝数の補助表も描画する。
+                GroupRanking.objects.create(group=group, pair=pair, rank=rank, wins=1)
+                target = LeagueEntry.objects.create(
+                    category=self.category, group=self.target_group,
+                    pair_code=f"NEXT-{number}-{rank}", display_order=number * 2 + rank,
+                )
+                self.sources.append(AdvancementSource.objects.create(
+                    target_league_entry=target,
+                    source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+                    source_stage=self.stage, source_group=group, source_rank=rank,
+                ))
+
+    def _count_view(self, name):
+        kwargs = {"category_id": self.category.pk}
+        if name == "public_category_results":
+            kwargs["code"] = self.tournament.code
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse(name, kwargs=kwargs))
+        self.assertEqual(response.status_code, 200)
+        return len(queries)
+
+    def _assert_constant_queries(self, name):
+        small = self._count_view(name)
+        self._add_groups(2)
+        large = self._count_view(name)
+        self.assertEqual(small, large, f"{name}: {small} -> {large}")
+
+    def test_overview_queries_do_not_grow(self):
+        self._assert_constant_queries("category_stage_overview")
+
+    def test_public_results_queries_do_not_grow(self):
+        self._assert_constant_queries("public_category_results")
+
+    def _legacy_readiness_sources(self, stage):
+        # 変更前と同じ取得条件で、DBが返す順序を比較基準にする。
+        # AdvancementSourceには既定のorderingがなく、挿入順は保証されない。
+        return AdvancementSource.objects.select_related(
+            "target_league_entry", "target_tournament_entry", "source_group",
+            "source_match", "source_stage",
+        ).filter(source_stage=stage)
+
+    def test_readiness_and_uncached_resolution(self):
+        from .services.operations import (
+            _resolved_advancement_entry, inspect_stage_advancement_readiness,
+        )
+
+        for state in ("unfinished", "tie", "missing", "confirmed"):
+            with self.subTest(state=state):
+                RoundRobinMatch.objects.filter(
+                    group__in=self.groups, counts_for_ranking=True,
+                ).update(pair1_games=None if state == "unfinished" else 4)
+                for group in self.groups:
+                    GroupRanking.objects.filter(group=group).update(
+                        rank=None if state == "missing" else 1,
+                    )
+                    if state not in ("tie", "missing"):
+                        for rank, ranking in enumerate(
+                            GroupRanking.objects.filter(group=group).order_by("pair__display_order"), 1,
+                        ):
+                            ranking.rank = rank
+                            ranking.save(update_fields=["rank"])
+                expected = []
+                for source in self._legacy_readiness_sources(self.stage):
+                    if state == "confirmed":
+                        entry = _resolved_advancement_entry(source)
+                        self.assertEqual(entry.group_id, source.source_group_id)
+                        self.assertEqual(entry.groupranking_set.get().rank, source.source_rank)
+                    else:
+                        message = (
+                            "順位計算対象の試合が完了していません。" if state == "unfinished"
+                            else f"{source.source_rank}位を1ペアに確定してください。"
+                        )
+                        expected.append(f"{source.label}: {message}")
+                        with self.assertRaises(ValidationError) as error:
+                            _resolved_advancement_entry(source)
+                        self.assertEqual(error.exception.messages, [expected[-1]])
+                self.assertEqual(inspect_stage_advancement_readiness(self.stage), {
+                    "ready": state == "confirmed", "source_count": 4, "blockers": expected,
+                })
+
+    def test_uncached_resolution_observes_database_changes(self):
+        from .services.operations import _resolved_advancement_entry
+
+        source = self.sources[0]
+        pair = _resolved_advancement_entry(source)
+        GroupRanking.objects.filter(group=source.source_group, pair=pair).delete()
+        with self.assertRaisesMessage(ValidationError, "1位を1ペアに確定してください。"):
+            _resolved_advancement_entry(source)
+        RoundRobinMatch.objects.filter(group=source.source_group, counts_for_ranking=True).update(
+            pair2_games=None,
+        )
+        with self.assertRaisesMessage(ValidationError, "順位計算対象の試合が完了していません。"):
+            _resolved_advancement_entry(source)
+
+    def test_stage_counts_preserve_completion_rules(self):
+        from .views.stage import _league_stage_data, _tournament_stage_data
+
+        with self.assertNumQueries(1):
+            rows = _league_stage_data(self.stage)
+        for row in rows:
+            self.assertEqual({key: value for key, value in row.items() if key != "group"}, {
+                "entry_count": 2, "match_count": 1, "finished_count": 1,
+                "ranking_count": 2, "matches_complete": True, "ranking_confirmed": True,
+            })
+        RoundRobinMatch.objects.filter(group=self.groups[0], counts_for_ranking=True).update(
+            pair2_games=None,
+        )
+        GroupRanking.objects.filter(group=self.groups[0], rank=2).update(rank=None)
+        first = _league_stage_data(self.stage)[0]
+        self.assertEqual(first["finished_count"], 0)
+        self.assertEqual(first["ranking_count"], 1)
+        self.assertFalse(first["matches_complete"])
+        self.assertFalse(first["ranking_confirmed"])
+        for number, code, retirement, has_pairs in (
+            (2, "S1", False, True), (3, "R1", True, True), (4, "R2", True, False),
+        ):
+            TournamentMatch.objects.create(
+                bracket=self.bracket, round_number=1, match_number=number, match_code=code,
+                pair1=self.entries[0] if has_pairs else None,
+                pair2=self.entries[1] if has_pairs else None,
+                pair1_games=0 if retirement else None, pair2_games=0 if retirement else None,
+                result_type=TournamentMatch.RESULT_RETIREMENT if retirement else TournamentMatch.RESULT_NORMAL,
+            )
+        with self.assertNumQueries(1):
+            rows = _tournament_stage_data(self.tournament_stage)
+        self.assertEqual({key: value for key, value in rows[0].items() if key != "bracket"}, {
+            "entry_count": 2, "match_count": 3, "finished_count": 2, "matches_complete": False,
+        })
+        TournamentMatch.objects.filter(bracket=self.bracket, match_code="R2").delete()
+        self.assertTrue(_tournament_stage_data(self.tournament_stage)[0]["matches_complete"])
+
+    def test_reference_cache_and_uncached_query_behavior(self):
+        from .services.operations import _resolved_advancement_entry
+
+        first, second = self.sources[:2]
+        with self.assertNumQueries(3):
+            expected = _resolved_advancement_entry(first)
+        reference_cache = {}
+        with self.assertNumQueries(2):
+            self.assertEqual(_resolved_advancement_entry(first, cache=reference_cache), expected)
+        with self.assertNumQueries(0):
+            self.assertEqual(_resolved_advancement_entry(first, cache=reference_cache), expected)
+            self.assertNotEqual(_resolved_advancement_entry(second, cache=reference_cache), expected)
+
+    def test_readiness_preserves_scored_target_blocker_order(self):
+        from .services.operations import inspect_stage_advancement_readiness
+
+        first, second = [source.target_league_entry for source in self.sources[:2]]
+        RoundRobinMatch.objects.create(
+            group=self.target_group, pair1=first, pair2=second, pair1_games=0,
+        )
+        self.assertEqual(inspect_stage_advancement_readiness(self.stage), {
+            "ready": False, "source_count": 4,
+            "blockers": [
+                f"{source.target_league_entry.code}: 後続枠の試合結果が入力済みのため変更できません。"
+                for source in self._legacy_readiness_sources(self.stage)
+                if source.target_league_entry_id in {first.pk, second.pk}
+            ],
+        })
+
+    def test_tournament_readiness_preloads_winner_and_loser(self):
+        from .services.operations import inspect_stage_advancement_readiness
+
+        targets = [source.target_league_entry for source in self.sources[:2]]
+        AdvancementSource.objects.filter(target_league_entry__in=targets).delete()
+        for target, result in zip(targets, (
+            AdvancementSource.RESULT_WINNER, AdvancementSource.RESULT_LOSER,
+        )):
+            AdvancementSource.objects.create(
+                target_league_entry=target,
+                source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+                source_stage=self.tournament_stage, source_match=self.final, source_result=result,
+            )
+        with self.assertNumQueries(3):
+            readiness = inspect_stage_advancement_readiness(self.tournament_stage)
+        self.assertEqual(readiness, {"ready": True, "source_count": 2, "blockers": []})
+        self.final.winner = None
+        self.final.save(update_fields=["winner"])
+        self.assertEqual(inspect_stage_advancement_readiness(self.tournament_stage), {
+            "ready": False, "source_count": 2,
+            "blockers": [
+                f"{source.label}: トーナメント結果が確定していません。"
+                for source in self._legacy_readiness_sources(self.tournament_stage)
+            ],
+        })
+
+    def test_empty_containers_and_no_outgoing_sources(self):
+        from .services.operations import inspect_stage_advancement_readiness
+        from .views.stage import _league_stage_data, _tournament_stage_data
+
+        self.assertEqual(inspect_stage_advancement_readiness(self.next_stage), {
+            "ready": False, "source_count": 0,
+            "blockers": ["このStageを参照する後続枠はありません。"],
+        })
+        LeagueEntry.objects.filter(group=self.target_group).delete()
+        self.assertEqual(_league_stage_data(self.next_stage), [{
+            "group": self.target_group, "entry_count": 0, "match_count": 0,
+            "finished_count": 0, "ranking_count": 0,
+            "matches_complete": False, "ranking_confirmed": False,
+        }])
+        TournamentMatch.objects.filter(bracket=self.bracket).delete()
+        TournamentEntry.objects.filter(bracket=self.bracket).delete()
+        self.assertEqual(_tournament_stage_data(self.tournament_stage), [{
+            "bracket": self.bracket, "entry_count": 0, "match_count": 0,
+            "finished_count": 0, "matches_complete": False,
+        }])

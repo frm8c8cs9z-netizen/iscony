@@ -500,6 +500,27 @@ def clone_tournament_without_results(source, *, name, code):
     return clone
 
 
+def _cache_league_rank_references(cache, group_ids):
+    """読み取りチェック内だけで共有する、リーグ別の確定状況。"""
+
+    group_ids = set(group_ids) - cache.keys()
+    if not group_ids:
+        return
+
+    pending_groups = set(RoundRobinMatch.objects.filter(
+        group_id__in=group_ids,
+        counts_for_ranking=True,
+    ).filter(
+        Q(pair1_games__isnull=True) | Q(pair2_games__isnull=True)
+    ).values_list("group_id", flat=True))
+    for group_id in group_ids:
+        cache[group_id] = (group_id in pending_groups, {})
+    for ranking in GroupRanking.objects.filter(
+        group_id__in=group_ids,
+    ).select_related("pair"):
+        cache[ranking.group_id][1].setdefault(ranking.rank, []).append(ranking.pair)
+
+
 def _resolve_rank_or_result_reference(
         source_type,
         source_group,
@@ -507,7 +528,8 @@ def _resolve_rank_or_result_reference(
         source_match,
         source_result,
         *,
-        label):
+        label,
+        cache=None):
     """
     リーグ順位(source_group+source_rank)またはトーナメント結果
     (source_match+source_result)の参照から、確定した参加枠を1件取得する。
@@ -515,6 +537,21 @@ def _resolve_rank_or_result_reference(
     """
 
     if source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
+        if cache is not None:
+            group_id = source_group.pk if source_group else None
+            _cache_league_rank_references(cache, [group_id])
+            unfinished, rankings_by_rank = cache[group_id]
+            if unfinished:
+                raise ValidationError(
+                    f"{label}: 順位計算対象の試合が完了していません。"
+                )
+            pairs = rankings_by_rank.get(source_rank, [])
+            if len(pairs) != 1:
+                raise ValidationError(
+                    f"{label}: {source_rank}位を1ペアに確定してください。"
+                )
+            return pairs[0]
+
         if RoundRobinMatch.objects.filter(
             group=source_group,
             counts_for_ranking=True,
@@ -560,7 +597,7 @@ def _resolve_rank_or_result_reference(
     raise ValidationError(f"{label}: 進出元設定を確認してください。")
 
 
-def _resolved_advancement_entry(source):
+def _resolved_advancement_entry(source, *, cache=None):
     """進出元設定から、確定した参加枠を1件取得する。"""
 
     return _resolve_rank_or_result_reference(
@@ -570,6 +607,7 @@ def _resolved_advancement_entry(source):
         source.source_match,
         source.source_result,
         label=source.label,
+        cache=cache,
     )
 
 
@@ -843,6 +881,45 @@ def inspect_stage_advancement_readiness(source_stage):
             "blockers": ["このStageを参照する後続枠はありません。"],
         }
 
+    # 元の取得順を保つ。JOIN追加だけでもDBの実行計画によりblockersの順が変わる。
+    tournament_source_ids = [source.pk for source in sources if source.source_match_id]
+    if tournament_source_ids:
+        loaded_sources = {
+            source.pk: source
+            for source in AdvancementSource.objects.filter(
+                pk__in=tournament_source_ids,
+            ).select_related(
+                "source_match__winner", "source_match__pair1", "source_match__pair2",
+            )
+        }
+        for source in sources:
+            if source.pk in loaded_sources:
+                source.source_match = loaded_sources[source.pk].source_match
+
+    cache = {}
+    _cache_league_rank_references(cache, [
+        source.source_group_id for source in sources
+        if source.source_type == AdvancementSource.SOURCE_LEAGUE_RANK
+    ])
+    # 反映待ちの枠も、結果入力の有無を対象群ごとに確認する。
+    def scored_targets(model, target_ids):
+        if not target_ids:
+            return set()
+        matches = model.objects.filter(
+            Q(pair1_id__in=target_ids) | Q(pair2_id__in=target_ids),
+        ).filter(
+            Q(pair1_games__isnull=False) | Q(pair2_games__isnull=False),
+        ).values_list("pair1_id", "pair2_id")
+        return {pair_id for pair_ids in matches for pair_id in pair_ids}
+
+    scored_league_targets = scored_targets(RoundRobinMatch, {
+        source.target_league_entry_id for source in sources
+        if source.target_league_entry_id is not None
+    })
+    scored_tournament_targets = scored_targets(TournamentMatch, {
+        source.target_tournament_entry_id for source in sources
+        if source.target_tournament_entry_id is not None
+    })
     blockers = []
 
     for source in sources:
@@ -852,7 +929,7 @@ def inspect_stage_advancement_readiness(source_stage):
         )
 
         try:
-            source_entry = _resolved_advancement_entry(source)
+            source_entry = _resolved_advancement_entry(source, cache=cache)
         except ValidationError as error:
             blockers.extend(error.messages)
             continue
@@ -866,7 +943,11 @@ def inspect_stage_advancement_readiness(source_stage):
         current_state = _target_advancement_state(target)
         desired_state = _desired_advancement_state(source_entry, target)
 
-        if current_state != desired_state and _target_has_score(target):
+        scored_target_ids = (
+            scored_league_targets if isinstance(target, LeagueEntry)
+            else scored_tournament_targets
+        )
+        if current_state != desired_state and target.pk in scored_target_ids:
             blockers.append(
                 f"{target.code}: 後続枠の試合結果が入力済みのため変更できません。"
             )

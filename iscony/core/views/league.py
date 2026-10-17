@@ -147,6 +147,93 @@ def build_category_group_data(
         entry_display_mode,
     )
 
+    groups = list(groups)
+    all_pairs = LeagueEntry.objects.filter(
+        group__in=groups
+    ).select_related(
+        "participant",
+    ).prefetch_related(
+        "participant__organization_values__field",
+        "advancement_source__source_group",
+        "advancement_source__source_match",
+    ).order_by(
+        "display_order",
+        "pair_code"
+    )
+
+    all_matches = RoundRobinMatch.objects.filter(
+        group__in=groups,
+        meeting_number=1,
+    ).select_related(
+        "pair1__participant",
+        "pair2__participant",
+    ).prefetch_related(
+        "pair1__participant__organization_values__field",
+        "pair1__advancement_source__source_group",
+        "pair1__advancement_source__source_match",
+        "pair2__participant__organization_values__field",
+        "pair2__advancement_source__source_group",
+        "pair2__advancement_source__source_match",
+    )
+
+    all_extra_matches = RoundRobinMatch.objects.filter(
+        group__in=groups,
+    ).filter(
+        Q(meeting_number__gt=1)
+        | Q(counts_for_ranking=False)
+    ).select_related(
+        "pair1__participant",
+        "pair2__participant",
+    ).prefetch_related(
+        "pair1__participant__organization_values__field",
+        "pair1__advancement_source__source_group",
+        "pair1__advancement_source__source_match",
+        "pair2__participant__organization_values__field",
+        "pair2__advancement_source__source_group",
+        "pair2__advancement_source__source_match",
+    ).order_by(
+        "meeting_number",
+        "pair1__display_order",
+        "pair2__display_order",
+    )
+    all_rankings = GroupRanking.objects.filter(
+        group__in=groups,
+    ).select_related("pair__participant").prefetch_related(
+        "pair__participant__organization_values__field",
+        "pair__advancement_source__source_group",
+        "pair__advancement_source__source_match",
+    )
+    all_ranking_matches = RoundRobinMatch.objects.filter(
+        group__in=groups, counts_for_ranking=True,
+    ).select_related("pair1", "pair2")
+    all_schedules = Schedule.objects.filter(
+        round_robin_match__group__in=groups,
+    ).select_related("court", "schedule_block", "round_robin_match")
+    all_histories = []
+    if include_operations:
+        all_histories = ScheduleReplacementHistory.objects.filter(
+            replacement_match__group__in=groups,
+            reverted_at__isnull=True,
+        ).select_related(
+            "schedule", "original_match__pair1", "original_match__pair2",
+            "replacement_match__pair1", "replacement_match__pair2",
+            "original_schedule_block", "original_court",
+        )
+
+    def by_group(items, group_id):
+        result = {}
+        for item in items:
+            result.setdefault(group_id(item), []).append(item)
+        return result
+
+    pairs_by_group = by_group(all_pairs, lambda item: item.group_id)
+    matches_by_group = by_group(all_matches, lambda item: item.group_id)
+    extras_by_group = by_group(all_extra_matches, lambda item: item.group_id)
+    rankings_by_group = by_group(all_rankings, lambda item: item.group_id)
+    ranking_matches_by_group = by_group(all_ranking_matches, lambda item: item.group_id)
+    schedules_by_group = by_group(all_schedules, lambda item: item.round_robin_match.group_id)
+    histories_by_group = by_group(all_histories, lambda item: item.replacement_match.group_id)
+
     for group in groups:
         group_score_next_url = reverse(
             score_next_view_name,
@@ -154,44 +241,9 @@ def build_category_group_data(
                 "category_id": category.id,
             },
         )
-        pairs = LeagueEntry.objects.filter(
-            group=group
-        ).select_related(
-            "participant",
-        ).prefetch_related(
-            "participant__organization_values__field",
-        ).order_by(
-            "display_order",
-            "pair_code"
-        )
-
-        matches = RoundRobinMatch.objects.filter(
-            group=group,
-            meeting_number=1,
-        ).select_related(
-            "pair1__participant",
-            "pair2__participant",
-        ).prefetch_related(
-            "pair1__participant__organization_values__field",
-            "pair2__participant__organization_values__field",
-        )
-
-        extra_matches = RoundRobinMatch.objects.filter(
-            group=group,
-        ).filter(
-            Q(meeting_number__gt=1)
-            | Q(counts_for_ranking=False)
-        ).select_related(
-            "pair1__participant",
-            "pair2__participant",
-        ).prefetch_related(
-            "pair1__participant__organization_values__field",
-            "pair2__participant__organization_values__field",
-        ).order_by(
-            "meeting_number",
-            "pair1__display_order",
-            "pair2__display_order",
-        )
+        pairs = pairs_by_group.get(group.id, [])
+        matches = matches_by_group.get(group.id, [])
+        extra_matches = extras_by_group.get(group.id, [])
         extra_match_rows = [
             {
                 "match": match,
@@ -206,32 +258,11 @@ def build_category_group_data(
             }
             for match in extra_matches
         ]
-        replacement_histories = []
-        if include_operations:
-            replacement_histories = ScheduleReplacementHistory.objects.filter(
-                replacement_match__group=group,
-                reverted_at__isnull=True,
-            ).select_related(
-                "schedule",
-                "original_match__pair1",
-                "original_match__pair2",
-                "replacement_match__pair1",
-                "replacement_match__pair2",
-                "original_schedule_block",
-                "original_court",
-            )
-        ranking_matches = RoundRobinMatch.objects.filter(
-            group=group,
-            counts_for_ranking=True,
-        )
+        replacement_histories = histories_by_group.get(group.id, [])
+        ranking_matches = ranking_matches_by_group.get(group.id, [])
         schedule_map = {
             schedule.round_robin_match_id: schedule
-            for schedule in Schedule.objects.filter(
-                round_robin_match__group=group,
-            ).select_related(
-                "court",
-                "schedule_block",
-            )
+            for schedule in schedules_by_group.get(group.id, [])
         }
 
         # pair1/pair2 の向きに関係なく試合を引けるよう、両向きで保持する。
@@ -241,13 +272,7 @@ def build_category_group_data(
             match_map[(match.pair1.id, match.pair2.id)] = match
             match_map[(match.pair2.id, match.pair1.id)] = match
 
-        rankings = GroupRanking.objects.filter(
-            group=group,
-        ).select_related(
-            "pair__participant",
-        ).prefetch_related(
-            "pair__participant__organization_values__field",
-        )
+        rankings = rankings_by_group.get(group.id, [])
         ranking_map = {ranking.pair_id: ranking for ranking in rankings}
 
         # リーグ表の各行。セルごとに「自分から見た得ゲーム」を入れる。
@@ -348,8 +373,8 @@ def build_category_group_data(
         tie_tables = []
 
         all_matches_finished = (
-            not ranking_matches.filter(pair1_games__isnull=True).exists()
-            and not ranking_matches.filter(pair2_games__isnull=True).exists()
+            all(match.pair1_games is not None and match.pair2_games is not None
+                for match in ranking_matches)
         )
 
         if all_matches_finished:
@@ -358,6 +383,7 @@ def build_category_group_data(
                 rankings=rankings,
                 match_map=match_map,
                 entry_display_mode=entry_display_mode,
+                ranking_matches=ranking_matches,
             )
 
         group_data.append({
@@ -437,6 +463,7 @@ def _build_round_robin_tie_tables(
     rankings,
     match_map,
     entry_display_mode,
+    ranking_matches=None,
 ):
     """同率順位の補助表をカテゴリ表示用の辞書列へ整える。"""
 
@@ -482,12 +509,19 @@ def _build_round_robin_tie_tables(
             for pair in tied_pairs
         }
 
-        related_matches = RoundRobinMatch.objects.filter(
-            group=group,
-            pair1__id__in=tied_pair_ids,
-            pair2__id__in=tied_pair_ids,
-            counts_for_ranking=True,
-        ).select_related("pair1", "pair2")
+        if ranking_matches is None:
+            related_matches = RoundRobinMatch.objects.filter(
+                group=group,
+                pair1__id__in=tied_pair_ids,
+                pair2__id__in=tied_pair_ids,
+                counts_for_ranking=True,
+            ).select_related("pair1", "pair2")
+        else:
+            tied_pair_ids = set(tied_pair_ids)
+            related_matches = [
+                match for match in ranking_matches
+                if match.pair1_id in tied_pair_ids and match.pair2_id in tied_pair_ids
+            ]
 
         for match in related_matches:
 

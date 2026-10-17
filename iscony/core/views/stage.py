@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -157,27 +157,30 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
 
 
 def _league_stage_data(stage):
-    groups = Group.objects.filter(stage=stage).order_by(
+    groups = Group.objects.filter(stage=stage).annotate(
+        entry_count=Count("leagueentry", distinct=True),
+        match_count=Count("roundrobinmatch", filter=Q(
+            roundrobinmatch__counts_for_ranking=True,
+        ), distinct=True),
+        finished_count=Count("roundrobinmatch", filter=Q(
+            roundrobinmatch__counts_for_ranking=True,
+            roundrobinmatch__pair1_games__isnull=False,
+            roundrobinmatch__pair2_games__isnull=False,
+        ), distinct=True),
+        ranking_count=Count("groupranking", filter=Q(
+            groupranking__rank__isnull=False,
+        ), distinct=True),
+    ).order_by(
         "display_order",
         "name",
     )
     rows = []
 
     for group in groups:
-        entry_count = LeagueEntry.objects.filter(group=group).count()
-        matches = RoundRobinMatch.objects.filter(
-            group=group,
-            counts_for_ranking=True,
-        )
-        match_count = matches.count()
-        finished_count = matches.exclude(
-            Q(pair1_games__isnull=True)
-            | Q(pair2_games__isnull=True)
-        ).count()
-        ranking_count = GroupRanking.objects.filter(
-            group=group,
-            rank__isnull=False,
-        ).count()
+        entry_count = group.entry_count
+        match_count = group.match_count
+        finished_count = group.finished_count
+        ranking_count = group.ranking_count
         matches_complete = (
             entry_count > 0
             and finished_count == match_count
@@ -201,28 +204,31 @@ def _league_stage_data(stage):
 
 
 def _tournament_stage_data(stage):
-    brackets = TournamentBracket.objects.filter(stage=stage).order_by(
+    brackets = TournamentBracket.objects.filter(stage=stage).annotate(
+        entry_count=Count("tournamententry", distinct=True),
+        match_count=Count("tournamentmatch", filter=~Q(
+            tournamentmatch__match_code__startswith="S",
+        ), distinct=True),
+        finished_count=Count("tournamentmatch", filter=(
+            ~Q(tournamentmatch__match_code__startswith="S")
+            & (Q(tournamentmatch__winner__isnull=False) | Q(
+                tournamentmatch__result_type=TournamentMatch.RESULT_RETIREMENT,
+                tournamentmatch__pair1_games=0,
+                tournamentmatch__pair2_games=0,
+                tournamentmatch__pair1__isnull=False,
+                tournamentmatch__pair2__isnull=False,
+            ))
+        ), distinct=True),
+    ).order_by(
         "display_order",
         "name",
     )
     rows = []
 
     for bracket in brackets:
-        entry_count = bracket.tournamententry_set.count()
-        matches = TournamentMatch.objects.filter(
-            bracket=bracket,
-        ).exclude(match_code__startswith="S")
-        match_count = matches.count()
-        finished_count = matches.filter(
-            Q(winner__isnull=False)
-            | Q(
-                result_type=TournamentMatch.RESULT_RETIREMENT,
-                pair1_games=0,
-                pair2_games=0,
-                pair1__isnull=False,
-                pair2__isnull=False,
-            )
-        ).count()
+        entry_count = bracket.entry_count
+        match_count = bracket.match_count
+        finished_count = bracket.finished_count
 
         rows.append({
             "bracket": bracket,
