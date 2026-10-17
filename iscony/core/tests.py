@@ -91,6 +91,7 @@ from .services import (
     auto_apply_stage_advancements_if_ready,
     apply_stage_advancements,
     cancel_pair_retirement,
+    retire_league_entry,
     clone_tournament_without_results,
     add_league_entry_slot,
     assign_league_entry_advancement_piece,
@@ -36387,3 +36388,195 @@ class PublicPagesNoOperatorLinksTests(TestCase):
         response = self.client.get(reverse("tournament_detail", args=[self.tournament.code]))
         self.assertEqual(response.status_code, 200)
         self.assert_brand_url(response, reverse("tournament_list"))
+
+
+class RetireLeagueEntryTests(TestCase):
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(name="リタイアテスト", code="RETIRE")
+        self.category = Category.objects.create(tournament=self.tournament, name="男子A")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.group = Group.objects.create(
+            category=self.category, stage=self.stage, name="A",
+        )
+        self.entries = [
+            create_league_entry_with_participant(
+                category=self.category, group=self.group, pair_code=f"A{i}",
+                display_order=i, player1_name=f"選手{i}", player2_name="",
+            )
+            for i in range(1, 4)
+        ]
+        self.pair = self.entries[2]
+        self.completed_match = RoundRobinMatch.objects.create(
+            group=self.group, pair1=self.entries[0], pair2=self.entries[1],
+            pair1_games=4, pair2_games=1, completed=True,
+        )
+        self.pending_matches = [
+            RoundRobinMatch.objects.create(
+                group=self.group, pair1=self.pair, pair2=self.entries[0],
+                match_games=5,
+            ),
+            RoundRobinMatch.objects.create(
+                group=self.group, pair1=self.entries[1], pair2=self.pair,
+            ),
+        ]
+        block = ScheduleBlock.objects.create(tournament=self.tournament, name="1日目")
+        court = Court.objects.create(tournament=self.tournament, name="1コート")
+        self.schedules = [
+            Schedule.objects.create(
+                schedule_block=block, court=court, order=i, round_robin_match=match,
+            )
+            for i, match in enumerate([self.completed_match, *self.pending_matches], 1)
+        ]
+        next_stage = Stage.objects.create(
+            category=self.category, name="決勝", stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category, stage=next_stage, name="決勝T",
+        )
+        self.target = create_tournament_entry(
+            bracket=bracket, pair_code="T1", display_order=1,
+        )
+        AdvancementSource.objects.create(
+            target_tournament_entry=self.target,
+            source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage, source_group=self.group, source_rank=1,
+        )
+        self.url = reverse("retire_pair", args=[self.pair.id])
+        self.redirect_url = (
+            reverse("category_detail", args=[self.category.id]) + f"#group-{self.group.id}"
+        )
+
+    def state(self):
+        return [
+            list(model.objects.order_by("pk").values())
+            for model in (
+                LeagueEntry, RoundRobinMatch, Schedule, GroupRanking,
+                TournamentEntry, OperationSnapshot,
+            )
+        ]
+
+    def test_retirement_completes_ranking_and_advances_to_next_stage(self):
+        update_group_ranking(self.group, reset_rank=True)
+        self.assertFalse(GroupRanking.objects.filter(group=self.group, rank__isnull=False).exists())
+        self.assertIsNone(self.target.participant_id)
+        self.assertIsNone(self.target.source_pair_id)
+
+        response = self.client.post(self.url)
+
+        self.assertRedirects(response, self.redirect_url, fetch_redirect_response=False)
+        self.pair.refresh_from_db()
+        self.target.refresh_from_db()
+        self.assertTrue(self.pair.retired)
+        self.assertFalse(RoundRobinMatch.objects.filter(group=self.group, completed=False).exists())
+        self.assertEqual(
+            list(GroupRanking.objects.filter(group=self.group).order_by("rank").values_list("pair_id", "rank")),
+            [(self.entries[0].id, 1), (self.entries[1].id, 2), (self.pair.id, 3)],
+        )
+        self.assertEqual(self.target.participant_id, self.entries[0].participant_id)
+        self.assertEqual(self.target.source_pair_id, self.entries[0].id)
+        self.assertEqual(
+            [str(message) for message in get_messages(response.wsgi_request)],
+            ["A / A3 をリタイア扱いにしました。自動不戦結果2試合を入力しました。"],
+        )
+
+    def test_only_unfinished_scores_are_filled_and_schedules_are_finished(self):
+        # 入力済み試合もリタイア対象枠の試合にして、保存内容を比較する。
+        self.completed_match.pair2 = self.pair
+        self.completed_match.save()
+        before = RoundRobinMatch.objects.filter(pk=self.completed_match.pk).values().get()
+        self.pair.retired_reason = "既存の理由"
+        self.pair.save(update_fields=["retired_reason"])
+        # 片側だけ入力済みの試合も、従来どおり不戦結果で埋める。
+        self.pending_matches[0].pair1_games = 1
+        self.pending_matches[0].save()
+
+        self.assertEqual(retire_league_entry(self.pair), 2)
+
+        self.assertEqual(RoundRobinMatch.objects.filter(pk=self.completed_match.pk).values().get(), before)
+        self.pair.refresh_from_db()
+        self.assertEqual(self.pair.retired_reason, "既存の理由")
+        for match, score in zip(self.pending_matches, [(0, 3), (4, 0)]):
+            match.refresh_from_db()
+            self.assertEqual((match.pair1_games, match.pair2_games), score)
+            self.assertTrue(match.completed)
+            self.assertEqual(match.result_type, RoundRobinMatch.RESULT_RETIREMENT)
+        for schedule in self.schedules:
+            schedule.refresh_from_db()
+            expected = schedule.round_robin_match_id != self.completed_match.id
+            self.assertEqual((schedule.called, schedule.started, schedule.finished), (expected,) * 3)
+
+    def test_already_retired_returns_error_without_changes(self):
+        retire_league_entry(self.pair)
+        before = self.state()
+        # self.pairは古いインスタンスなので、DBから取り直す検証も兼ねる。
+        self.assertFalse(self.pair.retired)
+        with self.assertRaisesMessage(ValidationError, "この枠はすでにリタイア扱いです。"):
+            retire_league_entry(self.pair)
+        response = self.client.post(self.url)
+        self.assertRedirects(response, self.redirect_url, fetch_redirect_response=False)
+        messages = list(get_messages(response.wsgi_request))
+        self.assertEqual([str(message) for message in messages], ["この枠はすでにリタイア扱いです。"])
+        self.assertEqual(messages[0].level_tag, "error")
+        self.assertEqual(self.state(), before)
+
+    def test_advancement_failure_rolls_back_retirement_scores_schedules_and_rankings(self):
+        from unittest.mock import patch
+
+        update_group_ranking(self.group, reset_rank=True)
+        before = self.state()
+        with patch(
+            "core.services.operations.auto_apply_stage_advancements_if_ready",
+            side_effect=RuntimeError("進出反映エラー"),
+        ):
+            with self.assertRaisesMessage(RuntimeError, "進出反映エラー"):
+                retire_league_entry(self.pair)
+        self.assertEqual(self.state(), before)
+
+    def test_retire_cancel_and_retire_again(self):
+        self.assertEqual(retire_league_entry(self.pair), 2)
+        self.assertEqual(cancel_pair_retirement(self.pair), 2)
+        self.pair.refresh_from_db()
+        self.target.refresh_from_db()
+        self.assertFalse(self.pair.retired)
+        self.assertIsNone(self.target.participant_id)
+        self.assertIsNone(self.target.source_pair_id)
+        for match in self.pending_matches:
+            match.refresh_from_db()
+            self.assertEqual((match.pair1_games, match.pair2_games), (None, None))
+            self.assertFalse(match.completed)
+            self.assertEqual(match.result_type, RoundRobinMatch.RESULT_NORMAL)
+        for schedule in self.schedules:
+            schedule.refresh_from_db()
+            self.assertEqual((schedule.called, schedule.started, schedule.finished), (False,) * 3)
+
+        self.assertEqual(retire_league_entry(self.pair), 2)
+        self.pair.refresh_from_db()
+        self.target.refresh_from_db()
+        self.assertTrue(self.pair.retired)
+        self.assertEqual(self.target.participant_id, self.entries[0].participant_id)
+        self.assertEqual(self.target.source_pair_id, self.entries[0].id)
+        self.completed_match.refresh_from_db()
+        self.assertEqual((self.completed_match.pair1_games, self.completed_match.pair2_games), (4, 1))
+
+    def test_retirement_displays_advancement_warning(self):
+        from unittest.mock import patch
+
+        with patch(
+            "core.services.operations.apply_ready_stage_advancements",
+            return_value=(0, ["後続試合に結果が入力済みです。"]),
+        ):
+            response = self.client.post(self.url)
+        messages = list(get_messages(response.wsgi_request))
+        self.assertEqual([message.level_tag for message in messages], ["warning", "success"])
+        self.assertIn("後続試合に結果が入力済みです。", str(messages[0]))
+
+    def test_retirement_without_stage(self):
+        self.group.stage = None
+        self.group.save(update_fields=["stage"])
+        self.assertEqual(retire_league_entry(self.pair), 2)
+        self.pair.refresh_from_db()
+        self.assertTrue(self.pair.retired)

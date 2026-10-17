@@ -2889,6 +2889,62 @@ def delete_round_robin_score(match):
     return None
 
 
+def retire_league_entry(pair):
+    """リーグ枠をリタイア扱いにし、未消化試合と後続Stageを更新する。"""
+
+    with transaction.atomic():
+        pair = LeagueEntry.objects.select_for_update().get(id=pair.id)
+
+        if pair.retired:
+            raise ValidationError("この枠はすでにリタイア扱いです。")
+
+        pair.retired = True
+        pair.save()
+
+        matches = RoundRobinMatch.objects.filter(
+            group=pair.group,
+        ).filter(
+            Q(pair1=pair) | Q(pair2=pair)
+        )
+        count = 0
+
+        for match in matches:
+            win_games = match.winning_games()
+
+            if (
+                match.pair1_games is not None
+                and match.pair2_games is not None
+            ):
+                continue
+
+            if match.pair1 == pair:
+                match.pair1_games = 0
+                match.pair2_games = win_games
+            else:
+                match.pair1_games = win_games
+                match.pair2_games = 0
+
+            match.completed = True
+            match.result_type = RoundRobinMatch.RESULT_RETIREMENT
+            match.save()
+
+            Schedule.objects.filter(
+                round_robin_match=match
+            ).update(
+                called=True,
+                started=True,
+                finished=True,
+            )
+            count += 1
+
+        update_group_ranking(pair.group, reset_rank=True)
+
+        if pair.group.stage:
+            auto_apply_stage_advancements_if_ready(pair.group.stage)
+
+        return count
+
+
 def cancel_pair_retirement(pair):
     """リーグ枠のリタイアを取り消し、自動不戦結果だけを戻す。"""
 

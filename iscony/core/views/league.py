@@ -41,6 +41,7 @@ from ..models import (
 )
 from ..services import (
     cancel_pair_retirement,
+    retire_league_entry,
     add_league_entry_slot,
     assign_league_entry_advancement_piece,
     assign_league_entry_advancement_piece_from_tournament_result,
@@ -1145,48 +1146,16 @@ def retire_pair(request, pair_id):
             pair_id=pair.id,
         )
 
-    pair.retired = True
-    pair.save()
-
-    matches = RoundRobinMatch.objects.filter(
-        group=pair.group
-    ).filter(
-        Q(pair1=pair) | Q(pair2=pair)
-    )
-
-    for match in matches:
-
-        win_games = match.winning_games()
-
-        if (
-            match.pair1_games is not None
-            and match.pair2_games is not None
-        ):
-            continue
-
-        if match.pair1 == pair:
-            match.pair1_games = 0
-            match.pair2_games = win_games
-        else:
-            match.pair1_games = win_games
-            match.pair2_games = 0
-
-        match.completed = True
-        match.result_type = RoundRobinMatch.RESULT_RETIREMENT
-        match.save()
-
-        Schedule.objects.filter(
-            round_robin_match=match
-        ).update(
-            called=True,
-            started=True,
-            finished=True,
+    try:
+        count = retire_league_entry(pair)
+    except ValidationError as error:
+        messages.error(request, " ".join(error.messages))
+    else:
+        _show_stage_advancement_warning(request)
+        messages.success(
+            request,
+            f"{pair.group.name} / {pair.pair_code} をリタイア扱いにしました。自動不戦結果{count}試合を入力しました。",
         )
-
-    update_group_ranking(
-        pair.group,
-        reset_rank=True
-    )
 
     return redirect(
         f"{reverse('category_detail', kwargs={'category_id': pair.category.id})}"
