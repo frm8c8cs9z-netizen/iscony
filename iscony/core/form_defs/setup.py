@@ -193,8 +193,15 @@ class StageSlotSetupForm(forms.Form):
 
     def __init__(self, *args, category=None, exclude_stage_id=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.category = category
 
         if category is not None:
+            if category.scoring_mode == Category.SCORING_MODE_STAR:
+                self.fields["match_games"].label = "対戦数"
+                self.fields["match_games"].help_text = (
+                    "星取方式の対戦数です。通常は3または5です。"
+                )
+
             queryset = Stage.objects.filter(
                 category=category,
                 stage_type__in=[
@@ -210,6 +217,19 @@ class StageSlotSetupForm(forms.Form):
                 "display_order",
                 "name",
             )
+
+    def clean_match_games(self):
+        match_games = self.cleaned_data.get("match_games")
+        if (
+            self.category is not None
+            and self.category.scoring_mode == Category.SCORING_MODE_STAR
+            and match_games is not None
+            and (match_games < 1 or match_games % 2 == 0)
+        ):
+            raise forms.ValidationError(
+                "対戦数は奇数で入力してください(過半数で勝敗が決まるため)。"
+            )
+        return match_games
 
 
 class ParticipantForm(forms.ModelForm):

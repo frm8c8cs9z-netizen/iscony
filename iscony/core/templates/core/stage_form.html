@@ -49,6 +49,9 @@
                 {{ slot_form.match_games.label_tag }}
                 {{ slot_form.match_games }}
                 {{ slot_form.match_games.errors }}
+                {% if slot_form.match_games.help_text %}
+                    <span class="helptext">{{ slot_form.match_games.help_text }}</span>
+                {% endif %}
             </p>
 
             <p>

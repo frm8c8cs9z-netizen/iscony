@@ -143,6 +143,16 @@ class TournamentMatchEditForm(forms.ModelForm):
     def __init__(self, *args, category=None, **kwargs):
         super().__init__(*args, **kwargs)
 
+        match_category = category
+        if self.instance.bracket_id:
+            match_category = self.instance.bracket.category
+        if (
+            match_category is not None
+            and match_category.scoring_mode == Category.SCORING_MODE_STAR
+        ):
+            self.fields["match_games"].label = "対戦数"
+            self.fields["match_games"].help_text = "この試合の対戦数です(星取方式)。"
+
         entries = None
         if category:
             entries = TournamentEntry.objects.filter(

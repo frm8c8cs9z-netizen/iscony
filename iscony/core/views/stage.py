@@ -58,6 +58,12 @@ def _target_stage(source):
     return None
 
 
+def _default_match_games(category):
+    if category and category.scoring_mode == Category.SCORING_MODE_STAR:
+        return 3
+    return 7
+
+
 def _current_stage_slot_values(stage):
     """
     現在のStageの枠構成から、変更検知・フォーム初期値表示の両方に使う値を算出する。
@@ -89,7 +95,7 @@ def _current_stage_slot_values(stage):
         ).values_list(
             "match_games",
             flat=True,
-        ).first() or 7
+        ).first() or _default_match_games(stage.category)
 
     else:
         values["pair_count"] = TournamentEntry.objects.filter(
@@ -101,7 +107,7 @@ def _current_stage_slot_values(stage):
         ).values_list(
             "match_games",
             flat=True,
-        ).first() or 7
+        ).first() or _default_match_games(stage.category)
 
         values["bracket_list"] = [
             {
@@ -740,13 +746,15 @@ def _validate_stage_slot_setup(stage_type, slot_form, *, current_stage=None):
     match_games = slot_form.cleaned_data.get("match_games")
 
     if match_games is None:
-        match_games = 7
+        match_games = _default_match_games(slot_form.category)
         slot_form.cleaned_data["match_games"] = match_games
 
     if (
-        match_games < 3
-        or match_games > 9
-        or match_games % 2 == 0
+        (
+            slot_form.category is None
+            or slot_form.category.scoring_mode != Category.SCORING_MODE_STAR
+        )
+        and (match_games < 3 or match_games > 9 or match_games % 2 == 0)
     ):
         slot_form.add_error(
             "match_games",
@@ -867,7 +875,10 @@ def add_stage(request, code, category_id):
             pair_count = slot_form.cleaned_data["pair_count"]
             if stage.stage_type == Stage.TYPE_LEAGUE:
                 group_count = slot_form.cleaned_data["group_count"]
-                match_games = slot_form.cleaned_data.get("match_games") or 7
+                match_games = (
+                    slot_form.cleaned_data.get("match_games")
+                    or _default_match_games(category)
+                )
                 candidate = find_group_count_candidate(
                     pair_count,
                     group_count,
@@ -898,7 +909,10 @@ def add_stage(request, code, category_id):
                 )
 
             else:
-                match_games = slot_form.cleaned_data.get("match_games") or 7
+                match_games = (
+                    slot_form.cleaned_data.get("match_games")
+                    or _default_match_games(category)
+                )
                 if (
                     slot_form.cleaned_data.get("advancement_mode")
                     == StageSlotSetupForm.ADVANCEMENT_MODE_SOURCE
@@ -1220,7 +1234,8 @@ def edit_stage(request, code, category_id, stage_id):
                 new_bracket_rows = None
                 bracket_names_changed = False
                 new_match_games = (
-                    slot_form.cleaned_data.get("match_games") or 7
+                    slot_form.cleaned_data.get("match_games")
+                    or _default_match_games(category)
                 )
                 match_games_changed = (
                     new_match_games != current_values.get("match_games")

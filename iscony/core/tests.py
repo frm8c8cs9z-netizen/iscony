@@ -27237,6 +27237,153 @@ class StarScoringModeTests(TestCase):
             match_games=3,
         )
 
+    def test_score_heading_uses_category_units_and_majority(self):
+        for category, games, heading in [
+            (self.star_category, 3, "3対戦（2勝先取）"),
+            (self.star_category, 5, "5対戦（3勝先取）"),
+            (self.individual_category, 7, "7ゲームマッチ （4ゲーム先取）"),
+        ]:
+            self.group.category = category
+            self.group.save(update_fields=["category"])
+            self.bracket.category = category
+            self.bracket.save(update_fields=["category"])
+            for match, url_name, kwargs in [
+                (self.round_robin_match, "input_match_score", {}),
+                (self.tournament_match, "input_tournament_match_score",
+                 {"code": self.tournament.code}),
+            ]:
+                with self.subTest(category=category.name, games=games, view=url_name):
+                    match.match_games = games
+                    match.save(update_fields=["match_games"])
+                    response = self.client.get(reverse(
+                        url_name, kwargs={"match_id": match.id, **kwargs},
+                    ))
+                    self.assertEqual(response.context["winning_games"], games // 2 + 1)
+                    header = re.search(
+                        r'<p class="score-input-games">(.*?)</p>',
+                        response.content.decode(), re.S,
+                    )
+                    self.assertIsNotNone(header)
+                    self.assertEqual(" ".join(header.group(1).split()), heading)
+                    if category == self.star_category:
+                        self.assertNotContains(response, "ゲームマッチ")
+
+    def test_stage_forms_show_category_label_and_help(self):
+        help_text = "星取方式の対戦数です。通常は3または5です。"
+        for category, label in [
+            (self.star_category, "対戦数"),
+            (self.individual_category, "ゲーム数"),
+        ]:
+            stage = Stage.objects.create(
+                category=category, name="表示確認", stage_type=Stage.TYPE_LEAGUE,
+            )
+            for url_name, extra in [
+                ("add_stage", {}), ("edit_stage", {"stage_id": stage.id}),
+            ]:
+                with self.subTest(category=category.name, view=url_name):
+                    response = self.client.get(reverse(url_name, kwargs={
+                        "code": self.tournament.code, "category_id": category.id, **extra,
+                    }))
+                    field = response.context["slot_form"].fields["match_games"]
+                    self.assertEqual(field.label, label)
+                    self.assertContains(response, label)
+                    if category == self.star_category:
+                        self.assertContains(response, help_text)
+                        self.assertEqual(response.context["slot_form"]["match_games"].value(),
+                                         None if url_name == "add_stage" else 3)
+                    else:
+                        self.assertNotContains(response, help_text)
+                        self.assertEqual(field.help_text, "")
+
+    def test_stage_creation_and_edit_default_match_games_by_category(self):
+        for category, expected in [(self.star_category, 3), (self.individual_category, 7)]:
+            for stage_type in [Stage.TYPE_LEAGUE, Stage.TYPE_TOURNAMENT]:
+                with self.subTest(category=category.name, stage_type=stage_type):
+                    data = {
+                        "name": "既定値確認" + stage_type, "stage_type": stage_type,
+                        "display_order": "3", "pair_count": "4", "group_count": "1",
+                        "match_games": "", "advancement_mode": "direct",
+                    }
+                    kwargs = {"code": self.tournament.code, "category_id": category.id}
+                    response = self.client.post(reverse("add_stage", kwargs=kwargs), data)
+                    self.assertEqual(response.status_code, 302)
+                    stage = Stage.objects.get(category=category, name=data["name"])
+                    matches = (RoundRobinMatch.objects.filter(group__stage=stage)
+                               if stage_type == Stage.TYPE_LEAGUE else
+                               TournamentMatch.objects.filter(bracket__stage=stage))
+                    self.assertTrue(matches.exists())
+                    self.assertEqual(set(matches.values_list("match_games", flat=True)), {expected})
+                    matches.update(match_games=5)
+                    response = self.client.post(reverse(
+                        "edit_stage", kwargs={**kwargs, "stage_id": stage.id},
+                    ), data)
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(set(matches.values_list("match_games", flat=True)), {expected})
+
+    def test_star_stage_rejects_even_match_games_without_creation(self):
+        for stage_type in [Stage.TYPE_LEAGUE, Stage.TYPE_TOURNAMENT]:
+            with self.subTest(stage_type=stage_type):
+                count = Stage.objects.count()
+                response = self.client.post(reverse("add_stage", kwargs={
+                    "code": self.tournament.code, "category_id": self.star_category.id,
+                }), {
+                    "name": "不正な対戦数", "stage_type": stage_type,
+                    "display_order": "3", "pair_count": "4", "group_count": "1",
+                    "match_games": "4",
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["slot_form"].errors["match_games"], [
+                    "対戦数は奇数で入力してください(過半数で勝敗が決まるため)。",
+                ])
+                self.assertEqual(Stage.objects.count(), count)
+
+    def test_star_stage_creation_accepts_positive_odd_match_games(self):
+        for stage_type in [Stage.TYPE_LEAGUE, Stage.TYPE_TOURNAMENT]:
+            for games in [1, 3, 5, 7, 9, 11]:
+                with self.subTest(stage_type=stage_type, games=games):
+                    name = f"対戦数確認{stage_type}{games}"
+                    response = self.client.post(reverse("add_stage", kwargs={
+                        "code": self.tournament.code, "category_id": self.star_category.id,
+                    }), {
+                        "name": name, "stage_type": stage_type,
+                        "display_order": "3", "pair_count": "4", "group_count": "1",
+                        "match_games": str(games), "advancement_mode": "direct",
+                    })
+                    self.assertEqual(response.status_code, 302)
+                    stage = Stage.objects.get(category=self.star_category, name=name)
+                    matches = (RoundRobinMatch.objects.filter(group__stage=stage)
+                               if stage_type == Stage.TYPE_LEAGUE else
+                               TournamentMatch.objects.filter(bracket__stage=stage))
+                    self.assertTrue(matches.exists())
+                    self.assertEqual(set(matches.values_list("match_games", flat=True)), {games})
+
+    def test_star_stage_match_games_accepts_positive_odd_numbers(self):
+        for games in [-1, 0, 1, 3, 4, 5, 7, 9, 11, 101]:
+            with self.subTest(games=games):
+                form = StageSlotSetupForm(
+                    {"pair_count": "4", "match_games": str(games)},
+                    category=self.star_category,
+                )
+                self.assertEqual(form.is_valid(), games >= 1 and games % 2 == 1)
+        form = StageSlotSetupForm({"pair_count": "4", "match_games": "4"},
+                                  category=self.individual_category)
+        self.assertTrue(form.is_valid())
+
+    def test_tournament_match_edit_form_uses_category_units(self):
+        from .form_defs.tournament import TournamentMatchEditForm
+
+        for category, label, help_text in [
+            (self.star_category, "対戦数", "この試合の対戦数です(星取方式)。"),
+            (self.individual_category, "ゲーム数", "この試合のゲーム数です。"),
+        ]:
+            self.bracket.category = category
+            self.bracket.save(update_fields=["category"])
+            for kwargs in [{}, {"category": category}]:
+                with self.subTest(category=category.name, kwargs=kwargs):
+                    form = TournamentMatchEditForm(instance=self.tournament_match, **kwargs)
+                    self.assertEqual(form.fields["match_games"].label, label)
+                    self.assertEqual(form.fields["match_games"].help_text, help_text)
+
     def test_validate_star_score_accepts_majority_patterns(self):
         self.assertIsNone(validate_star_score(2, 0, 3))
         self.assertIsNone(validate_star_score(2, 1, 3))
@@ -27752,7 +27899,7 @@ class StarSummaryEntryModeTests(TestCase):
 
     def test_summary_inputs_and_keypad_respect_match_games(self):
         for match, url, _ in self.score_inputs():
-            for match_games in [3, 5]:
+            for match_games in [3, 5, 11]:
                 with self.subTest(model=type(match).__name__, match_games=match_games):
                     match.match_games = match_games
                     match.save(update_fields=["match_games"])
@@ -27763,9 +27910,10 @@ class StarSummaryEntryModeTests(TestCase):
                         self.assertIsNotNone(field)
                         for attribute in [
                             'type="text"', f'name="{side}_games"', 'inputmode="none"',
-                            'autocomplete="off"', 'maxlength="1"', 'value=""',
+                            'autocomplete="off"', 'value=""',
                         ]:
                             self.assertIn(attribute, field.group(0))
+                        self.assertNotIn('maxlength=', field.group(0))
                         self.assertNotIn("disabled", field.group(0))
                     keypad = re.search(r'<div id="star-keypad"[^>]*>(.*?)</div>', content, re.S)
                     self.assertIsNotNone(keypad)
@@ -27777,7 +27925,7 @@ class StarSummaryEntryModeTests(TestCase):
                     for before, value, after, label in keys:
                         self.assertIn('type="button"', before)
                         self.assertEqual(value, label)
-                        self.assertEqual("disabled" in after, int(value) > match_games)
+                        self.assertEqual("disabled" in after, match_games <= 9 and int(value) > match_games)
                     clear = re.search(r'<button[^>]*data-star-clear[^>]*>消す</button>', keypad.group(1))
                     self.assertIsNotNone(clear)
                     self.assertIn('type="button"', clear.group(0))

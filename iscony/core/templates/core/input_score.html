@@ -27,8 +27,12 @@
         </p>
 
         <p class="score-input-games">
-            {{ match.match_games }}ゲームマッチ
-            （{{ winning_games }}ゲーム先取）
+            {% if scoring_mode == "star" %}
+                {{ match.match_games }}対戦（{{ winning_games }}勝先取）
+            {% else %}
+                {{ match.match_games }}ゲームマッチ
+                （{{ winning_games }}ゲーム先取）
+            {% endif %}
         </p>
     </div>
 
@@ -143,7 +147,6 @@
                         value="{{ match.pair1_games|default_if_none:'' }}"
                         inputmode="none"
                         autocomplete="off"
-                        maxlength="1"
                         class="star-score-input"
                         aria-label="{{ match.pair1.display_player1_name }}の星数"
                         {% if not can_input_score %}disabled{% endif %}
@@ -159,7 +162,6 @@
                         value="{{ match.pair2_games|default_if_none:'' }}"
                         inputmode="none"
                         autocomplete="off"
-                        maxlength="1"
                         class="star-score-input"
                         aria-label="{{ match.pair2.display_player1_name }}の星数"
                         {% if not can_input_score %}disabled{% endif %}
@@ -172,7 +174,7 @@
                 <button
                     type="button"
                     data-star-value="{{ n }}"
-                    {% if n|add:"0" > match.match_games or not can_input_score %}disabled{% endif %}
+                    {% if not can_input_score or match.match_games <= 9 and n|add:"0" > match.match_games %}disabled{% endif %}
                 >{{ n }}</button>
             {% endfor %}
             <button type="button" data-star-clear {% if not can_input_score %}disabled{% endif %}>消す</button>
@@ -772,9 +774,12 @@ document.addEventListener("DOMContentLoaded", function () {
     const inputs = Array.from(document.querySelectorAll(".star-score-input"));
     const totalLegs = {{ match.match_games|default:0 }};
     let activeInput = inputs[0];
+    let replaceOnNextDigit = true;
+    const previousValues = new Map(inputs.map(input => [input, input.value]));
 
     function selectInput(input, moveFocus = false) {
         activeInput = input;
+        replaceOnNextDigit = true;
         inputs.forEach(function (field) {
             field.classList.toggle("star-input-active", field === input && !field.disabled);
         });
@@ -783,17 +788,42 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    function enterValue(value) {
-        if (activeInput.disabled || (value !== "" && !isValidValue(value))) {
+    function setValue(input, value) {
+        input.value = value;
+        previousValues.set(input, value);
+        updateStarSummaryMode();
+    }
+
+    function advanceIfComplete(input) {
+        const value = Number(input.value);
+        if (input === inputs[0] && (value === 0 || value * 10 > totalLegs)) {
+            selectInput(inputs[1], true);
+        }
+    }
+
+    function enterValue(digit) {
+        if (activeInput.disabled) {
             return;
         }
-        activeInput.value = value;
-        updateStarSummaryMode();
-        selectInput(value !== "" && activeInput === inputs[0] ? inputs[1] : activeInput, true);
+        const value = replaceOnNextDigit || activeInput.value === "0"
+            ? digit : activeInput.value + digit;
+        if (!isValidValue(value)) {
+            return;
+        }
+        setValue(activeInput, value);
+        replaceOnNextDigit = false;
+        advanceIfComplete(activeInput);
+    }
+
+    function clearValue() {
+        if (!activeInput.disabled) {
+            setValue(activeInput, "");
+            replaceOnNextDigit = true;
+        }
     }
 
     function isValidValue(value) {
-        return /^[0-9]$/.test(value) && Number(value) <= totalLegs;
+        return /^[0-9]+$/.test(value) && Number(value) <= totalLegs;
     }
 
     inputs.forEach(function (input) {
@@ -806,9 +836,13 @@ document.addEventListener("DOMContentLoaded", function () {
             if (/^[0-9]$/.test(event.key)) {
                 event.preventDefault();
                 enterValue(event.key);
-            } else if (event.key === "Backspace" || event.key === "Delete") {
+            } else if (event.key === "Backspace") {
                 event.preventDefault();
-                enterValue("");
+                setValue(input, input.value.slice(0, -1));
+                replaceOnNextDigit = input.value === "";
+            } else if (event.key === "Delete") {
+                event.preventDefault();
+                clearValue();
             } else if (event.key === "Enter") {
                 if (document.getElementById("star-save-button").disabled) {
                     event.preventDefault();
@@ -818,14 +852,27 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
         input.addEventListener("input", function () {
-            selectInput(input);
-            enterValue(isValidValue(input.value) ? input.value : "");
+            if (input.value === "" || isValidValue(input.value)) {
+                setValue(input, input.value.replace(/^0+(?=[0-9])/, ""));
+                replaceOnNextDigit = input.value === "";
+                if (input.value !== "") {
+                    advanceIfComplete(input);
+                }
+            } else {
+                input.value = previousValues.get(input);
+            }
         });
     });
     keypad.querySelectorAll("button").forEach(function (button) {
+        // テンキー操作で入力欄のフォーカスと追加入力状態を失わないようにする。
+        button.addEventListener("mousedown", function (event) { event.preventDefault(); });
         button.addEventListener("click", function () {
             if (!button.disabled) {
-                enterValue(button.hasAttribute("data-star-clear") ? "" : button.dataset.starValue);
+                if (button.hasAttribute("data-star-clear")) {
+                    clearValue();
+                } else {
+                    enterValue(button.dataset.starValue);
+                }
             }
         });
     });
