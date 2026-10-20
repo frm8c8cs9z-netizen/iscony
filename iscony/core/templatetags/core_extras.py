@@ -485,3 +485,13 @@ def entry_organization_html(entry):
             html_parts.append(text)
 
     return mark_safe("".join(html_parts))
+
+
+@register.simple_tag(takes_context=True)
+def show_session_controls(context):
+    """Keep operator identity and logout forms off publicly cached pages."""
+    request = context.get("request")
+    if not getattr(getattr(request, "user", None), "is_authenticated", False):
+        return False
+    match = getattr(request, "resolver_match", None)
+    return getattr(getattr(match, "func", None), "login_required", True) is not False

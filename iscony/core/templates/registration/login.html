@@ -1,0 +1,23 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<h2>ログイン</h2>
+<form method="post" class="participant-form">
+    {% csrf_token %}
+    {% if form.errors %}
+        <p role="alert">ログインできませんでした。ユーザー名とパスワードを確認してください。</p>
+    {% endif %}
+    <div class="participant-field-stack">
+        <div class="participant-field participant-field--medium">
+            <label for="{{ form.username.id_for_label }}">ユーザー名</label>
+            {{ form.username }}
+        </div>
+        <div class="participant-field participant-field--medium">
+            <label for="{{ form.password.id_for_label }}">パスワード</label>
+            {{ form.password }}
+        </div>
+    </div>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit" class="button-link">ログイン</button>
+</form>
+{% endblock %}

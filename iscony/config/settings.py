@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -47,6 +48,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.IsconyLoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -136,3 +138,9 @@ ENABLE_AUTO_OPERATION_SNAPSHOT = True
 # 一般参加者向けの読み取り専用画面だけに使う短時間キャッシュ。
 # 結果反映の遅れを避けたい場合は 0、負荷が高い場合は 10 などに調整する。
 PUBLIC_VIEW_CACHE_SECONDS = 5
+
+# Keep existing tests anonymous; all normal server invocations require login.
+ISCONY_LOGIN_REQUIRED = sys.argv[1:2] != ["test"]
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "tournament_list"
+LOGOUT_REDIRECT_URL = "login"

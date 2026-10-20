@@ -2304,6 +2304,17 @@
         </a>
     </h1>
 
+    {% show_session_controls as show_session %}
+    {% if show_session %}
+        <div class="session-controls" style="text-align: right; font-size: 0.85rem;">
+            <span>{{ user.get_username }}</span>
+            <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="button-link">ログアウト</button>
+            </form>
+        </div>
+    {% endif %}
+
     {% admin_menu_code as shortcut_code %}
     {% admin_menu_public_token as public_token %}
     {% if shortcut_code %}
@@ -2317,6 +2328,12 @@
                     </span>
                 </summary>
                 <div class="site-menu-panel">
+                    {% if show_session %}
+                        <form method="post" action="{% url 'logout' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="button-link">ログアウト</button>
+                        </form>
+                    {% endif %}
                     {% if public_token %}
                         <a href="{% url 'public_tournament_detail' public_token %}">
                             公開表示

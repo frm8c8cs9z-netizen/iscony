@@ -36867,3 +36867,214 @@ class GroupRankingInputValidationTests(TestCase):
         self.assertRedirects(response, self.url, fetch_redirect_response=False)
         self._assert_ranks((None, None, None))
         advance.assert_called_once_with(self.stage)
+
+
+@override_settings(ISCONY_LOGIN_REQUIRED=True)
+class LoginRequiredTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+
+        cls.user = get_user_model().objects.create_user(
+            username="weekend_operator", password="operator-test-password",
+        )
+        cls.tournament = Tournament.objects.create(
+            name="認証確認大会", code="LOGINTEST", is_public=True,
+        )
+        cls.category = Category.objects.create(tournament=cls.tournament, name="一般")
+        stage = Stage.objects.create(
+            category=cls.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+        )
+        group = Group.objects.create(category=cls.category, stage=stage, name="A")
+        cls.entries = [
+            create_league_entry_with_participant(
+                category=cls.category, group=group, pair_code=f"A{i}", display_order=i,
+                player1_name=f"選手{i}甲", player2_name=f"選手{i}乙",
+            ) for i in (1, 2)
+        ]
+        cls.match = RoundRobinMatch.objects.create(
+            group=group, pair1=cls.entries[0], pair2=cls.entries[1],
+        )
+        final_stage = Stage.objects.create(
+            category=cls.category, name="本戦", stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=cls.category, stage=final_stage, name="本戦",
+        )
+        finalists = [
+            create_tournament_entry(
+                bracket=bracket, pair_code=f"T{i}", display_order=i,
+                player1_name=f"本戦{i}甲", player2_name=f"本戦{i}乙",
+            ) for i in (1, 2)
+        ]
+        cls.final = TournamentMatch.objects.create(
+            bracket=bracket, round_number=1, match_number=1, match_code="M1",
+            pair1=finalists[0], pair2=finalists[1],
+        )
+        cls.court = Court.objects.create(tournament=cls.tournament, name="1")
+        block = ScheduleBlock.objects.create(tournament=cls.tournament, name="午前")
+        cls.schedule = Schedule.objects.create(
+            court=cls.court, schedule_block=block, order=1, round_robin_match=cls.match,
+        )
+
+    def public_urls(self):
+        token = self.tournament.public_token
+        return [
+            reverse("public_tournament_detail", args=[token]),
+            reverse("public_category_results", args=[self.tournament.code, self.category.pk]),
+            reverse("public_category_results_id_token", args=[token, self.category.pk]),
+            reverse("public_category_results_token", args=[token, self.category.public_token]),
+            reverse("public_schedule_view", args=[self.tournament.code]),
+            reverse("public_schedule_view_token", args=[token]),
+        ]
+
+    def assert_login_redirect(self, response, url):
+        self.assertRedirects(
+            response, reverse("login") + "?" + urlencode({"next": url}, safe="/"),
+            fetch_redirect_response=False,
+        )
+
+    def test_anonymous_operator_requests_cannot_read_or_mutate(self):
+        from django.apps import apps
+
+        def core_state():
+            return {
+                model._meta.label: list(model.objects.order_by("pk").values())
+                for model in apps.get_app_config("core").get_models()
+            }
+
+        before = core_state()
+        urls = [
+            reverse("tournament_list"),
+            reverse("tournament_detail", args=[self.tournament.code]),
+            reverse("maintenance_menu", args=[self.tournament.code]),
+            reverse("input_match_score", args=[self.match.pk]),
+            reverse("input_tournament_match_score", args=[self.tournament.code, self.final.pk]),
+            reverse("league_entry_action", args=[self.entries[0].pk]),
+            reverse("delete_tournament", args=[self.tournament.code]),
+            reverse("tournament_backup_list", args=[self.tournament.code]),
+            reverse("public_tournament_qr_pdf", args=[self.tournament.code]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                self.assert_login_redirect(self.client.get(url), url)
+        posts = [
+            (urls[6], {"confirm_code": self.tournament.code}),
+            (urls[3], {"pair1_games": 4, "pair2_games": 0}),
+            (urls[4], {"pair1_games": 4, "pair2_games": 0}),
+            (urls[5], {"action": "retire"}),
+            (reverse("move_schedule_slot_api", args=[self.schedule.pk]),
+             {"target_court_id": self.court.pk, "target_order": 2}),
+        ]
+        for url, data in posts:
+            with self.subTest(post=url):
+                self.assert_login_redirect(self.client.post(url, data), url)
+        query_url = urls[3] + "?from_schedule=1&return_to=%2F"
+        self.assert_login_redirect(self.client.get(query_url), query_url)
+        self.assertEqual(core_state(), before)
+
+    def test_all_public_urls_remain_accessible_with_or_without_cache(self):
+        for timeout in (0, 5):
+            with self.subTest(timeout=timeout), override_settings(PUBLIC_VIEW_CACHE_SECONDS=timeout):
+                cache.clear()
+                for url in self.public_urls():
+                    with self.subTest(url=url):
+                        self.assertEqual(self.client.get(url).status_code, 200)
+        cache.clear()
+
+    def test_login_returns_to_next_and_operator_pages_open(self):
+        target = reverse("tournament_detail", args=[self.tournament.code]) + "?from=login"
+        response = self.client.get(reverse("login"), {"next": target})
+        self.assertContains(response, "ユーザー名")
+        self.assertContains(response, "パスワード")
+        self.assertContains(response, 'name="next"')
+        response = self.client.post(reverse("login"), {
+            "username": self.user.username, "password": "operator-test-password", "next": target,
+        })
+        self.assertRedirects(response, target)
+        self.assertContains(self.client.get(reverse("tournament_list")), self.tournament.name)
+
+    def test_wrong_password_shows_japanese_error(self):
+        response = self.client.post(reverse("login"), {
+            "username": self.user.username, "password": "wrong-password",
+        })
+        self.assertContains(response, "ユーザー名とパスワードを確認してください。")
+        self.assert_login_redirect(self.client.get("/"), "/")
+
+    def test_default_login_destination_and_safe_next(self):
+        for next_url in ("", "https://example.org/"):
+            with self.subTest(next=next_url):
+                self.client.logout()
+                response = self.client.post(reverse("login"), {
+                    "username": self.user.username, "password": "operator-test-password",
+                    "next": next_url,
+                })
+                self.assertRedirects(response, reverse("tournament_list"))
+
+    def test_logout_requires_post_and_csrf_then_protects_operator_pages(self):
+        from django.test import Client
+
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        self.assertEqual(client.get(reverse("logout")).status_code, 405)
+        self.assertEqual(client.post(reverse("logout")).status_code, 403)
+        client.get(reverse("tournament_list"))
+        response = client.post(reverse("logout"), {
+            "csrfmiddlewaretoken": client.cookies["csrftoken"].value,
+        })
+        self.assertRedirects(response, reverse("login"))
+        self.assert_login_redirect(client.get("/"), "/")
+
+    def test_logout_controls_on_operator_pages_only(self):
+        self.client.force_login(self.user)
+        for url in (reverse("tournament_list"),
+                    reverse("tournament_detail", args=[self.tournament.code])):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(response, self.user.username)
+                self.assertContains(response, 'action="/logout/"')
+                self.assertContains(response, 'name="csrfmiddlewaretoken"')
+                self.assertContains(response, "ログアウト")
+                if url != reverse("tournament_list"):
+                    panel = re.search(
+                        r'<div class="site-menu-panel">(.*?)</div>',
+                        response.content.decode(), re.S,
+                    )
+                    self.assertIsNotNone(panel)
+                    self.assertIn('action="/logout/"', panel.group(1))
+        cache.clear()
+        for url in self.public_urls():
+            with self.subTest(public_url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotContains(response, "ログアウト")
+                self.assertNotContains(response, self.user.username)
+        self.client.logout()
+        for url in self.public_urls():
+            self.assertNotContains(self.client.get(url), self.user.username)
+        cache.clear()
+
+    def test_only_explicit_public_urls_and_login_are_exempt(self):
+        from django.urls import URLResolver, resolve
+        from core.urls import urlpatterns
+
+        def exempt_names(patterns):
+            names = []
+            for pattern in patterns:
+                if isinstance(pattern, URLResolver):
+                    names.extend(exempt_names(pattern.url_patterns))
+                elif getattr(pattern.callback, "login_required", True) is False:
+                    names.append(pattern.name)
+            return names
+
+        self.assertCountEqual(exempt_names(urlpatterns), [
+            "login", "public_tournament_detail", "public_category_results",
+            "public_category_results_id_token", "public_category_results_token",
+            "public_schedule_view", "public_schedule_view_token",
+        ])
+        for url in [reverse("login"), *self.public_urls()]:
+            self.assertIs(resolve(url).func.login_required, False)
+
+    @override_settings(ISCONY_LOGIN_REQUIRED=False)
+    def test_disabled_setting_keeps_existing_anonymous_behavior(self):
+        self.assertEqual(self.client.get(reverse("tournament_list")).status_code, 200)

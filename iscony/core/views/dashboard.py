@@ -8,6 +8,7 @@ core.views.dashboard
 from collections import defaultdict
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_not_required
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q
@@ -147,6 +148,7 @@ def tournament_detail(request, code):
     )
 
 
+@login_not_required
 def public_tournament_detail(request, public_token):
     """公開トークンから一般利用者向けの大会入口を表示する。"""
 
@@ -1100,6 +1102,7 @@ def _render_public_schedule(request, tournament):
     )
 
 
+@login_not_required
 def public_schedule_view(
         request,
         tournament_code
@@ -1114,6 +1117,7 @@ def public_schedule_view(
     return _render_public_schedule(request, tournament)
 
 
+@login_not_required
 def public_schedule_view_by_token(request, public_token):
     """公開トークンから一般参加者向け進行表を表示する。"""
 

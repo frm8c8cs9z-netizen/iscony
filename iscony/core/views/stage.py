@@ -5,6 +5,7 @@ import secrets
 from urllib.parse import urlencode
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_not_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
@@ -1570,6 +1571,7 @@ def _render_public_category_results(request, category):
     )
 
 
+@login_not_required
 def public_category_results(request, code, category_id):
     """一般利用者向けにカテゴリ内の結果入口を表示する。"""
 
@@ -1582,6 +1584,7 @@ def public_category_results(request, code, category_id):
     return _render_public_category_results(request, category)
 
 
+@login_not_required
 def public_category_results_by_token(request, public_token, category_id):
     """公開トークンからカテゴリ内の結果入口を表示する。"""
 
@@ -1594,6 +1597,7 @@ def public_category_results_by_token(request, public_token, category_id):
     return _render_public_category_results(request, category)
 
 
+@login_not_required
 def public_category_results_by_public_tokens(
     request,
     public_token,

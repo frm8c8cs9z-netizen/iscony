@@ -1,3 +1,4 @@
+from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 
 from .helpers.cache import public_view_cache
@@ -15,6 +16,8 @@ from .views import (
 
 
 urlpatterns = [
+    path("login/", LoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
     path("tournament/<str:code>/delete/", dashboard.delete_tournament_confirm, name="delete_tournament"),
     path("backups/<int:backup_id>/revive/", backup.tournament_backup_revive, name="tournament_backup_revive"),
     path("backups/import/", backup.tournament_backup_import, name="tournament_backup_import"),
