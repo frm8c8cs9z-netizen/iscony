@@ -2456,7 +2456,7 @@ def import_schedule(request, tournament_code):
                     errors.append(
                         "未スケジュール: "
                         f"{match.group.category.name} "
-                        f"{match.group.name}リーグ "
+                        f"{match.group.name} "
                         f"{match.pair1.pair_code} vs "
                         f"{match.pair2.pair_code}"
                     )

@@ -278,7 +278,6 @@
         <section class="stage-section" id="stage-{{ row.stage.id }}">
             <div class="stage-heading">
                 <div>
-                    <span class="stage-order">{{ row.stage.display_order }}</span>
                     <h3>{{ row.stage.name }}</h3>
                 </div>
                 <div>
@@ -292,7 +291,7 @@
             {% if row.stage.stage_type == "league" %}
                 {% for data in row.display_groups %}
                     <div class="public-result-block group-box" id="group-{{ data.group.id }}">
-                        <h4>{{ data.group.name }}リーグ</h4>
+                        <h4>{{ data.group.name }}</h4>
 
                         <div class="table-wrapper">
                             {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="public" public_schedule_url=public_schedule_url use_league_score_colors=use_league_score_colors self_cell_html="&nbsp;" score_blank_html="&nbsp;" table_kind="main" %}

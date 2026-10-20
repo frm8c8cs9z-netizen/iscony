@@ -260,7 +260,7 @@ def _league_scope_rows(tournament, stage_id=None, court_id=None):
             continue
 
         rows.append({
-            "label": f"{group.category.name} {group.name}リーグ",
+            "label": f"{group.category.name} {group.name}",
             "stage_name": group.stage.name if group.stage else "",
             "url": (
                 f"?group={group.id}"

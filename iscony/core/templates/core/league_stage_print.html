@@ -1,0 +1,155 @@
+{% extends "core/base.html" %}
+{% load tz %}
+{% block content %}
+<style id="league-print-page">@page { size: A4 landscape; margin: 8mm; }</style>
+<style>
+    .league-print-controls { display: flex; flex-wrap: wrap; gap: 1em; align-items: center; margin: 1em 0; }
+    #league-print { width: 281mm; box-sizing: border-box; padding-bottom: 7mm; color: #000; background: #fff; }
+    #league-print h2 { font-size: 16pt; margin: 0 0 4mm; }
+    .league-print-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4mm; align-items: start; }
+    .league-print-group { min-width: 0; padding: 2mm; border: 1px solid #999; break-inside: avoid; page-break-inside: avoid; }
+    .league-print-group h3, .league-print-group h4 { font-size: 1.1em; margin: 0 0 0.5em; }
+    #league-print table { min-width: 0; width: max-content; table-layout: auto; margin: 0 0 1em; font-size: inherit; }
+    #league-print table:not(.round-robin-table) { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
+    #league-print table:not(.round-robin-table) th:first-child { width: 44%; }
+    #league-print th, #league-print td { padding: 0.25em; }
+    #league-print .rr-code-col { width: 2.2em; }
+    #league-print .rr-name-col { width: 10em; }
+    #league-print .rr-score-col, #league-print .rr-stat-col { width: 2.2em; }
+    #league-print .score-chip { min-width: 1.5em; min-height: 1.5em; padding: 0 0.2em; border-width: 1px; }
+    #league-print, #league-print * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    #league-print [hidden] { display: none !important; }
+    .league-print-time { font-size: 9pt; text-align: right; margin-top: 3mm; }
+    @media print {
+        html, body { margin: 0 !important; padding: 0 !important; min-width: 0 !important; background: #fff !important; }
+        body > :not(#league-print) { display: none !important; }
+        #league-print { margin: 0; }
+        #league-print a, #league-print button { display: none !important; }
+        .league-print-time { position: fixed; bottom: 0; right: 0; margin: 0; }
+    }
+</style>
+<div class="league-print-controls">
+    <label>印刷内容
+        <select id="print-content">
+            <option value="league"{% if print_options.content == "league" %} selected{% endif %}>リーグ表(追加試合を含む)</option>
+            <option value="tie"{% if print_options.content == "tie" %} selected{% endif %}>同率補助表のみ</option>
+        </select>
+    </label>
+    <label>用紙
+        <select id="print-paper">
+            <option value="A4"{% if print_options.paper == "A4" %} selected{% endif %}>A4</option>
+            <option value="A3"{% if print_options.paper == "A3" %} selected{% endif %}>A3</option>
+        </select>
+    </label>
+    <label>向き
+        <select id="print-orientation">
+            <option value="portrait"{% if print_options.orientation == "portrait" %} selected{% endif %}>縦</option>
+            <option value="landscape"{% if print_options.orientation == "landscape" %} selected{% endif %}>横</option>
+        </select>
+    </label>
+    <label>1行に並べるリーグの数
+        <select id="print-columns">
+            <option value="2"{% if print_options.columns == "2" %} selected{% endif %}>2</option>
+            <option value="3"{% if print_options.columns == "3" %} selected{% endif %}>3</option>
+            <option value="4"{% if print_options.columns == "4" %} selected{% endif %}>4</option>
+            <option value="5"{% if print_options.columns == "5" %} selected{% endif %}>5</option>
+            <option value="6"{% if print_options.columns == "6" %} selected{% endif %}>6</option>
+        </select>
+    </label>
+    <button type="button" id="print-button">印刷</button>
+</div>
+<main id="league-print">
+    <h2>{{ tournament.name }} {{ category.name }} {{ stage.name }}</h2>
+    <div class="league-print-grid" data-content="league"{% if print_options.content == "tie" %} hidden{% endif %}>
+        {% for data in display_groups %}
+            <section class="league-print-group">
+                <h3>{{ data.group.name }}</h3>
+                {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="plain" use_league_score_colors=use_league_score_colors self_cell_html="-" table_kind="main" %}
+                {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches link_kind="plain" %}
+            </section>
+        {% empty %}
+            <p>リーグがありません。</p>
+        {% endfor %}
+    </div>
+    <div class="league-print-grid" data-content="tie"{% if print_options.content != "tie" %} hidden{% endif %}>
+        {% for data in display_groups %}
+            {% if data.tie_tables %}
+                <section class="league-print-group">
+                    <h3>{{ data.group.name }}</h3>
+                    {% for tie_table in data.tie_tables %}
+                        <h4>同率順位決定補助表（{{ tie_table.wins }}勝）</h4>
+                        {% include "core/_round_robin_table.html" with data=data pairs=tie_table.pairs rows=tie_table.rows row_template="core/_round_robin_tie_row.html" row_score_link_kind="plain" use_league_score_colors=use_league_score_colors self_cell_html="&nbsp;" table_kind="tie" %}
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endfor %}
+        {% if not has_tie_tables %}<p>同率順位決定補助表はありません。</p>{% endif %}
+    </div>
+    <footer class="league-print-time">{% timezone "Asia/Tokyo" %}{{ printed_at|date:"Y年n月j日 H:i" }} 時点{% endtimezone %}</footer>
+</main>
+<script>
+(function () {
+    const root = document.getElementById("league-print");
+    const controls = {};
+    ["content", "paper", "orientation", "columns"].forEach(function (key) {
+        controls[key] = document.getElementById("print-" + key);
+        controls[key].addEventListener("change", update);
+    });
+
+    function fitTables() {
+        const groups = Array.from(root.querySelectorAll('[data-content]:not([hidden]) .league-print-group'));
+        const baseSize = 12;
+        let ratio = Infinity;
+        groups.forEach(function (group) {
+            group.style.fontSize = baseSize + "px";
+        });
+        groups.forEach(function (group) {
+            const style = getComputedStyle(group);
+            const available = group.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+            group.querySelectorAll(".round-robin-table").forEach(function (table) {
+                // Intrinsic width includes em-based player columns from the tournament settings.
+                ratio = Math.min(ratio, available / table.getBoundingClientRect().width);
+            });
+        });
+        if (!Number.isFinite(ratio)) return;
+        let size = Math.max(2, Math.min(28, baseSize * ratio));
+        groups.forEach(function (group) { group.style.fontSize = size + "px"; });
+        // Border widths and wrapping do not scale linearly; refine using actual layout.
+        for (let pass = 0; pass < 3; pass++) {
+            let correction = 1;
+            groups.forEach(function (group) {
+                const style = getComputedStyle(group);
+                const available = group.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+                group.querySelectorAll("table").forEach(function (table) {
+                    correction = Math.min(correction, available / table.getBoundingClientRect().width);
+                });
+            });
+            if (correction >= 0.999) break;
+            size = Math.max(2, size * correction * 0.995);
+            groups.forEach(function (group) { group.style.fontSize = size + "px"; });
+        }
+    }
+
+    function update() {
+        const paper = controls.paper.value;
+        const orientation = controls.orientation.value;
+        const dimensions = paper === "A3" ? [297, 420] : [210, 297];
+        root.style.width = ((orientation === "landscape" ? dimensions[1] : dimensions[0]) - 16) + "mm";
+        document.getElementById("league-print-page").textContent =
+            "@page { size: " + paper + " " + orientation + "; margin: 8mm; }";
+        root.querySelectorAll("[data-content]").forEach(function (grid) {
+            grid.hidden = grid.dataset.content !== controls.content.value;
+            grid.style.gridTemplateColumns = "repeat(" + controls.columns.value + ", minmax(0, 1fr))";
+        });
+        fitTables();
+    }
+
+    document.getElementById("print-button").addEventListener("click", function () { window.print(); });
+    window.addEventListener("beforeprint", update);
+    window.addEventListener("afterprint", update);
+    window.addEventListener("resize", fitTables);
+    if (document.fonts) document.fonts.ready.then(fitTables);
+    update();
+})();
+</script>
+{% endblock %}

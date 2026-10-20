@@ -68,6 +68,12 @@ urlpatterns = [
     ),
 
     path(
+        "category/<int:category_id>/stages/<int:stage_id>/print/",
+        stage.league_stage_print,
+        name="league_stage_print",
+    ),
+
+    path(
         "category/<int:category_id>/stages/",
         stage.category_stage_overview,
         name="category_stage_overview",

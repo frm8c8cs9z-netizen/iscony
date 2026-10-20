@@ -1195,7 +1195,7 @@ def _round_robin_search_row(match, tournament, schedule=None):
         "kind": "リーグ",
         "category": match.group.category.name,
         "stage": match.group.stage.name if match.group.stage else "-",
-        "container": f"{match.group.name}リーグ",
+        "container": match.group.name,
         "match_label": (
             f"{match.pair1.pair_code} vs {match.pair2.pair_code}"
         ),

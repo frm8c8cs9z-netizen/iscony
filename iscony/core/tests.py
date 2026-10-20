@@ -5845,7 +5845,7 @@ class BulkScoreSheetPdfTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "採点票一括出力")
         self.assertContains(response, "リーグすべて")
-        self.assertContains(response, "女子A Aリーグ")
+        self.assertContains(response, "女子A A")
         self.assertContains(response, "トーナメント1回戦すべて")
         self.assertContains(response, "女子A 本戦 準決勝")
         self.assertContains(response, "コート別")
@@ -5952,7 +5952,8 @@ class BulkScoreSheetPdfTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["league_rows"]), 1)
-        self.assertContains(response, "Bリーグ")
+        self.assertContains(response, "B")
+        self.assertNotContains(response, "Bリーグ")
         self.assertContains(response, "順位リーグ")
         self.assertEqual(len(response.context["tournament_rows"]), 1)
         self.assertContains(response, "下位本戦")
@@ -26816,7 +26817,8 @@ class ReceptionMatchSearchTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "A")
+        self.assertNotContains(response, "Aリーグ")
         self.assertContains(response, "決勝")
         self.assertContains(response, "予選1A・予選1B")
         self.assertContains(response, "本戦1A・本戦1B")
@@ -28198,7 +28200,8 @@ class CategoryStageOverviewTests(TestCase):
             content.index(f'id="stage-{league_stage.id}"'),
             content.index(f'id="stage-{tournament_stage.id}"'),
         )
-        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "A")
+        self.assertNotContains(response, "Aリーグ")
         self.assertContains(response, "本戦")
         self.assertContains(response, "決勝トーナメント")
         self.assertContains(response, "0/1枠反映済み")
@@ -28752,7 +28755,8 @@ class CategoryStageOverviewTests(TestCase):
         self.assertContains(response, 'class="round-robin-table"')
         self.assertContains(response, "女子A 結果")
         self.assertContains(response, "予選リーグ")
-        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "A")
+        self.assertNotContains(response, "Aリーグ")
         self.assertContains(response, "予選1・予選2")
         self.assertContains(response, "予選3・予選4")
         self.assertContains(response, "win")
@@ -33320,7 +33324,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "管理メニュー")
         self.assertContains(response, "1 第1試合")
         self.assertContains(response, "1 第2試合")
-        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "A")
+        self.assertNotContains(response, "Aリーグ")
         self.assertContains(response, "1回戦1")
         self.assertContains(response, "結果入力")
         self.assertContains(response, "採点票PDF")
@@ -33490,7 +33495,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "一般参加者向け")
         self.assertContains(response, "1 第1試合")
         self.assertContains(response, "1 第2試合")
-        self.assertContains(response, "Aリーグ")
+        self.assertContains(response, "A")
+        self.assertNotContains(response, "Aリーグ")
         self.assertContains(response, "1回戦1")
         self.assertContains(response, "（予選クラブ1）")
         self.assertContains(response, "（予選クラブ2）")
@@ -37255,3 +37261,181 @@ class LeaguePlayerRowsDisplayTests(TestCase):
             group = Group.objects.create(category=self.category, stage=self.stage, name=f"G{i}")
             self._pair(group, f"C{i}", "選手", "相方", "所属一", "所属二")
         self.assertEqual(count(), small)
+
+
+class LeagueStagePrintAndNameTests(TestCase):
+    """名前の表示と、既存の表示設定を使う読取専用のStage印刷画面。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.tournament = Tournament.objects.create(
+            name="印刷確認大会", code="PRINTLEAGUE", is_public=True,
+        )
+        cls.category = Category.objects.create(tournament=cls.tournament, name="印刷カテゴリ")
+        cls.stage = Stage.objects.create(
+            category=cls.category, name="印刷予選", stage_type=Stage.TYPE_LEAGUE,
+            display_order=17,
+        )
+        cls.groups = []
+        cls.entries = []
+        for order, name in enumerate(("第1リーグ", "A"), 1):
+            group = Group.objects.create(
+                category=cls.category, stage=cls.stage, name=name, display_order=order,
+            )
+            cls.groups.append(group)
+            entries = [
+                create_league_entry_with_participant(
+                    category=cls.category, group=group, pair_code=f"P{order}{i}",
+                    display_order=i, player1_name=f"選手{order}{i}甲",
+                    player2_name=f"選手{order}{i}乙", organization="印刷クラブ",
+                ) for i in range(1, 4)
+            ]
+            cls.entries.append(entries)
+            # Three-way tie in the first group; distinct wins in the second.
+            for a, b in ((0, 1), (1, 2), (2, 0)):
+                RoundRobinMatch.objects.create(
+                    group=group, pair1=entries[a], pair2=entries[b],
+                    pair1_games=3, pair2_games=1,
+                )
+            for i, entry in enumerate(entries):
+                GroupRanking.objects.create(
+                    group=group, pair=entry, wins=1 if order == 1 else i, rank=i + 1,
+                )
+        cls.match = RoundRobinMatch.objects.filter(group=cls.groups[0]).first()
+        cls.extra = RoundRobinMatch.objects.create(
+            group=cls.groups[0], pair1=cls.entries[0][0], pair2=cls.entries[0][1],
+            meeting_number=2, counts_for_ranking=False, note="印刷追加対戦確認",
+        )
+        cls.other_stage = Stage.objects.create(
+            category=cls.category, name="別のリーグStage", stage_type=Stage.TYPE_LEAGUE,
+        )
+        Group.objects.create(category=cls.category, stage=cls.other_stage, name="対象外グループ")
+        cls.final_stage = Stage.objects.create(
+            category=cls.category, name="決勝", stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        cls.other_category = Category.objects.create(tournament=cls.tournament, name="別カテゴリ")
+        court = Court.objects.create(tournament=cls.tournament, name="1")
+        Schedule.objects.create(court=court, order=1, round_robin_match=cls.match)
+        cls.url = reverse("league_stage_print", args=[cls.category.id, cls.stage.id])
+
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_group_names_are_not_suffixed_on_operator_and_public_pages(self):
+        Group.objects.filter(pk=self.groups[1].pk).update(name="B")
+        urls = [
+            reverse("category_stage_overview", args=[self.category.id]),
+            reverse("category_detail", args=[self.category.id]),
+            reverse("public_category_results", args=[self.tournament.code, self.category.id]),
+            reverse("schedule_view", args=[self.tournament.code]),
+            reverse("public_schedule_view", args=[self.tournament.code]),
+            reverse("input_match_score", args=[self.match.id]),
+            reverse("edit_group_ranking", args=[self.groups[0].id]),
+            self.url,
+        ]
+        for name in ("第1リーグ", "A"):
+            self.groups[0].name = name
+            self.groups[0].save(update_fields=["name"])
+            cache.clear()
+            for url in urls:
+                with self.subTest(name=name, url=url):
+                    response = self.client.get(url)
+                    self.assertContains(response, name)
+                    self.assertNotContains(response, f"{name}リーグ")
+
+    def test_pdf_labels_and_search_json_use_exact_group_name(self):
+        Group.objects.filter(pk=self.groups[1].pk).update(name="B")
+        from .views.pdf import _league_scope_rows
+        from .views.dashboard import _round_robin_search_row
+
+        for name in ("第1リーグ", "A"):
+            self.groups[0].name = name
+            self.groups[0].save(update_fields=["name"])
+            self.match.refresh_from_db()
+            row = _round_robin_search_row(self.match, self.tournament)
+            self.assertEqual(row["container"], name)
+            self.assertEqual(row["kind"], "リーグ")
+            labels = [row["label"] for row in _league_scope_rows(self.tournament)]
+            self.assertIn(f"{self.category.name} {name}", labels)
+            self.assertNotIn(f"{self.category.name} {name}リーグ", labels)
+            self.assertNotIn(f"{name}リーグ", str(self.match))
+
+    def test_stage_order_is_not_rendered_and_print_link_is_operator_only(self):
+        response = self.client.get(reverse("category_stage_overview", args=[self.category.id]))
+        self.assertContains(response, self.url)
+        self.assertNotContains(response, reverse("league_stage_print", args=[self.category.id, self.final_stage.id]))
+        self.assertNotContains(response, "stage-order")
+        response = self.client.get(reverse("public_category_results", args=[self.tournament.code, self.category.id]))
+        self.assertNotContains(response, self.url)
+        self.assertNotContains(response, "stage-order")
+
+    @override_settings(ISCONY_LOGIN_REQUIRED=True)
+    def test_print_requires_login_and_authenticated_operator_can_open_it(self):
+        from django.contrib.auth import get_user_model
+
+        response = self.client.get(self.url)
+        self.assertRedirects(response, reverse("login") + "?" + urlencode({"next": self.url}))
+        user = get_user_model().objects.create_user(username="league_printer")
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_print_rejects_tournament_stage_and_other_category(self):
+        for category, stage in ((self.category, self.final_stage), (self.other_category, self.stage)):
+            with self.subTest(category=category.id, stage=stage.id):
+                self.assertEqual(self.client.get(reverse("league_stage_print", args=[category.id, stage.id])).status_code, 404)
+
+    def test_print_contains_stage_groups_and_extra_matches_without_operation_links(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([data["group"] for data in response.context["display_groups"]], self.groups)
+        self.assertContains(response, "印刷追加対戦確認")
+        self.assertNotContains(response, "対象外グループ")
+        body = response.content.decode().split('<main id="league-print">', 1)[1].split('</main>', 1)[0]
+        self.assertIn("第1リーグ", body)
+        self.assertIn("<h3>A</h3>", body)
+        self.assertNotIn("<a ", body)
+        self.assertNotIn(reverse("input_match_score", args=[self.match.id]), response.content.decode())
+        self.assertNotIn("17 印刷予選", body)
+
+    def test_tie_mode_shows_only_groups_with_tie_tables(self):
+        response = self.client.get(self.url, {"content": "tie"})
+        self.assertEqual(response.context["print_options"]["content"], "tie")
+        body = response.content.decode()
+        self.assertIn('data-content="league" hidden', body)
+        tie = body.split('data-content="tie"', 1)[1].split('</div>', 1)[0]
+        self.assertIn("第1リーグ", tie)
+        self.assertNotIn("<h3>A</h3>", tie)
+        self.assertIn("同率順位決定補助表", tie)
+
+    def test_tie_mode_without_ties_has_empty_message(self):
+        GroupRanking.objects.all().delete()
+        response = self.client.get(self.url, {"content": "tie"})
+        self.assertContains(response, "同率順位決定補助表はありません。")
+
+    def test_options_are_validated_and_timestamp_uses_japan_time(self):
+        from datetime import datetime, timezone as datetime_timezone
+        from unittest.mock import patch
+
+        with patch("core.views.stage.timezone.now", return_value=datetime(2026, 10, 20, 23, 45, tzinfo=datetime_timezone.utc)):
+            response = self.client.get(self.url, {"content": "tie", "paper": "A3", "orientation": "portrait", "columns": "6"})
+        self.assertEqual(response.context["print_options"], {"content": "tie", "paper": "A3", "orientation": "portrait", "columns": "6"})
+        self.assertContains(response, "2026年10月21日 08:45 時点")
+        response = self.client.get(self.url, {"content": "bad", "paper": "bad", "orientation": "bad", "columns": "99"})
+        self.assertEqual(response.context["print_options"], {"content": "league", "paper": "A4", "orientation": "landscape", "columns": "3"})
+
+    def test_print_preserves_player_rows_widths_and_score_color_setting(self):
+        from .views.league import build_category_group_data
+        from .helpers.display import ENTRY_DISPLAY_PLAYER_ROWS
+
+        self.tournament.default_league_entry_display_mode = ENTRY_DISPLAY_PLAYER_ROWS
+        self.tournament.default_league_score_color_mode = Tournament.LEAGUE_SCORE_COLOR_NONE
+        self.tournament.save()
+        response = self.client.get(self.url)
+        expected, _ = build_category_group_data(self.category, groups=self.groups, include_operations=False)
+        self.assertEqual(response.context["display_groups"][0]["player_rows_widths"], expected[0]["player_rows_widths"])
+        self.assertIsNotNone(response.context["display_groups"][0]["player_rows_widths"])
+        self.assertFalse(response.context["use_league_score_colors"])
+        self.assertNotContains(response, 'class="rr-score-col win')

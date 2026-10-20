@@ -3,6 +3,7 @@
 import json
 import secrets
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_not_required
@@ -11,6 +12,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from .league import build_category_group_data
 from ..forms import StageEditForm, StageForm, StageSlotSetupForm
@@ -582,6 +584,46 @@ def category_stage_overview(request, category_id):
             ),
         },
     )
+
+
+def league_stage_print(request, category_id, stage_id):
+    """リーグStageの表を、操作リンクなしの印刷用画面に表示する。"""
+
+    stage = get_object_or_404(
+        Stage.objects.select_related("category__tournament"),
+        id=stage_id,
+        category_id=category_id,
+        stage_type=Stage.TYPE_LEAGUE,
+    )
+    category = stage.category
+    display_groups, _ = build_category_group_data(
+        category,
+        groups=Group.objects.filter(stage=stage).order_by("display_order", "name"),
+        include_operations=False,
+    )
+    options = {
+        "content": ("league", "tie"),
+        "paper": ("A4", "A3"),
+        "orientation": ("landscape", "portrait"),
+        "columns": ("3", "2", "4", "5", "6"),
+    }
+    print_options = {
+        key: request.GET.get(key) if request.GET.get(key) in choices else choices[0]
+        for key, choices in options.items()
+    }
+    return render(request, "core/league_stage_print.html", {
+        "category": category,
+        "tournament": category.tournament,
+        "stage": stage,
+        "display_groups": display_groups,
+        "has_tie_tables": any(data["tie_tables"] for data in display_groups),
+        "print_options": print_options,
+        "printed_at": timezone.localtime(timezone.now(), ZoneInfo("Asia/Tokyo")),
+        "use_league_score_colors": (
+            category.tournament.default_league_score_color_mode
+            != Tournament.LEAGUE_SCORE_COLOR_NONE
+        ),
+    })
 
 
 def category_stage_management(request, code, category_id):

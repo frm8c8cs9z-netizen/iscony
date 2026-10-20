@@ -242,7 +242,6 @@
             <div class="page-heading">
                 <div>
                     <h3>
-                        <span class="stage-order">{{ row.stage.display_order }}</span>
                         {{ row.stage.name }}
                     </h3>
                     <p class="stage-subtext">
@@ -254,12 +253,15 @@
                         </span>
                     </p>
                 </div>
+                {% if row.stage.stage_type == "league" %}
+                    <a class="button-link" href="{% url 'league_stage_print' category.id row.stage.id %}">印刷</a>
+                {% endif %}
             </div>
 
             {% if row.stage.stage_type == "league" %}
                 {% for data in row.display_groups %}
                     <div class="group-box" id="group-{{ data.group.id }}">
-                        <h4>{{ data.group.name }}リーグ</h4>
+                        <h4>{{ data.group.name }}</h4>
                         <p>
                             <a href="{% url 'edit_group_ranking' data.group.id %}?next={{ data.group_score_link_next_url }}%23group-{{ data.group.id }}">順位入力</a>
                             / <a href="{% url 'add_extra_round_robin_match' data.group.id %}?next={{ data.group_score_link_next_url }}%23group-{{ data.group.id }}">追加対戦</a>
