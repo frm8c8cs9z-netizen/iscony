@@ -1,7 +1,7 @@
 <table class="round-robin-table">
     <tr>
-        <th class="rr-code-col"></th>
-        <th class="rr-name-col"></th>
+        <th class="rr-code-col"{% if data.player_rows_widths %} style="width: {{ data.player_rows_widths.code }}em; min-width: {{ data.player_rows_widths.code }}em; max-width: {{ data.player_rows_widths.code }}em;"{% endif %}></th>
+        <th class="rr-name-col"{% if data.player_rows_widths %} style="width: {{ data.player_rows_widths.entry }}em; min-width: {{ data.player_rows_widths.entry }}em; max-width: {{ data.player_rows_widths.entry }}em;"{% endif %}></th>
 
         {% for pair in pairs %}
             <th class="rr-code-col rr-header {% if pair.retired %}retired-pair{% endif %}">

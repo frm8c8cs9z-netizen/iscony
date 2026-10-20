@@ -11,6 +11,7 @@ from .helpers.display import (
     ENTRY_DISPLAY_INHERIT as DISPLAY_INHERIT,
     ENTRY_DISPLAY_NAME_ORG_2LINE as DISPLAY_NAME_ORG_2LINE,
     ENTRY_DISPLAY_ONE_LINE as DISPLAY_ONE_LINE,
+    ENTRY_DISPLAY_PLAYER_ROWS as DISPLAY_PLAYER_ROWS,
     ENTRY_DISPLAY_SHORT_ORG_2LINE as DISPLAY_SHORT_ORG_2LINE,
 )
 from .match_keys import (
@@ -64,6 +65,7 @@ class Tournament(models.Model):
     ENTRY_DISPLAY_SHORT_ORG_2LINE = DISPLAY_SHORT_ORG_2LINE
     ENTRY_DISPLAY_ONE_LINE = DISPLAY_ONE_LINE
     ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
+    ENTRY_DISPLAY_PLAYER_ROWS = DISPLAY_PLAYER_ROWS
     TOURNAMENT_LAYOUT_SINGLE = "single"
     TOURNAMENT_LAYOUT_SPLIT = "split"
     CHAMPION_DISPLAY_AUTO = "auto"
@@ -201,9 +203,13 @@ class Tournament(models.Model):
         on_delete=models.SET_NULL
     )
 
+    LEAGUE_ENTRY_DISPLAY_CHOICES = ENTRY_DISPLAY_CHOICES + [
+        (ENTRY_DISPLAY_PLAYER_ROWS, "選手ごと2段（名前｜所属）"),
+    ]
+
     default_league_entry_display_mode = models.CharField(
         max_length=30,
-        choices=ENTRY_DISPLAY_CHOICES,
+        choices=LEAGUE_ENTRY_DISPLAY_CHOICES,
         default=ENTRY_DISPLAY_SHORT_ORG_2LINE
     )
 

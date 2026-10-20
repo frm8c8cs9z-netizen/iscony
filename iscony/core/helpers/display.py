@@ -19,6 +19,7 @@ ENTRY_DISPLAY_INHERIT = "inherit"
 ENTRY_DISPLAY_SHORT_ORG_2LINE = "short_org_2line"
 ENTRY_DISPLAY_ONE_LINE = "one_line"
 ENTRY_DISPLAY_NAME_ORG_2LINE = "name_org_2line"
+ENTRY_DISPLAY_PLAYER_ROWS = "player_rows"
 SYSTEM_ENTRY_DISPLAY_MODE = ENTRY_DISPLAY_SHORT_ORG_2LINE
 ENTRY_DISPLAY_TARGET_LEAGUE = "league"
 ENTRY_DISPLAY_TARGET_TOURNAMENT = "tournament"
@@ -47,7 +48,9 @@ def resolve_entry_display_mode(*, explicit_mode=None, tournament=None, target=No
     """参加者表示モードを上書き階層込みで解決する。"""
 
     if explicit_mode and explicit_mode != ENTRY_DISPLAY_INHERIT:
-        return explicit_mode
+        return (ENTRY_DISPLAY_NAME_ORG_2LINE
+                if target == ENTRY_DISPLAY_TARGET_TOURNAMENT
+                and explicit_mode == ENTRY_DISPLAY_PLAYER_ROWS else explicit_mode)
 
     for attr in _tournament_default_attrs(target):
         tournament_default = getattr(
@@ -57,7 +60,9 @@ def resolve_entry_display_mode(*, explicit_mode=None, tournament=None, target=No
         )
 
         if tournament_default and tournament_default != ENTRY_DISPLAY_INHERIT:
-            return tournament_default
+            return (ENTRY_DISPLAY_NAME_ORG_2LINE
+                    if target == ENTRY_DISPLAY_TARGET_TOURNAMENT
+                    and tournament_default == ENTRY_DISPLAY_PLAYER_ROWS else tournament_default)
 
     return SYSTEM_ENTRY_DISPLAY_MODE
 
@@ -140,7 +145,7 @@ def build_entry_display_lines(
             }
         ]
 
-    if mode == ENTRY_DISPLAY_NAME_ORG_2LINE:
+    if mode in (ENTRY_DISPLAY_NAME_ORG_2LINE, ENTRY_DISPLAY_PLAYER_ROWS):
         organization = entry.display_organization
 
         lines = [
@@ -180,3 +185,30 @@ def build_entry_display_lines(
         })
 
     return lines
+
+
+def build_entry_player_rows(entry):
+    """リーグ選手欄の行と、共通所属の結合情報を返す。未定枠は従来表示。"""
+    participant = getattr(entry, "participant", None)
+    if not participant:
+        return None
+    org1 = participant.effective_player1_organization
+    org2 = participant.effective_player2_organization
+    changed1 = participant.player1_organization_is_day_changed
+    changed2 = participant.player2_organization_is_day_changed
+    has_second = bool(entry.display_player2_name)
+    shared = not has_second or not org1 or not org2 or org1 == org2
+    rows = [{
+        "name": entry.display_player1_name,
+        "changed": entry.display_player1_is_day_changed,
+        "organization": org1 if not shared else org1 or org2,
+        "organization_changed": changed1 if not shared else changed1 or changed2,
+    }]
+    if has_second:
+        rows.append({
+            "name": entry.display_player2_name,
+            "changed": entry.display_player2_is_day_changed,
+            "organization": org2,
+            "organization_changed": changed2,
+        })
+    return {"rows": rows, "shared": shared}

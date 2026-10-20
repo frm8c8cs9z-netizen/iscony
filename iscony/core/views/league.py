@@ -18,6 +18,8 @@ from django.urls import reverse
 
 from ..helpers.display import (
     build_entry_display_lines,
+    build_entry_player_rows,
+    ENTRY_DISPLAY_PLAYER_ROWS,
     ENTRY_DISPLAY_TARGET_LEAGUE,
     resolve_entry_display_mode,
 )
@@ -143,10 +145,36 @@ def build_category_group_data(
         tournament=category.tournament,
         target=ENTRY_DISPLAY_TARGET_LEAGUE,
     )
-    entry_display_mode_label = dict(Tournament.ENTRY_DISPLAY_CHOICES).get(
+    entry_display_mode_label = dict(Tournament.LEAGUE_ENTRY_DISPLAY_CHOICES).get(
         entry_display_mode,
         entry_display_mode,
     )
+
+    player_rows_widths = None
+    if entry_display_mode == ENTRY_DISPLAY_PLAYER_ROWS:
+        # 表示対象のStage/リーグに限定せず、未割当の参加者も含める。
+        participants = Participant.objects.filter(category=category).prefetch_related(
+            "organization_values__field",
+        )
+        name_length = organization_length = 0
+        for participant in participants:
+            name_length = max(name_length, len(participant.effective_player1_name),
+                              len(participant.effective_player2_name))
+            organization_length = max(
+                organization_length,
+                len(participant.effective_player1_organization),
+                len(participant.effective_player2_organization),
+            )
+        code_length = max((len(code) for code in LeagueEntry.objects.filter(
+            category=category,
+        ).values_list("pair_code", flat=True)), default=0)
+        # 整数emにしてロケールの小数点表記に依存せず、左右の余白も確保する。
+        player_rows_widths = {
+            "name": name_length + 1,
+            "organization": organization_length + 1,
+            "code": code_length + 1,
+            "entry": name_length + organization_length + 2,
+        }
 
     groups = list(groups)
     all_pairs = LeagueEntry.objects.filter(
@@ -362,6 +390,8 @@ def build_category_group_data(
 
             table_rows.append({
                 "pair": row_pair,
+                "player_rows": (build_entry_player_rows(row_pair)
+                                if player_rows_widths else None),
                 "pair_display_lines": build_entry_display_lines(
                     row_pair,
                     mode=entry_display_mode,
@@ -387,10 +417,12 @@ def build_category_group_data(
                 match_map=match_map,
                 entry_display_mode=entry_display_mode,
                 ranking_matches=ranking_matches,
+                player_rows_widths=player_rows_widths,
             )
 
         group_data.append({
             "group": group,
+            "player_rows_widths": player_rows_widths,
             "pairs": pairs,
             "table_rows": table_rows,
             "tie_tables": tie_tables,
@@ -467,6 +499,7 @@ def _build_round_robin_tie_tables(
     match_map,
     entry_display_mode,
     ranking_matches=None,
+    player_rows_widths=None,
 ):
     """同率順位の補助表をカテゴリ表示用の辞書列へ整える。"""
 
@@ -559,6 +592,8 @@ def _build_round_robin_tie_tables(
         for row_pair in tied_pairs:
             tie_rows.append({
                 "pair": row_pair,
+                "player_rows": (build_entry_player_rows(row_pair)
+                                if player_rows_widths else None),
                 "pair_display_lines": build_entry_display_lines(
                     row_pair,
                     mode=entry_display_mode,

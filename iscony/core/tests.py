@@ -37078,3 +37078,180 @@ class LoginRequiredTests(TestCase):
     @override_settings(ISCONY_LOGIN_REQUIRED=False)
     def test_disabled_setting_keeps_existing_anonymous_behavior(self):
         self.assertEqual(self.client.get(reverse("tournament_list")).status_code, 200)
+
+
+@override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+class LeaguePlayerRowsDisplayTests(TestCase):
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="選手行表示", code="PLAYER_ROWS", is_public=True,
+            default_league_entry_display_mode="player_rows",
+        )
+        self.category = Category.objects.create(tournament=self.tournament, name="一般")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_LEAGUE,
+        )
+        self.groups = [Group.objects.create(
+            category=self.category, stage=self.stage, name=f"G{i}", display_order=i,
+        ) for i in (1, 2)]
+        self.field = TournamentOrganizationField.objects.create(
+            tournament=self.tournament, code="club", label="所属",
+        )
+        self.pair = self._pair(self.groups[0], "A1", "山田 太郎", "佐藤 次郎", "同じ所属", "同じ所属")
+
+    def _pair(self, group, code, name1, name2, org1="", org2=""):
+        pair = create_league_entry_with_participant(
+            category=self.category, group=group, pair_code=code, display_order=1,
+            player1_name=name1, player2_name=name2,
+        )
+        for number, organization in enumerate((org1, org2), 1):
+            ParticipantOrganizationValue.objects.create(
+                participant=pair.participant, field=self.field, player_no=number,
+                original_value=organization,
+            )
+        return pair
+
+    def _data(self, groups=None):
+        from .views.league import build_category_group_data
+        return build_category_group_data(self.category, groups=groups)[0]
+
+    def _render(self, data, *, tie=False):
+        from django.template.loader import render_to_string
+        return render_to_string("core/_round_robin_table.html", {
+            "data": data, "pairs": data["pairs"], "rows": data["table_rows"],
+            "row_template": "core/_round_robin_tie_row.html" if tie else "core/_round_robin_main_row.html",
+        })
+
+    def test_shared_and_different_organizations_and_player_lines(self):
+        html = self._render(self._data()[0])
+        self.assertEqual(html.count("同じ所属"), 1)
+        self.assertEqual(html.count('class="rr-player-name"'), 2)
+        self.assertIn('grid-row: 1 / span 2; align-self: center;', html)
+        self.assertIn("山田 太郎", html)
+        self.assertIn("佐藤 次郎", html)
+        ParticipantOrganizationValue.objects.filter(
+            participant=self.pair.participant, player_no=2,
+        ).update(original_value="別所属")
+        html = self._render(self._data()[0])
+        self.assertEqual(html.count('class="rr-player-organization"'), 2)
+        self.assertEqual(html.count("別所属"), 1)
+        self.assertEqual(html.count("同じ所属"), 1)
+        self.assertNotIn("/ span 2", html)
+
+    def test_day_changes_are_red_in_main_and_tie_rows(self):
+        participant = self.pair.participant
+        participant.has_day_player_change = True
+        participant.current_player1_name = "当日 名前"
+        participant.save()
+        ParticipantOrganizationValue.objects.filter(
+            participant=participant, player_no=1,
+        ).update(current_value="当日所属")
+        GroupRanking.objects.create(group=self.groups[0], pair=self.pair, wins=1)
+        other = self._pair(self.groups[0], "A2", "他の選手", "相方")
+        GroupRanking.objects.create(group=self.groups[0], pair=other, wins=1)
+        data = self._data()[0]
+        for tie in (False, True):
+            table = dict(data)
+            if tie:
+                table["table_rows"] = data["tie_tables"][0]["rows"]
+            html = self._render(table, tie=tie)
+            self.assertIn('<span style="color:red;">当日 名前</span>', html)
+            self.assertIn('<span style="color:red;">当日所属</span>', html)
+            self.assertNotIn("山田 太郎", html)
+
+    def test_single_player_empty_and_advancement_slots(self):
+        self.pair.participant.player2_name = ""
+        self.pair.participant.save()
+        empty = LeagueEntry.objects.create(category=self.category, group=self.groups[0], pair_code="A2")
+        source = LeagueEntry.objects.create(category=self.category, group=self.groups[0], pair_code="A3")
+        AdvancementSource.objects.create(
+            target_league_entry=source, source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            source_stage=self.stage, source_group=self.groups[1], source_rank=1,
+        )
+        html = self._render(self._data()[0])
+        self.assertEqual(html.count('class="rr-player-name"'), 1)
+        self.assertIn("未定", html)
+        self.assertIn(source.display_name, html)
+        self.assertIsNone(empty.participant)
+
+    def test_category_widths_include_hidden_groups_and_unassigned_participants(self):
+        long_name = "長い名前の選手です 全角も一文字"
+        long_org = "一番長い所属クラブ名"
+        hidden = self._pair(self.groups[1], "LONGCODE123", "短名", long_name, "", long_org)
+        participant = hidden.participant
+        participant.has_day_player_change = True
+        participant.current_player2_name = long_name + "変更"
+        participant.save()
+        expected = {
+            "name": len(long_name + "変更") + 1,
+            "organization": len(long_org) + 1,
+            "code": len("LONGCODE123") + 1,
+            "entry": len(long_name + "変更") + len(long_org) + 2,
+        }
+        data = self._data()
+        self.assertEqual([d["player_rows_widths"] for d in data], [expected, expected])
+        filtered = self._data(groups=[self.groups[0]])[0]
+        self.assertEqual(filtered["player_rows_widths"], expected)
+        for group_data in [*data, filtered]:
+            html = self._render(group_data)
+            self.assertIn(f'grid-template-columns: {expected["name"]}em {expected["organization"]}em;', html)
+            self.assertIn(f'width: {expected["code"]}em;', html)
+            self.assertIn('white-space: nowrap;', html)
+        Participant.objects.create(
+            category=self.category, entry_code="UNASSIGNED", player1_name="未割当" * 20,
+        )
+        self.assertEqual(self._data(groups=[self.groups[0]])[0]["player_rows_widths"]["name"], 61)
+
+    def test_settings_only_offer_player_rows_for_league(self):
+        response = self.client.get(reverse("tournament_settings", kwargs={"code": self.tournament.code}))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        league = re.search(r'<select[^>]*name="default_league_entry_display_mode".*?</select>', html, re.S).group()
+        tournament = re.search(r'<select[^>]*name="default_tournament_entry_display_mode".*?</select>', html, re.S).group()
+        self.assertIn('value="player_rows"', league)
+        self.assertIn("選手ごと2段（名前｜所属）", league)
+        self.assertNotIn('value="player_rows"', tournament)
+        form_class = response.context["form"].__class__
+        form = form_class(data={
+            "default_league_entry_display_mode": "player_rows",
+            "default_tournament_entry_display_mode": "name_org_2line",
+        }, instance=self.tournament)
+        form.is_valid()
+        self.assertNotIn("default_league_entry_display_mode", form.errors)
+
+    def test_non_table_and_tournament_fallback(self):
+        self.assertEqual(
+            build_entry_display_lines(self.pair, mode="player_rows"),
+            build_entry_display_lines(self.pair, mode="name_org_2line"),
+        )
+        self.assertEqual(resolve_entry_display_mode(
+            explicit_mode="player_rows", target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
+        ), "name_org_2line")
+        self.tournament.default_tournament_entry_display_mode = "player_rows"
+        self.assertEqual(resolve_entry_display_mode(
+            tournament=self.tournament, target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
+        ), "name_org_2line")
+
+    def test_all_league_screens_use_player_rows(self):
+        for name, kwargs in (
+            ("category_detail", {"category_id": self.category.pk}),
+            ("category_stage_overview", {"category_id": self.category.pk}),
+            ("public_category_results", {"category_id": self.category.pk, "code": self.tournament.code}),
+        ):
+            with self.subTest(screen=name):
+                response = self.client.get(reverse(name, kwargs=kwargs))
+                self.assertContains(response, 'class="rr-player-rows"')
+
+    def test_player_rows_queries_do_not_grow_with_groups_or_organizations(self):
+        def count():
+            with CaptureQueriesContext(connection) as queries:
+                data = self._data()
+                for group in data:
+                    self._render(group)
+            return len(queries)
+        self._pair(self.groups[1], "B1", "別選手", "相方", "クラブ", "クラブ")
+        small = count()
+        for i in range(3, 7):
+            group = Group.objects.create(category=self.category, stage=self.stage, name=f"G{i}")
+            self._pair(group, f"C{i}", "選手", "相方", "所属一", "所属二")
+        self.assertEqual(count(), small)
