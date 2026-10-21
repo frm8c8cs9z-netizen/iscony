@@ -26,12 +26,13 @@
             <section data-bracket-name="{{ data.bracket.name }}">
                 {% for svg_bracket in data.svg_brackets %}
                     <div class="print-diagram" data-split-role="{{ svg_bracket.split_role|default:'whole' }}" data-title="{% if svg_bracket.split_role == 'winner' %}上位トーナメント{% elif svg_bracket.split_role == 'block' %}ブロック{{ svg_bracket.block_number }}{% endif %}">
-                        <h3>{% if svg_bracket.split_role == 'winner' %}上位トーナメント{% elif svg_bracket.split_role == 'block' %}ブロック{{ svg_bracket.block_number }}{% endif %}</h3>
+                        <h3>{{ data.bracket.name }}{% if svg_bracket.split_role == 'winner' or svg_bracket.split_role == 'block' %} / {% endif %}{% if svg_bracket.split_role == 'winner' %}上位トーナメント{% elif svg_bracket.split_role == 'block' %}ブロック{{ svg_bracket.block_number }}{% endif %}</h3>
                         {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=data.bracket.name %}
                     </div>
                 {% empty %}
                     {% if data.svg_bracket %}
                         <div class="print-diagram" data-split-role="whole" data-title="">
+                            <h3>{{ data.bracket.name }}</h3>
                             {% include "core/_svg_bracket.html" with svg_bracket=data.svg_bracket aria_label=data.bracket.name %}
                         </div>
                     {% else %}<p>対戦表がありません。</p>{% endif %}

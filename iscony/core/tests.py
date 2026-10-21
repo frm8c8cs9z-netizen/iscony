@@ -37426,6 +37426,34 @@ class LeagueStagePrintAndNameTests(TestCase):
         response = self.client.get(self.url, {"content": "bad", "paper": "bad", "orientation": "bad", "columns": "99"})
         self.assertEqual(response.context["print_options"], {"content": "league", "paper": "A4", "orientation": "landscape", "columns": "3"})
 
+    def test_unfinished_stats_are_blank_only_on_print(self):
+        GroupRanking.objects.filter(group__in=self.groups).delete()
+        response = self.client.get(self.url)
+        self.assertNotContains(response, "未集計")
+        empty_stats = re.findall(r'(?:<td class="rr-stat-col"></td>\s*){3}', response.content.decode())
+        self.assertEqual(len(empty_stats), 6)
+        for url in (
+            reverse("category_stage_overview", args=[self.category.pk]),
+            reverse("category_detail", args=[self.category.pk]),
+            reverse("public_category_results", args=[self.tournament.code, self.category.pk]),
+        ):
+            with self.subTest(url=url):
+                self.assertContains(self.client.get(url), '未集計')
+
+    def test_finished_stats_keep_wins_losses_and_rank(self):
+        ranking = GroupRanking.objects.filter(group=self.groups[0]).first()
+        ranking.wins, ranking.losses, ranking.rank = 7, 4, 2
+        ranking.save()
+        self.assertContains(
+            self.client.get(self.url),
+            '<td class="rr-stat-col">7</td>\n        <td class="rr-stat-col">4</td>\n        <td class="rr-stat-col">2</td>',
+        )
+
+    def test_league_frame_defaults_off_and_accepts_query(self):
+        self.assertContains(self.client.get(self.url), 'id="print-frame">')
+        self.assertContains(self.client.get(self.url, {"frame": "1"}), 'id="print-frame" checked>')
+        self.assertContains(self.client.get(self.url, {"frame": "bad"}), 'id="print-frame">')
+
     def test_print_preserves_player_rows_widths_and_score_color_setting(self):
         from .views.league import build_category_group_data
         from .helpers.display import ENTRY_DISPLAY_PLAYER_ROWS
@@ -37494,6 +37522,27 @@ class StagePrintPaginationTests(TestCase):
         self.assertNotContains(response, reverse("public_schedule_view_token", kwargs={"public_token": self.tournament.public_token}))
         body = response.content.decode().split('<main id="tournament-print">', 1)[1].split('</main>', 1)[0]
         self.assertNotIn('<a ', body)
+
+    def test_multiple_brackets_have_individual_headings_and_block_roles(self):
+        from .services import generate_tournament_bracket_matches
+
+        for name in ("小さい決勝表A", "小さい決勝表B"):
+            bracket = TournamentBracket.objects.create(
+                category=self.category, stage=self.stage, name=name,
+                use_tournament_defaults=False, layout_type=TournamentBracket.LAYOUT_SINGLE,
+            )
+            for i in range(1, 5):
+                create_tournament_entry(bracket=bracket, pair_code=str(i), display_order=i)
+            generate_tournament_bracket_matches(bracket, 3)
+        response = self.client.get(self.url)
+        for name in ("小さい決勝表A", "小さい決勝表B"):
+            self.assertContains(response, f"<h3>{name}</h3>")
+        self.assertContains(response, "<h3>決勝表 / ブロック1</h3>")
+        self.assertContains(response, "<h3>決勝表 / ブロック2</h3>")
+        self.assertContains(response, "<h3>決勝表 / 上位トーナメント</h3>")
+        self.assertContains(response, 'data-split-role="block"', count=2)
+        header = re.search(r'<h2 class="print-header">(.*?)</h2>', response.content.decode(), re.S)
+        self.assertNotIn("決勝表", header.group(1))
 
     def test_print_link_only_on_operator_overview(self):
         self.assertContains(self.client.get(reverse("category_stage_overview", args=[self.category.pk])), self.url)

@@ -617,6 +617,7 @@ def league_stage_print(request, category_id, stage_id):
         "stage": stage,
         "display_groups": display_groups,
         "repeat_header": request.GET.get("repeat_header") != "0",
+        "show_league_frame": request.GET.get("frame") == "1",
         "has_tie_tables": any(data["tie_tables"] for data in display_groups),
         "print_options": print_options,
         "printed_at": timezone.localtime(timezone.now(), ZoneInfo("Asia/Tokyo")),

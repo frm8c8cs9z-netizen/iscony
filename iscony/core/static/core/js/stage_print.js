@@ -4,7 +4,7 @@
     const pages = document.getElementById("print-pages");
     const sources = document.getElementById("print-sources");
     const controls = {};
-    ["paper", "orientation", "columns", "content", "winner-placement", "repeat-header"].forEach(key => {
+    ["paper", "orientation", "columns", "content", "winner-placement", "repeat-header", "frame"].forEach(key => {
         controls[key] = document.getElementById("print-" + key);
         if (controls[key]) controls[key].addEventListener("change", update);
     });
@@ -87,55 +87,145 @@
             page().textContent = "トーナメント表がありません。";
             return;
         }
+        // Measure every page unit against the first (fully headed) page.
+        // Later pages can have more space when their header is hidden.
+        const probe = page();
+        probe.classList.add("print-tournament-body");
+        const bodyWidth = probe.clientWidth;
+        const bodyHeight = probe.clientHeight;
+        const units = [];
         brackets.forEach(bracket => {
-            const diagrams = Array.from(bracket.querySelectorAll(".print-diagram"));
             const plans = [];
-            diagrams.forEach(diagram => {
+            bracket.querySelectorAll(".print-diagram").forEach(diagram => {
                 if (diagram.dataset.splitRole === "winner" && controls["winner-placement"].value === "together" && plans.length) {
                     plans[plans.length - 1].push(diagram);
                 } else plans.push([diagram]);
             });
             if (!plans.length) {
-                page(bracket.dataset.bracketName).textContent = bracket.textContent.trim();
-                return;
-            }
-            let scale = Infinity;
-            const rendered = [];
-            plans.forEach(plan => {
-                const title = [bracket.dataset.bracketName, ...plan.map(diagram => diagram.dataset.title)].filter(Boolean).join(" / ");
-                const body = page(title);
-                body.classList.add("print-tournament-body");
                 const stack = document.createElement("div");
                 stack.className = "print-diagrams";
-                body.append(stack);
-                let height = 0;
+                stack.dataset.pageUnit = "packable";
+                const heading = document.createElement("h3");
+                heading.textContent = bracket.dataset.bracketName;
+                heading.style.maxWidth = bodyWidth + "px";
+                const message = document.createElement("p");
+                message.textContent = bracket.textContent.trim();
+                const diagram = document.createElement("div");
+                diagram.className = "print-diagram";
+                diagram.append(heading, message);
+                stack.append(diagram);
+                units.push({stack, isolated: false, svgs: [], scale: Infinity});
+            }
+            plans.forEach(plan => {
+                const stack = document.createElement("div");
+                stack.className = "print-diagrams";
+                const isolated = plan.some(source => source.dataset.splitRole === "block");
+                stack.dataset.pageUnit = isolated ? "split-block" : "packable";
+                probe.append(stack);
                 let width = 0;
+                let height = 0;
                 let headingsHeight = 0;
+                const svgs = [];
                 plan.forEach(source => {
                     const diagram = source.cloneNode(true);
-                    const heading = diagram.querySelector("h3");
-                    if (heading) heading.hidden = plan.length === 1;
                     stack.append(diagram);
+                    const heading = diagram.querySelector("h3");
+                    heading.style.maxWidth = bodyWidth + "px";
                     const svg = diagram.querySelector("svg");
                     const box = svg.viewBox.baseVal;
                     width = Math.max(width, box.width);
                     height += box.height;
-                    if (heading && !heading.hidden) {
-                        headingsHeight += heading.getBoundingClientRect().height + parseFloat(getComputedStyle(heading).marginBottom);
-                    }
-                    rendered.push({svg, width: box.width, height: box.height});
+                    headingsHeight += heading.getBoundingClientRect().height + parseFloat(getComputedStyle(heading).marginBottom);
+                    svgs.push({svg, width: box.width, height: box.height});
                 });
                 const gap = parseFloat(getComputedStyle(stack).rowGap) * (plan.length - 1);
-                scale = Math.min(scale, body.clientWidth / width, (body.clientHeight - headingsHeight - gap) / height);
+                units.push({stack, isolated, svgs, scale: Math.min(bodyWidth / width, (bodyHeight - headingsHeight - gap) / height)});
+                stack.remove();
             });
-            // A single common scale for every block and winner page of this bracket.
-            rendered.forEach(({svg, width, height}) => {
+        });
+        // Use the page count at native size (or the fit limit when smaller)
+        // as the budget, then enlarge all units together within that budget.
+        const fitScale = Math.min(...units.map(unit => unit.scale));
+        function layout(scale) {
+            units.forEach(unit => unit.svgs.forEach(({svg, width, height}) => {
                 svg.setAttribute("width", width * scale);
                 svg.setAttribute("height", height * scale);
                 svg.style.width = width * scale + "px";
                 svg.style.height = height * scale + "px";
+            }));
+            pages.replaceChildren();
+            let body = null;
+            let shelf, rows;
+            let gap = 0;
+            function nextPage() {
+                body = page();
+                body.classList.add("print-tournament-body");
+                shelf = document.createElement("div");
+                shelf.className = "print-tournament-shelf";
+                body.append(shelf);
+                gap = parseFloat(getComputedStyle(shelf).rowGap);
+                rows = [];
+            }
+            function place({stack, width, height}) {
+                const usedHeight = rows.reduce((sum, row) => sum + row.height, 0) + gap * Math.max(0, rows.length - 1);
+                const lastRow = rows[rows.length - 1];
+                if (lastRow && lastRow.width + gap + width <= body.clientWidth + 0.5 &&
+                    usedHeight + Math.max(0, height - lastRow.height) <= body.clientHeight + 0.5) {
+                    lastRow.node.append(stack);
+                    lastRow.width += gap + width;
+                    lastRow.height = Math.max(lastRow.height, height);
+                } else {
+                    if (rows.length && usedHeight + gap + height > body.clientHeight + 0.5) nextPage();
+                    const node = document.createElement("div");
+                    node.className = "print-tournament-row";
+                    shelf.append(node);
+                    node.append(stack);
+                    rows.push({node, width, height});
+                }
+            }
+            // Preserve display order, filling only the last row before starting
+            // a new row or page. Keep split blocks as forced page boundaries.
+            let pending = [];
+            function flush() {
+                pending.forEach(unit => {
+                    if (!body) nextPage();
+                    place(unit);
+                });
+                pending = [];
+            }
+            units.forEach(({stack, isolated}) => {
+                if (!body) nextPage();
+                body.append(stack);
+                const width = stack.getBoundingClientRect().width;
+                const height = stack.getBoundingClientRect().height;
+                stack.remove();
+                if (isolated) {
+                    flush();
+                    // An empty measuring page can also serve as the block page.
+                    if (rows.length) nextPage();
+                    place({stack, width, height});
+                    body = null;
+                } else pending.push({stack, width, height});
             });
-        });
+            flush();
+            return pages.children.length;
+        }
+        let scale = Math.min(1, fitScale);
+        const budget = layout(scale);
+        if (Number.isFinite(fitScale) && fitScale > scale) {
+            if (layout(fitScale) <= budget) {
+                scale = fitScale;
+            } else {
+                let upper = fitScale;
+                for (let pass = 0; pass < 24; pass++) {
+                    const candidate = (scale + upper) / 2;
+                    if (layout(candidate) <= budget) scale = candidate;
+                    else upper = candidate;
+                }
+            }
+            layout(scale);
+        }
+        if (!units.length) page().textContent = "対戦表がありません。";
     }
 
     function update() {
@@ -147,6 +237,7 @@
         pages.style.setProperty("--page-height", dimensions[1] + "mm");
         document.getElementById("stage-print-page").textContent = "@page { size: " + paper + " " + orientation + "; margin: 8mm; }";
         pages.replaceChildren();
+        pages.classList.toggle("print-no-league-frame", !!controls.frame && !controls.frame.checked);
         if (controls.columns) league(); else tournament();
         const total = pages.children.length;
         Array.from(pages.children).forEach((node, index) => {

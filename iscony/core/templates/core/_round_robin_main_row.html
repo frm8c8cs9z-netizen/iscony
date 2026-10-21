@@ -87,6 +87,10 @@
         <td class="rr-stat-col">{{ row.ranking.wins }}</td>
         <td class="rr-stat-col">{{ row.ranking.losses }}</td>
         <td class="rr-stat-col">{{ row.ranking.rank|default_if_none:"" }}</td>
+    {% elif blank_unfinished_stats %}
+        <td class="rr-stat-col"></td>
+        <td class="rr-stat-col"></td>
+        <td class="rr-stat-col"></td>
     {% else %}
         <td colspan="3" class="rr-stat-col">未集計</td>
     {% endif %}

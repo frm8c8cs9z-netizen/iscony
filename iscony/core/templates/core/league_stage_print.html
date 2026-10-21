@@ -8,6 +8,7 @@
     #league-print h2 { font-size: 16pt; margin: 0 0 4mm; }
     .league-print-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4mm; align-items: start; }
     .league-print-group { min-width: 0; padding: 2mm; border: 1px solid #999; break-inside: avoid; page-break-inside: avoid; }
+    #league-print .print-no-league-frame .league-print-group { border: 0; background: transparent; border-radius: 0; box-shadow: none; }
     .league-print-group h3, .league-print-group h4 { font-size: 1.1em; margin: 0 0 0.5em; }
     #league-print table { min-width: 0; width: max-content; table-layout: auto; margin: 0 0 1em; font-size: inherit; }
     #league-print table:not(.round-robin-table) { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
@@ -57,6 +58,7 @@
             <option value="6"{% if print_options.columns == "6" %} selected{% endif %}>6</option>
         </select>
     </label>
+    <label><input type="checkbox" id="print-frame"{% if show_league_frame %} checked{% endif %}> リーグを囲む枠を表示する</label>
     {% include "core/_stage_print_repeat_header.html" %}
     <button type="button" id="print-button">印刷</button>
 </div>
@@ -68,7 +70,7 @@
         {% for data in display_groups %}
             <section class="league-print-group">
                 <h3>{{ data.group.name }}</h3>
-                {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="plain" use_league_score_colors=use_league_score_colors self_cell_html="-" table_kind="main" %}
+                {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="plain" blank_unfinished_stats=True use_league_score_colors=use_league_score_colors self_cell_html="-" table_kind="main" %}
                 {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches link_kind="plain" %}
             </section>
         {% empty %}
