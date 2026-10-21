@@ -1091,6 +1091,22 @@ def _render_public_schedule(request, tournament):
     block_tables = _schedule_block_tables(tournament)
     _attach_resolved_referee_participants(block_tables)
 
+    bracket_counts_by_stage = dict(
+        TournamentBracket.objects.filter(
+            category__tournament=tournament,
+            stage__isnull=False,
+        ).order_by().values("stage_id").annotate(count=Count("pk"))
+        .values_list("stage_id", "count")
+    )
+    for block_table in block_tables:
+        for row in block_table["table"]:
+            for schedule in row["cells"]:
+                if schedule and schedule.is_tournament:
+                    match = schedule.tournament_match
+                    match.hide_bracket_name = (
+                        bracket_counts_by_stage.get(match.bracket.stage_id) == 1
+                    )
+
     return render(
         request,
         "core/public_schedule.html",

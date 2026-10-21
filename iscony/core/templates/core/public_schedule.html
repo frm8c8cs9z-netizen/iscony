@@ -323,12 +323,14 @@
                                             <div class="schedule-context">
                                                 <strong>{{ match.bracket.category.name }}</strong>
                                                 <span class="schedule-context-detail">
-                                                    {{ match.bracket.name }}
+                                                    {% if not match.hide_bracket_name %}
+                                                        {{ match.bracket.name }}
+                                                    {% endif %}
                                                     {% if match.match_label or match.match_code %}
-                                                        / {{ match.match_label|default:match.match_code }}
+                                                        {% if not match.hide_bracket_name %} / {% endif %}{{ match.match_label|default:match.match_code }}
                                                     {% endif %}
                                                     {% if match.bracket.stage %}
-                                                        / {{ match.bracket.stage.name }}
+                                                        {% if not match.hide_bracket_name or match.match_label or match.match_code %} / {% endif %}{{ match.bracket.stage.name }}
                                                     {% endif %}
                                                 </span>
                                             </div>

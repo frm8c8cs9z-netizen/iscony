@@ -37720,3 +37720,96 @@ class TournamentPlayerRowsSvgTests(TestCase):
                 self.assertEqual(labels[0]["x"], left)
                 self.assertEqual(labels[1]["x"], left + columns[0] + 16)
                 self.assertEqual(spec["bounds"]["right"], left + width)
+
+
+@override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+class PublicScheduleTournamentHeadingTests(TestCase):
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="公開見出し大会", code="PUBLIC_HEADING", is_public=True,
+        )
+        self.category = Category.objects.create(
+            tournament=self.tournament, name="見出しカテゴリ",
+        )
+        self.stage = Stage.objects.create(
+            category=self.category, name="決勝Stage",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category, stage=self.stage, name="見出し決勝表",
+        )
+        self.match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", match_label="1回戦1",
+        )
+        court = Court.objects.create(tournament=self.tournament, name="1")
+        self.schedule = Schedule.objects.create(
+            court=court, order=1, tournament_match=self.match,
+        )
+
+    def _heading_detail(self, view_name="public_schedule_view"):
+        response = self.client.get(reverse(
+            view_name, kwargs={"tournament_code": self.tournament.code},
+        ))
+        self.assertEqual(response.status_code, 200)
+        cell = re.search(
+            rf'<td\b[^>]*id="schedule-{self.schedule.pk}"[^>]*>(.*?)</td>',
+            response.content.decode(), re.S,
+        )
+        self.assertIsNotNone(cell)
+        self.assertIn(f"<strong>{self.category.name}</strong>", cell.group(1))
+        detail = re.search(
+            r'<span class="schedule-context-detail">(.*?)</span>',
+            cell.group(1), re.S,
+        )
+        self.assertIsNotNone(detail)
+        return " ".join(detail.group(1).split())
+
+    def test_single_bracket_omits_bracket_name(self):
+        self.assertEqual(self._heading_detail(), "1回戦1 / 決勝Stage")
+
+    def test_multiple_brackets_keep_bracket_name_even_if_second_unscheduled(self):
+        TournamentBracket.objects.create(
+            category=self.category, stage=self.stage, name="未配置の決勝表",
+        )
+        self.assertEqual(
+            self._heading_detail(), "見出し決勝表 / 1回戦1 / 決勝Stage",
+        )
+
+    def test_other_stage_bracket_does_not_affect_heading(self):
+        other_stage = Stage.objects.create(
+            category=self.category, name="別Stage",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        TournamentBracket.objects.create(
+            category=self.category, stage=other_stage, name="別の決勝表",
+        )
+        self.assertEqual(self._heading_detail(), "1回戦1 / 決勝Stage")
+
+    def test_bracket_without_stage_keeps_bracket_name(self):
+        self.bracket.stage = None
+        self.bracket.save(update_fields=["stage"])
+        self.assertEqual(self._heading_detail(), "見出し決勝表 / 1回戦1")
+
+    def test_operations_schedule_keeps_bracket_name(self):
+        response = self.client.get(reverse(
+            "schedule_view", kwargs={"tournament_code": self.tournament.code},
+        ))
+        self.assertContains(
+            response,
+            '<div class="schedule-context">'
+            '<strong>見出しカテゴリ</strong> / 見出し決勝表 / 1回戦1 '
+            '<span>（決勝Stage）</span></div>',
+            html=True,
+        )
+
+    def test_single_bracket_uses_match_code_when_label_empty(self):
+        self.match.match_label = ""
+        self.match.save(update_fields=["match_label"])
+        self.assertEqual(self._heading_detail(), "M1 / 決勝Stage")
+
+    def test_single_bracket_without_match_number_has_no_leading_separator(self):
+        self.match.match_label = ""
+        self.match.match_code = ""
+        self.match.save(update_fields=["match_label", "match_code"])
+        self.assertEqual(self._heading_detail(), "決勝Stage")
