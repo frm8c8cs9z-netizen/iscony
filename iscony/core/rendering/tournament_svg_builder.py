@@ -48,6 +48,7 @@ from .tournament_svg_labels import (
     estimate_svg_number_width,
     estimate_svg_round_gap,
     estimate_svg_row_gap,
+    svg_player_rows_column_widths,
 )
 from .tournament_svg_matches import add_svg_match
 from .tournament_svg_split import (
@@ -324,6 +325,8 @@ def build_svg_bracket_data(
         "final_line_pad": final_line_pad,
         "round_count": round_count,
         "layout_type": layout_type,
+        "player_rows_column_widths": svg_player_rows_column_widths(
+            round_data, entry_display_mode),
         "entry_display_mode": entry_display_mode,
         "reflected_entry_code_mode": (
             bracket.category.tournament.default_tournament_reflected_entry_code_mode

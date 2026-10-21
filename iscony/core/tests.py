@@ -37208,7 +37208,7 @@ class LeaguePlayerRowsDisplayTests(TestCase):
         )
         self.assertEqual(self._data(groups=[self.groups[0]])[0]["player_rows_widths"]["name"], 61)
 
-    def test_settings_only_offer_player_rows_for_league(self):
+    def test_settings_offer_player_rows_for_league_and_tournament(self):
         response = self.client.get(reverse("tournament_settings", kwargs={"code": self.tournament.code}))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
@@ -37216,7 +37216,7 @@ class LeaguePlayerRowsDisplayTests(TestCase):
         tournament = re.search(r'<select[^>]*name="default_tournament_entry_display_mode".*?</select>', html, re.S).group()
         self.assertIn('value="player_rows"', league)
         self.assertIn("選手ごと2段（名前｜所属）", league)
-        self.assertNotIn('value="player_rows"', tournament)
+        self.assertIn('value="player_rows"', tournament)
         form_class = response.context["form"].__class__
         form = form_class(data={
             "default_league_entry_display_mode": "player_rows",
@@ -37232,11 +37232,11 @@ class LeaguePlayerRowsDisplayTests(TestCase):
         )
         self.assertEqual(resolve_entry_display_mode(
             explicit_mode="player_rows", target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
-        ), "name_org_2line")
+        ), "player_rows")
         self.tournament.default_tournament_entry_display_mode = "player_rows"
         self.assertEqual(resolve_entry_display_mode(
             tournament=self.tournament, target=ENTRY_DISPLAY_TARGET_TOURNAMENT,
-        ), "name_org_2line")
+        ), "player_rows")
 
     def test_all_league_screens_use_player_rows(self):
         for name, kwargs in (
@@ -37567,3 +37567,156 @@ class StagePrintPaginationTests(TestCase):
         self.bracket.refresh_from_db()
         self.assertEqual(self.bracket.svg_split_count, 1)
         self.assertEqual(self.bracket.layout_type, TournamentBracket.LAYOUT_SINGLE)
+
+
+class TournamentPlayerRowsSvgTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.tournament = Tournament.objects.create(
+            name="選手行SVG", code="SVGROWS",
+            default_tournament_entry_display_mode="player_rows",
+        )
+        cls.category = Category.objects.create(tournament=cls.tournament, name="一般")
+        cls.bracket = TournamentBracket.objects.create(
+            category=cls.category, name="決勝", use_tournament_defaults=False,
+            entry_display_mode="player_rows", layout_type=TournamentBracket.LAYOUT_SPLIT,
+        )
+        cls.field = TournamentOrganizationField.objects.create(
+            tournament=cls.tournament, code="pref", label="県名",
+        )
+        cls.entries = []
+        for i in range(8):
+            entry = create_tournament_entry(
+                bracket=cls.bracket, pair_code=str(i + 1), display_order=i + 1,
+                player1_name=f"選手{i} 名前" if i != 1 else "とても長い選手の氏名",
+                player2_name=f"相方{i} 名前" if i != 7 else "",
+            )
+            for number, org in enumerate(("兵庫", "香川" if i == 1 else "兵庫"), 1):
+                ParticipantOrganizationValue.objects.create(
+                    participant=entry.participant, field=cls.field,
+                    player_no=number, original_value=org,
+                )
+            cls.entries.append(entry)
+        from .services import generate_tournament_bracket_matches
+        generate_tournament_bracket_matches(cls.bracket, 3)
+
+    def _display(self):
+        from .rendering.tournament_svg_builder import build_tournament_bracket_display_data
+        return build_tournament_bracket_display_data(self.bracket)
+
+    def _html(self, svg):
+        from django.template.loader import render_to_string
+        return render_to_string("core/_svg_bracket.html", {"svg_bracket": svg})
+
+    def test_separate_names_shared_and_different_organizations_and_columns(self):
+        svg = self._display()["svg_bracket"]
+        labels = svg["labels"]
+        names = [label for label in labels if label["class"] == "entry-text"]
+        orgs = [label for label in labels if label["class"] == "entry-org-text"]
+        self.assertEqual(len(names), 15)
+        self.assertEqual(len(orgs), 9)
+        self.assertEqual(sum(label["text"] == "香川" for label in orgs), 1)
+        for side_names, side_orgs in ((names[:8], orgs[:5]), (names[8:], orgs[5:])):
+            self.assertEqual(len({label["x"] for label in side_names}), 1)
+            self.assertEqual(len({label["x"] for label in side_orgs}), 1)
+            self.assertLess(side_names[0]["x"], side_orgs[0]["x"])
+        self.assertEqual(names[1]["y"] - names[0]["y"], 18)
+        self.assertEqual(orgs[0]["y"], (names[0]["y"] + names[1]["y"]) / 2)
+        html = self._html(svg)
+        self.assertIn('class="entry-text"', html)
+        self.assertIn('class="entry-org-text"', html)
+        self.assertNotIn('entry-name-text', html)
+        self.assertIn(">選手0 名前</tspan>", html)
+        self.assertIn(">相方0 名前</tspan>", html)
+        self.assertEqual(html.count(">兵庫</tspan>"), 8)
+        self.assertEqual(html.count(">香川</tspan>"), 1)
+
+    def test_day_changes_and_one_empty_organization(self):
+        participant = self.entries[0].participant
+        participant.has_day_player_change = True
+        participant.current_player1_name = "当日 選手"
+        participant.save()
+        ParticipantOrganizationValue.objects.filter(
+            participant=participant, player_no=1,
+        ).update(current_value="大阪")
+        html = self._html(self._display()["svg_bracket"])
+        self.assertIn('<tspan fill="red">当日 選手</tspan>', html)
+        self.assertIn('<tspan fill="red">大阪</tspan>', html)
+        ParticipantOrganizationValue.objects.filter(
+            participant=participant, player_no=2,
+        ).update(original_value="")
+        svg = self._display()["svg_bracket"]
+        orgs = [label for label in svg["labels"] if label["class"] == "entry-org-text"]
+        self.assertEqual(len(orgs), 9)
+
+    def test_single_split_winner_champion_and_placeholder(self):
+        for layout in (TournamentBracket.LAYOUT_SINGLE, TournamentBracket.LAYOUT_SPLIT):
+            for split in (1, 2, 4):
+                with self.subTest(layout=layout, split=split):
+                    self.bracket.layout_type = layout
+                    self.bracket.svg_split_count = split
+                    self.bracket.save()
+                    display = self._display()
+                    self.assertEqual(len(display["svg_brackets"]), 1 if split == 1 else split + 1)
+                    for svg in display["svg_brackets"]:
+                        self.assertIn("<svg", self._html(svg))
+                    final = TournamentMatch.objects.filter(bracket=self.bracket).order_by("-round_number").first()
+                    final.winner = self.entries[0]
+                    final.save()
+                    for svg in self._display()["svg_brackets"]:
+                        self.assertIn("<svg", self._html(svg))
+        from .rendering.tournament_svg_labels import svg_entry_block_spec
+        from types import SimpleNamespace
+        placeholder = SimpleNamespace(
+            participant_id=None, advancement_source=True, display_name="Aブロック勝者")
+        spec = svg_entry_block_spec(entry=placeholder, entry_display_mode="player_rows",
+                                    side="left", x=100, base_y=50)
+        self.assertEqual(spec["lines"][0]["text"], "Aブロック勝者")
+
+    def test_choices_resolution_fallback_and_dimensions(self):
+        from .helpers.display import resolve_entry_display_mode, build_entry_display_lines
+        from .rendering.tournament_svg_labels import svg_entry_block_dimensions, estimate_svg_name_width
+        for model, field in ((Tournament, "default_tournament_entry_display_mode"),
+                             (TournamentBracket, "entry_display_mode")):
+            choices = list(model._meta.get_field(field).choices)
+            self.assertEqual(choices[-1], ("player_rows", "選手ごと2段（名前｜所属）"))
+        self.assertEqual(TournamentBracket.ENTRY_DISPLAY_CHOICES,
+                         [("inherit", "大会デフォルトを使う")]
+                         + Tournament.TOURNAMENT_ENTRY_DISPLAY_CHOICES)
+        self.assertEqual(resolve_entry_display_mode(
+            tournament=self.tournament, target="tournament"), "player_rows")
+        entry = self.entries[0]
+        self.assertEqual(build_entry_display_lines(entry, mode="player_rows"),
+                         build_entry_display_lines(entry, mode="name_org_2line"))
+        width, height = svg_entry_block_dimensions(entry, "player_rows")
+        self.assertEqual(height, 18)
+        display = self._display()
+        self.assertGreaterEqual(estimate_svg_name_width(display["round_data"], "player_rows"), width)
+        self.assertGreaterEqual(display["svg_bracket"]["row_gap"], 36)
+
+
+    def test_font_widths_shared_columns_and_block_anchors(self):
+        from .rendering.tournament_svg_labels import (
+            _estimate_svg_player_rows_text_width, svg_player_rows_spec,
+            svg_player_rows_column_widths, estimate_svg_name_width,
+        )
+        self.assertEqual(_estimate_svg_player_rows_text_width("井田 智史輝"), 78)
+        self.assertEqual(_estimate_svg_player_rows_text_width("五十嵐 壮甫"), 78)
+        self.assertEqual(_estimate_svg_player_rows_text_width(
+            "兵庫 A", organization=True), 35)
+        display = self._display()
+        columns = svg_player_rows_column_widths(display["round_data"], "player_rows")
+        self.assertEqual(columns, (14 * len("とても長い選手の氏名"), 22))
+        width = columns[0] + 16 + columns[1]
+        self.assertEqual(estimate_svg_name_width(display["round_data"], "player_rows"), width)
+        self.assertEqual(display["svg_bracket"]["name_width"], width)
+        self.assertEqual(display["svg_bracket"]["player_rows_column_widths"], columns)
+        for side, left in (("right", 500), ("left", 500 - width)):
+            with self.subTest(side=side):
+                spec = svg_player_rows_spec(self.entries[0], "player_rows", side,
+                                            500, 100, columns)
+                self.assertEqual(spec["bounds"]["width"], width)
+                labels = spec["player_rows_labels"]
+                self.assertEqual(labels[0]["x"], left)
+                self.assertEqual(labels[1]["x"], left + columns[0] + 16)
+                self.assertEqual(spec["bounds"]["right"], left + width)

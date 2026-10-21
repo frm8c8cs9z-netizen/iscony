@@ -685,6 +685,10 @@ def _append_svg_vertical_block_label(
 def _append_svg_text_block_label(svg, spec):
     """テキストブロック仕様に従ってSVGラベルを追加する。"""
 
+    if "player_rows_labels" in spec:
+        svg["labels"].extend(spec["player_rows_labels"])
+        return
+
     if spec["orientation"] == CHAMPION_ORIENTATION_VERTICAL:
         _append_svg_vertical_block_label(
             svg,

@@ -213,9 +213,11 @@ class Tournament(models.Model):
         default=ENTRY_DISPLAY_SHORT_ORG_2LINE
     )
 
+    TOURNAMENT_ENTRY_DISPLAY_CHOICES = LEAGUE_ENTRY_DISPLAY_CHOICES
+
     default_tournament_entry_display_mode = models.CharField(
         max_length=30,
-        choices=ENTRY_DISPLAY_CHOICES,
+        choices=TOURNAMENT_ENTRY_DISPLAY_CHOICES,
         default=ENTRY_DISPLAY_SHORT_ORG_2LINE
     )
 
@@ -1680,11 +1682,13 @@ class TournamentBracket(models.Model):
     ]
 
     ENTRY_DISPLAY_INHERIT = DISPLAY_INHERIT
+    ENTRY_DISPLAY_PLAYER_ROWS = DISPLAY_PLAYER_ROWS
     ENTRY_DISPLAY_CHOICES = [
         (ENTRY_DISPLAY_INHERIT, "大会デフォルトを使う"),
         (ENTRY_DISPLAY_SHORT_ORG_2LINE, "短い名前/所属2段"),
         (ENTRY_DISPLAY_ONE_LINE, "短い名前（所属）1行"),
         (ENTRY_DISPLAY_NAME_ORG_2LINE, "フル名前/所属2段"),
+        (ENTRY_DISPLAY_PLAYER_ROWS, "選手ごと2段（名前｜所属）"),
     ]
 
     category = models.ForeignKey(
@@ -1958,7 +1962,7 @@ class TournamentBracket(models.Model):
 
     @property
     def effective_entry_display_mode_label(self):
-        return dict(Tournament.ENTRY_DISPLAY_CHOICES).get(
+        return dict(Tournament.TOURNAMENT_ENTRY_DISPLAY_CHOICES).get(
             self.effective_entry_display_mode,
             self.effective_entry_display_mode,
         )

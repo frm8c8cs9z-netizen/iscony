@@ -13,6 +13,7 @@ import copy
 
 from django.urls import reverse
 
+from ..helpers.display import ENTRY_DISPLAY_PLAYER_ROWS, build_entry_player_rows
 from ..models import AdvancementSource, Tournament, TournamentBracket
 from .svg_text_blocks import (
     ENTRY_BLOCK_MIN_HEIGHT,
@@ -43,6 +44,75 @@ from .tournament_svg_split import svg_match_display_entry
 
 MINIMUM_ROUND_GAP = 24
 ROUND_GAP_PADDING = 16
+
+
+PLAYER_ROWS_COLUMN_GAP = 16
+
+
+def _estimate_svg_player_rows_text_width(text, *, organization=False):
+    """選手行のCSSフォント（名前14px、所属11px）に合わせた列幅。"""
+    full_width, half_width = (11, 6.5) if organization else (14, 8)
+    return sum(half_width if char.isascii() else full_width for char in text)
+
+
+def svg_player_rows(entry, mode):
+    if mode == ENTRY_DISPLAY_PLAYER_ROWS and not is_unresolved_advancement_entry(entry):
+        return build_entry_player_rows(entry)
+    return None
+
+
+def svg_player_rows_column_widths(round_data, mode):
+    """SVG 1つの中で共有する名前列・所属列の幅。"""
+    if mode != ENTRY_DISPLAY_PLAYER_ROWS:
+        return 0, 0
+    name_width = organization_width = 0
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in (svg_match_display_entry(match, "pair1"),
+                          svg_match_display_entry(match, "pair2"), match.winner):
+                data = svg_player_rows(entry, mode) if entry else None
+                if data:
+                    for row in data["rows"]:
+                        name_width = max(name_width, _estimate_svg_player_rows_text_width(row["name"]))
+                        organization_width = max(
+                            organization_width, _estimate_svg_player_rows_text_width(row["organization"], organization=True))
+    return name_width, organization_width
+
+
+def svg_player_rows_spec(entry, mode, side, x, base_y, column_widths=None):
+    data = svg_player_rows(entry, mode)
+    if not data:
+        return None
+    rows = data["rows"]
+    name_width, org_width = column_widths or (
+        max(_estimate_svg_player_rows_text_width(row["name"]) for row in rows),
+        max(_estimate_svg_player_rows_text_width(row["organization"], organization=True) for row in rows),
+    )
+    width = name_width + (PLAYER_ROWS_COLUMN_GAP + org_width if org_width else 0)
+    left = x if side == "right" else x - width
+    center_y = base_y + ENTRY_TEXT_BLOCK_LAYOUT.offset_y
+    top = center_y - ((len(rows) - 1) * ENTRY_LINE_HEIGHT / 2)
+    labels = []
+
+    def cell(text, changed, cell_x, cell_y, css_class):
+        line = {"text": text, "class": css_class,
+                "parts": [{"text": text, "changed": changed}], "y": cell_y}
+        labels.append({"x": cell_x, "y": cell_y, "text": text,
+                       "lines": [line], "class": css_class,
+                       "anchor": "start", "baseline": "middle"})
+
+    for index, row in enumerate(rows):
+        y = top + index * ENTRY_LINE_HEIGHT
+        cell(row["name"], row["changed"], left, y, "entry-text")
+        if row["organization"] and (not data["shared"] or index == 0):
+            cell(row["organization"], row["organization_changed"],
+                 left + name_width + PLAYER_ROWS_COLUMN_GAP,
+                 center_y if data["shared"] else y, "entry-org-text")
+    return {"player_rows_labels": labels,
+            "bounds": {"left": left, "right": left + width,
+                       "top": top, "bottom": top + (len(rows) - 1) * ENTRY_LINE_HEIGHT,
+                       "width": width, "height": max(ENTRY_BLOCK_MIN_HEIGHT,
+                           (len(rows) - 1) * ENTRY_LINE_HEIGHT)}}
 
 
 def tournament_match_score_url(match):
@@ -106,6 +176,10 @@ def svg_entry_block_lines(entry, entry_display_mode):
 def svg_entry_block_dimensions(entry, entry_display_mode):
     """参加者表示ブロックの寸法を返す。"""
 
+    player_spec = svg_player_rows_spec(entry, entry_display_mode, "right", 0, 0)
+    if player_spec:
+        return player_spec["bounds"]["width"], player_spec["bounds"]["height"]
+
     return _svg_horizontal_text_block_dimensions(
         svg_entry_block_lines(entry, entry_display_mode),
         line_height=ENTRY_LINE_HEIGHT,
@@ -119,8 +193,14 @@ def svg_entry_block_spec(
         entry_display_mode,
         side,
         x,
-        base_y):
+        base_y,
+        column_widths=None):
     """参加者表示ブロックの描画仕様を返す。"""
+
+    player_spec = svg_player_rows_spec(
+        entry, entry_display_mode, side, x, base_y, column_widths)
+    if player_spec:
+        return player_spec
 
     lines = svg_entry_block_lines(
         entry,
@@ -163,6 +243,7 @@ def append_svg_entry_block_label(
         side=side,
         x=x,
         base_y=base_y,
+        column_widths=svg.get("player_rows_column_widths"),
     )
 
     _append_svg_text_block_label(svg, spec)
@@ -364,6 +445,9 @@ def estimate_svg_name_width(round_data, entry_display_mode):
     if not widths:
         return 160
 
+    if entry_display_mode == ENTRY_DISPLAY_PLAYER_ROWS:
+        name, org = svg_player_rows_column_widths(round_data, entry_display_mode)
+        widths.append(name + (PLAYER_ROWS_COLUMN_GAP + org if org else 0))
     return max(widths)
 
 
@@ -466,10 +550,9 @@ def estimate_svg_row_gap(round_data, entry_display_mode, row_gap_density):
                 max_lines = max(
                     max_lines,
                     len(
-                        _svg_display_lines(
-                            entry,
-                            mode=entry_display_mode,
-                        )
+                        svg_player_rows(entry, entry_display_mode)["rows"]
+                        if svg_player_rows(entry, entry_display_mode)
+                        else _svg_display_lines(entry, mode=entry_display_mode)
                     ),
                 )
 

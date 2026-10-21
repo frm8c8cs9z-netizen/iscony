@@ -48,9 +48,7 @@ def resolve_entry_display_mode(*, explicit_mode=None, tournament=None, target=No
     """参加者表示モードを上書き階層込みで解決する。"""
 
     if explicit_mode and explicit_mode != ENTRY_DISPLAY_INHERIT:
-        return (ENTRY_DISPLAY_NAME_ORG_2LINE
-                if target == ENTRY_DISPLAY_TARGET_TOURNAMENT
-                and explicit_mode == ENTRY_DISPLAY_PLAYER_ROWS else explicit_mode)
+        return explicit_mode
 
     for attr in _tournament_default_attrs(target):
         tournament_default = getattr(
@@ -60,9 +58,7 @@ def resolve_entry_display_mode(*, explicit_mode=None, tournament=None, target=No
         )
 
         if tournament_default and tournament_default != ENTRY_DISPLAY_INHERIT:
-            return (ENTRY_DISPLAY_NAME_ORG_2LINE
-                    if target == ENTRY_DISPLAY_TARGET_TOURNAMENT
-                    and tournament_default == ENTRY_DISPLAY_PLAYER_ROWS else tournament_default)
+            return tournament_default
 
     return SYSTEM_ENTRY_DISPLAY_MODE
 
