@@ -605,7 +605,7 @@ def league_stage_print(request, category_id, stage_id):
         "content": ("league", "tie"),
         "paper": ("A4", "A3"),
         "orientation": ("landscape", "portrait"),
-        "columns": ("3", "2", "4", "5", "6"),
+        "columns": ("3", "1", "2", "4", "5", "6"),
     }
     print_options = {
         key: request.GET.get(key) if request.GET.get(key) in choices else choices[0]
@@ -616,6 +616,7 @@ def league_stage_print(request, category_id, stage_id):
         "tournament": category.tournament,
         "stage": stage,
         "display_groups": display_groups,
+        "repeat_header": request.GET.get("repeat_header") != "0",
         "has_tie_tables": any(data["tie_tables"] for data in display_groups),
         "print_options": print_options,
         "printed_at": timezone.localtime(timezone.now(), ZoneInfo("Asia/Tokyo")),
@@ -623,6 +624,45 @@ def league_stage_print(request, category_id, stage_id):
             category.tournament.default_league_score_color_mode
             != Tournament.LEAGUE_SCORE_COLOR_NONE
         ),
+    })
+
+
+def tournament_stage_print(request, category_id, stage_id):
+    """既存の表示設定を使い、操作リンクを付けずにトーナメントを印刷する。"""
+
+    stage = get_object_or_404(
+        Stage.objects.select_related("category__tournament"),
+        id=stage_id,
+        category_id=category_id,
+        stage_type=Stage.TYPE_TOURNAMENT,
+    )
+    display_brackets = []
+    for bracket in TournamentBracket.objects.filter(stage=stage).order_by("display_order", "name"):
+        display_data = build_tournament_bracket_display_data(bracket)
+        # 印刷では結果入力・公開進行表へのリンクを付けない。
+        svgs = display_data.get("svg_brackets") or [display_data.get("svg_bracket")]
+        for svg in svgs:
+            if svg:
+                for label in svg["labels"]:
+                    label.pop("url", None)
+                    label.pop("public_url", None)
+        display_brackets.append({"bracket": bracket, **display_data})
+    options = {
+        "paper": ("A4", "A3"),
+        "orientation": ("landscape", "portrait"),
+        "winner_placement": ("separate", "together"),
+    }
+    return render(request, "core/tournament_stage_print.html", {
+        "stage": stage,
+        "category": stage.category,
+        "tournament": stage.category.tournament,
+        "display_brackets": display_brackets,
+        "print_options": {
+            key: request.GET.get(key) if request.GET.get(key) in choices else choices[0]
+            for key, choices in options.items()
+        },
+        "repeat_header": request.GET.get("repeat_header") != "0",
+        "printed_at": timezone.localtime(timezone.now(), ZoneInfo("Asia/Tokyo")),
     })
 
 

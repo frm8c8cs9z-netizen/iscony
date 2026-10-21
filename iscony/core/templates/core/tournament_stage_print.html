@@ -1,0 +1,44 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block content %}
+{% include "core/_stage_print_style.html" %}
+<div class="stage-print-controls">
+    <label>用紙 <select id="print-paper">
+        <option value="A4"{% if print_options.paper == "A4" %} selected{% endif %}>A4</option>
+        <option value="A3"{% if print_options.paper == "A3" %} selected{% endif %}>A3</option>
+    </select></label>
+    <label>向き <select id="print-orientation">
+        <option value="portrait"{% if print_options.orientation == "portrait" %} selected{% endif %}>縦</option>
+        <option value="landscape"{% if print_options.orientation == "landscape" %} selected{% endif %}>横</option>
+    </select></label>
+    <label>上位トーナメント <select id="print-winner-placement">
+        <option value="separate"{% if print_options.winner_placement == "separate" %} selected{% endif %}>別のページ</option>
+        <option value="together"{% if print_options.winner_placement == "together" %} selected{% endif %}>最後のページに一緒に</option>
+    </select></label>
+    {% include "core/_stage_print_repeat_header.html" %}
+    <button type="button" id="print-button">印刷</button>
+</div>
+<main id="tournament-print">
+    {% include "core/_stage_print_page.html" %}
+    <div id="print-pages"></div>
+    <div id="print-sources" hidden>
+        {% for data in display_brackets %}
+            <section data-bracket-name="{{ data.bracket.name }}">
+                {% for svg_bracket in data.svg_brackets %}
+                    <div class="print-diagram" data-split-role="{{ svg_bracket.split_role|default:'whole' }}" data-title="{% if svg_bracket.split_role == 'winner' %}上位トーナメント{% elif svg_bracket.split_role == 'block' %}ブロック{{ svg_bracket.block_number }}{% endif %}">
+                        <h3>{% if svg_bracket.split_role == 'winner' %}上位トーナメント{% elif svg_bracket.split_role == 'block' %}ブロック{{ svg_bracket.block_number }}{% endif %}</h3>
+                        {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=data.bracket.name %}
+                    </div>
+                {% empty %}
+                    {% if data.svg_bracket %}
+                        <div class="print-diagram" data-split-role="whole" data-title="">
+                            {% include "core/_svg_bracket.html" with svg_bracket=data.svg_bracket aria_label=data.bracket.name %}
+                        </div>
+                    {% else %}<p>対戦表がありません。</p>{% endif %}
+                {% endfor %}
+            </section>
+        {% empty %}<p>トーナメント表がありません。</p>{% endfor %}
+    </div>
+</main>
+<script src="{% static 'core/js/stage_print.js' %}"></script>
+{% endblock %}

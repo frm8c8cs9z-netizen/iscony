@@ -74,6 +74,12 @@ urlpatterns = [
     ),
 
     path(
+        "category/<int:category_id>/stages/<int:stage_id>/print-tournament/",
+        stage.tournament_stage_print,
+        name="tournament_stage_print",
+    ),
+
+    path(
         "category/<int:category_id>/stages/",
         stage.category_stage_overview,
         name="category_stage_overview",

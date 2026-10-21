@@ -1,0 +1,27 @@
+<style id="stage-print-page">@page { size: A4 landscape; margin: 8mm; }</style>
+<style>
+    .stage-print-controls { display: flex; flex-wrap: wrap; gap: 1em; align-items: center; margin: 1em 0; }
+    .print-page { box-sizing: border-box; width: var(--page-width, 281mm); height: var(--page-height, 194mm); display: flex; flex-direction: column; color: #000; background: white; margin: 6mm 0; outline: 1px solid #bbb; }
+    .print-page-top { display: flex; align-items: start; gap: 4mm; flex-shrink: 0; padding-bottom: 4mm; }
+    .print-page .print-header { font-size: 16pt; margin: 0; flex: 1; overflow-wrap: anywhere; }
+    .print-bracket-title { display: block; }
+    .print-page-number { font-size: 18pt; font-weight: 800; white-space: nowrap; margin-left: auto; }
+    .print-page-body { flex: 1; min-height: 0; }
+    .print-time { font-size: 9pt; text-align: right; padding-top: 3mm; flex-shrink: 0; }
+    .print-league-row { display: grid; grid-template-columns: repeat(var(--columns), minmax(0, 1fr)); gap: 4mm; align-items: start; margin-bottom: 4mm; }
+    .print-tournament-body { display: flex; justify-content: center; align-items: center; }
+    .print-diagrams { display: flex; flex-direction: column; align-items: center; gap: 4mm; }
+    .print-diagram { display: flex; flex-direction: column; align-items: center; }
+    .print-diagram h3 { font-size: 12pt; margin: 0 0 2mm; }
+    .print-diagram svg.svg-bracket { flex-shrink: 0; width: auto; height: auto; }
+    #league-print, #tournament-print { color: #000; }
+    .print-page, .print-page * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    [hidden] { display: none !important; }
+    @media print {
+        html, body { margin: 0 !important; padding: 0 !important; min-width: 0 !important; background: white !important; }
+        body > :not(#league-print):not(#tournament-print) { display: none !important; }
+        #league-print, #tournament-print { margin: 0; padding: 0; }
+        .print-page { margin: 0; outline: none; break-inside: avoid; }
+        .print-page:not(:last-child) { break-after: page; }
+    }
+</style>

@@ -1,0 +1,11 @@
+{% load tz %}
+<template id="print-page-template">
+    <section class="print-page">
+        <div class="print-page-top">
+            <h2 class="print-header">{{ tournament.name }} {{ category.name }} {{ stage.name }}<span class="print-bracket-title"></span></h2>
+            <strong class="print-page-number" aria-label="ページ番号"></strong>
+        </div>
+        <div class="print-page-body"></div>
+        <footer class="print-time">{% timezone "Asia/Tokyo" %}{{ printed_at|date:"Y年n月j日 H:i" }} 時点{% endtimezone %}</footer>
+    </section>
+</template>

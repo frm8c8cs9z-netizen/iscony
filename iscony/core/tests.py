@@ -37439,3 +37439,82 @@ class LeagueStagePrintAndNameTests(TestCase):
         self.assertIsNotNone(response.context["display_groups"][0]["player_rows_widths"])
         self.assertFalse(response.context["use_league_score_colors"])
         self.assertNotContains(response, 'class="rr-score-col win')
+
+
+class StagePrintPaginationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.tournament = Tournament.objects.create(name="ページ印刷大会", code="PRINTPAGES", is_public=True)
+        cls.category = Category.objects.create(tournament=cls.tournament, name="印刷部門")
+        cls.other_category = Category.objects.create(tournament=cls.tournament, name="別部門")
+        cls.stage = Stage.objects.create(category=cls.category, name="決勝", stage_type=Stage.TYPE_TOURNAMENT)
+        cls.league_stage = Stage.objects.create(category=cls.category, name="予選", stage_type=Stage.TYPE_LEAGUE)
+        cls.bracket = TournamentBracket.objects.create(
+            category=cls.category, stage=cls.stage, name="決勝表", use_tournament_defaults=False,
+            layout_type=TournamentBracket.LAYOUT_SPLIT, svg_split_count=2,
+        )
+        for i in range(1, 9):
+            create_tournament_entry(
+                bracket=cls.bracket, pair_code=str(i), display_order=i,
+                player1_name=f"印刷選手{i}甲", player2_name=f"印刷選手{i}乙",
+            )
+        from .services import generate_tournament_bracket_matches
+        generate_tournament_bracket_matches(cls.bracket, 3)
+        cls.url = reverse("tournament_stage_print", args=[cls.category.pk, cls.stage.pk])
+
+    def test_league_single_column_and_page_template(self):
+        response = self.client.get(reverse("league_stage_print", args=[self.category.pk, self.league_stage.pk]), {"columns": "1"})
+        self.assertEqual(response.context["print_options"]["columns"], "1")
+        self.assertContains(response, '<option value="1" selected>1</option>')
+        for marker in ('id="print-repeat-header" checked', 'class="print-page-number"', 'class="print-header"', 'class="print-time"', 'id="print-page-template"'):
+            self.assertContains(response, marker)
+        self.assertContains(response, "2ページ目以降にもヘッダーを出す")
+
+    @override_settings(ISCONY_LOGIN_REQUIRED=True)
+    def test_tournament_login_required(self):
+        from django.contrib.auth import get_user_model
+        self.assertRedirects(self.client.get(self.url), reverse("login") + "?" + urlencode({"next": self.url}))
+        self.client.force_login(get_user_model().objects.create_user(username="tournament_printer"))
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_tournament_stage_and_category_validation(self):
+        for category, stage in ((self.category, self.league_stage), (self.other_category, self.stage)):
+            self.assertEqual(self.client.get(reverse("tournament_stage_print", args=[category.pk, stage.pk])).status_code, 404)
+
+    def test_split_svgs_and_no_operation_links(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-split-role="block"', count=2)
+        self.assertContains(response, 'data-split-role="winner"', count=1)
+        self.assertContains(response, '<svg', count=3)
+        self.assertContains(response, "上位トーナメント")
+        self.assertContains(response, "印刷選手1甲")
+        for match in TournamentMatch.objects.filter(bracket=self.bracket):
+            self.assertNotContains(response, reverse("input_tournament_match_score", kwargs={"code": self.tournament.code, "match_id": match.pk}))
+        self.assertNotContains(response, reverse("public_schedule_view_token", kwargs={"public_token": self.tournament.public_token}))
+        body = response.content.decode().split('<main id="tournament-print">', 1)[1].split('</main>', 1)[0]
+        self.assertNotIn('<a ', body)
+
+    def test_print_link_only_on_operator_overview(self):
+        self.assertContains(self.client.get(reverse("category_stage_overview", args=[self.category.pk])), self.url)
+        self.assertNotContains(self.client.get(reverse("public_category_results", args=[self.tournament.code, self.category.pk])), self.url)
+
+    def test_options_and_empty_stage(self):
+        response = self.client.get(self.url, {"paper": "A3", "orientation": "portrait", "winner_placement": "together", "repeat_header": "0"})
+        self.assertEqual(response.context["print_options"], {"paper": "A3", "orientation": "portrait", "winner_placement": "together"})
+        self.assertNotContains(response, 'id="print-repeat-header" checked')
+        response = self.client.get(self.url, {"paper": "bad", "orientation": "bad", "winner_placement": "bad"})
+        self.assertEqual(response.context["print_options"], {"paper": "A4", "orientation": "landscape", "winner_placement": "separate"})
+        empty = Stage.objects.create(category=self.category, name="空の決勝", stage_type=Stage.TYPE_TOURNAMENT)
+        self.assertContains(self.client.get(reverse("tournament_stage_print", args=[self.category.pk, empty.pk])), "トーナメント表がありません。")
+
+    def test_unsplit_svg_and_display_settings_preserved(self):
+        self.bracket.svg_split_count = 1
+        self.bracket.layout_type = TournamentBracket.LAYOUT_SINGLE
+        self.bracket.save()
+        response = self.client.get(self.url)
+        self.assertContains(response, 'data-split-role="whole"', count=1)
+        self.assertContains(response, '<svg', count=1)
+        self.bracket.refresh_from_db()
+        self.assertEqual(self.bracket.svg_split_count, 1)
+        self.assertEqual(self.bracket.layout_type, TournamentBracket.LAYOUT_SINGLE)

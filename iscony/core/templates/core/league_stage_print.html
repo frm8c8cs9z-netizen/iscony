@@ -1,10 +1,10 @@
 {% extends "core/base.html" %}
-{% load tz %}
+{% load tz static %}
 {% block content %}
-<style id="league-print-page">@page { size: A4 landscape; margin: 8mm; }</style>
+{% include "core/_stage_print_style.html" %}
 <style>
     .league-print-controls { display: flex; flex-wrap: wrap; gap: 1em; align-items: center; margin: 1em 0; }
-    #league-print { width: 281mm; box-sizing: border-box; padding-bottom: 7mm; color: #000; background: #fff; }
+    #league-print { width: max-content; box-sizing: border-box; color: #000; background: #fff; }
     #league-print h2 { font-size: 16pt; margin: 0 0 4mm; }
     .league-print-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4mm; align-items: start; }
     .league-print-group { min-width: 0; padding: 2mm; border: 1px solid #999; break-inside: avoid; page-break-inside: avoid; }
@@ -25,7 +25,7 @@
         body > :not(#league-print) { display: none !important; }
         #league-print { margin: 0; }
         #league-print a, #league-print button { display: none !important; }
-        .league-print-time { position: fixed; bottom: 0; right: 0; margin: 0; }
+
     }
 </style>
 <div class="league-print-controls">
@@ -49,6 +49,7 @@
     </label>
     <label>1行に並べるリーグの数
         <select id="print-columns">
+            <option value="1"{% if print_options.columns == "1" %} selected{% endif %}>1</option>
             <option value="2"{% if print_options.columns == "2" %} selected{% endif %}>2</option>
             <option value="3"{% if print_options.columns == "3" %} selected{% endif %}>3</option>
             <option value="4"{% if print_options.columns == "4" %} selected{% endif %}>4</option>
@@ -56,10 +57,13 @@
             <option value="6"{% if print_options.columns == "6" %} selected{% endif %}>6</option>
         </select>
     </label>
+    {% include "core/_stage_print_repeat_header.html" %}
     <button type="button" id="print-button">印刷</button>
 </div>
 <main id="league-print">
-    <h2>{{ tournament.name }} {{ category.name }} {{ stage.name }}</h2>
+    {% include "core/_stage_print_page.html" %}
+    <div id="print-pages"></div>
+    <div id="print-sources" hidden>
     <div class="league-print-grid" data-content="league"{% if print_options.content == "tie" %} hidden{% endif %}>
         {% for data in display_groups %}
             <section class="league-print-group">
@@ -85,71 +89,7 @@
         {% endfor %}
         {% if not has_tie_tables %}<p>同率順位決定補助表はありません。</p>{% endif %}
     </div>
-    <footer class="league-print-time">{% timezone "Asia/Tokyo" %}{{ printed_at|date:"Y年n月j日 H:i" }} 時点{% endtimezone %}</footer>
+    </div>
 </main>
-<script>
-(function () {
-    const root = document.getElementById("league-print");
-    const controls = {};
-    ["content", "paper", "orientation", "columns"].forEach(function (key) {
-        controls[key] = document.getElementById("print-" + key);
-        controls[key].addEventListener("change", update);
-    });
-
-    function fitTables() {
-        const groups = Array.from(root.querySelectorAll('[data-content]:not([hidden]) .league-print-group'));
-        const baseSize = 12;
-        let ratio = Infinity;
-        groups.forEach(function (group) {
-            group.style.fontSize = baseSize + "px";
-        });
-        groups.forEach(function (group) {
-            const style = getComputedStyle(group);
-            const available = group.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-            group.querySelectorAll(".round-robin-table").forEach(function (table) {
-                // Intrinsic width includes em-based player columns from the tournament settings.
-                ratio = Math.min(ratio, available / table.getBoundingClientRect().width);
-            });
-        });
-        if (!Number.isFinite(ratio)) return;
-        let size = Math.max(2, Math.min(28, baseSize * ratio));
-        groups.forEach(function (group) { group.style.fontSize = size + "px"; });
-        // Border widths and wrapping do not scale linearly; refine using actual layout.
-        for (let pass = 0; pass < 3; pass++) {
-            let correction = 1;
-            groups.forEach(function (group) {
-                const style = getComputedStyle(group);
-                const available = group.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-                group.querySelectorAll("table").forEach(function (table) {
-                    correction = Math.min(correction, available / table.getBoundingClientRect().width);
-                });
-            });
-            if (correction >= 0.999) break;
-            size = Math.max(2, size * correction * 0.995);
-            groups.forEach(function (group) { group.style.fontSize = size + "px"; });
-        }
-    }
-
-    function update() {
-        const paper = controls.paper.value;
-        const orientation = controls.orientation.value;
-        const dimensions = paper === "A3" ? [297, 420] : [210, 297];
-        root.style.width = ((orientation === "landscape" ? dimensions[1] : dimensions[0]) - 16) + "mm";
-        document.getElementById("league-print-page").textContent =
-            "@page { size: " + paper + " " + orientation + "; margin: 8mm; }";
-        root.querySelectorAll("[data-content]").forEach(function (grid) {
-            grid.hidden = grid.dataset.content !== controls.content.value;
-            grid.style.gridTemplateColumns = "repeat(" + controls.columns.value + ", minmax(0, 1fr))";
-        });
-        fitTables();
-    }
-
-    document.getElementById("print-button").addEventListener("click", function () { window.print(); });
-    window.addEventListener("beforeprint", update);
-    window.addEventListener("afterprint", update);
-    window.addEventListener("resize", fitTables);
-    if (document.fonts) document.fonts.ready.then(fitTables);
-    update();
-})();
-</script>
+<script src="{% static 'core/js/stage_print.js' %}"></script>
 {% endblock %}

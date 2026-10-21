@@ -255,6 +255,8 @@
                 </div>
                 {% if row.stage.stage_type == "league" %}
                     <a class="button-link" href="{% url 'league_stage_print' category.id row.stage.id %}">印刷</a>
+                {% else %}
+                    <a class="button-link" href="{% url 'tournament_stage_print' category.id row.stage.id %}">印刷</a>
                 {% endif %}
             </div>
 
