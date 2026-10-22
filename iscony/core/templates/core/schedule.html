@@ -80,8 +80,8 @@
                                     </div>
 
                                     {% if schedule.is_round_robin %}
-                                        <div class="schedule-context">
-                                            <strong>{{ match.group.category.name }}</strong>
+                                        <div class="schedule-context schedule-context-muted">
+                                            <span>{{ match.group.category.name }}</span>
                                             /
                                             {{ match.group.name }}
                                             {% if match.group.stage %}
@@ -138,8 +138,8 @@
                                                 結果表示
                                             </a>
                                     {% elif schedule.is_tournament %}
-                                        <div class="schedule-context">
-                                            <strong>{{ match.bracket.category.name }}</strong>
+                                        <div class="schedule-context schedule-context-muted">
+                                            <span>{{ match.bracket.category.name }}</span>
                                             /
                                             {{ match.bracket.name }}
                                             {% if match.match_label or match.match_code %}

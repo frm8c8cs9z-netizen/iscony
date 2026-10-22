@@ -22,6 +22,6 @@
     </tr>
 
     {% for row in rows %}
-        {% include row_template with row=row data=data row_pair_link_url=row.row_pair_link_url row_score_link_kind=row_score_link_kind row_score_link_view_name=row_score_link_view_name row_score_link_next_url=row.row_score_link_next_url public_schedule_url=public_schedule_url use_league_score_colors=use_league_score_colors self_cell_html=self_cell_html score_blank_html=score_blank_html %}
+        {% include row_template with row=row data=data row_pair_link_url=row.row_pair_link_url row_score_link_kind=row_score_link_kind row_score_link_view_name=row_score_link_view_name row_score_link_next_url=row.row_score_link_next_url public_schedule_url=public_schedule_url use_league_score_colors=use_league_score_colors score_blank_html=score_blank_html %}
     {% endfor %}
 </table>

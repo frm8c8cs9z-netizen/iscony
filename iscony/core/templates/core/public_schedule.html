@@ -107,17 +107,15 @@
         margin-bottom: 10px;
     }
 
-    .public-schedule-card-link .schedule-context strong {
-        color: #1f2937;
-        display: block;
-        font-size: 1rem;
+    .public-schedule-card-link .schedule-context-category {
         margin-bottom: 3px;
     }
 
-    .schedule-context-detail {
-        color: #5d6878;
+    .public-schedule-card-link .schedule-context .schedule-context-detail {
+        color: #666;
         display: block;
-        font-size: 0.88rem;
+        font-size: 0.86rem;
+        font-weight: normal;
         line-height: 1.35;
     }
 
@@ -260,7 +258,7 @@
 
                                         {% if schedule.is_round_robin %}
                                             <div class="schedule-context">
-                                                <strong>{{ match.group.category.name }}</strong>
+                                                <span class="schedule-context-detail schedule-context-category">{{ match.group.category.name }}</span>
                                                 <span class="schedule-context-detail">
                                                     {{ match.group.name }}
                                                     {% if match.group.stage %}
@@ -318,7 +316,7 @@
                                             {% endif %}
                                         {% elif schedule.is_tournament %}
                                             <div class="schedule-context">
-                                                <strong>{{ match.bracket.category.name }}</strong>
+                                                <span class="schedule-context-detail schedule-context-category">{{ match.bracket.category.name }}</span>
                                                 <span class="schedule-context-detail">
                                                     {% if not match.hide_bracket_name %}
                                                         {{ match.bracket.name }}

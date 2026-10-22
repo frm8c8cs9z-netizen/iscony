@@ -37490,6 +37490,60 @@ class LeagueStagePrintAndNameTests(TestCase):
                     self.assertContains(response, name)
                     self.assertNotContains(response, f"{name}リーグ")
 
+    def test_self_cells_are_empty_and_diagonal_on_all_league_screens(self):
+        urls = [
+            reverse("category_stage_overview", args=[self.category.id]),
+            reverse("category_detail", args=[self.category.id]),
+            reverse("public_category_results", args=[self.tournament.code, self.category.id]),
+            self.url,
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode()
+                cells = re.findall(r'<td class="[^"<>]*\bself-cell\b[^"<>]*">(.*?)</td>', html, re.S)
+                self.assertTrue(cells)
+                self.assertTrue(all(cell == "" for cell in cells))
+                if url != urls[2]:
+                    self.assertIn('<td class="rr-score-col self-cell"></td>', html)
+                style = re.search(r'\.self-cell\s*\{([^}]+)\}', html).group(1)
+                self.assertIn("background-color: #ffffff;", style)
+                self.assertIn("linear-gradient(to top right,", style)
+                self.assertIn("#999 calc(50% - 0.5px)", style)
+                self.assertIn("#999 calc(50% + 0.5px)", style)
+                self.assertIn("print-color-adjust: exact;", style)
+                self.assertIn("-webkit-print-color-adjust: exact;", style)
+
+    def test_league_schedule_category_uses_detail_typography(self):
+        for view in ("schedule_view", "public_schedule_view"):
+            with self.subTest(view=view):
+                response = self.client.get(reverse(view, args=[self.tournament.code]))
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode()
+                context = re.search(r'<div class="schedule-context[^"<>]*">(.*?)</div>', html, re.S)
+                self.assertIsNotNone(context)
+                self.assertNotIn("<strong", context.group(1))
+                if view == "public_schedule_view":
+                    self.assertIn(
+                        f'<span class="schedule-context-detail schedule-context-category">{self.category.name}</span>',
+                        context.group(1),
+                    )
+                    self.assertIn('<span class="schedule-context-detail">', context.group(1))
+                    selector = r'\.public-schedule-card-link \.schedule-context \.schedule-context-detail'
+                    expected_size, expected_color = "0.86rem", "#666"
+                else:
+                    self.assertIn(f'<span>{self.category.name}</span>', context.group(1))
+                    self.assertIn('class="schedule-context schedule-context-muted"', html)
+                    selector = r'\.schedule-context\.schedule-context-muted'
+                    expected_size, expected_color = "0.86rem", "#666"
+                style = re.search(selector + r'\s*\{([^}]+)\}', html).group(1)
+                self.assertIn(f"font-size: {expected_size};", style)
+                self.assertIn(f"color: {expected_color};", style)
+                self.assertIn("font-weight: normal;", style)
+                if view == "public_schedule_view":
+                    self.assertIn("display: block;", style)
+
     def test_pdf_labels_and_search_json_use_exact_group_name(self):
         Group.objects.filter(pk=self.groups[1].pk).update(name="B")
         from .views.pdf import _league_scope_rows
@@ -37901,7 +37955,13 @@ class PublicScheduleTournamentHeadingTests(TestCase):
             response.content.decode(), re.S,
         )
         self.assertIsNotNone(cell)
-        self.assertIn(f"<strong>{self.category.name}</strong>", cell.group(1))
+        context = re.search(r'<div class="schedule-context[^"<>]*">(.*?)</div>', cell.group(1), re.S)
+        self.assertIsNotNone(context)
+        self.assertNotIn("<strong", context.group(1))
+        self.assertIn(
+            f'<span class="schedule-context-detail schedule-context-category">{self.category.name}</span>',
+            cell.group(1),
+        )
         detail = re.search(
             r'<span class="schedule-context-detail">(.*?)</span>',
             cell.group(1), re.S,
@@ -37941,8 +38001,8 @@ class PublicScheduleTournamentHeadingTests(TestCase):
         ))
         self.assertContains(
             response,
-            '<div class="schedule-context">'
-            '<strong>見出しカテゴリ</strong> / 見出し決勝表 / 1回戦1 '
+            '<div class="schedule-context schedule-context-muted">'
+            '<span>見出しカテゴリ</span> / 見出し決勝表 / 1回戦1 '
             '<span>（決勝Stage）</span></div>',
             html=True,
         )

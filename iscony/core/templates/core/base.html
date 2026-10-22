@@ -65,7 +65,12 @@
     }
 
     .self-cell {
-        background: #eeeeee;
+        background-color: #ffffff;
+        background-image: linear-gradient(to top right,
+            transparent calc(50% - 0.5px), #999 calc(50% - 0.5px),
+            #999 calc(50% + 0.5px), transparent calc(50% + 0.5px));
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
     }
 
     .group-box {
@@ -909,6 +914,12 @@
     .schedule-context {
         margin-bottom: 8px;
         line-height: 1.35;
+    }
+
+    .schedule-context.schedule-context-muted {
+        color: #666;
+        font-size: 0.86rem;
+        font-weight: normal;
     }
 
     .schedule-context span {

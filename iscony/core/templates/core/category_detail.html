@@ -55,7 +55,7 @@
     </p>
 
     <div class="table-wrapper">
-        {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="input" row_score_link_view_name="input_match_score" use_league_score_colors=use_league_score_colors self_cell_html="&nbsp;" score_blank_html="&nbsp;" table_kind="main" %}
+        {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="input" row_score_link_view_name="input_match_score" use_league_score_colors=use_league_score_colors score_blank_html="&nbsp;" table_kind="main" %}
 
         {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches title="追加試合" link_kind="input" input_url_name="input_match_score" next_url=data.group_score_link_next_url group_id=data.group.id table_border=True %}
 
@@ -113,7 +113,7 @@
             同率順位決定補助表
             （{{ tie_table.wins }}勝）
         </h4>
-        {% include "core/_round_robin_table.html" with data=data pairs=tie_table.pairs rows=tie_table.rows row_template="core/_round_robin_tie_row.html" use_league_score_colors=use_league_score_colors self_cell_html="&nbsp;" table_kind="tie" %}
+        {% include "core/_round_robin_table.html" with data=data pairs=tie_table.pairs rows=tie_table.rows row_template="core/_round_robin_tie_row.html" use_league_score_colors=use_league_score_colors table_kind="tie" %}
     </div>
 {% endfor %}
 
