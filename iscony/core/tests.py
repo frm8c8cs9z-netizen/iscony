@@ -10858,7 +10858,7 @@ class DayOfRefereeTests(TestCase):
         )
 
     @override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
-    def test_schedule_cell_headers_keep_only_status(self):
+    def test_schedule_cards_hide_status_and_keep_cell_colors(self):
         self.tournament.is_public = True
         self.tournament.save(update_fields=["is_public"])
         cases = [
@@ -10897,13 +10897,14 @@ class DayOfRefereeTests(TestCase):
                         cell.group(0),
                     )
                     self.assertNotIn('class="schedule-order-label"', cell.group(0))
-                    if view == "public_schedule_view" and status == "未入力":
-                        self.assertNotIn('class="schedule-card-head"', cell.group(0))
-                    else:
-                        self.assertRegex(
-                            cell.group(0),
-                            rf'class="schedule-status-label">\s*{status}\s*</span>',
-                        )
+                    self.assertNotIn("schedule-card-head", cell.group(0))
+                    self.assertNotIn("schedule-status-label", cell.group(0))
+                    for flag in ("finished", "started", "called"):
+                        if getattr(schedule, flag):
+                            self.assertRegex(
+                                cell.group(0),
+                                rf'<td\s+id="schedule-{schedule.id}"\s+class="\s*{flag}-cell\s*">',
+                            )
 
     @override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
     def test_schedule_cells_use_short_umpire_names_for_both_match_formats(self):
@@ -29541,8 +29542,24 @@ class CategoryStageOverviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'class="public-result-toolbar"')
         self.assertContains(response, category.name)
-        self.assertContains(response, "状態の見方")
-        self.assertContains(response, "まだ始まっていない")
+        self.assertNotContains(response, "ステージ状態の見方")
+        self.assertNotContains(response, "public-stage-status-legend")
+        for note in (
+            "まだ始まっていない", "前の結果を待っている",
+            "試合が進んでいる", "すべて確定している",
+        ):
+            self.assertNotContains(response, note)
+        for stage, key, label in (
+            (not_started_stage, "not_started", "未着手"),
+            (waiting_stage, "waiting", "結果待ち"),
+            (in_progress_stage, "in_progress", "進行中"),
+            (confirmed_stage, "confirmed", "結果確定"),
+        ):
+            with self.subTest(stage=stage.name):
+                self.assertRegex(
+                    self._stage_section(response, stage),
+                    rf'<span class="public-stage-status {key}">\s*{label}\s*</span>',
+                )
         self.assertIn("未着手", self._stage_section(response, not_started_stage))
         self.assertIn("結果待ち", self._stage_section(response, waiting_stage))
         self.assertIn("進行中", self._stage_section(response, in_progress_stage))
@@ -33503,7 +33520,9 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
         self.assertContains(response, 'id="schedule-')
-        self.assertContains(response, "未入力")
+        self.assertNotContains(response, "schedule-status-label")
+        self.assertNotContains(response, "schedule-card-head")
+        self.assertNotContains(response, "未入力")
         self.assertNotContains(
             response,
             reverse(

@@ -63,22 +63,6 @@
 
                             {% with match=schedule.match %}
                                 <div class="schedule-match-card">
-                                    <div class="schedule-card-head">
-                                        <span class="schedule-status-label">
-                                            {% if schedule.finished %}
-                                                完了
-                                            {% elif schedule.started %}
-                                                試合中
-                                            {% elif schedule.called %}
-                                                呼出済
-                                            {% elif match.pair1_games != None and match.pair2_games != None %}
-                                                結果入力済み
-                                            {% else %}
-                                                未入力
-                                            {% endif %}
-                                        </span>
-                                    </div>
-
                                     {% if schedule.is_round_robin %}
                                         <div class="schedule-context schedule-context-muted">
                                             <span>{{ match.group.category.name }}</span>

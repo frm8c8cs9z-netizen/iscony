@@ -79,18 +79,6 @@
         outline-offset: 2px;
     }
 
-    .public-schedule-card-link .schedule-card-head {
-        border-bottom: 1px solid #edf1f5;
-        margin-bottom: 8px;
-        padding-bottom: 6px;
-    }
-
-    .public-schedule-card-link .schedule-status-label {
-        background: #f4f7fb;
-        border-color: #c9d4e4;
-        color: #2e3b4e;
-    }
-
     .called-cell .schedule-match-card {
         border-left-color: #4f8fd8;
     }
@@ -240,22 +228,6 @@
                                         >
                                     {% endif %}
                                     <div class="schedule-match-card">
-                                        {% if schedule.finished or schedule.started or schedule.called or match.pair1_games != None and match.pair2_games != None %}
-                                        <div class="schedule-card-head">
-                                            <span class="schedule-status-label">
-                                                {% if schedule.finished %}
-                                                    完了
-                                                {% elif schedule.started %}
-                                                    試合中
-                                                {% elif schedule.called %}
-                                                    呼出済
-                                                {% elif match.pair1_games != None and match.pair2_games != None %}
-                                                    結果入力済み
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                        {% endif %}
-
                                         {% if schedule.is_round_robin %}
                                             <div class="schedule-context">
                                                 <span class="schedule-context-detail schedule-context-category">{{ match.group.category.name }}</span>
