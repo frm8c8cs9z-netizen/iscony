@@ -242,24 +242,21 @@
                                         >
                                     {% endif %}
                                     <div class="schedule-match-card">
+                                        {% if schedule.finished or schedule.started or schedule.called or match.pair1_games != None and match.pair2_games != None %}
                                         <div class="schedule-card-head">
-                                            <span class="schedule-order-label">
-                                                {{ schedule.court.name }} 第{{ schedule.order }}試合
+                                            <span class="schedule-status-label">
+                                                {% if schedule.finished %}
+                                                    完了
+                                                {% elif schedule.started %}
+                                                    試合中
+                                                {% elif schedule.called %}
+                                                    呼出済
+                                                {% elif match.pair1_games != None and match.pair2_games != None %}
+                                                    結果入力済み
+                                                {% endif %}
                                             </span>
-                                            {% if schedule.finished or schedule.started or schedule.called or match.pair1_games != None and match.pair2_games != None %}
-                                                <span class="schedule-status-label">
-                                                    {% if schedule.finished %}
-                                                        完了
-                                                    {% elif schedule.started %}
-                                                        試合中
-                                                    {% elif schedule.called %}
-                                                        呼出済
-                                                    {% elif match.pair1_games != None and match.pair2_games != None %}
-                                                        結果入力済み
-                                                    {% endif %}
-                                                </span>
-                                            {% endif %}
                                         </div>
+                                        {% endif %}
 
                                         {% if schedule.is_round_robin %}
                                             <div class="schedule-context">
@@ -307,12 +304,12 @@
                                                 <div class="schedule-referee-line">
                                                     審判:
                                                     {% if schedule.referee_participant_id %}
-                                                        {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                        {{ schedule.referee_participant.code }} {{ schedule.referee_participant.short_name }}
                                                     {% elif schedule.referee_note %}
                                                         {{ schedule.referee_note }}
                                                     {% elif schedule.referee_source_type %}
                                                         {% if schedule.referee_resolved_participant %}
-                                                            {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                            {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.short_name }}
                                                         {% else %}
                                                             {{ schedule.referee_source_label }}(未確定)
                                                         {% endif %}
@@ -390,12 +387,12 @@
                                                 <div class="schedule-referee-line">
                                                     審判:
                                                     {% if schedule.referee_participant_id %}
-                                                        {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                        {{ schedule.referee_participant.code }} {{ schedule.referee_participant.short_name }}
                                                     {% elif schedule.referee_note %}
                                                         {{ schedule.referee_note }}
                                                     {% elif schedule.referee_source_type %}
                                                         {% if schedule.referee_resolved_participant %}
-                                                            {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                            {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.short_name }}
                                                         {% else %}
                                                             {{ schedule.referee_source_label }}(未確定)
                                                         {% endif %}

@@ -4515,11 +4515,14 @@ def set_schedule_referee_api(request, code, schedule_id):
 
     label = None
     if schedule.referee_participant_id:
-        label = schedule.referee_participant.display_name
+        label = (
+            f"{schedule.referee_participant.code} "
+            f"{schedule.referee_participant.short_name}"
+        )
     elif schedule.referee_source_type:
         resolved = resolve_schedule_referee(schedule)
         label = (
-            resolved.display_name if resolved
+            f"{resolved.code} {resolved.short_name}" if resolved
             else schedule.referee_source_label
         )
     elif schedule.referee_note:

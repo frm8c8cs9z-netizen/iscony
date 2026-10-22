@@ -64,9 +64,6 @@
                             {% with match=schedule.match %}
                                 <div class="schedule-match-card">
                                     <div class="schedule-card-head">
-                                        <span class="schedule-order-label">
-                                            {{ schedule.court.name }} 第{{ schedule.order }}試合
-                                        </span>
                                         <span class="schedule-status-label">
                                             {% if schedule.finished %}
                                                 完了
@@ -110,12 +107,12 @@
                                             <div class="schedule-referee-line">
                                                 審判:
                                                 {% if schedule.referee_participant_id %}
-                                                    {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                    {{ schedule.referee_participant.code }} {{ schedule.referee_participant.short_name }}
                                                 {% elif schedule.referee_note %}
                                                     {{ schedule.referee_note }}
                                                 {% elif schedule.referee_source_type %}
                                                     {% if schedule.referee_resolved_participant %}
-                                                        {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                        {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.short_name }}
                                                     {% else %}
                                                         {{ schedule.referee_source_label }}(未確定)
                                                     {% endif %}
@@ -196,12 +193,12 @@
                                             <div class="schedule-referee-line">
                                                 審判:
                                                 {% if schedule.referee_participant_id %}
-                                                    {{ schedule.referee_participant.code }} {{ schedule.referee_participant.display_name }}
+                                                    {{ schedule.referee_participant.code }} {{ schedule.referee_participant.short_name }}
                                                 {% elif schedule.referee_note %}
                                                     {{ schedule.referee_note }}
                                                 {% elif schedule.referee_source_type %}
                                                     {% if schedule.referee_resolved_participant %}
-                                                        {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.display_name }}
+                                                        {{ schedule.referee_resolved_participant.code }} {{ schedule.referee_resolved_participant.short_name }}
                                                     {% else %}
                                                         {{ schedule.referee_source_label }}(未確定)
                                                     {% endif %}

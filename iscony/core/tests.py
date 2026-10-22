@@ -10346,6 +10346,11 @@ class ScheduleRefereeApiTests(TestCase):
         )
 
     def test_set_referee_api_sets_participant(self):
+        participant = self.referee_entry.participant
+        participant.original_player1_short_name = "短名A"
+        participant.original_player2_short_name = "短名B"
+        participant.save()
+        self.assertNotEqual(participant.short_name, participant.display_name)
         response = self.client.post(
             self._set_url(),
             {
@@ -10365,8 +10370,17 @@ class ScheduleRefereeApiTests(TestCase):
             response.json(),
             {
                 "success": True,
-                "referee_label": self.referee_entry.participant.display_name,
+                "referee_label": (
+                    f"{self.referee_entry.participant.code} "
+                    f"{self.referee_entry.participant.short_name}"
+                ),
             },
+        )
+
+        candidates = self.client.get(self._candidates_url())
+        self.assertEqual(candidates.status_code, 200)
+        self.assertEqual(
+            candidates.json()["current"]["label"], participant.display_name,
         )
 
     def test_set_referee_api_sets_note(self):
@@ -10413,6 +10427,11 @@ class ScheduleRefereeApiTests(TestCase):
         )
 
     def test_set_referee_api_uses_resolved_league_rank_label(self):
+        participant = self.pair1.participant
+        participant.original_player1_short_name = "短名A"
+        participant.original_player2_short_name = "短名B"
+        participant.save()
+        self.assertNotEqual(participant.short_name, participant.display_name)
         self.match.pair1_games = 4
         self.match.pair2_games = 1
         self.match.save()
@@ -10435,7 +10454,16 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.json(),
-            {"success": True, "referee_label": self.pair1.display_name},
+            {
+                "success": True,
+                "referee_label": f"{self.pair1.code} {self.pair1.short_name}",
+            },
+        )
+
+        candidates = self.client.get(self._candidates_url())
+        self.assertEqual(candidates.status_code, 200)
+        self.assertEqual(
+            candidates.json()["current"]["label"], participant.display_name,
         )
 
     def test_set_referee_api_rejects_league_rank_advancing_further(self):
@@ -10829,6 +10857,122 @@ class DayOfRefereeTests(TestCase):
             candidates[unrelated.participant_id]["day_of_next_match"]
         )
 
+    @override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+    def test_schedule_cell_headers_keep_only_status(self):
+        self.tournament.is_public = True
+        self.tournament.save(update_fields=["is_public"])
+        cases = [
+            ({"finished": True}, False, "完了"),
+            ({"started": True}, False, "試合中"),
+            ({"called": True}, False, "呼出済"),
+            ({}, True, "結果入力済み"),
+            ({}, False, "未入力"),
+        ]
+        schedules = []
+        for order, (flags, scored, status) in enumerate(cases, 1):
+            pair1 = self._create_entry(f"P{order}A")
+            pair2 = self._create_entry(f"P{order}B")
+            schedule = self._create_schedule(
+                self.court1, order, pair1, pair2, scored=scored,
+            )
+            for field, value in flags.items():
+                setattr(schedule, field, value)
+            schedule.save()
+            schedules.append((schedule, status))
+
+        for view in ("schedule_view", "public_schedule_view"):
+            response = self.client.get(reverse(
+                view, kwargs={"tournament_code": self.tournament.code},
+            ))
+            self.assertEqual(response.status_code, 200)
+            for schedule, status in schedules:
+                with self.subTest(view=view, status=status):
+                    cell = re.search(
+                        rf'<td\s+id="schedule-{schedule.id}".*?</td>',
+                        response.content.decode(), re.S,
+                    )
+                    self.assertIsNotNone(cell)
+                    self.assertNotIn(
+                        f"{self.court1.name} 第{schedule.order}試合",
+                        cell.group(0),
+                    )
+                    self.assertNotIn('class="schedule-order-label"', cell.group(0))
+                    if view == "public_schedule_view" and status == "未入力":
+                        self.assertNotIn('class="schedule-card-head"', cell.group(0))
+                    else:
+                        self.assertRegex(
+                            cell.group(0),
+                            rf'class="schedule-status-label">\s*{status}\s*</span>',
+                        )
+
+    @override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+    def test_schedule_cells_use_short_umpire_names_for_both_match_formats(self):
+        self.tournament.is_public = True
+        self.tournament.save(update_fields=["is_public"])
+        umpire = self._create_entry("UMP")
+        participant = umpire.participant
+        participant.original_player1_short_name = "短名A"
+        participant.original_player2_short_name = "短名B"
+        participant.save()
+        self.assertNotEqual(participant.short_name, participant.display_name)
+        GroupRanking.objects.create(group=self.group, pair=umpire, rank=1)
+        stage = Stage.objects.create(
+            category=self.category, name="本戦", stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category, stage=stage, name="本戦",
+        )
+        entries = [
+            create_tournament_entry(
+                bracket=bracket, pair_code=f"T{i}", display_order=i,
+                player1_name=f"本戦{i}A", player2_name=f"本戦{i}B",
+            ) for i in (1, 2)
+        ]
+        for match_format in ("league", "tournament"):
+            for resolved in (False, True):
+                order = Schedule.objects.count() + 1
+                if match_format == "league":
+                    pair1 = self._create_entry(f"P{order}A")
+                    pair2 = self._create_entry(f"P{order}B")
+                    schedule = self._create_schedule(
+                        self.court1, order, pair1, pair2, scored=True,
+                    )
+                else:
+                    match = TournamentMatch.objects.create(
+                        bracket=bracket, round_number=1, match_number=order,
+                        match_code=f"M{order}", pair1=entries[0], pair2=entries[1],
+                    )
+                    schedule = Schedule.objects.create(
+                        schedule_block=self.block, court=self.court1,
+                        order=order, tournament_match=match,
+                    )
+                if resolved:
+                    schedule.referee_source_type = AdvancementSource.SOURCE_LEAGUE_RANK
+                    schedule.referee_source_stage = self.stage
+                    schedule.referee_source_group = self.group
+                    schedule.referee_source_rank = 1
+                else:
+                    schedule.referee_participant = participant
+                schedule.save()
+
+        for view in ("schedule_view", "public_schedule_view"):
+            response = self.client.get(reverse(
+                view, kwargs={"tournament_code": self.tournament.code},
+            ))
+            self.assertEqual(response.status_code, 200)
+            for schedule in Schedule.objects.order_by("order"):
+                with self.subTest(view=view, schedule=schedule.order):
+                    cell = re.search(
+                        rf'<td\s+id="schedule-{schedule.id}".*?</td>',
+                        response.content.decode(), re.S,
+                    )
+                    self.assertIsNotNone(cell)
+                    self.assertIn(
+                        f"{participant.code} {participant.short_name}", cell.group(0),
+                    )
+                    self.assertNotIn(participant.display_name, cell.group(0))
+
     def test_schedule_view_shows_referee_labels_and_trigger_buttons(self):
         direct_referee = self._create_entry("REF")
         match1_pair1 = self._create_entry("M1A")
@@ -10883,7 +11027,7 @@ class DayOfRefereeTests(TestCase):
             response,
             (
                 f"{direct_referee.participant.code} "
-                f"{direct_referee.participant.display_name}"
+                f"{direct_referee.participant.short_name}"
             ),
         )
         self.assertContains(response, "本部審判")
@@ -10997,12 +11141,12 @@ class DayOfRefereeTests(TestCase):
             response,
             (
                 f"{direct_referee.participant.code} "
-                f"{direct_referee.participant.display_name}"
+                f"{direct_referee.participant.short_name}"
             ),
         )
         self.assertContains(
             response,
-            f"{resolved_referee.code} {resolved_referee.display_name}",
+            f"{resolved_referee.code} {resolved_referee.short_name}",
         )
         self.assertContains(response, "本部審判")
         self.assertContains(response, f'id="schedule-{direct_schedule.id}"')
@@ -33322,8 +33466,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "試合選択")
         self.assertContains(response, "管理メニュー")
-        self.assertContains(response, "1 第1試合")
-        self.assertContains(response, "1 第2試合")
+        self.assertNotContains(response, "1 第1試合")
+        self.assertNotContains(response, "1 第2試合")
         self.assertContains(response, "A")
         self.assertNotContains(response, "Aリーグ")
         self.assertContains(response, "1回戦1")
@@ -33493,8 +33637,8 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "一般参加者向け")
-        self.assertContains(response, "1 第1試合")
-        self.assertContains(response, "1 第2試合")
+        self.assertNotContains(response, "1 第1試合")
+        self.assertNotContains(response, "1 第2試合")
         self.assertContains(response, "A")
         self.assertNotContains(response, "Aリーグ")
         self.assertContains(response, "1回戦1")
