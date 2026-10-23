@@ -94,6 +94,7 @@ from ..services import (
     unassign_schedule_range,
 )
 
+from ..helpers.sorting import natural_sort_key
 from ..helpers.view import(
     redirect_next_or_default,
     safe_next_url,
@@ -4027,6 +4028,7 @@ def schedule_referee_candidates_api(request, code, schedule_id):
     ).exclude(
         id__in=own_participant_ids,
     ).order_by("entry_code")
+    candidates = sorted(candidates, key=lambda p: natural_sort_key(p.entry_code))
 
     if schedule.is_round_robin:
         match_label = (

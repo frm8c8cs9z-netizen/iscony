@@ -15,7 +15,7 @@ from django.db import connection
 from django.db.models import Q
 from django.db.models.signals import post_save
 from django.template import Context, Template
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from pypdf import PdfReader
@@ -30,6 +30,7 @@ from .helpers.display import (
     format_entry_one_line,
     resolve_entry_display_mode,
 )
+from .helpers.sorting import natural_sort_key
 from .helpers.league_grouping import (
     build_group_count_candidates,
     find_group_count_candidate,
@@ -9881,6 +9882,26 @@ class ScheduleBlockDetailTests(TestCase):
         self.assertContains(response, 'title="審判指定あり"', count=1)
 
 
+class NaturalSortKeyTests(SimpleTestCase):
+
+    def test_natural_order_with_empty_values_last(self):
+        codes = ["3A10", "3A2", "3A1", "1B1", "1A2", "10", "9", "",
+                 "108", "2A1", "1A1", "2", "1", "A10", "A2"]
+        self.assertEqual(
+            sorted(codes, key=natural_sort_key),
+            ["1", "1A1", "1A2", "1B1", "2", "2A1", "3A1", "3A2",
+             "3A10", "9", "10", "108", "A2", "A10", ""],
+        )
+
+    def test_case_and_leading_zeroes_produce_equal_stable_keys(self):
+        self.assertEqual(natural_sort_key("3a2"), natural_sort_key("3A02"))
+        codes = ["", "3a2", "3A02", "3a1", "", "3A10"]
+        self.assertEqual(
+            sorted(codes, key=natural_sort_key),
+            ["3a1", "3a2", "3A02", "3A10", "", ""],
+        )
+
+
 class ScheduleRefereeApiTests(TestCase):
 
     def setUp(self):
@@ -10055,6 +10076,33 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertNotIn(self.pair1.participant_id, candidate_ids)
         self.assertNotIn(self.pair2.participant_id, candidate_ids)
         self.assertIn(self.referee_entry.participant_id, candidate_ids)
+
+    def test_candidates_api_orders_entry_codes_naturally_with_empty_last(self):
+        umpire = self.referee_entry.participant
+        umpire.entry_code = "3A10"
+        umpire.save(update_fields=["entry_code"])
+        for index, code in enumerate(
+            ["3A2", "3A1", "1B1", "1A2", "10", "9", "", "3a3", "108"]
+        ):
+            self._create_entry(code, f"Umpire {index}", "", index + 4)
+        # Keep the database's existing ordering among candidates with empty codes.
+        empty_ids = list(
+            Participant.objects.filter(category=self.category, entry_code="")
+            .order_by("entry_code").values_list("id", flat=True)
+        )
+
+        response = self.client.get(self._candidates_url())
+
+        self.assertEqual(response.status_code, 200)
+        candidates = response.json()["candidates"]
+        self.assertEqual(
+            [candidate["entry_code"] for candidate in candidates],
+            ["1A2", "1B1", "3A1", "3A2", "3a3", "3A10", "9", "10", "108", ""],
+        )
+        self.assertEqual(
+            [candidate["id"] for candidate in candidates if not candidate["entry_code"]],
+            empty_ids,
+        )
 
     def test_candidates_api_includes_umpire_entry_code(self):
         umpire = self.referee_entry.participant
