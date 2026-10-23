@@ -376,6 +376,19 @@
             return;
         }
 
+        function appendUmpireCandidateLabel(element, candidate) {
+            if (candidate.entry_code) {
+                const code = document.createElement("span");
+                code.className = "umpire-candidate-code";
+                code.textContent = candidate.entry_code;
+                element.appendChild(code);
+                element.appendChild(document.createTextNode(" "));
+            }
+            const name = document.createElement("span");
+            name.textContent = candidate.label;
+            element.appendChild(name);
+        }
+
         function renderCandidates() {
             const query = searchInput.value.trim().toLowerCase();
             resultList.innerHTML = "";
@@ -390,12 +403,13 @@
                 if (
                     query
                     && candidate.label.toLowerCase().indexOf(query) === -1
+                    && (candidate.entry_code || "").toLowerCase().indexOf(query) === -1
                 ) {
                     return;
                 }
 
                 const item = document.createElement("li");
-                item.textContent = candidate.label;
+                appendUmpireCandidateLabel(item, candidate);
                 item.dataset.candidateId = candidate.id;
                 item.classList.toggle(
                     "is-selected",
@@ -545,7 +559,7 @@
                 const button = document.createElement("button");
                 button.type = "button";
                 button.className = "schedule-referee-chip";
-                button.textContent = candidate.label;
+                appendUmpireCandidateLabel(button, candidate);
                 button.addEventListener("click", function() {
                     selectedCandidateId = candidate.id;
                     selectedSourceOption = null;

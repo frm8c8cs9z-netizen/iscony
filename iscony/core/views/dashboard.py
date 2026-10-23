@@ -4072,6 +4072,7 @@ def schedule_referee_candidates_api(request, code, schedule_id):
         candidate_payload.append({
             "id": p.id,
             "label": p.display_name,
+            "entry_code": p.entry_code,
             "group_id": group_id_by_participant_id.get(p.id),
             "duplicate_referee_court_name": (
                 conflict_schedule.court.name if conflict_schedule else None

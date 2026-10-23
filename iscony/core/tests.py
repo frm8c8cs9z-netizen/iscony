@@ -10056,6 +10056,53 @@ class ScheduleRefereeApiTests(TestCase):
         self.assertNotIn(self.pair2.participant_id, candidate_ids)
         self.assertIn(self.referee_entry.participant_id, candidate_ids)
 
+    def test_candidates_api_includes_umpire_entry_code(self):
+        umpire = self.referee_entry.participant
+        umpire.entry_code = "3A5"
+        umpire.save(update_fields=["entry_code"])
+        self.schedule.referee_participant = umpire
+        self.schedule.save(update_fields=["referee_participant"])
+
+        response = self.client.get(self._candidates_url())
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        candidate = next(
+            candidate for candidate in payload["candidates"]
+            if candidate["id"] == umpire.id
+        )
+        self.assertEqual(candidate["entry_code"], "3A5")
+        self.assertEqual(candidate["label"], umpire.display_name)
+        self.assertEqual(payload["current"]["label"], umpire.display_name)
+
+    def test_umpire_dialogs_display_and_search_entry_codes(self):
+        urls = [
+            reverse("schedule_view", kwargs={
+                "tournament_code": self.tournament.code,
+            }),
+            reverse("schedule_block_detail", kwargs={
+                "code": self.tournament.code,
+                "schedule_block_id": self.block.id,
+            }),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                for snippet in (
+                    'if (candidate.entry_code)',
+                    'code.className = "umpire-candidate-code";',
+                    'code.textContent = candidate.entry_code;',
+                    'name.textContent = candidate.label;',
+                    'appendUmpireCandidateLabel(item, candidate);',
+                    'appendUmpireCandidateLabel(button, candidate);',
+                    'searchInput.value.trim().toLowerCase()',
+                    'candidate.label.toLowerCase().indexOf(query) === -1',
+                    '&& (candidate.entry_code || "").toLowerCase().indexOf(query) === -1',
+                    'font-variant-numeric: tabular-nums;',
+                ):
+                    self.assertContains(response, snippet)
+
     def test_candidates_api_includes_league_groups_and_candidate_group_ids(self):
         other_group = Group.objects.create(
             category=self.category,
