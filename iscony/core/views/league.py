@@ -16,6 +16,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from ..selectors.advancement_labels import prepare_related_result_labels
 from ..helpers.display import (
     build_entry_display_lines,
     build_entry_player_rows,
@@ -254,6 +255,9 @@ def build_category_group_data(
         for item in items:
             result.setdefault(group_id(item), []).append(item)
         return result
+
+    for items in (all_pairs, all_matches, all_extra_matches, all_rankings):
+        prepare_related_result_labels(items)
 
     pairs_by_group = by_group(all_pairs, lambda item: item.group_id)
     matches_by_group = by_group(all_matches, lambda item: item.group_id)
@@ -1349,6 +1353,7 @@ def pair_maintenance(request, category_id, stage_id=None):
         "pair_code"
     )
 
+    prepare_related_result_labels(pairs)
     context = {
         "category": category,
         "stage": stage,
@@ -1431,6 +1436,7 @@ def pair_maintenance(request, category_id, stage_id=None):
                         "source_result",
                     )
                 )
+                prepare_related_result_labels(source_matches)
                 bracket_sizes = {}
 
                 for match in source_matches:

@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
+from ..selectors.advancement_labels import prepare_related_result_labels
 from ..models import (
     AdvancementSource,
     Stage,
@@ -156,6 +157,7 @@ def advancement_source_list(request, code):
         "source_match__bracket__stage",
     )
 
+    prepare_related_result_labels(sources)
     rows = []
 
     for source in sources:

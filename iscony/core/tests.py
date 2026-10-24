@@ -2902,10 +2902,10 @@ class AdvancementSourceModelTests(TestCase):
             self.league_entry.advancement_source,
             source,
         )
-        self.assertEqual(source.label, "M1勝者")
-        self.assertEqual(self.league_entry.display_name, "M1勝者")
+        self.assertEqual(source.label, "決勝T勝者")
+        self.assertEqual(self.league_entry.display_name, "決勝T勝者")
 
-    def test_tournament_result_piece_label_keeps_existing_format(self):
+    def test_tournament_result_piece_label_uses_final_bracket_name(self):
         match = TournamentMatch.objects.create(
             bracket=self.bracket,
             round_number=1,
@@ -2918,7 +2918,7 @@ class AdvancementSourceModelTests(TestCase):
                 match,
                 AdvancementSource.RESULT_WINNER,
             ),
-            "M1勝者",
+            "決勝T勝者",
         )
 
     def test_source_group_delete_cascades_advancement_source(self):
@@ -3957,9 +3957,9 @@ class AdvancementPieceServiceTests(TestCase):
         )
         self.assertIsNotNone(pool)
         self.assertContains(response, 'data-mode="piece"')
-        self.assertContains(response, "M1勝者")
-        self.assertNotIn("M1勝者", pool.group(0))
-        self.assertIn("M1敗者", pool.group(0))
+        self.assertContains(response, "予選勝者")
+        self.assertNotIn("予選勝者", pool.group(0))
+        self.assertIn("予選敗者", pool.group(0))
         self.assertNotIn("S1勝者", pool.group(0))
         self.assertNotIn("S1敗者", pool.group(0))
         self.assertNotIn(
@@ -4799,8 +4799,8 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         )
         self.assertIsNotNone(pool)
         self.assertContains(response, 'data-mode="piece"')
-        self.assertNotIn("M1勝者", pool.group(0))
-        self.assertIn("M1敗者", pool.group(0))
+        self.assertNotIn("予選勝者", pool.group(0))
+        self.assertIn("予選敗者", pool.group(0))
         self.assertNotIn("S1勝者", pool.group(0))
         self.assertNotIn("S1敗者", pool.group(0))
         self.assertNotIn(
@@ -15055,7 +15055,7 @@ class ImportStageSlotsCsvTests(TestCase):
             pair_code="1",
         )
 
-        self.assertEqual(entry.display_name, "M1敗者")
+        self.assertEqual(entry.display_name, "予選敗者")
         self.assertEqual(
             entry.advancement_source.source_type,
             AdvancementSource.SOURCE_TOURNAMENT_RESULT,
@@ -15151,7 +15151,7 @@ class ImportStageSlotsCsvTests(TestCase):
             entry.advancement_source.source_match,
             source_match_b,
         )
-        self.assertEqual(entry.display_name, "M1勝者")
+        self.assertEqual(entry.display_name, "Bブロック勝者")
 
     def test_source_bracket_is_required_when_tournament_source_is_ambiguous(self):
         category = Category.objects.create(
@@ -15846,7 +15846,7 @@ class AdvancementSourceListViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "敗者リーグ")
         self.assertContains(response, "予選T / Aブロック / M1 / 敗者")
-        self.assertContains(response, "M1敗者")
+        self.assertContains(response, "Aブロック敗者")
 
     def test_advancement_source_list_shows_swap_options_in_same_stage(self):
         preliminary_stage = Stage.objects.create(
@@ -38131,3 +38131,112 @@ class PublicScheduleTournamentHeadingTests(TestCase):
         self.match.match_code = ""
         self.match.save(update_fields=["match_label", "match_code"])
         self.assertEqual(self._heading_detail(), "決勝Stage")
+
+
+class TournamentResultSourceLabelTests(TestCase):
+    def setUp(self):
+        self.tournament = Tournament.objects.create(name="進出元表示", code="SOURCE_LABEL")
+        self.category = Category.objects.create(tournament=self.tournament, name="男子")
+        self.stage = Stage.objects.create(
+            category=self.category, name="予選", stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        self.bracket = TournamentBracket.objects.create(
+            category=self.category, stage=self.stage, name="男子予選1",
+        )
+        self.final = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=2, match_number=2, match_code="M2",
+        )
+        self.semifinal = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", next_match=self.final,
+        )
+
+    def label(self, match, result=AdvancementSource.RESULT_LOSER):
+        return AdvancementSource.tournament_result_piece_label(match, result)
+
+    def test_final_uses_bracket_name_with_one_or_multiple_brackets(self):
+        self.assertEqual(self.label(self.final, AdvancementSource.RESULT_WINNER), "男子予選1勝者")
+        self.assertEqual(self.label(self.final), "男子予選1敗者")
+        other = TournamentBracket.objects.create(
+            category=self.category, stage=self.stage, name="男子予選2",
+        )
+        other_final = TournamentMatch.objects.create(
+            bracket=other, round_number=2, match_number=2, match_code="M2",
+        )
+        for match in (self.final, other_final):
+            for result, suffix in AdvancementSource.SOURCE_RESULT_CHOICES:
+                with self.subTest(bracket=match.bracket.name, result=result):
+                    with self.assertNumQueries(0):
+                        self.assertEqual(self.label(match, result), match.bracket.name + suffix)
+
+    def test_nonfinal_uses_stage_count_and_match_name_fallbacks(self):
+        self.semifinal.match_label = "SF1"
+        self.assertEqual(self.label(self.semifinal), "SF1敗者")
+        TournamentBracket.objects.create(category=self.category, stage=self.stage, name="男子予選2")
+        # Refresh to model a new request; the display cache is instance-local.
+        self.semifinal.refresh_from_db()
+        self.semifinal.match_label = "SF1"
+        self.assertEqual(self.label(self.semifinal), "男子予選1SF1敗者")
+        self.semifinal.match_label = ""
+        self.assertEqual(self.label(self.semifinal), "男子予選1M1敗者")
+        self.semifinal.match_code = ""
+        self.assertEqual(self.label(self.semifinal), "男子予選1M1敗者")
+
+    def test_no_stage_and_seed_are_not_misclassified(self):
+        self.bracket.stage = None
+        self.assertEqual(self.label(self.semifinal), "M1敗者")
+        seed = TournamentMatch(bracket=self.bracket, match_code="S1", match_number=3)
+        self.assertEqual(self.label(seed, AdvancementSource.RESULT_WINNER), "S1勝者")
+        self.assertEqual(self.label(self.final), "男子予選1敗者")
+
+    def test_bulk_labels_use_constant_queries_and_do_not_follow_next_match(self):
+        TournamentBracket.objects.create(category=self.category, stage=self.stage, name="男子予選2")
+        for index in range(3, 9):
+            TournamentMatch.objects.create(
+                bracket=self.bracket, round_number=1, match_number=index,
+                match_code=f"M{index}", next_match=self.final,
+            )
+        from .selectors.advancement_labels import prepare_related_result_labels
+        for size in (2, 8):
+            with self.subTest(size=size):
+                with self.assertNumQueries(2):
+                    matches = prepare_related_result_labels(
+                        TournamentMatch.objects.select_related("bracket").order_by("pk")[:size]
+                    )
+                with self.assertNumQueries(0):
+                    for match in matches:
+                        for result in (AdvancementSource.RESULT_WINNER, AdvancementSource.RESULT_LOSER):
+                            self.assertTrue(self.label(match, result).startswith("男子予選1"))
+
+    def test_source_list_and_both_svg_layouts_show_bracket_name(self):
+        target_stage = Stage.objects.create(
+            category=self.category, name="決勝", stage_type=Stage.TYPE_TOURNAMENT,
+            display_order=2, advancement_source_stage=self.stage,
+        )
+        target = TournamentBracket.objects.create(
+            category=self.category, stage=target_stage, name="決勝",
+        )
+        entry = create_tournament_entry(bracket=target, pair_code="1", display_order=1)
+        AdvancementSource.objects.create(
+            target_tournament_entry=entry,
+            source_stage=self.stage, source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            source_match=self.final, source_result=AdvancementSource.RESULT_WINNER,
+        )
+        opponent = create_tournament_entry(bracket=target, pair_code="2", display_order=2)
+        TournamentMatch.objects.create(
+            bracket=target, round_number=1, match_number=1,
+            match_code="M1", pair1=entry, pair2=opponent,
+        )
+        response = self.client.get(reverse("advancement_source_list", kwargs={"code": self.tournament.code}))
+        self.assertContains(response, "男子予選1勝者")
+        for layout in (TournamentBracket.LAYOUT_SINGLE, TournamentBracket.LAYOUT_SPLIT):
+            with self.subTest(layout=layout):
+                target.layout_type = layout
+                target.save(update_fields=["layout_type"])
+                response = self.client.get(reverse("tournament_bracket_detail", kwargs={
+                    "code": self.tournament.code, "bracket_id": target.pk,
+                }))
+                self.assertContains(response, "男子予選1勝者")
+                svg = re.search(r"<svg\b[\s\S]*?</svg>", response.content.decode())
+                self.assertIsNotNone(svg)
+                self.assertIn("男子予選1勝者", svg.group(0))

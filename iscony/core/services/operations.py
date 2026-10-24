@@ -796,7 +796,11 @@ def schedule_referee_conflicts_at_same_order(schedule):
         "court",
         "referee_participant",
         "referee_source_group",
-        "referee_source_match",
+        "referee_source_match__bracket",
+    )
+    others = list(others)
+    AdvancementSource.prepare_tournament_result_labels(
+        other.referee_source_match for other in others if other.referee_source_match_id
     )
 
     result = {}
@@ -890,11 +894,15 @@ def inspect_stage_advancement_readiness(source_stage):
                 pk__in=tournament_source_ids,
             ).select_related(
                 "source_match__winner", "source_match__pair1", "source_match__pair2",
+                "source_match__bracket",
             )
         }
         for source in sources:
             if source.pk in loaded_sources:
                 source.source_match = loaded_sources[source.pk].source_match
+        AdvancementSource.prepare_tournament_result_labels(
+            source.source_match for source in sources if source.source_match_id
+        )
 
     cache = {}
     _cache_league_rank_references(cache, [

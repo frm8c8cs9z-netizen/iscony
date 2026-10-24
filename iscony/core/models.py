@@ -2533,7 +2533,36 @@ class AdvancementSource(models.Model):
         )
 
     @staticmethod
-    def tournament_result_piece_label(match, result):
+    def prepare_tournament_result_labels(matches):
+        """表示対象の表とStage別表数をまとめて読み込む。キャッシュは対象インスタンス限定。"""
+        matches = list(matches)
+        missing_ids = {
+            match.bracket_id for match in matches
+            if "bracket" not in match._state.fields_cache
+        }
+        if missing_ids:
+            brackets = TournamentBracket.objects.in_bulk(missing_ids)
+            for match in matches:
+                if "bracket" not in match._state.fields_cache:
+                    match.bracket = brackets[match.bracket_id]
+        stage_ids = {
+            match.bracket.stage_id for match in matches
+            if match.bracket.stage_id and (
+                match.next_match_id is not None
+                or match.match_code.startswith("S")
+            )
+        }
+        counts = dict(
+            TournamentBracket.objects.filter(stage_id__in=stage_ids)
+            .values("stage_id").annotate(total=models.Count("pk"))
+            .values_list("stage_id", "total")
+        ) if stage_ids else {}
+        for match in matches:
+            match._label_stage_bracket_counts = counts
+        return counts
+
+    @staticmethod
+    def tournament_result_piece_label(match, result, stage_bracket_counts=None):
         match_label = (
             match.match_label
             or match.match_code
@@ -2543,6 +2572,20 @@ class AdvancementSource(models.Model):
             AdvancementSource.SOURCE_RESULT_CHOICES
         ).get(result, result)
 
+        # FKのIDだけで判定し、next_match自体は読み込まない。
+        bracket = match.bracket
+        if match.next_match_id is None and not match.match_code.startswith("S"):
+            return f"{bracket.name}{result_label}"
+
+        if bracket.stage_id:
+            if stage_bracket_counts is None:
+                stage_bracket_counts = getattr(match, "_label_stage_bracket_counts", None)
+            if stage_bracket_counts is None:
+                bracket_count = TournamentBracket.objects.filter(stage_id=bracket.stage_id).count()
+            else:
+                bracket_count = stage_bracket_counts.get(bracket.stage_id, 0)
+            if bracket_count >= 2:
+                return f"{bracket.name}{match_label}{result_label}"
         return f"{match_label}{result_label}"
 
     @property

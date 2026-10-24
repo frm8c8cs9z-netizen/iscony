@@ -14,6 +14,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from ..selectors.advancement_labels import prepare_related_result_labels
 from ..forms import (
     BracketGenerateForm,
     ScheduleCreateForm,
@@ -738,10 +739,15 @@ def tournament_pair_maintenance(request, code, bracket_id):
         "pair2",
         "pair1__advancement_source",
         "pair2__advancement_source",
+        "pair1__advancement_source__source_group",
+        "pair1__advancement_source__source_match__bracket",
+        "pair2__advancement_source__source_group",
+        "pair2__advancement_source__source_match__bracket",
     ).order_by(
         "match_number",
     )
 
+    prepare_related_result_labels(first_round_matches)
     slots = []
 
     for match in first_round_matches:
@@ -799,6 +805,7 @@ def tournament_pair_maintenance(request, code, bracket_id):
                     "source_result",
                 )
             )
+            prepare_related_result_labels(source_matches)
             bracket_sizes = {}
 
             for match in source_matches:

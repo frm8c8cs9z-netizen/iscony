@@ -1,3 +1,4 @@
+from .advancement_labels import prepare_related_result_labels
 from ..models import TournamentMatch
 from ..helpers.brackets import get_round_label
 
@@ -14,6 +15,12 @@ def build_tournament_round_data(bracket):
         "pair1__advancement_source",
         "pair2__advancement_source",
         "winner__advancement_source",
+        "pair1__advancement_source__source_group",
+        "pair1__advancement_source__source_match__bracket",
+        "pair2__advancement_source__source_group",
+        "pair2__advancement_source__source_match__bracket",
+        "winner__advancement_source__source_group",
+        "winner__advancement_source__source_match__bracket",
         "bracket__category__tournament",
         "pair1__participant",
         "pair2__participant",
@@ -30,6 +37,7 @@ def build_tournament_round_data(bracket):
     # テンプレートとSVGが「回戦ごとの列」を扱いやすいようにまとめる。
     rounds = {}
 
+    prepare_related_result_labels(all_matches)
     for match in all_matches:
         rounds.setdefault(
             match.round_number,

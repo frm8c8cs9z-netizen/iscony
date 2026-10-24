@@ -22,6 +22,7 @@ from django.shortcuts import (
     redirect,
 )
 
+from ..selectors.advancement_labels import prepare_related_result_labels
 from ..models import (
     Tournament,
     TournamentBackup,
@@ -261,6 +262,9 @@ def _schedule_block_tables(tournament):
         .select_related(
             "court",
             "schedule_block",
+            "referee_participant",
+            "referee_source_group",
+            "referee_source_match__bracket",
 
             "round_robin_match",
             "round_robin_match__pair1",
@@ -299,7 +303,7 @@ def _schedule_block_tables(tournament):
             "tournament_match__pair2__participant__organization_values__field",
         )
     )
-    schedule_list = list(schedules)
+    schedule_list = prepare_related_result_labels(schedules)
 
     courts = list(Court.objects.filter(
         tournament=tournament
@@ -4225,6 +4229,7 @@ def schedule_referee_source_options_api(request, code, schedule_id, stage_id):
             ).values_list("source_match_id", "source_result")
         )
 
+        prepare_related_result_labels(matches)
         for source_match in matches:
             for result in (
                 AdvancementSource.RESULT_WINNER,
@@ -4291,6 +4296,7 @@ def schedule_referee_conflicts_view(request, code):
         )
     )
 
+    prepare_related_result_labels(schedules)
     grouped = {}
     for schedule in schedules:
         key = schedule_referee_key(schedule)
