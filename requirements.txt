@@ -1,12 +1,12 @@
 # Runtime dependencies for iscony (production and development).
-# Verified on Python 3.12.13 and 3.14.8 (2026-10-25) with Django 6.1.2: full test suite and PDF generation pass.
+# Verified on Python 3.12.13 and 3.14.8 (2026-10-25) with Django 6.1.2: full test suite passes and PDFs render identically to the previous versions.
 Django==6.1.2
 asgiref==3.13.0
 sqlparse==0.6.0
 psycopg==3.3.6
 psycopg-binary==3.3.6
-reportlab==4.5.1
-pillow==12.2.0
+reportlab==5.1.0
+pillow==13.0.0
 charset-normalizer==3.5.2
 pypdf==6.21.2
 tzdata==2026.5
