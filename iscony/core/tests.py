@@ -3,7 +3,11 @@ import io
 import json
 import os
 import re
+import subprocess
+import sys
+import tempfile
 from html.parser import HTMLParser
+from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -38240,3 +38244,98 @@ class TournamentResultSourceLabelTests(TestCase):
                 svg = re.search(r"<svg\b[\s\S]*?</svg>", response.content.decode())
                 self.assertIsNotNone(svg)
                 self.assertIn("男子予選1勝者", svg.group(0))
+
+
+class LocalSettingsTests(SimpleTestCase):
+    def load_isolated_settings(self, local_source=None, command="test"):
+        config_dir = Path(__file__).resolve().parents[1] / "config"
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "config"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "settings.py").write_bytes((config_dir / "settings.py").read_bytes())
+            (package / "local_settings.example.py").write_bytes(
+                (config_dir / "local_settings.example.py").read_bytes()
+            )
+            if local_source is not None:
+                (package / "local_settings.py").write_text(local_source, encoding="utf-8")
+            return subprocess.run(
+                [
+                    sys.executable, "-c",
+                    "import json, sys; "
+                    "sys.argv = ['manage.py', sys.argv[1]]; "
+                    "import config.settings as config; "
+                    "print(json.dumps({name: getattr(config, name, None) for name in "
+                    "['__package__', 'DEBUG', 'SECRET_KEY', 'ALLOWED_HOSTS', "
+                    "'DATABASES', 'STATIC_ROOT', 'ISCONY_LOGIN_REQUIRED', 'LOGIN_URL', "
+                    "'LOGIN_REDIRECT_URL', 'LOGOUT_REDIRECT_URL']}))",
+                    command,
+                ],
+                cwd=directory, capture_output=True, text=True, timeout=30,
+            )
+
+    def test_missing_local_settings_preserves_defaults_and_ignores_example(self):
+        for command in ("test", "runserver"):
+            with self.subTest(command=command):
+                result = self.load_isolated_settings(command=command)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                config = json.loads(result.stdout)
+                self.assertEqual(config["__package__"], "config")
+                self.assertIs(config["DEBUG"], True)
+                self.assertEqual(
+                    config["SECRET_KEY"],
+                    "django-insecure-5kf)h0y$4bymj)up3%lrr!-k9d+qdqzm--khw6u312yycd4zrb",
+                )
+                self.assertEqual(config["ALLOWED_HOSTS"], [])
+                self.assertEqual(config["DATABASES"], {"default": {
+                    "ENGINE": "django.db.backends.postgresql", "NAME": "stpro",
+                    "USER": "postgres", "PASSWORD": "", "HOST": "", "PORT": "5432",
+                }})
+                self.assertIsNone(config["STATIC_ROOT"])
+                self.assertEqual(config["ISCONY_LOGIN_REQUIRED"], command != "test")
+                self.assertEqual(config["LOGIN_URL"], "login")
+                self.assertEqual(config["LOGIN_REDIRECT_URL"], "tournament_list")
+                self.assertEqual(config["LOGOUT_REDIRECT_URL"], "login")
+
+    def test_local_settings_overrides_defaults_at_end(self):
+        overrides = {
+            "DEBUG": False,
+            "SECRET_KEY": "isolated-test-secret",
+            "ALLOWED_HOSTS": ["production.example.com"],
+            "DATABASES": {"default": {
+                "ENGINE": "django.db.backends.postgresql", "NAME": "production_example",
+                "USER": "example_user", "PASSWORD": "example_password",
+                "HOST": "db.example.com", "PORT": "5432",
+            }},
+            "STATIC_ROOT": "/tmp/isolated-staticfiles",
+            "ISCONY_LOGIN_REQUIRED": True,
+            "LOGIN_URL": "production_login",
+            "LOGIN_REDIRECT_URL": "production_home",
+            "LOGOUT_REDIRECT_URL": "production_logout",
+        }
+        source = "\n".join(f"{name} = {value!r}" for name, value in overrides.items())
+        result = self.load_isolated_settings(source)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = json.loads(result.stdout)
+        for name, value in overrides.items():
+            with self.subTest(setting=name):
+                self.assertEqual(config[name], value)
+
+    def test_local_settings_import_errors_propagate(self):
+        for source, message in (
+            ("import nonexistent_iscony_local_settings_dependency", "ModuleNotFoundError"),
+            ("from pathlib import nonexistent_iscony_attribute", "ImportError"),
+            ("DEBUG =", "SyntaxError"),
+        ):
+            with self.subTest(source=source):
+                result = self.load_isolated_settings(source)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertIn("local_settings.py", result.stderr)
+
+    def test_gitignore_excludes_local_settings(self):
+        repository = Path(__file__).resolve().parents[2]
+        self.assertIn(
+            "iscony/config/local_settings.py",
+            (repository / ".gitignore").read_text(encoding="utf-8").splitlines(),
+        )

@@ -13,3 +13,4 @@ stpro_LeagueEntryへ方針転換前/
 *.sqlite3
 *.zip
 *.html.[0-9][0-9][0-9]
+iscony/config/local_settings.py

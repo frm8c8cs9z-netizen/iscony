@@ -144,3 +144,11 @@ ISCONY_LOGIN_REQUIRED = sys.argv[1:2] != ["test"]
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "tournament_list"
 LOGOUT_REDIRECT_URL = "login"
+
+# 本番などの環境ごとの設定(Gitで管理しない)。iscony/config/local_settings.py があれば読み込んで上書きする。
+# 書き方は local_settings.example.py を参照。
+try:
+    from .local_settings import *  # noqa: F401,F403
+except ModuleNotFoundError as error:
+    if error.name != f"{__package__}.local_settings":
+        raise
