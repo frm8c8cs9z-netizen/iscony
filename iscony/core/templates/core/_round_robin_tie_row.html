@@ -1,14 +1,14 @@
 <tr>
-    <th class="rr-code-col rr-header"{% if data.player_rows_widths %} style="width: {{ data.player_rows_widths.code }}em; min-width: {{ data.player_rows_widths.code }}em; max-width: {{ data.player_rows_widths.code }}em; white-space: nowrap;"{% endif %}>
+    <th class="rr-code-col rr-header">
         <span class="rr-header-inner">{{ row.pair.pair_code }}</span>
     </th>
 
-    <th class="rr-name-col rr-header"{% if data.player_rows_widths %} style="width: {{ data.player_rows_widths.entry }}em; min-width: {{ data.player_rows_widths.entry }}em; max-width: {{ data.player_rows_widths.entry }}em;"{% endif %}>
+    <th class="rr-name-col rr-header">
         {% if row.player_rows %}
             {% include "core/_round_robin_player_rows.html" %}
         {% else %}
         {% for line in row.pair_display_lines %}
-            <span class="rr-header-inner">{% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</span>{% if not forloop.last %}<br>{% endif %}
+            <span class="rr-header-inner">{% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</span>
         {% endfor %}
         {% endif %}
     </th>

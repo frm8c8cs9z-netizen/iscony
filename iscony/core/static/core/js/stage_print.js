@@ -42,6 +42,7 @@
         // Preserve the Stage-wide font size derived from intrinsic table widths.
         let size = 12;
         groups.forEach(group => { group.style.fontSize = size + "px"; });
+        window.isconyAlignRoundRobinTables(pages);
         let ratio = Infinity;
         groups.forEach(group => {
             const style = getComputedStyle(group);
@@ -53,6 +54,7 @@
         if (Number.isFinite(ratio)) size = Math.max(2, Math.min(28, size * ratio));
         for (let pass = 0; pass < 12; pass++) {
             groups.forEach(group => { group.style.fontSize = size + "px"; });
+            window.isconyAlignRoundRobinTables(pages);
             let correction = 1;
             groups.forEach(group => {
                 const style = getComputedStyle(group);
@@ -66,6 +68,7 @@
             size *= correction * 0.99;
         }
         groups.forEach(group => { group.style.fontSize = size + "px"; });
+        window.isconyAlignRoundRobinTables(pages);
         rows.forEach(row => row.remove());
         let used = 0;
         rows.forEach(row => {

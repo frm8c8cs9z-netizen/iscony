@@ -1,4 +1,4 @@
-<span class="rr-player-rows" style="display: grid; grid-template-columns: {{ data.player_rows_widths.name }}em {{ data.player_rows_widths.organization }}em; grid-template-rows: repeat({{ row.player_rows.rows|length }}, auto); white-space: nowrap; text-align: left;">
+<span class="rr-player-rows" style="display: grid; grid-template-columns: max-content max-content; column-gap: 1em; grid-template-rows: repeat({{ row.player_rows.rows|length }}, auto); white-space: nowrap; text-align: left;">
     {% for player in row.player_rows.rows %}
         <span class="rr-player-name" style="grid-column: 1; grid-row: {{ forloop.counter }}; white-space: nowrap;">{% if player.changed %}<span style="color:red;">{{ player.name }}</span>{% else %}{{ player.name }}{% endif %}</span>
         {% if not row.player_rows.shared or forloop.first %}

@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load static %}
 
 {% block title %}{{ category.name }} Stage進行{% endblock %}
 
@@ -333,4 +334,5 @@
     {% endfor %}
 </div>
 
+<script src="{% static 'core/js/round_robin_rows.js' %}"></script>
 {% endblock %}

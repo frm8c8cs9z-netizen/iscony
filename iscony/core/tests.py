@@ -37442,33 +37442,14 @@ class LeaguePlayerRowsDisplayTests(TestCase):
         self.assertIn(source.display_name, html)
         self.assertIsNone(empty.participant)
 
-    def test_category_widths_include_hidden_groups_and_unassigned_participants(self):
-        long_name = "長い名前の選手です 全角も一文字"
-        long_org = "一番長い所属クラブ名"
-        hidden = self._pair(self.groups[1], "LONGCODE123", "短名", long_name, "", long_org)
-        participant = hidden.participant
-        participant.has_day_player_change = True
-        participant.current_player2_name = long_name + "変更"
-        participant.save()
-        expected = {
-            "name": len(long_name + "変更") + 1,
-            "organization": len(long_org) + 1,
-            "code": len("LONGCODE123") + 1,
-            "entry": len(long_name + "変更") + len(long_org) + 2,
-        }
+    def test_player_rows_use_intrinsic_grid_without_category_widths(self):
+        self._pair(self.groups[1], "LONGCODE123", "長い名前" * 10, "相方", "長い所属" * 10)
         data = self._data()
-        self.assertEqual([d["player_rows_widths"] for d in data], [expected, expected])
-        filtered = self._data(groups=[self.groups[0]])[0]
-        self.assertEqual(filtered["player_rows_widths"], expected)
-        for group_data in [*data, filtered]:
+        for group_data in [*data, *self._data(groups=[self.groups[0]])]:
+            self.assertNotIn("player_rows_widths", group_data)
             html = self._render(group_data)
-            self.assertIn(f'grid-template-columns: {expected["name"]}em {expected["organization"]}em;', html)
-            self.assertIn(f'width: {expected["code"]}em;', html)
-            self.assertIn('white-space: nowrap;', html)
-        Participant.objects.create(
-            category=self.category, entry_code="UNASSIGNED", player1_name="未割当" * 20,
-        )
-        self.assertEqual(self._data(groups=[self.groups[0]])[0]["player_rows_widths"]["name"], 61)
+            self.assertIn('grid-template-columns: max-content max-content;', html)
+            self.assertIn(f'data-rr-stage="{self.stage.pk}"', html)
 
     def test_settings_offer_player_rows_for_league_and_tournament(self):
         response = self.client.get(reverse("tournament_settings", kwargs={"code": self.tournament.code}))
@@ -37505,10 +37486,168 @@ class LeaguePlayerRowsDisplayTests(TestCase):
             ("category_detail", {"category_id": self.category.pk}),
             ("category_stage_overview", {"category_id": self.category.pk}),
             ("public_category_results", {"category_id": self.category.pk, "code": self.tournament.code}),
+            ("league_stage_print", {"category_id": self.category.pk, "stage_id": self.stage.pk}),
         ):
             with self.subTest(screen=name):
                 response = self.client.get(reverse(name, kwargs=kwargs))
                 self.assertContains(response, 'class="rr-player-rows"')
+                self.assertContains(response, 'core/js/round_robin_rows.js')
+                self.assertContains(response, f'data-rr-stage="{self.stage.pk}"')
+
+    def test_browser_alignment_all_modes_and_repeated_measurement(self):
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            self.skipTest("Playwright is not installed")
+        self._pair(self.groups[0], "A222", "長い選手名" * 10, "相方", "長い所属" * 10, "別所属")
+        self._pair(self.groups[1], "B1", "短名", "相方", "クラブ", "クラブ")
+        for pair in LeagueEntry.objects.filter(group=self.groups[0]):
+            GroupRanking.objects.create(group=self.groups[0], pair=pair, wins=1)
+        participant = self.pair.participant
+        participant.has_day_player_change = True
+        participant.current_player1_name = "当日変更"
+        participant.save()
+        js = Path(settings.BASE_DIR) / "core/static/core/js/round_robin_rows.js"
+        documents = {}
+        for mode in ("short_org_2line", "one_line", "name_org_2line", "player_rows"):
+            self.tournament.default_league_entry_display_mode = mode
+            self.tournament.save()
+            response = self.client.get(reverse("category_stage_overview", args=[self.category.pk]))
+            documents[mode] = re.sub(r'<script[^>]*src=[^>]*></script>', '', response.content.decode())
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch()
+            except Exception as exc:
+                self.skipTest(f"Chromium is unavailable: {exc}")
+            with browser:
+                page = browser.new_page()
+                errors = []
+                page.on("pageerror", lambda exc: errors.append(str(exc)))
+                for mode, html in documents.items():
+                    with self.subTest(mode=mode):
+                        page.set_content(html)
+                        page.add_script_tag(path=str(js))
+                        page.evaluate("document.fonts.ready")
+                        metrics = page.evaluate("""() => {
+                            const tables = [...document.querySelectorAll('.round-robin-table')];
+                            const snapshot = () => tables.map(t => [...t.rows].map(r =>
+                                [...r.cells].map(c => [c.getBoundingClientRect().width, c.getBoundingClientRect().height])));
+                            const before = snapshot();
+                            window.isconyAlignRoundRobinTables(document);
+                            window.isconyAlignRoundRobinTables(document);
+                            const after = snapshot();
+                            const columns = {code: [], name: [], score: [], stat: []};
+                            let rowDiff = 0, maxEm = 0, overflow = 0;
+                            tables.forEach(t => {
+                                [...t.rows[0].cells].forEach((c, i) => {
+                                    const type = c.classList.contains('rr-name-col') ? 'name' :
+                                        c.classList.contains('rr-stat-col') ? 'stat' : i === 0 ? 'code' : 'score';
+                                    columns[type].push(c.getBoundingClientRect().width);
+                                });
+                                const heights = [...t.rows].slice(1).map(r => r.getBoundingClientRect().height);
+                                rowDiff = Math.max(rowDiff, Math.max(...heights) - Math.min(...heights));
+                                t.querySelectorAll('.rr-name-col').forEach(c => {
+                                    maxEm = Math.max(maxEm, c.getBoundingClientRect().width / parseFloat(getComputedStyle(c).fontSize));
+                                    overflow = Math.max(overflow, c.scrollWidth - c.clientWidth);
+                                });
+                            });
+                            return {tables: tables.length, stable: JSON.stringify(before) === JSON.stringify(after),
+                                columnDiff: Math.max(...Object.values(columns).map(v => Math.max(...v) - Math.min(...v))),
+                                rowDiff, maxEm, overflow,
+                                changed: [...document.querySelectorAll('.rr-name-col span')].some(s =>
+                                    s.textContent === '当日変更' && getComputedStyle(s).color === 'rgb(255, 0, 0)')};
+                        }""")
+                        self.assertGreaterEqual(metrics["tables"], 3)  # main, tie, other group
+                        self.assertTrue(metrics["stable"], metrics)
+                        self.assertLessEqual(metrics["columnDiff"], 0.05, metrics)
+                        self.assertLessEqual(metrics["rowDiff"], 0.05, metrics)
+                        self.assertLessEqual(metrics["overflow"], 1, metrics)
+                        self.assertTrue(metrics["changed"], metrics)
+                        if mode == "player_rows":
+                            self.assertGreater(metrics["maxEm"], 16)
+                        else:
+                            self.assertLessEqual(metrics["maxEm"], 16.01)
+                self.assertEqual(errors, [])
+
+    def test_browser_player_gap_and_two_lines_on_all_league_screens(self):
+        from playwright.sync_api import sync_playwright
+
+        other = self._pair(self.groups[0], "A2", "吉川", "青木", "出雲御縁クラブ", "出雲御縁クラブ")
+        for pair in (self.pair, other):
+            GroupRanking.objects.create(group=self.groups[0], pair=pair, wins=1)
+        screens = (
+            ("category_detail", [self.category.pk]),
+            ("category_stage_overview", [self.category.pk]),
+            ("public_category_results", [self.tournament.code, self.category.pk]),
+            ("league_stage_print", [self.category.pk, self.stage.pk]),
+        )
+        script_dir = Path(settings.BASE_DIR) / "core/static/core/js"
+        documents = {}
+        for mode in ("player_rows", "name_org_2line"):
+            self.tournament.default_league_entry_display_mode = mode
+            self.tournament.save()
+            for screen, args in screens:
+                response = self.client.get(reverse(screen, args=args))
+                self.assertEqual(response.status_code, 200)
+                documents[mode, screen] = re.sub(
+                    r'<script[^>]*src=[^>]*></script>', '', response.content.decode(),
+                )
+        with sync_playwright() as playwright:
+            with playwright.chromium.launch() as browser:
+                page = browser.new_page()
+                # Render only test DB fixtures; never navigate to the development server.
+                page.route("**/*", lambda route: route.abort())
+                for (mode, screen), html in documents.items():
+                    variants = ("league", "tie") if screen == "league_stage_print" else ("screen",)
+                    for variant in variants:
+                        with self.subTest(mode=mode, screen=screen, variant=variant):
+                            page.emulate_media(media="print" if screen == "league_stage_print" else "screen")
+                            page.set_content(html)
+                            page.add_script_tag(path=str(script_dir / "round_robin_rows.js"))
+                            if screen == "league_stage_print":
+                                page.eval_on_selector("#print-content", "(el, value) => { el.value = value; }", variant)
+                                page.add_script_tag(path=str(script_dir / "stage_print.js"))
+                            page.evaluate("document.fonts.ready")
+                            metrics = page.evaluate("""mode => {
+                                const root = document.querySelector('#print-pages') || document;
+                                const cell = root.querySelector('tr + tr .rr-name-col');
+                                const table = cell.closest('table');
+                                const rect = node => node.getBoundingClientRect();
+                                if (mode === 'player_rows') {
+                                    const grid = cell.querySelector('.rr-player-rows');
+                                    const name = grid.querySelector('.rr-player-name');
+                                    const org = grid.querySelector('.rr-player-organization');
+                                    const gap = rect(org).left - rect(name).right;
+                                    const right = rect(cell).right - rect(org).right;
+                                    const width = rect(cell).width;
+                                    const em = parseFloat(getComputedStyle(grid).fontSize);
+                                    root.querySelectorAll('.rr-player-rows').forEach(g => g.style.columnGap = '0px');
+                                    window.isconyAlignRoundRobinTables(root);
+                                    return {gap, em, right, width, beforeWidth: rect(cell).width};
+                                }
+                                const lines = [...cell.querySelectorAll('.rr-header-inner')];
+                                const height = rect(cell).height;
+                                const lineGap = rect(lines[1]).top - rect(lines[0]).bottom;
+                                const blocks = lines.every(l => getComputedStyle(l).display === 'block');
+                                const breaks = root.querySelectorAll('.rr-name-col br').length;
+                                // Reproduce the old template markup after prepareName has run.
+                                root.querySelectorAll('.rr-name-col').forEach(c => {
+                                    const ls = [...c.querySelectorAll('.rr-header-inner')];
+                                    ls.slice(0, -1).forEach(l => l.after(document.createElement('br')));
+                                });
+                                window.isconyAlignRoundRobinTables(root);
+                                return {height, beforeHeight: rect(cell).height, lineGap, blocks, breaks};
+                            }""", mode)
+                            print(f"RR spacing {screen}/{variant}/{mode}: {json.dumps(metrics)}")
+                            if mode == "player_rows":
+                                self.assertAlmostEqual(metrics["gap"], metrics["em"], delta=0.1)
+                                self.assertGreater(metrics["right"], 1)
+                                self.assertAlmostEqual(metrics["width"] - metrics["beforeWidth"], metrics["gap"], delta=0.1)
+                            else:
+                                self.assertTrue(metrics["blocks"])
+                                self.assertEqual(metrics["breaks"], 0)
+                                self.assertAlmostEqual(metrics["lineGap"], 0, delta=0.1)
+                                self.assertLess(metrics["height"], metrics["beforeHeight"])
 
     def test_player_rows_queries_do_not_grow_with_groups_or_organizations(self):
         def count():
@@ -37770,7 +37909,7 @@ class LeagueStagePrintAndNameTests(TestCase):
         self.assertContains(self.client.get(self.url, {"frame": "1"}), 'id="print-frame" checked>')
         self.assertContains(self.client.get(self.url, {"frame": "bad"}), 'id="print-frame">')
 
-    def test_print_preserves_player_rows_widths_and_score_color_setting(self):
+    def test_print_preserves_player_rows_and_score_color_setting(self):
         from .views.league import build_category_group_data
         from .helpers.display import ENTRY_DISPLAY_PLAYER_ROWS
 
@@ -37779,8 +37918,9 @@ class LeagueStagePrintAndNameTests(TestCase):
         self.tournament.save()
         response = self.client.get(self.url)
         expected, _ = build_category_group_data(self.category, groups=self.groups, include_operations=False)
-        self.assertEqual(response.context["display_groups"][0]["player_rows_widths"], expected[0]["player_rows_widths"])
-        self.assertIsNotNone(response.context["display_groups"][0]["player_rows_widths"])
+        self.assertEqual(response.context["display_groups"][0]["table_rows"][0]["player_rows"],
+                         expected[0]["table_rows"][0]["player_rows"])
+        self.assertContains(response, "core/js/round_robin_rows.js")
         self.assertFalse(response.context["use_league_score_colors"])
         self.assertNotContains(response, 'class="rr-score-col win')
 
