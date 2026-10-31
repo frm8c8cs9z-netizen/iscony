@@ -37649,6 +37649,151 @@ class LeaguePlayerRowsDisplayTests(TestCase):
                                 self.assertAlmostEqual(metrics["lineGap"], 0, delta=0.1)
                                 self.assertLess(metrics["height"], metrics["beforeHeight"])
 
+    def test_browser_organization_cap_fitting_and_print_recalculation(self):
+        from playwright.sync_api import sync_playwright
+
+        # Cover normal/shared wrapping, measured shrinking, the 60% fallback,
+        # and changed-organization markup using only test database fixtures.
+        self._pair(self.groups[0], "A2", "選手", "相方", "あ" * 12, "あ" * 12)
+        self._pair(self.groups[0], "A3", "選手", "相方", "い" * 24, "い" * 24)
+        self._pair(self.groups[1], "B1", "選手", "相方", "う" * 12, "え" * 24)
+        ParticipantOrganizationValue.objects.filter(
+            participant=self.pair.participant, player_no=1,
+        ).update(current_value="同じ所属")
+        for length in (11, 13, 14, 15, 25):
+            text = "か" * length
+            pair = self._pair(self.groups[0], f"L{length}", "選手", "相方", text, text)
+            ParticipantOrganizationValue.objects.filter(
+                participant=pair.participant, player_no=1,
+            ).update(current_value=text)
+        self._pair(self.groups[1], "B2", "選手", "相方", "き" * 35, "く" * 36)
+        examples = ("スフィーダテニスクラブ", "倉敷ジュニアソフトテニスクラブ", "広島土曜クラブジュニア")
+        for index, text in enumerate(examples):
+            self._pair(self.groups[0], f"C{index}", "選手", "相方", text, text)
+        scripts = Path(settings.BASE_DIR) / "core/static/core/js"
+        screens = (
+            ("public_category_results", [self.tournament.code, self.category.pk]),
+            ("league_stage_print", [self.category.pk, self.stage.pk]),
+        )
+        documents = {}
+        for screen, args in screens:
+            response = self.client.get(reverse(screen, args=args))
+            self.assertEqual(response.status_code, 200)
+            documents[screen] = re.sub(r'<script[^>]*src=[^>]*></script>', '', response.content.decode())
+        with sync_playwright() as playwright:
+            with playwright.chromium.launch() as browser:
+                page = browser.new_page()
+                page.route("**/*", lambda route: route.abort())
+                for screen, html in documents.items():
+                    page.set_content(html)
+                    page.add_script_tag(path=str(scripts / "round_robin_rows.js"))
+                    if screen == "league_stage_print":
+                        page.add_script_tag(path=str(scripts / "stage_print.js"))
+                    page.evaluate("document.fonts.ready")
+                    for size in (None, 9, 20, 16):
+                        with self.subTest(screen=screen, size=size):
+                            metrics = page.evaluate("""size => {
+                                const root = document.querySelector('#print-pages') || document;
+                                if (size) root.querySelectorAll('.round-robin-table').forEach(t => t.style.fontSize = size + 'px');
+                                window.isconyAlignRoundRobinTables(root);
+                                const tables = [...root.querySelectorAll('.round-robin-table')];
+                                const snapshot = () => tables.map(t => [t.getBoundingClientRect().width,
+                                    ...[...t.rows].map(r => r.getBoundingClientRect().height),
+                                    ...[...t.querySelectorAll('.rr-player-organization')].map(o => o.style.cssText)]);
+                                const before = JSON.stringify(snapshot());
+                                window.isconyAlignRoundRobinTables(root);
+                                const organizations = [...root.querySelectorAll('.rr-player-organization')].map(o => {
+                                    const range = document.createRange(); range.selectNodeContents(o);
+                                    const rects = [...range.getClientRects()];
+                                    const box = o.getBoundingClientRect(), cell = o.closest('td,th').getBoundingClientRect();
+                                    const base = parseFloat(getComputedStyle(o.parentElement).fontSize);
+                                    const style = getComputedStyle(o);
+                                    const names = [...o.parentElement.querySelectorAll('.rr-player-name')];
+                                    const shared = style.gridRowEnd.includes('span');
+                                    const lineCounts = new Map();
+                                    const walker = document.createTreeWalker(o, NodeFilter.SHOW_TEXT);
+                                    while (walker.nextNode()) {
+                                        const node = walker.currentNode;
+                                        for (let i = 0; i < node.length; i++) {
+                                            const character = document.createRange();
+                                            character.setStart(node, i); character.setEnd(node, i + 1);
+                                            const top = character.getBoundingClientRect().top.toFixed(2);
+                                            lineCounts.set(top, (lineCounts.get(top) || 0) + 1);
+                                        }
+                                    }
+                                    return {text: o.textContent, em: box.width / base,
+                                        lineCounts: [...lineCounts.values()], textWrap: style.textWrap,
+                                        lineHeight: style.lineHeight,
+                                        nameLineHeight: getComputedStyle(names[0]).lineHeight,
+                                        padding: [style.paddingTop, style.paddingBottom],
+                                        height: box.height, textWidth: o.style.inlineSize,
+                                        nameHeight: names.reduce((sum, n) => sum + n.getBoundingClientRect().height, 0),
+                                        shared,
+                                        scale: parseFloat(style.fontSize) / base,
+                                        lines: new Set(rects.map(r => r.top.toFixed(2))).size,
+                                        overflow: rects.some(r => r.left < box.left - .1 || r.right > box.right + .1 ||
+                                            r.top <= cell.top || r.bottom >= cell.bottom)};
+                                });
+                                return {organizations, stable: before === JSON.stringify(snapshot()),
+                                    rowDiff: Math.max(...tables.map(t => {
+                                        const hs = [...t.rows].slice(1).map(r => r.getBoundingClientRect().height);
+                                        return Math.max(...hs) - Math.min(...hs);
+                                    }))};
+                            }""", size)
+                            self.assertTrue(metrics["stable"], metrics)
+                            self.assertLessEqual(metrics["rowDiff"], 0.05, metrics)
+                            orgs = {o["text"]: o for o in metrics["organizations"]}
+                            for org in orgs.values():
+                                self.assertLessEqual(org["em"], 10.01, org)
+                                self.assertGreater(org["scale"], 0, org)
+                                if len(org["text"]) <= 25:
+                                    self.assertGreaterEqual(org["scale"], 0.59999, org)
+                                if org["lines"] == 1:
+                                    self.assertEqual(org["textWidth"], "", org)
+                                self.assertLessEqual(org["lines"], 2, org)
+                                self.assertFalse(org["overflow"], org)
+                                expected_line_height = float(org["nameLineHeight"][:-2])
+                                if not org["shared"] and org["lines"] == 2:
+                                    expected_line_height /= 2
+                                self.assertAlmostEqual(float(org["lineHeight"][:-2]), expected_line_height, delta=0.02, msg=org)
+                                self.assertEqual(org["padding"], ["0px", "0px"], org)
+                                self.assertNotEqual(org["textWrap"], "balance", org)
+                                available = org["nameHeight"] / (1 if org["shared"] else 2)
+                                self.assertLessEqual(org["height"], available + 0.1, org)
+                                self.assertAlmostEqual(org["nameHeight"], 2 * float(org["nameLineHeight"][:-2]), delta=0.1, msg=org)
+                                if org["lines"] == 2:
+                                    self.assertEqual(len(org["lineCounts"]), 2, org)
+                                    first, second = org["lineCounts"]
+                                    self.assertGreaterEqual(first, second, org)
+                                    self.assertLessEqual(first - second, 1, org)
+                            for text in examples:
+                                self.assertEqual(orgs[text]["lineCounts"], [(len(text) + 1) // 2, len(text) // 2])
+                            for length in (11, 13, 14, 15, 25):
+                                self.assertEqual(orgs["か" * length]["lineCounts"], [(length + 1) // 2, length // 2])
+                            self.assertEqual(orgs["き" * 35]["lineCounts"], [18, 17])
+                            self.assertEqual(orgs["く" * 36]["lineCounts"], [18, 18])
+                            self.assertEqual(orgs["同じ所属"]["scale"], 1)
+                            self.assertEqual(orgs["同じ所属"]["lines"], 1)
+                            self.assertEqual(orgs["あ" * 12]["scale"], 1)
+                            self.assertEqual(orgs["あ" * 12]["lines"], 2)
+                            self.assertLess(orgs["い" * 24]["scale"], 1)
+                            self.assertEqual(orgs["い" * 24]["lines"], 2)
+                            self.assertLess(orgs["う" * 12]["scale"], 1)
+                            self.assertEqual(orgs["う" * 12]["lines"], 1)
+                            self.assertAlmostEqual(orgs["え" * 24]["scale"], 0.6, delta=0.00001)
+                            self.assertEqual(orgs["え" * 24]["lines"], 2)
+                    # A Stage with only short affiliations retains its natural width.
+                    page.evaluate("""() => {
+                        document.querySelectorAll('.rr-player-organization').forEach(o => o.textContent = '島根');
+                        window.isconyAlignRoundRobinTables(document.querySelector('#print-pages') || document);
+                    }""")
+                    short = page.evaluate("""() => {
+                        const root = document.querySelector('#print-pages') || document;
+                        return [...root.querySelectorAll('.rr-player-organization')].map(o =>
+                            o.getBoundingClientRect().width / parseFloat(getComputedStyle(o).fontSize));
+                    }""")
+                    self.assertTrue(all(0 < width < 3 for width in short), short)
+
     def test_player_rows_queries_do_not_grow_with_groups_or_organizations(self):
         def count():
             with CaptureQueriesContext(connection) as queries:

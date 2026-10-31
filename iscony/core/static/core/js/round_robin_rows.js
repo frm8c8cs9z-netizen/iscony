@@ -2,6 +2,107 @@
 (function () {
     "use strict";
     const NAME_MAX_EM = 16;
+    const ORGANIZATION_MAX_EM = 10;
+    const ORGANIZATION_MIN_SCALE = 0.6;
+    const ORGANIZATION_MAX_LINES = 2;
+    const ORGANIZATION_FIT_PASSES = 16;
+
+    function resetOrganization(cell) {
+        ["font-size", "white-space", "overflow-wrap", "word-break", "line-height", "padding-block", "text-wrap", "inline-size"]
+            .forEach(property => cell.style.removeProperty(property));
+        cell.style.whiteSpace = "nowrap";
+    }
+
+    function fitOrganization(cell) {
+        const baseSize = parseFloat(getComputedStyle(cell).fontSize);
+        const shared = parseInt(getComputedStyle(cell).gridRowEnd.replace("span ", ""), 10) > 1;
+        // Keep the original measured name row height, including layout rounding.
+        const name = cell.parentElement.querySelector(".rr-player-name");
+        const nameLineHeight = name.getBoundingClientRect().height;
+        cell.style.lineHeight = nameLineHeight + "px";
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        // Small kana and proportional glyphs can make the second line contain
+        // more characters even with greedy wrapping. Require the midpoint on
+        // the first line as well as fitting two lines; do not insert line breaks.
+        const characters = [];
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            let offset = 0;
+            for (const character of node.textContent) {
+                characters.push({node, offset, length: character.length});
+                offset += character.length;
+            }
+        }
+        function characterRange(index) {
+            const character = characters[index];
+            if (!character) return null;
+            const result = document.createRange();
+            result.setStart(character.node, character.offset);
+            result.setEnd(character.node, character.offset + character.length);
+            return result;
+        }
+        const first = characterRange(0);
+        const midpoint = characterRange(Math.ceil(characters.length / 2) - 1);
+        function fits(scale, lines) {
+            cell.style.fontSize = baseSize * scale + "px";
+            const box = cell.getBoundingClientRect();
+            const rects = Array.from(range.getClientRects());
+            const height = rects.length ? Math.max(...rects.map(r => r.bottom)) -
+                Math.min(...rects.map(r => r.top)) : 0;
+            const firstLineLongEnough = lines === 1 || !first ||
+                Math.abs(first.getBoundingClientRect().top - midpoint.getBoundingClientRect().top) < 0.01;
+            return firstLineLongEnough && rects.every(r => r.left >= box.left - 0.01 && r.right <= box.right + 0.01) &&
+                height <= Math.max(0, ...rects.map(r => r.height)) +
+                    parseFloat(getComputedStyle(cell).lineHeight) * (lines - 1) + 0.01;
+        }
+        if (shared) {
+            Object.assign(cell.style, {whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "normal"});
+        }
+        const lines = shared ? ORGANIZATION_MAX_LINES : 1;
+        function fitTextWidth(scale) {
+            // Keep the Stage column fixed; narrow only this text area. Ordinary
+            // wrapping fills the first line first, including text inside red spans.
+            if (fits(scale, 1)) return;
+            let lower = 0;
+            let upper = cell.getBoundingClientRect().width;
+            for (let pass = 0; pass < ORGANIZATION_FIT_PASSES; pass++) {
+                const width = (lower + upper) / 2;
+                cell.style.inlineSize = width + "px";
+                if (fits(scale, ORGANIZATION_MAX_LINES)) upper = width;
+                else lower = width;
+            }
+            // Round up to a layout pixel fraction so quantization cannot add a line.
+            cell.style.inlineSize = Math.ceil(upper * 64) / 64 + "px";
+        }
+        if (fits(1, lines)) {
+            if (shared) fitTextWidth(1);
+            return;
+        }
+        if (!shared && !fits(ORGANIZATION_MIN_SCALE, 1)) {
+            // Two individual affiliation lines must fit within one name row.
+            cell.style.lineHeight = nameLineHeight / 2 + "px";
+            Object.assign(cell.style, {whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "normal"});
+            if (fits(ORGANIZATION_MIN_SCALE, ORGANIZATION_MAX_LINES)) {
+                fitTextWidth(ORGANIZATION_MIN_SCALE);
+                return;
+            }
+        }
+        // Shared affiliations use the full two-line area; individual affiliations
+        // keep one line down to 60%, then wrap. Measure DOM text, including red spans.
+        const wrapping = cell.style.whiteSpace === "normal";
+        const fitLines = wrapping ? ORGANIZATION_MAX_LINES : lines;
+        let lower = shared || wrapping ? 0 : ORGANIZATION_MIN_SCALE;
+        let upper = !shared && wrapping ? ORGANIZATION_MIN_SCALE : 1;
+        for (let pass = 0; pass < ORGANIZATION_FIT_PASSES; pass++) {
+            const scale = (lower + upper) / 2;
+            if (fits(scale, fitLines)) lower = scale;
+            else upper = scale;
+        }
+        fits(lower, fitLines);
+        if (wrapping) fitTextWidth(lower);
+    }
 
     // Keep day-change markup while grouping text through each middle dot.
     // Inline blocks wrap as a unit; only an oversized unit wraps internally.
@@ -85,12 +186,17 @@
                 });
                 table.querySelectorAll(".rr-player-rows").forEach(grid => {
                     grid.style.gridTemplateColumns = "max-content max-content";
+                    grid.querySelectorAll(".rr-player-organization").forEach(resetOrganization);
                 });
             });
             stageTables.forEach(table => {
                 Object.keys(playerWidths).forEach(key => {
                     table.querySelectorAll(".rr-player-" + key).forEach(cell => {
-                        playerWidths[key] = Math.max(playerWidths[key], cell.getBoundingClientRect().width);
+                        let width = cell.getBoundingClientRect().width;
+                        if (key === "organization") {
+                            width = Math.min(width, ORGANIZATION_MAX_EM * parseFloat(getComputedStyle(cell).fontSize));
+                        }
+                        playerWidths[key] = Math.max(playerWidths[key], width);
                     });
                 });
             });
@@ -131,6 +237,7 @@
                 }));
             });
             stageTables.forEach(table => {
+                table.querySelectorAll(".rr-player-organization").forEach(fitOrganization);
                 const rows = Array.from(table.rows).slice(1);
                 const height = Math.max(0, ...rows.map(row => row.getBoundingClientRect().height));
                 rows.forEach(row => { row.style.height = height + "px"; });
