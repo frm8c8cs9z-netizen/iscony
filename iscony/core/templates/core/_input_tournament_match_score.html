@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load core_extras %}
 
 {% block content %}
 
@@ -58,7 +59,7 @@
                     {{ match.pair1.display_player2_name }}
                     <br>
 
-                    （{{ match.pair1.display_organization }}）
+                    （{% entry_organization_html match.pair1 %}）
                     <br>
 
                     <button
@@ -135,7 +136,7 @@
                     {{ match.pair2.display_player2_name }}
                     <br>
 
-                    （{{ match.pair2.display_organization }}）
+                    （{% entry_organization_html match.pair2 %}）
                     <br>
 
                     <button

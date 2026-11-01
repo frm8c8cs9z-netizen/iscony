@@ -528,7 +528,7 @@ def get_score_sheet_template_settings(tournament):
     )
 
 
-def get_score_sheet_entry_data(entry):
+def get_score_sheet_entry_data(entry, *, tournament=None):
     """
     採点票に印字する選手情報を取り出す。
 
@@ -543,6 +543,9 @@ def get_score_sheet_entry_data(entry):
             "player1_name": "",
             "player2_name": "",
         }
+
+    from ..helpers.display import bind_entry_organization_tournament
+    bind_entry_organization_tournament(entry, tournament)
 
     return {
         "code": entry.code,
@@ -602,6 +605,7 @@ def _schedule_outside_text(schedule):
 
 def _add_schedule_score_sheet_page(writer, schedule, settings_tuple, request):
     match = schedule.match
+    tournament = schedule.court.tournament
 
     if not is_match_score_sheet_printable(match):
         return False
@@ -613,10 +617,10 @@ def _add_schedule_score_sheet_page(writer, schedule, settings_tuple, request):
     ) = settings_tuple
 
     pair1_data = get_score_sheet_entry_data(
-        match.pair1
+        match.pair1, tournament=tournament
     )
     pair2_data = get_score_sheet_entry_data(
-        match.pair2
+        match.pair2, tournament=tournament
     )
     match_key = format_match_key_display(match.match_key)
     qr_url = _match_key_qr_url(
@@ -713,11 +717,11 @@ def score_sheet_pdf(request, schedule_id):
     tournament = schedule.court.tournament
 
     pair1_data = get_score_sheet_entry_data(
-        match.pair1
+        match.pair1, tournament=tournament
     )
 
     pair2_data = get_score_sheet_entry_data(
-        match.pair2
+        match.pair2, tournament=tournament
     )
     match_key = format_match_key_display(match.match_key)
     qr_url = _match_key_qr_url(
@@ -857,11 +861,11 @@ def court_score_sheets_pdf(request, court_id):
             continue
 
         pair1_data = get_score_sheet_entry_data(
-            match.pair1
+            match.pair1, tournament=tournament
         )
 
         pair2_data = get_score_sheet_entry_data(
-            match.pair2
+            match.pair2, tournament=tournament
         )
         match_key = format_match_key_display(match.match_key)
         qr_url = _match_key_qr_url(
@@ -968,11 +972,11 @@ def tournament_match_score_sheet_pdf(
     )
 
     pair1_data = get_score_sheet_entry_data(
-        match.pair1
+        match.pair1, tournament=tournament
     )
 
     pair2_data = get_score_sheet_entry_data(
-        match.pair2
+        match.pair2, tournament=tournament
     )
     match_key = format_match_key_display(match.match_key)
     qr_url = _match_key_qr_url(
@@ -1054,11 +1058,11 @@ def tournament_first_round_score_sheets_pdf(request, code, bracket_id):
             continue
 
         pair1_data = get_score_sheet_entry_data(
-            match.pair1
+            match.pair1, tournament=tournament
         )
 
         pair2_data = get_score_sheet_entry_data(
-            match.pair2
+            match.pair2, tournament=tournament
         )
         match_key = format_match_key_display(match.match_key)
         qr_url = _match_key_qr_url(

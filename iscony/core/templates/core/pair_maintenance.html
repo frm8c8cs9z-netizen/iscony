@@ -87,7 +87,7 @@
                     >
                         <td>{{ pair.display_order }}</td>
                         <td>{{ pair.code }}</td>
-                        <td data-entry-organization>{{ pair.display_organization }}</td>
+                        <td data-entry-organization>{{ pair.formal_organization }}</td>
                         <td data-entry-participant-name>
                             {% if pair.participant %}
                                 {{ pair.display_name }}
@@ -2038,7 +2038,7 @@
             <td>{{ pair.group.name }}</td>
             <td>{{ pair.display_order }}</td>
             <td>{{ pair.code }}</td>
-            <td>{{ pair.display_organization }}</td>
+            <td>{{ pair.formal_organization }}</td>
             <td>
                 {{ pair.display_name }}
             </td>

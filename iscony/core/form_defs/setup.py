@@ -450,12 +450,18 @@ class DayPlayerChangeForm(forms.ModelForm):
 
 class TournamentSettingsForm(forms.ModelForm):
 
+    def clean_organization_display_mode(self):
+        return (self.cleaned_data.get("organization_display_mode")
+                or self.instance.organization_display_mode
+                or Tournament.ORGANIZATION_FORMAL)
+
     class Meta:
 
         model = Tournament
 
         fields = [
             "score_sheet_template",
+            "organization_display_mode",
             "default_league_entry_display_mode",
             "default_league_score_color_mode",
             "default_tournament_entry_display_mode",
@@ -552,6 +558,7 @@ class TournamentSettingsForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["organization_display_mode"].required = False
         self.score_color_presets = TOURNAMENT_SCORE_COLOR_PRESETS
         self.score_color_value = (
             self.instance.default_tournament_score_color

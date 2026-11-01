@@ -9,7 +9,7 @@
 効く値かを明確にして、参加者表示との共通化を崩さない。
 """
 
-from ..helpers.display import format_entry_one_line
+from ..helpers.display import format_entry_one_line, build_entry_display_lines
 from ..models import TournamentBracket
 from .svg_text_blocks import (
     CHAMPION_LINE_HEIGHT,
@@ -93,6 +93,7 @@ def svg_champion_text_lines(entry, bracket, layout_type=None):
             },
             {
                 "text": entry.display_organization,
+                "parts": entry.display_organization_parts,
                 "class": "champion-org-text",
             },
         ]
@@ -100,6 +101,7 @@ def svg_champion_text_lines(entry, bracket, layout_type=None):
     return [
         {
             "text": svg_entry_with_org(entry),
+            "parts": build_entry_display_lines(entry, mode="one_line")[0]["parts"],
             "class": "",
         }
     ]

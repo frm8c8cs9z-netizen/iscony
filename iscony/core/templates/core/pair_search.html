@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load core_extras %}
 
 {% block title %}
 リーグ枠検索
@@ -53,7 +54,7 @@
 
             <p>
 
-                {{ pair.display_organization }}
+                {% entry_organization_html pair %}
 
             </p>
 

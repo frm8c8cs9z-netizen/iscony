@@ -1,3 +1,4 @@
+{% load core_extras %}
 <tr>
     <th class="rr-code-col rr-header {% if row.pair.retired %}retired-pair{% endif %}">
         {% if row.pair and row.pair.id %}
@@ -16,12 +17,12 @@
         {% elif row_pair_link_url %}
             <a href="{{ row_pair_link_url }}">
                 {% for line in row.pair_display_lines %}
-                    <span class="rr-header-inner">{% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</span>
+                    <span class="rr-header-inner">{% for part in line.parts %}{% organization_part_html part %}{% empty %}{{ line.text }}{% endfor %}</span>
                 {% endfor %}
             </a>
         {% else %}
             {% for line in row.pair_display_lines %}
-                <span class="rr-header-inner">{% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</span>
+                <span class="rr-header-inner">{% for part in line.parts %}{% organization_part_html part %}{% empty %}{{ line.text }}{% endfor %}</span>
             {% endfor %}
         {% endif %}
     </th>

@@ -62,6 +62,14 @@ class ScoreSheetTemplate(models.Model):
 # =========================================================
 class Tournament(models.Model):
 
+    ORGANIZATION_FORMAL = "formal"
+    ORGANIZATION_ABBREVIATION = "abbreviation"
+    organization_display_mode = models.CharField(
+        "所属の表示", max_length=16, default=ORGANIZATION_FORMAL,
+        choices=[(ORGANIZATION_FORMAL, "正式名(所属1)"),
+                 (ORGANIZATION_ABBREVIATION, "略称(所属2)")],
+    )
+
     ENTRY_DISPLAY_SHORT_ORG_2LINE = DISPLAY_SHORT_ORG_2LINE
     ENTRY_DISPLAY_ONE_LINE = DISPLAY_ONE_LINE
     ENTRY_DISPLAY_NAME_ORG_2LINE = DISPLAY_NAME_ORG_2LINE
@@ -787,29 +795,47 @@ class Participant(models.Model):
             if value.player_no == ParticipantOrganizationValue.PLAYER_2
         )
 
+    def player_organization_display(self, player_no, *, tournament=None):
+        """表示用所属。正式名のAPIは変更せず、当日変更後の所属2を選択する。"""
+        tournament = (tournament or getattr(self, "_organization_display_tournament", None)
+                      or self.category.tournament)
+        formal = getattr(self, f"effective_player{player_no}_organization")
+        changed = getattr(self, f"player{player_no}_organization_is_day_changed")
+        mode = getattr(self, "_organization_display_mode_override", tournament.organization_display_mode)
+        if mode != Tournament.ORGANIZATION_ABBREVIATION:
+            return {"text": formal, "changed": changed, "abbreviation_missing": False}
+        for value in self.organization_values.all():
+            if value.player_no == player_no and value.field.code == "org2":
+                day_changed = self.has_day_player_change and value.current_value is not None
+                text = value.current_value if day_changed else value.original_value
+                if text and text.strip():
+                    return {"text": text, "changed": bool(day_changed),
+                            "abbreviation_missing": False}
+                break
+        return {"text": formal, "changed": changed, "abbreviation_missing": True}
+
+    @property
+    def presentation_organization(self):
+        return "".join(part["text"] for part in self.organization_display_parts)
+
     @property
     def organization_display_parts(self):
         """選手1・選手2の所属を、当日変更フラグ付きの部分リストで返す。"""
 
-        org1 = self.effective_player1_organization
-        org2 = self.effective_player2_organization
-        changed1 = self.player1_organization_is_day_changed
-        changed2 = self.player2_organization_is_day_changed
+        def part(value):
+            return {key: item for key, item in value.items()
+                    if key != "abbreviation_missing" or item}
 
+        first = self.player_organization_display(1)
+        second = self.player_organization_display(2)
+        org1, org2 = first["text"], second["text"]
         if org1 and org2 and org1 != org2:
-            return [
-                {"text": org1, "changed": changed1},
-                {"text": "・", "changed": False},
-                {"text": org2, "changed": changed2},
-            ]
-
+            return [part(first), {"text": "・", "changed": False}, part(second)]
         if org1:
-            return [{"text": org1, "changed": changed1 or changed2}]
-
-        if org2:
-            return [{"text": org2, "changed": changed2}]
-
-        return []
+            return [part({**first, "changed": first["changed"] or second["changed"],
+                     "abbreviation_missing": first["abbreviation_missing"] or (
+                         bool(self.effective_player2_name) and second["abbreviation_missing"])})]
+        return [part(second)] if org2 else []
 
     @property
     def effective_organization(self):
@@ -1203,10 +1229,17 @@ class LeagueEntry(models.Model):
             return "未定"
 
     @property
+    def formal_organization(self):
+        if self.participant:
+            return self.participant.effective_organization
+        source_pair = getattr(self, "source_pair", None)
+        return source_pair.formal_organization if source_pair else ""
+
+    @property
     def display_organization(self):
 
         if self.participant:
-            return self.participant.effective_organization
+            return self.participant.presentation_organization
 
         return ""
 
@@ -2165,9 +2198,16 @@ class TournamentEntry(models.Model):
         return "未定"
     
     @property
-    def display_organization(self):
+    def formal_organization(self):
         if self.participant:
             return self.participant.effective_organization
+        source_pair = getattr(self, "source_pair", None)
+        return source_pair.formal_organization if source_pair else ""
+
+    @property
+    def display_organization(self):
+        if self.participant:
+            return self.participant.presentation_organization
 
         if self.source_pair:
             return self.source_pair.display_organization

@@ -2,7 +2,7 @@ from django import template
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
-from core.helpers.display import entry_name_parts
+from core.helpers.display import entry_name_parts, bind_entry_organization_tournament
 
 from core.models import (
     Category,
@@ -467,24 +467,24 @@ def entry_short_name_html(entry):
     return mark_safe("".join(html_parts))
 
 
-@register.simple_tag
-def entry_organization_html(entry):
+_ENTRY_UNSET = object()
+
+
+@register.simple_tag(takes_context=True)
+def entry_organization_html(context, entry=_ENTRY_UNSET):
     """参加枠の所属を、当日変更された選手の所属部分だけ赤字にしたHTMLとして返す。"""
+
+    if entry is _ENTRY_UNSET:
+        entry, context = context, {}
 
     if not entry:
         return ""
 
+    tournament = context.get("tournament") or getattr(context.get("category"), "tournament", None)
+    bind_entry_organization_tournament(entry, tournament)
     parts = entry.display_organization_parts
-    html_parts = []
 
-    for part in parts:
-        text = escape(part["text"])
-        if part["changed"]:
-            html_parts.append(f'<span style="color:red;">{text}</span>')
-        else:
-            html_parts.append(text)
-
-    return mark_safe("".join(html_parts))
+    return mark_safe("".join(organization_part_html(context, part) for part in parts))
 
 
 @register.simple_tag(takes_context=True)
@@ -495,3 +495,41 @@ def show_session_controls(context):
         return False
     match = getattr(request, "resolver_match", None)
     return getattr(getattr(match, "func", None), "login_required", True) is not False
+
+
+@register.simple_tag(takes_context=True)
+def organization_warnings_enabled(context):
+    """未登録の注意はログイン済みの運営画面だけに出す。"""
+    request = context.get("request")
+    if not getattr(getattr(request, "user", None), "is_authenticated", False):
+        return False
+    match = getattr(request, "resolver_match", None)
+    name = getattr(match, "url_name", "") or ""
+    return not (name.startswith("public_") or "print" in name or "score_sheet" in name)
+
+
+@register.simple_tag(takes_context=True)
+def organization_part_html(context, part, svg=False):
+    text = escape(part["text"])
+    missing = part.get("abbreviation_missing") and organization_warnings_enabled(context)
+    changed = part.get("changed", False)
+    if svg:
+        if missing:
+            color = "red" if changed else "#996515"
+            return mark_safe(f'<tspan fill="{color}" class="organization-abbreviation-missing">'
+                             f'<title>略称登録がありません</title>{text}</tspan>')
+        return mark_safe(f'<tspan fill="red">{text}</tspan>') if changed else text
+    if missing:
+        color = "red" if changed else "#996515"
+        return mark_safe(f'<span class="organization-abbreviation-missing" style="color:{color};" '
+                         f'title="略称登録がありません">{text}</span>')
+    return mark_safe(f'<span style="color:red;">{text}</span>') if changed else text
+
+
+@register.simple_tag(takes_context=True)
+def player_organization_html(context, player):
+    return organization_part_html(context, {
+        "text": player["organization"],
+        "changed": player["organization_changed"],
+        "abbreviation_missing": player["organization_abbreviation_missing"],
+    })

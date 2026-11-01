@@ -38624,3 +38624,6 @@ class LocalSettingsTests(SimpleTestCase):
             "iscony/config/local_settings.py",
             (repository / ".gitignore").read_text(encoding="utf-8").splitlines(),
         )
+
+
+from .organization_display_tests import OrganizationDisplayTests  # noqa: E402,F401

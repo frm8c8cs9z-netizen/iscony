@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load core_extras %}
 
 {% block content %}
 
@@ -23,7 +24,7 @@
         {% for ranking in rankings %}
         <tr{% if ranking.rank_error %} class="ranking-error" style="background-color:#ffe0e0;"{% endif %}>
             <td>{{ ranking.pair.code }}</td>
-            <td>{{ ranking.pair.display_organization }}</td>
+            <td>{% entry_organization_html ranking.pair %}</td>
             <td>
                 {{ ranking.pair.display_name }}
             </td>

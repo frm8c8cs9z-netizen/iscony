@@ -268,12 +268,12 @@ def _schedule_block_tables(tournament):
 
             "round_robin_match",
             "round_robin_match__pair1",
-            "round_robin_match__pair1__participant",
+            "round_robin_match__pair1__participant__category__tournament",
             "round_robin_match__pair1__advancement_source",
             "round_robin_match__pair1__advancement_source__source_group",
             "round_robin_match__pair1__advancement_source__source_match",
             "round_robin_match__pair2",
-            "round_robin_match__pair2__participant",
+            "round_robin_match__pair2__participant__category__tournament",
             "round_robin_match__pair2__advancement_source",
             "round_robin_match__pair2__advancement_source__source_group",
             "round_robin_match__pair2__advancement_source__source_match",
@@ -283,12 +283,12 @@ def _schedule_block_tables(tournament):
 
             "tournament_match",
             "tournament_match__pair1",
-            "tournament_match__pair1__participant",
+            "tournament_match__pair1__participant__category__tournament",
             "tournament_match__pair1__advancement_source",
             "tournament_match__pair1__advancement_source__source_group",
             "tournament_match__pair1__advancement_source__source_match",
             "tournament_match__pair2",
-            "tournament_match__pair2__participant",
+            "tournament_match__pair2__participant__category__tournament",
             "tournament_match__pair2__advancement_source",
             "tournament_match__pair2__advancement_source__source_group",
             "tournament_match__pair2__advancement_source__source_match",
@@ -1516,6 +1516,8 @@ def tournament_settings(request, code):
         Tournament,
         code=code,
     )
+    from ..helpers.organization import missing_organization_abbreviations
+    missing_abbreviations = missing_organization_abbreviations(tournament)
     blocks = None
     schedule_block_forms = None
 
@@ -1588,6 +1590,7 @@ def tournament_settings(request, code):
                     "form": form,
                     "public_url": public_url,
                     "schedule_block_forms": list(zip(blocks, block_forms)),
+                    "missing_abbreviations": missing_abbreviations,
                 },
             )
 
@@ -1611,6 +1614,7 @@ def tournament_settings(request, code):
 
         if form.is_valid():
             form.save()
+            cache.clear()
             return redirect(
                 "maintenance_menu",
                 code=tournament.code,
@@ -1649,6 +1653,7 @@ def tournament_settings(request, code):
             "form": form,
             "public_url": public_url,
             "schedule_block_forms": schedule_block_forms,
+            "missing_abbreviations": missing_abbreviations,
         },
     )
 

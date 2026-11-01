@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load core_extras %}
 
 {% block content %}
 
@@ -30,7 +31,7 @@
                 <strong>{{ match.pair1.code }}</strong><br>
                 {{ match.pair1.dispaly_player1_name }}<br>
                 {{ match.pair1.display_player2_name }}<br>
-                （{{ match.pair1.display_organization }}）<br>
+                （{% entry_organization_html match.pair1 %}）<br>
 
                 <button type="button" onclick="event.stopPropagation(); setWinner('pair1')">
                     勝ち
@@ -74,7 +75,7 @@
                 <strong>{{ match.pair2.code }}</strong><br>
                 {{ match.pair2.display_player1_name }}<br>
                 {{ match.pair2.display_player2_name }}<br>
-                （{{ match.pair2.display_organization }}）<br>
+                （{% entry_organization_html match.pair2 %}）<br>
 
                 <button type="button" onclick="event.stopPropagation(); setWinner('pair2')">
                     勝ち

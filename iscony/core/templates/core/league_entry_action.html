@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load core_extras %}
 
 {% block title %}
 リーグ枠棄権
@@ -49,7 +50,7 @@
     </tr>
     <tr>
         <th>所属</th>
-        <td>{{ pair.display_organization }}</td>
+        <td>{% entry_organization_html pair %}</td>
     </tr>
     <tr>
         <th>状態</th>

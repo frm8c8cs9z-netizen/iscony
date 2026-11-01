@@ -625,6 +625,7 @@ def _append_svg_horizontal_block_label(
         "x": x,
         "y": y,
         "text": lines[0]["text"] if lines else "",
+        "parts": lines[0].get("parts", []) if len(lines) == 1 else [],
         "lines": _svg_multiline_block_lines(
             lines,
             x,
@@ -675,6 +676,7 @@ def _append_svg_vertical_block_label(
             "x": line["x"],
             "y": line["y"],
             "text": line["text"],
+            "parts": line.get("parts", []),
             "class": class_map.get(line["class"], line["class"]),
             "anchor": anchor,
             "baseline": baseline,

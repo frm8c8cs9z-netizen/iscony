@@ -181,6 +181,17 @@
 
 <h2>{{ tournament.name }} 大会設定</h2>
 
+<details class="settings-section">
+    <summary>略称が未入力: {{ missing_abbreviations|length }}人</summary>
+    <p>所属2に略称を登録してください。未入力の選手は正式名で表示します。</p>
+    <table border="1">
+        <tr><th>カテゴリ</th><th>参加者コード</th><th>選手名</th><th>正式名</th></tr>
+        {% for player in missing_abbreviations %}
+        <tr><td>{{ player.category }}</td><td>{{ player.entry_code }}</td><td>{{ player.name }}</td><td>{{ player.organization }}</td></tr>
+        {% empty %}<tr><td colspan="4">全選手の略称が登録されています。</td></tr>{% endfor %}
+    </table>
+</details>
+
 <p>
     大会全体の標準設定を管理します。リーグとトーナメントで別々の標準表示を指定できます。
     個別のトーナメントで上書きしない限り、この設定が使われます。
@@ -584,6 +595,10 @@
             </td>
         </tr>
     </table>
+
+    <h3>所属の表示</h3>
+    <p>{{ form.organization_display_mode.label_tag }} {{ form.organization_display_mode }}</p>
+    <p>リーグ表・トーナメント表・進行表・公開画面・印刷に共通です。略称が空の場合は正式名を表示します。名簿や編集画面、CSVの内容は変わりません。</p>
 
     <h3>優勝者表示</h3>
 

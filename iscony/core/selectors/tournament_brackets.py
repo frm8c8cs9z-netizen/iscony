@@ -3,7 +3,7 @@ from ..models import TournamentMatch
 from ..helpers.brackets import get_round_label
 
 
-def build_tournament_round_data(bracket):
+def build_tournament_round_data(bracket, *, organization_display_mode=None):
     """トーナメント表表示に必要な回戦データをDBから取得してまとめる。"""
 
     all_matches = TournamentMatch.objects.filter(
@@ -22,9 +22,9 @@ def build_tournament_round_data(bracket):
         "winner__advancement_source__source_group",
         "winner__advancement_source__source_match__bracket",
         "bracket__category__tournament",
-        "pair1__participant",
-        "pair2__participant",
-        "winner__participant",
+        "pair1__participant__category__tournament",
+        "pair2__participant__category__tournament",
+        "winner__participant__category__tournament",
     ).prefetch_related(
         "pair1__participant__organization_values__field",
         "pair2__participant__organization_values__field",
@@ -39,6 +39,11 @@ def build_tournament_round_data(bracket):
 
     prepare_related_result_labels(all_matches)
     for match in all_matches:
+        if organization_display_mode is not None:
+            # Pair assignment is a data editor, including its embedded SVG.
+            for entry in (match.pair1, match.pair2, match.winner):
+                if entry and entry.participant:
+                    entry.participant._organization_display_mode_override = organization_display_mode
         rounds.setdefault(
             match.round_number,
             []

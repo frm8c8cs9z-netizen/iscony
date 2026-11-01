@@ -155,7 +155,7 @@ def build_category_group_data(
     all_pairs = LeagueEntry.objects.filter(
         group__in=groups
     ).select_related(
-        "participant",
+        "participant__category__tournament",
     ).prefetch_related(
         "participant__organization_values__field",
         "advancement_source__source_group",
@@ -169,8 +169,8 @@ def build_category_group_data(
         group__in=groups,
         meeting_number=1,
     ).select_related(
-        "pair1__participant",
-        "pair2__participant",
+        "pair1__participant__category__tournament",
+        "pair2__participant__category__tournament",
     ).prefetch_related(
         "pair1__participant__organization_values__field",
         "pair1__advancement_source__source_group",
@@ -186,8 +186,8 @@ def build_category_group_data(
         Q(meeting_number__gt=1)
         | Q(counts_for_ranking=False)
     ).select_related(
-        "pair1__participant",
-        "pair2__participant",
+        "pair1__participant__category__tournament",
+        "pair2__participant__category__tournament",
     ).prefetch_related(
         "pair1__participant__organization_values__field",
         "pair1__advancement_source__source_group",
@@ -202,7 +202,7 @@ def build_category_group_data(
     )
     all_rankings = GroupRanking.objects.filter(
         group__in=groups,
-    ).select_related("pair__participant").prefetch_related(
+    ).select_related("pair__participant__category__tournament").prefetch_related(
         "pair__participant__organization_values__field",
         "pair__advancement_source__source_group",
         "pair__advancement_source__source_match",
@@ -646,6 +646,7 @@ def pair_search(request):
             "category",
             "group",
             "category__tournament",
+            "participant__category__tournament",
         )
 
     return render(
@@ -1211,7 +1212,7 @@ def league_entry_action(request, pair_id):
         LeagueEntry.objects.select_related(
             "category__tournament",
             "group__stage",
-            "participant",
+            "participant__category__tournament",
         ),
         id=pair_id,
     )

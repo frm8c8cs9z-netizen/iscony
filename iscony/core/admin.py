@@ -229,7 +229,7 @@ class LeagueEntryAdmin(admin.ModelAdmin):
 
     @admin.display(description="所属")
     def display_organization(self, obj):
-        return obj.display_organization
+        return obj.formal_organization
 
     @admin.display(description="選手1")
     def display_player1_name(self, obj):
@@ -510,6 +510,11 @@ class TournamentEntryAdmin(admin.ModelAdmin):
             return ""
 
         return source.label
+
+
+    @admin.display(description="所属")
+    def display_organization(self, obj):
+        return obj.formal_organization
 
 
 @admin.register(AdvancementSource)

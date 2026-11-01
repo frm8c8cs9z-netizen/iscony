@@ -94,9 +94,9 @@ def svg_player_rows_spec(entry, mode, side, x, base_y, column_widths=None):
     top = center_y - ((len(rows) - 1) * ENTRY_LINE_HEIGHT / 2)
     labels = []
 
-    def cell(text, changed, cell_x, cell_y, css_class):
+    def cell(text, changed, cell_x, cell_y, css_class, missing=False):
         line = {"text": text, "class": css_class,
-                "parts": [{"text": text, "changed": changed}], "y": cell_y}
+                "parts": [{"text": text, "changed": changed, "abbreviation_missing": missing}], "y": cell_y}
         labels.append({"x": cell_x, "y": cell_y, "text": text,
                        "lines": [line], "class": css_class,
                        "anchor": "start", "baseline": "middle"})
@@ -107,7 +107,8 @@ def svg_player_rows_spec(entry, mode, side, x, base_y, column_widths=None):
         if row["organization"] and (not data["shared"] or index == 0):
             cell(row["organization"], row["organization_changed"],
                  left + name_width + PLAYER_ROWS_COLUMN_GAP,
-                 center_y if data["shared"] else y, "entry-org-text")
+                 center_y if data["shared"] else y, "entry-org-text",
+                 row["organization_abbreviation_missing"])
     return {"player_rows_labels": labels,
             "bounds": {"left": left, "right": left + width,
                        "top": top, "bottom": top + (len(rows) - 1) * ENTRY_LINE_HEIGHT,

@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load core_extras %}
 
 {% block content %}
 
@@ -30,7 +31,7 @@
             <td>
                 {% if match.pair1 %}
                     {{ match.pair1.display_name }}
-                    （{{ match.pair1.display_organization }}）
+                    （{% entry_organization_html match.pair1 %}）
                 {% endif %}
             </td>
 
@@ -41,7 +42,7 @@
             <td>
                 {% if match.pair2 %}
                     {{ match.pair2.display_name }}
-                    （{{ match.pair2.display_organization }}）
+                    （{% entry_organization_html match.pair2 %}）
                 {% endif %}
             </td>
 

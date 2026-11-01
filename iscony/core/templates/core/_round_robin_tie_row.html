@@ -1,3 +1,4 @@
+{% load core_extras %}
 <tr>
     <th class="rr-code-col rr-header">
         <span class="rr-header-inner">{{ row.pair.pair_code }}</span>
@@ -8,7 +9,7 @@
             {% include "core/_round_robin_player_rows.html" %}
         {% else %}
         {% for line in row.pair_display_lines %}
-            <span class="rr-header-inner">{% for part in line.parts %}{% if part.changed %}<span style="color:red;">{{ part.text }}</span>{% else %}{{ part.text }}{% endif %}{% empty %}{{ line.text }}{% endfor %}</span>
+            <span class="rr-header-inner">{% for part in line.parts %}{% organization_part_html part %}{% empty %}{{ line.text }}{% endfor %}</span>
         {% endfor %}
         {% endif %}
     </th>

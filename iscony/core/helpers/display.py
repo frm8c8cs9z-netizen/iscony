@@ -188,10 +188,10 @@ def build_entry_player_rows(entry):
     participant = getattr(entry, "participant", None)
     if not participant:
         return None
-    org1 = participant.effective_player1_organization
-    org2 = participant.effective_player2_organization
-    changed1 = participant.player1_organization_is_day_changed
-    changed2 = participant.player2_organization_is_day_changed
+    first = participant.player_organization_display(1)
+    second = participant.player_organization_display(2)
+    org1, org2 = first["text"], second["text"]
+    changed1, changed2 = first["changed"], second["changed"]
     has_second = bool(entry.display_player2_name)
     shared = not has_second or not org1 or not org2 or org1 == org2
     rows = [{
@@ -199,6 +199,8 @@ def build_entry_player_rows(entry):
         "changed": entry.display_player1_is_day_changed,
         "organization": org1 if not shared else org1 or org2,
         "organization_changed": changed1 if not shared else changed1 or changed2,
+        "organization_abbreviation_missing": first["abbreviation_missing"] or (
+            shared and has_second and second["abbreviation_missing"]),
     }]
     if has_second:
         rows.append({
@@ -206,5 +208,19 @@ def build_entry_player_rows(entry):
             "changed": entry.display_player2_is_day_changed,
             "organization": org2,
             "organization_changed": changed2,
+            "organization_abbreviation_missing": second["abbreviation_missing"],
         })
     return {"rows": rows, "shared": shared}
+
+
+def bind_entry_organization_tournament(entry, tournament):
+    """Pass the request's tournament through to display properties without another read."""
+    if not entry or tournament is None:
+        return
+    participant = getattr(entry, "participant", None)
+    if participant:
+        participant._organization_display_tournament = tournament
+    else:
+        source_pair = getattr(entry, "source_pair", None)
+        if source_pair:
+            bind_entry_organization_tournament(source_pair, tournament)

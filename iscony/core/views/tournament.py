@@ -721,7 +721,9 @@ def tournament_pair_maintenance(request, code, bracket_id):
             bracket_id=bracket.id,
         )
 
-    round_data = build_tournament_round_data(bracket)
+    round_data = build_tournament_round_data(
+        bracket, organization_display_mode=Tournament.ORGANIZATION_FORMAL,
+    )
     svg_bracket = build_svg_bracket_data(
         bracket,
         round_data,
