@@ -317,7 +317,7 @@ def _tournament_scope_rows(tournament, stage_id=None, court_id=None):
             matches = TournamentMatch.objects.filter(
                 bracket=bracket,
                 round_number=round_number,
-            )
+            ).exclude(match_code__startswith="S")
             schedules = Schedule.objects.filter(
                 court__tournament=tournament,
                 tournament_match__bracket=bracket,
@@ -573,6 +573,8 @@ def is_score_sheet_entry_printable(entry):
 
 def is_match_score_sheet_printable(match):
     if not match:
+        return False
+    if isinstance(match, TournamentMatch) and match.match_code.startswith("S"):
         return False
 
     return (

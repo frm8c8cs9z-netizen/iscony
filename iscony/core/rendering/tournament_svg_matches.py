@@ -39,6 +39,9 @@ from .tournament_svg_split import svg_match_display_entry
 def add_svg_match(svg, match, *, round_number, side, index):
     """1試合分の線・文字をSVGデータへ追加する。"""
 
+    if match.is_empty_seed_match:
+        return
+
     row_gap = svg["row_gap"]
     top = svg["top"]
 

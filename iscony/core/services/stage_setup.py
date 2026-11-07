@@ -10,7 +10,11 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max
 
-from ..helpers.brackets import build_display_bracket_slots, get_bracket_size
+from ..helpers.brackets import (
+    build_standard_start_rounds,
+    build_start_round_bracket_slots,
+    get_bracket_size,
+)
 from ..helpers.league_grouping import find_group_count_candidate
 from ..models import (
     Group,
@@ -360,9 +364,28 @@ def generate_tournament_bracket_matches(bracket, match_games, *, entries=None):
             )
         )
 
-    entry_count = len(entries)
-
-    size = get_bracket_size(entry_count)
+    entries = list(entries)
+    start_rounds = [entry.start_round for entry in entries]
+    if len(entries) < 2 and all(value is None for value in start_rounds):
+        # Automatic draws with fewer than two entries have no matches.
+        slots = entries
+    else:
+        if any(value is not None for value in start_rounds):
+            for index, value in enumerate(start_rounds, start=1):
+                if value is None:
+                    raise ValidationError(
+                        f"{index}組目の開始回戦が未設定です。全組を空にするか、全組に指定してください。"
+                    )
+        else:
+            try:
+                start_rounds = build_standard_start_rounds(len(entries))
+            except ValueError as error:
+                raise ValidationError(str(error)) from error
+        try:
+            slots = build_start_round_bracket_slots(start_rounds, entries)
+        except ValueError as error:
+            raise ValidationError(str(error)) from error
+    size = len(slots)
 
     TournamentMatch.objects.filter(
         bracket=bracket,
@@ -375,11 +398,6 @@ def generate_tournament_bracket_matches(bracket, match_games, *, entries=None):
         rounds_count += 1
         temp_size = temp_size // 2
 
-    slots = build_display_bracket_slots(
-        entries,
-        size,
-    )
-
     m_number = 1
     s_number = 1
 
@@ -391,17 +409,12 @@ def generate_tournament_bracket_matches(bracket, match_games, *, entries=None):
 
         for match_number in range(1, matches_count + 1):
 
-            is_seed_match = False
-
-            if round_number == 1:
-
-                slot1 = slots[(match_number - 1) * 2]
-                slot2 = slots[(match_number - 1) * 2 + 1]
-
-                is_seed_match = (
-                    (slot1 and not slot2)
-                    or (slot2 and not slot1)
-                )
+            width = 2 ** round_number
+            start = (match_number - 1) * width
+            middle = start + width // 2
+            has_upper = any(entry is not None for entry in slots[start:middle])
+            has_lower = any(entry is not None for entry in slots[middle:start + width])
+            is_seed_match = not (has_upper and has_lower)
 
             if is_seed_match:
                 match_code = f"S{s_number}"

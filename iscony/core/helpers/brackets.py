@@ -142,3 +142,66 @@ def get_best_n(round_number, bracket_size):
 def get_best_n_label(round_number, bracket_size):
 
     return f"ベスト{get_best_n(round_number, bracket_size)}決定戦"
+
+
+def build_standard_start_rounds(entry_count):
+    """従来のシード配置を、上から順の開始回戦へ変換する。"""
+    if type(entry_count) is not int or entry_count < 2:
+        raise ValueError("トーナメントには2組以上が必要です。")
+    slots = build_display_bracket_slots(
+        list(range(1, entry_count + 1)), get_bracket_size(entry_count),
+    )
+    return [
+        2 if slots[index ^ 1] is None else 1
+        for index, entry in enumerate(slots) if entry is not None
+    ]
+
+
+class StartRoundValidationError(ValueError):
+    """開始回戦の誤り。組番号は表示順で1から数える。"""
+
+    def __init__(self, message, *, kind, entry_number=None, **values):
+        super().__init__(message)
+        self.kind = kind
+        self.entry_number = entry_number
+        self.values = values
+
+
+def build_start_round_bracket_slots(start_rounds, entries):
+    """開始回戦の配列を検証し、格子状の表の末端枠へ配置する。"""
+    entries = list(entries)
+    start_rounds = list(start_rounds)
+    if len(entries) < 2:
+        raise StartRoundValidationError("トーナメントには2組以上が必要です。", kind="entry_count")
+    if len(start_rounds) != len(entries):
+        raise StartRoundValidationError("開始回戦の数が組数と一致しません。", kind="count_mismatch")
+    for index, value in enumerate(start_rounds, start=1):
+        if type(value) is not int or value < 1:
+            raise StartRoundValidationError(
+                f"{index}組目の開始回戦は1以上の整数にしてください。",
+                kind="invalid_round", entry_number=index, start_round=value,
+            )
+    if 1 not in start_rounds:
+        raise StartRoundValidationError("開始回戦が1の組がありません。", kind="missing_first_round")
+    widths = [1 << (value - 1) for value in start_rounds]
+    size = sum(widths)
+    if size < 2 or size & (size - 1):
+        raise StartRoundValidationError(
+            f"開始回戦から計算した枠の合計が{size}で、2・4・8…のどれにもなりません。",
+            kind="total_slots", total_slots=size,
+        )
+    slots = [None] * size
+    position = 0
+    for index, (width, entry) in enumerate(zip(widths, entries), start=1):
+        if position % width:
+            raise StartRoundValidationError(
+                f"{index}組目: 開始回戦{start_rounds[index - 1]}の組は{width}枠を使うため、"
+                f"上にある組の枠の合計が{width}の倍数になる位置に置いてください(今は上に{position}枠)。",
+                kind="alignment", entry_number=index,
+                start_round=start_rounds[index - 1], slots=width, slots_above=position,
+            )
+        # 兄弟ブロックから遠い端に置く。
+        slot = position if (position // width) % 2 == 0 else position + width - 1
+        slots[slot] = entry
+        position += width
+    return slots

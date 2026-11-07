@@ -68,6 +68,7 @@
                     <div class="round-matches">
 
                         {% for match in round.matches %}
+                            {% if not match.is_empty_seed_match %}
 
                             <article class="bracket-match {% if match.match_code|slice:':1' == 'S' %}seed-match{% endif %}">
 
@@ -189,6 +190,7 @@
 
                             </article>
 
+                        {% endif %}
                         {% endfor %}
 
                     </div>

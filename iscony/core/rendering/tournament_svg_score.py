@@ -103,10 +103,11 @@ def should_highlight_svg_winner(match):
     if not match.match_code.startswith("S"):
         return True
 
-    if not match.next_match:
-        return False
+    next_match = match.next_match
+    while next_match and next_match.match_code.startswith("S"):
+        next_match = next_match.next_match
 
-    return match.next_match.winner_id == match.winner_id
+    return bool(next_match and next_match.winner_id == match.winner_id)
 
 
 def should_highlight_svg_advance(match, svg):

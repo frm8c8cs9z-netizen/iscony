@@ -1322,6 +1322,7 @@ def _search_matches_by_entry(tournament, category, entry_number):
         TournamentMatch.objects.filter(
             bracket__category=category,
         )
+        .exclude(match_code__startswith="S")
         .filter(tournament_entry_filter)
         .select_related(
             "bracket",
@@ -1432,6 +1433,7 @@ def _search_matches_by_key(tournament, match_key):
             bracket__category__tournament=tournament,
             match_key=match_key,
         )
+        .exclude(match_code__startswith="S")
         .select_related(
             "bracket",
             "bracket__stage",

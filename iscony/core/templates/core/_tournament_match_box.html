@@ -1,3 +1,4 @@
+{% if not match.is_empty_seed_match %}
 {% load core_extras %}
 <article
     class="draw-match {{ side }}-draw-match {% if match.match_code|slice:':1' == 'S' %}seed-match{% endif %} {% if not show_entries %}draw-advance-match{% endif %}"
@@ -127,3 +128,5 @@
     </div>
 
 </article>
+
+{% endif %}

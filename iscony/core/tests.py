@@ -38627,3 +38627,6 @@ class LocalSettingsTests(SimpleTestCase):
 
 
 from .organization_display_tests import OrganizationDisplayTests  # noqa: E402,F401
+
+
+from .irregular_tournament_tests import StartRoundArrayTests, IrregularTournamentTests

@@ -74,7 +74,6 @@ from ..services import (
 from ..helpers.brackets import (
     get_best_n,
     get_best_n_label,
-    get_bracket_size,
 )
 from ..validators import validate_game_score, validate_star_score
 from ..helpers.view import (
@@ -177,6 +176,9 @@ def input_tournament_match_score(request, code, match_id):
         id=match_id,
         bracket__category__tournament=tournament
     )
+
+    if match.match_code.startswith("S"):
+        return redirect(_tournament_stage_overview_url(match))
 
     winning_games = (
         match.match_games // 2
@@ -476,6 +478,10 @@ def tournament_match_maintenance(request, code, bracket_id):
 
     matches = TournamentMatch.objects.filter(
         bracket=bracket
+    ).exclude(
+        match_code__startswith="S",
+        pair1__isnull=True,
+        pair2__isnull=True,
     ).select_related(
         "pair1",
         "pair2",
@@ -513,6 +519,9 @@ def edit_tournament_match(request, code, match_id):
         id=match_id,
         bracket__category__tournament=tournament
     )
+
+    if match.is_empty_seed_match:
+        return redirect("tournament_match_maintenance", code=tournament.code, bracket_id=match.bracket_id)
 
     if request.method == "POST":
 
@@ -812,12 +821,10 @@ def tournament_pair_maintenance(request, code, bracket_id):
 
             for match in source_matches:
                 if match.bracket_id not in bracket_sizes:
-                    entry_count = TournamentEntry.objects.filter(
+                    bracket_sizes[match.bracket_id] = TournamentMatch.objects.filter(
                         bracket_id=match.bracket_id,
-                    ).count()
-                    bracket_sizes[match.bracket_id] = get_bracket_size(
-                        entry_count,
-                    )
+                        round_number=1,
+                    ).count() * 2
 
                 bracket_size = bracket_sizes[match.bracket_id]
 

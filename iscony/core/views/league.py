@@ -82,7 +82,6 @@ from ..helpers.view import (
 from ..helpers.brackets import (
     get_best_n,
     get_best_n_label,
-    get_bracket_size,
 )
 
 
@@ -1413,12 +1412,10 @@ def pair_maintenance(request, category_id, stage_id=None):
 
                 for match in source_matches:
                     if match.bracket_id not in bracket_sizes:
-                        entry_count = TournamentEntry.objects.filter(
+                        bracket_sizes[match.bracket_id] = TournamentMatch.objects.filter(
                             bracket_id=match.bracket_id,
-                        ).count()
-                        bracket_sizes[match.bracket_id] = get_bracket_size(
-                            entry_count,
-                        )
+                            round_number=1,
+                        ).count() * 2
 
                     bracket_size = bracket_sizes[match.bracket_id]
 

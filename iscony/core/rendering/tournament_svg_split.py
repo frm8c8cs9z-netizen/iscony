@@ -173,6 +173,8 @@ def build_split_winner_round_data(round_data, split_count, bracket_name):
         matches = round_item["matches"]
 
         for match_index, match in enumerate(matches):
+            if match.match_code.startswith("S"):
+                continue
             if round_index > 0:
                 continue
 

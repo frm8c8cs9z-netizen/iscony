@@ -2024,6 +2024,13 @@ class TournamentBracket(models.Model):
 
 class TournamentEntry(models.Model):
 
+    start_round = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        verbose_name="開始回戦",
+    )
+
     bracket = models.ForeignKey(
         TournamentBracket,
         on_delete=models.CASCADE
@@ -2246,6 +2253,14 @@ class TournamentEntry(models.Model):
 
 
 class TournamentMatch(models.Model):
+
+    @property
+    def is_empty_seed_match(self):
+        return (
+            self.match_code.startswith("S")
+            and self.pair1_id is None
+            and self.pair2_id is None
+        )
 
     NEXT_SLOT_CHOICES = [
         ("pair1", "上側 / pair1"),
@@ -2559,6 +2574,9 @@ class AdvancementSource(models.Model):
                 )
 
         if self.source_type == self.SOURCE_TOURNAMENT_RESULT:
+
+            if self.source_match and self.source_match.is_empty_seed_match:
+                raise ValidationError("内部通過試合は進出元に指定できません。")
 
             if not self.source_match or not self.source_result:
                 raise ValidationError(

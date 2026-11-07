@@ -45,6 +45,9 @@ def build_svg_match_positions(round_items, row_gap, top):
         display_pair1 = svg_match_display_entry(match, "pair1")
         display_pair2 = svg_match_display_entry(match, "pair2")
 
+        if match.match_code.startswith("S") and not (display_pair1 or display_pair2):
+            continue
+
         if display_pair1 and display_pair2:
             y1 = top + (row_index * row_gap)
             row_index += 1
@@ -77,6 +80,8 @@ def build_svg_match_positions(round_items, row_gap, top):
         previous_matches = round_items[round_index - 1]["matches"]
 
         for index, match in enumerate(round_item["matches"]):
+            if match.is_empty_seed_match:
+                continue
             first_child_index = index * 2
             child_centers = []
 

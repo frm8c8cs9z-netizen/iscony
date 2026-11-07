@@ -117,6 +117,7 @@ def build_category_snapshot_payload(category):
             "id": entry.id,
             "participant_id": entry.participant_id,
             "source_pair_id": entry.source_pair_id,
+            "start_round": entry.start_round,
             "display_order": entry.display_order,
         })
 
@@ -452,6 +453,7 @@ def _restore_category_payload(
             TournamentEntry.objects.filter(id=item["id"]).update(
                 participant_id=item["participant_id"],
                 source_pair_id=item["source_pair_id"],
+                start_round=item.get("start_round"),
                 display_order=item["display_order"],
             )
 

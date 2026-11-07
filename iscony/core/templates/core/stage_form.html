@@ -861,6 +861,9 @@
                     let confirmMessage = (
                         "現在の枠構成を削除して作り直します。よろしいですか？"
                     );
+                    {% if has_start_rounds %}
+                    confirmMessage += "\n\n開始回戦の指定は解除され、自動の配置に戻ります。";
+                    {% endif %}
                     const downstreamCount = (
                         regenerateForm.dataset.downstreamAdvancementCount
                     );

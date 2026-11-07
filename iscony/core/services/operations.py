@@ -346,6 +346,7 @@ def clone_tournament_without_results(source, *, name, code):
                 pair_code=old.pair_code,
                 display_order=old.display_order,
                 source_pair=league_entry_map.get(old.source_pair_id),
+                start_round=old.start_round,
             )
 
         for old in RoundRobinMatch.objects.filter(
@@ -578,6 +579,9 @@ def _resolve_rank_or_result_reference(
 
     if source_type == AdvancementSource.SOURCE_TOURNAMENT_RESULT:
         match = source_match
+
+        if match and match.is_empty_seed_match:
+            raise ValidationError(f"{label}: 内部通過試合は進出元に指定できません。")
 
         if not match or not match.winner:
             raise ValidationError(
@@ -2434,6 +2438,8 @@ def assign_match_to_schedule_slot(match, schedule_block, court, position=None):
     if isinstance(match, RoundRobinMatch):
         match_kwargs = {"round_robin_match": match}
     elif isinstance(match, TournamentMatch):
+        if is_internal_seed_match(match):
+            raise ValidationError("内部通過試合は進行表へ割り付けできません。")
         match_kwargs = {"tournament_match": match}
     else:
         raise ValidationError("対応していない試合の種類です。")
@@ -2549,7 +2555,8 @@ def tournament_matches_in_round1_position_range(
 
         for match in newly_selected:
             selected_ids.add(match.id)
-            result.append(match)
+            if not is_internal_seed_match(match):
+                result.append(match)
 
     return result
 
@@ -3728,7 +3735,8 @@ def advance_tournament_bye_winners(bracket):
     )
 
     for match in seed_matches:
-
+        # 前の回戦が更新したpairとnext_matchを、キャッシュからではなく読み直す。
+        match.refresh_from_db()
         winner = get_single_tournament_entry(match)
 
         if not winner:
@@ -3999,6 +4007,8 @@ def validate_tournament_score_change(
     pair1_games,
     pair2_games
 ):
+    if is_internal_seed_match(match):
+        return "内部通過試合には結果を入力できません。"
 
     # --------------------------------------
     # 次試合がなければ影響先がないのでOK

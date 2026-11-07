@@ -13,11 +13,13 @@ import secrets
 import tempfile
 from itertools import combinations
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
+from ..helpers.brackets import StartRoundValidationError, build_start_round_bracket_slots
 from ..forms import CSVUploadForm
 from ..models import (
     AdvancementSource,
@@ -131,6 +133,7 @@ CSV_FORMAT_HEADERS = {
         "source_match",
         "source_result",
         "match_games",
+        "start_round",
     ],
     "schedule": [
         "schedule_block",
@@ -413,6 +416,7 @@ def export_stage_slots(request, tournament_code):
             entry.participant.entry_code if entry.participant else "",
             *_stage_slot_source_columns(entry),
             match_games,
+            "",
         ]
         rows.append((
             entry.category.display_order,
@@ -455,6 +459,7 @@ def export_stage_slots(request, tournament_code):
             entry.participant.entry_code if entry.participant else "",
             *_stage_slot_source_columns(entry),
             match_games,
+            entry.start_round if entry.start_round is not None else "",
         ]
         rows.append((
             category.display_order,
@@ -640,6 +645,10 @@ def _get_source_match(
 ):
     queryset = TournamentMatch.objects.filter(
         bracket__category=category,
+    ).exclude(
+        match_code__startswith="S",
+        pair1__isnull=True,
+        pair2__isnull=True,
     ).filter(
         Q(match_code=source_match_code)
         | Q(match_label=source_match_code)
@@ -1256,6 +1265,7 @@ def import_stage_slots(request, tournament_code):
                     }
                 )
 
+            categories_by_name = {}
             validated_rows = []
             target_stage_keys = []
             target_stage_key_set = set()
@@ -1409,10 +1419,32 @@ def import_stage_slots(request, tournament_code):
                         )
                         continue
 
-                category, _ = Category.objects.get_or_create(
-                    tournament=tournament,
-                    name=category_name,
-                )
+                start_round = None
+                raw_start_round = _cell(row, "start_round")
+                bracket_label = f"{category_name} / {stage_name} / {bracket_name or group_name}"
+                if raw_start_round:
+                    if stage_type == Stage.TYPE_LEAGUE:
+                        errors.append(
+                            f"{row_number}行目: {bracket_label}: "
+                            "start_round(開始回戦)はトーナメントの行にだけ指定できます。"
+                        )
+                        continue
+                    start_round = _parse_positive_int(
+                        raw_start_round, row_number,
+                        f"{bracket_label}: start_round(開始回戦)", errors,
+                    )
+                    if start_round is None:
+                        continue
+
+                # 未作成カテゴリは仮のIDでまとめ、全行の検証が通るまで保存しない。
+                if category_name not in categories_by_name:
+                    categories_by_name[category_name] = Category.objects.filter(
+                        tournament=tournament, name=category_name,
+                    ).first() or Category(
+                        id=-(len(categories_by_name) + 1),
+                        tournament=tournament, name=category_name,
+                    )
+                category = categories_by_name[category_name]
 
                 participant = None
 
@@ -1535,8 +1567,40 @@ def import_stage_slots(request, tournament_code):
                     "source_match": source_match,
                     "source_result": source_result,
                     "match_games": match_games,
+                    "start_round": start_round,
                     "row_number": row_number,
                 })
+
+            bracket_rows = {}
+            for row in validated_rows:
+                if row["stage_type"] == Stage.TYPE_TOURNAMENT:
+                    key = (row["category"].id, row["stage_identity"], row["bracket_name"])
+                    bracket_rows.setdefault(key, []).append(row)
+            for rows_in_bracket in bracket_rows.values():
+                rows_in_bracket.sort(key=lambda row: (row["display_order"], row["slot_label"]))
+                first = rows_in_bracket[0]
+                label = f"{first['category'].name} / {first['stage_name']} / {first['bracket_name']}"
+                rounds = [row["start_round"] for row in rows_in_bracket]
+                if all(value is None for value in rounds):
+                    continue
+                row_numbers = "、".join(f"{row['row_number']}行目" for row in rows_in_bracket)
+                blank_rows = [row for row in rows_in_bracket if row["start_round"] is None]
+                if blank_rows:
+                    blanks = "、".join(f"{row['row_number']}行目" for row in blank_rows)
+                    errors.append(
+                        f"{label}: 開始回戦が空欄の行があります({blanks})。"
+                        "全部の行に入れるか、全部空欄にしてください。"
+                    )
+                    continue
+                try:
+                    build_start_round_bracket_slots(rounds, rows_in_bracket)
+                except StartRoundValidationError as exc:
+                    if exc.entry_number is not None:
+                        row_number = rows_in_bracket[exc.entry_number - 1]["row_number"]
+                        message = str(exc).split(": ", 1)[-1]
+                        errors.append(f"{row_number}行目: {label}: {message}")
+                    else:
+                        errors.append(f"{label}: {exc} ({row_numbers})")
 
             if not validated_rows:
                 errors.append(
@@ -1742,6 +1806,17 @@ def import_stage_slots(request, tournament_code):
 
             try:
                 with transaction.atomic():
+                    category_id_map = {}
+                    for category in categories_by_name.values():
+                        old_id = category.id
+                        if category._state.adding:
+                            category.pk = None
+                            category.save()
+                        category_id_map[old_id] = category.id
+                    target_stage_keys = [
+                        (category_id_map[category_id], code, name, stage_type)
+                        for category_id, code, name, stage_type in target_stage_keys
+                    ]
 
                     stages_by_key = {}
                     next_stage_orders = {}
@@ -1917,6 +1992,7 @@ def import_stage_slots(request, tournament_code):
                             "pair_code": row["slot_label"],
                             "display_order": row["display_order"],
                             "participant": participant,
+                            "start_round": row["start_round"],
                         }
 
                             entry = TournamentEntry.objects.create(
@@ -2025,6 +2101,7 @@ def import_stage_slots(request, tournament_code):
                             )
 
             except Exception as exc:
+                error_text = " / ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
                 return render(
                     request,
                     "core/import_stage_slots.html",
@@ -2032,7 +2109,7 @@ def import_stage_slots(request, tournament_code):
                         "tournament": tournament,
                         "form": form,
                         "errors": [
-                            f"取込中にエラーが発生しました: {exc}"
+                            f"取込中にエラーが発生しました: {error_text}"
                         ],
                     }
                 )

@@ -44,6 +44,8 @@ def add_svg_final_match(svg, bracket, round_data, *, width, height):
 
     center_x = width / 2
     final_match = final_matches[0]
+    if final_match.is_empty_seed_match:
+        return
     final_y = height / 2 + 52
     round_count = len(round_data)
     layout_type = svg["layout_type"]

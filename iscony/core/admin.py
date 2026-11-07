@@ -367,6 +367,13 @@ class CourtAdmin(admin.ModelAdmin):
 @admin.register(Schedule)
 class ScheduleAdmin(admin.ModelAdmin):
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "tournament_match":
+            kwargs["queryset"] = TournamentMatch.objects.exclude(
+                match_code__startswith="S",
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     list_display = (
         "schedule_block",
         "court",
@@ -449,6 +456,18 @@ class ScheduleBlockAdmin(admin.ModelAdmin):
 @admin.register(TournamentMatch)
 class TournamentMatchAdmin(admin.ModelAdmin):
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "next_match":
+            kwargs["queryset"] = self.get_queryset(request)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).exclude(
+            match_code__startswith="S",
+            pair1__isnull=True,
+            pair2__isnull=True,
+        )
+
     list_display = (
         "match_code",
         "match_label",
@@ -476,6 +495,9 @@ class TournamentMatchAdmin(admin.ModelAdmin):
 
 @admin.register(TournamentEntry)
 class TournamentEntryAdmin(admin.ModelAdmin):
+
+    # 開始回戦の入力は第2段階で扱う。
+    exclude = ("start_round",)
 
     list_display = (
         "pair_code",
@@ -519,6 +541,15 @@ class TournamentEntryAdmin(admin.ModelAdmin):
 
 @admin.register(AdvancementSource)
 class AdvancementSourceAdmin(admin.ModelAdmin):
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "source_match":
+            kwargs["queryset"] = TournamentMatch.objects.exclude(
+                match_code__startswith="S",
+                pair1__isnull=True,
+                pair2__isnull=True,
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     list_display = (
         "label",

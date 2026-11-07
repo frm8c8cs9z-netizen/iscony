@@ -1580,6 +1580,9 @@ def edit_stage(request, code, category_id, stage_id):
         "stage_type_locked": stage_type_locked,
         "downstream_advancement_count": downstream_advancement_count,
         "downstream_advancement_stage_names": downstream_advancement_stage_names,
+        "has_start_rounds": TournamentEntry.objects.filter(
+            bracket__stage=stage, start_round__isnull=False,
+        ).exists(),
         "page_title": "Stage編集",
         "submit_label": "更新",
     }
