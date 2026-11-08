@@ -1,5 +1,6 @@
 """開始回戦からの生成と、従来の全標準ドローの回帰テスト。"""
 import os
+import re
 import csv
 import io
 from pathlib import Path
@@ -234,6 +235,75 @@ class IrregularTournamentTests(TestCase):
             third.refresh_from_db()
             self.assertEqual(third.pair1, entries[0])
         self.assertEqual(TournamentMatch.objects.filter(bracket=self.bracket, match_code__startswith="M").count(), len(entries)-1)
+
+    def assert_range_assign_slot_scheduled(self, block, entry, expected):
+        for view_name in (
+            "schedule_block_tournament_bracket_assign",
+            "schedule_block_tournament_bracket_assign_fragment",
+        ):
+            with self.subTest(view=view_name, scheduled=expected):
+                response = self.client.get(reverse(view_name, kwargs={
+                    "code": self.tournament.code,
+                    "schedule_block_id": block.id,
+                    "bracket_id": self.bracket.id,
+                }))
+                self.assertEqual(response.status_code, 200)
+                slot = next(slot for slot in response.context["slots"]
+                            if slot["entry"].id == entry.id)
+                self.assertEqual(slot["is_scheduled"], expected)
+                row = re.search(
+                    r'<div\s+class="(tournament-slot-row[^"]*)"'
+                    r'[^>]*data-match-index="' + str(slot["match_index"]) + r'"',
+                    response.content.decode(),
+                )
+                self.assertIsNotNone(row)
+                self.assertEqual(
+                    "tournament-slot-row--already-scheduled" in row.group(1),
+                    expected,
+                )
+
+    def test_range_assign_superseed_uses_first_real_match(self):
+        entries = self.generate([3,1,1,2,1,1,1,1,1,1,1,1])
+        court = Court.objects.create(tournament=self.tournament, name="1")
+        block = ScheduleBlock.objects.create(tournament=self.tournament, name="午前")
+        third = TournamentMatch.objects.get(
+            bracket=self.bracket, round_number=3, match_number=1,
+        )
+        self.assertFalse(third.match_code.startswith("S"))
+        self.assertEqual(third.pair1_id, entries[0].id)
+        # A later assigned match must not mark the entry's first real match assigned.
+        assign_match_to_schedule_slot(third.next_match, block, court)
+        self.assert_range_assign_slot_scheduled(block, entries[0], False)
+        assign_match_to_schedule_slot(third, block, court)
+        self.assert_range_assign_slot_scheduled(block, entries[0], True)
+
+    def test_range_assign_standard_bye_and_regular_match(self):
+        self.generate([None, None, None])
+        court = Court.objects.create(tournament=self.tournament, name="1")
+        block = ScheduleBlock.objects.create(tournament=self.tournament, name="午前")
+        seed = TournamentMatch.objects.get(
+            bracket=self.bracket, round_number=1, match_code__startswith="S",
+        )
+        regular = TournamentMatch.objects.get(
+            bracket=self.bracket, round_number=1, match_code__startswith="M",
+        )
+        seed_entry = seed.pair1 or seed.pair2
+        regular_entry = regular.pair1
+        self.assert_range_assign_slot_scheduled(block, seed_entry, False)
+        self.assert_range_assign_slot_scheduled(block, regular_entry, False)
+        assign_match_to_schedule_slot(seed.next_match, block, court)
+        self.assert_range_assign_slot_scheduled(block, seed_entry, True)
+        self.assert_range_assign_slot_scheduled(block, regular_entry, False)
+        assign_match_to_schedule_slot(regular, block, court)
+        self.assert_range_assign_slot_scheduled(block, regular_entry, True)
+
+    def test_range_assign_seed_without_next_match_is_unscheduled(self):
+        entries = self.generate([3,1,1,2,1,1,1,1,1,1,1,1])
+        block = ScheduleBlock.objects.create(tournament=self.tournament, name="午前")
+        TournamentMatch.objects.filter(
+            bracket=self.bracket, round_number=2, match_number=1,
+        ).update(next_match=None)
+        self.assert_range_assign_slot_scheduled(block, entries[0], False)
 
     def test_superseed_highlight_waits_for_first_real_win(self):
         from .rendering.tournament_svg_score import should_highlight_svg_winner

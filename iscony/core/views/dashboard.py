@@ -3417,6 +3417,11 @@ def _build_tournament_bracket_assign_render_data(
     """トーナメント表配置画面/断片で使う描画データを組み立てる。"""
 
     round_data = build_tournament_round_data(bracket)
+    matches_by_id = {
+        match.id: match
+        for round_item in round_data
+        for match in round_item["matches"]
+    }
 
     if schedules_by_match_id is None:
         schedules_by_match_id = {
@@ -3461,13 +3466,18 @@ def _build_tournament_bracket_assign_render_data(
     for match_index, match in enumerate(first_round_matches):
         position = match_positions.get(("left", match.id), {})
 
-        if is_internal_seed_match(match):
-            is_scheduled = (
-                match.next_match_id is not None
-                and match.next_match_id in schedules_by_match_id
-            )
-        else:
-            is_scheduled = match.id in schedules_by_match_id
+        scheduled_match = match
+        visited_match_ids = set()
+        while scheduled_match and is_internal_seed_match(scheduled_match):
+            if scheduled_match.id in visited_match_ids:
+                scheduled_match = None
+                break
+            visited_match_ids.add(scheduled_match.id)
+            scheduled_match = matches_by_id.get(scheduled_match.next_match_id)
+        is_scheduled = (
+            scheduled_match is not None
+            and scheduled_match.id in schedules_by_match_id
+        )
 
         if match.pair1_id:
             slots.append({
