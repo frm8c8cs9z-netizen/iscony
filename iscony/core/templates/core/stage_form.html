@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load static %}
 
 {% block title %}{{ page_title }}{% endblock %}
 
@@ -38,7 +39,7 @@
                 {% endif %}
             </p>
         {% endif %}
-        <div class="stage-slot-setup">
+        <div class="stage-slot-setup" data-stage-type="{{ stage.stage_type|default:'league' }}">
             <span id="pair-count-anchor" hidden></span>
             <p id="pair-count-field">
                 {{ slot_form.pair_count.label_tag }}
@@ -90,41 +91,17 @@
             </div>
 
             <div id="tournament-slot-setup"{% if stage and stage.stage_type != "tournament" %} hidden{% endif %}>
-                <p id="tournament-single-bracket-preview">
-                    トーナメント枠:
-                    <span id="tournament-slot-preview-text">
-                        {% if tournament_slot_preview.bracket_size %}
-                            {{ tournament_slot_preview.bracket_size }}枠(不戦勝{{ tournament_slot_preview.bye_count }}回)
-                        {% else %}
-                            {{ tournament_slot_preview.message }}
-                        {% endif %}
-                    </span>
-                </p>
-
                 <p>
-                    <label>
-                        {{ slot_form.use_multi_bracket }}
-                        {{ slot_form.use_multi_bracket.label }}
-                    </label>
+                    <label>{{ slot_form.use_multi_bracket }} {{ slot_form.use_multi_bracket.label }}</label>
                     {{ slot_form.use_multi_bracket.errors }}
                 </p>
-
-                <div id="tournament-bracket-list-setup" hidden>
+                {{ slot_form.start_rounds }}
+                {{ slot_form.start_rounds.errors }}
+                <div id="tournament-bracket-list-setup"
+                     data-preview-url="{% url 'stage_start_round_preview' tournament.code category.id %}">
                     {{ slot_form.bracket_list }}
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ブラケット名</th>
-                                <th>参加ペア数</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="tournament-bracket-rows-body">
-                        </tbody>
-                    </table>
-                    <button type="button" id="tournament-bracket-add-row">
-                        +ブラケットを追加
-                    </button>
+                    <div id="tournament-bracket-blocks"></div>
+                    <button type="button" id="tournament-bracket-add-row">+トーナメント表を追加</button>
                     {{ slot_form.bracket_list.errors }}
                 </div>
             </div>
@@ -139,6 +116,8 @@
 </form>
 
 {% if slot_form %}
+    <link rel="stylesheet" href="{% static 'core/stage_start_rounds.css' %}">
+    <script src="{% static 'core/js/stage_start_rounds.js' %}"></script>
     <script>
         function toggleStageSlotSetup() {
             const stageType = document.getElementById("id_stage_type");
@@ -174,8 +153,7 @@
             );
 
             if (
-                !stageType
-                || !leagueSetup
+                !leagueSetup
                 || !tournamentSetup
                 || !sourceStageField
                 || !pairCountField
@@ -186,7 +164,7 @@
                 return;
             }
 
-            const isLeague = stageType.value === "league";
+            const isLeague = (stageType ? stageType.value : document.querySelector(".stage-slot-setup").dataset.stageType) === "league";
             leagueSetup.hidden = !isLeague;
 
             if (isLeague) {
@@ -226,7 +204,7 @@
                 && useMultiBracketCheckbox.checked
             );
 
-            pairCountField.hidden = !showPairCount || useMultiBracket;
+            pairCountField.hidden = !showPairCount || !isLeague;
             matchGamesField.hidden = !showPairCount;
             groupCountSetup.hidden = !(isLeague && showPairCount);
             tournamentSetup.hidden = isLeague || !showPairCount;
@@ -235,36 +213,9 @@
                 singleBracketPreview.hidden = useMultiBracket;
             }
             if (bracketListSetup) {
-                bracketListSetup.hidden = !useMultiBracket;
+                bracketListSetup.hidden = false;
+                refreshBracketMode();
             }
-        }
-
-        function bracketSizeFor(pairCount) {
-            let size = 1;
-            while (size < pairCount) {
-                size *= 2;
-            }
-            return size;
-        }
-
-        function updateTournamentSlotPreview() {
-            const pairCountInput = document.getElementById("id_pair_count");
-            const previewText = document.getElementById("tournament-slot-preview-text");
-
-            if (!pairCountInput || !previewText) {
-                return;
-            }
-
-            const pairCount = parseInt(pairCountInput.value, 10);
-
-            if (!pairCount || pairCount < 1) {
-                previewText.textContent = "参加ペア数を入力してください。";
-                return;
-            }
-
-            const bracketSize = bracketSizeFor(pairCount);
-            const byeCount = bracketSize - pairCount;
-            previewText.textContent = bracketSize + "枠(不戦勝" + byeCount + "回)";
         }
 
         function buildGroupCountCandidates(pairCount) {
@@ -391,175 +342,6 @@
             ];
         }
 
-        function writeBracketRows(rows) {
-            const bracketListInput = document.getElementById(
-                "id_bracket_list"
-            );
-            if (bracketListInput) {
-                bracketListInput.value = JSON.stringify(rows);
-            }
-
-            const useMultiBracketCheckbox = document.getElementById(
-                "id_use_multi_bracket"
-            );
-            const pairCountInput = document.getElementById("id_pair_count");
-            if (
-                useMultiBracketCheckbox
-                && useMultiBracketCheckbox.checked
-                && pairCountInput
-            ) {
-                const total = rows.reduce(function(sum, row) {
-                    return sum + (parseInt(row.pair_count, 10) || 0);
-                }, 0);
-                pairCountInput.value = total > 0 ? String(total) : "";
-            }
-        }
-
-        function renderBracketRows(rows) {
-            const bracketRowsBody = document.getElementById(
-                "tournament-bracket-rows-body"
-            );
-            if (!bracketRowsBody) {
-                return;
-            }
-
-            bracketRowsBody.innerHTML = "";
-
-            rows.forEach(function(row) {
-                const tr = document.createElement("tr");
-
-                const nameTd = document.createElement("td");
-                const nameInput = document.createElement("input");
-                nameInput.type = "text";
-                nameInput.value = row.name || "";
-                nameInput.dataset.role = "bracket-name";
-                nameTd.appendChild(nameInput);
-
-                const countTd = document.createElement("td");
-                const countInput = document.createElement("input");
-                countInput.type = "number";
-                countInput.min = "1";
-                countInput.inputMode = "numeric";
-                countInput.value = (
-                    row.pair_count === undefined
-                    || row.pair_count === null
-                        ? ""
-                        : row.pair_count
-                );
-                countInput.dataset.role = "bracket-pair-count";
-                countTd.appendChild(countInput);
-
-                const removeTd = document.createElement("td");
-                const removeButton = document.createElement("button");
-                removeButton.type = "button";
-                removeButton.textContent = "削除";
-                removeButton.dataset.role = "bracket-remove";
-                removeTd.appendChild(removeButton);
-
-                tr.appendChild(nameTd);
-                tr.appendChild(countTd);
-                tr.appendChild(removeTd);
-                bracketRowsBody.appendChild(tr);
-            });
-        }
-
-        function syncBracketRowsFromDom() {
-            const bracketRowsBody = document.getElementById(
-                "tournament-bracket-rows-body"
-            );
-            if (!bracketRowsBody) {
-                return [];
-            }
-
-            const rows = [];
-            bracketRowsBody.querySelectorAll("tr").forEach(function(tr) {
-                const nameInput = tr.querySelector(
-                    '[data-role="bracket-name"]'
-                );
-                const countInput = tr.querySelector(
-                    '[data-role="bracket-pair-count"]'
-                );
-                rows.push({
-                    name: nameInput ? nameInput.value : "",
-                    pair_count: (
-                        countInput && countInput.value
-                            ? parseInt(countInput.value, 10)
-                            : null
-                    ),
-                });
-            });
-            return rows;
-        }
-
-        function setupBracketRowEditing() {
-            const bracketRowsBody = document.getElementById(
-                "tournament-bracket-rows-body"
-            );
-            const addBracketRowButton = document.getElementById(
-                "tournament-bracket-add-row"
-            );
-            const useMultiBracketCheckbox = document.getElementById(
-                "id_use_multi_bracket"
-            );
-
-            if (!bracketRowsBody) {
-                return;
-            }
-
-            const initialRows = readBracketRowsFromInput();
-            renderBracketRows(initialRows);
-            writeBracketRows(initialRows);
-
-            if (addBracketRowButton) {
-                addBracketRowButton.addEventListener("click", function() {
-                    const rows = syncBracketRowsFromDom();
-                    rows.push({ name: "", pair_count: null });
-                    renderBracketRows(rows);
-                    writeBracketRows(rows);
-                });
-            }
-
-            bracketRowsBody.addEventListener("input", function() {
-                writeBracketRows(syncBracketRowsFromDom());
-            });
-
-            bracketRowsBody.addEventListener("click", function(event) {
-                const removeButton = event.target.closest(
-                    '[data-role="bracket-remove"]'
-                );
-                if (!removeButton) {
-                    return;
-                }
-                const tr = removeButton.closest("tr");
-                const rows = syncBracketRowsFromDom();
-                const index = Array.from(
-                    bracketRowsBody.children
-                ).indexOf(tr);
-                if (index !== -1) {
-                    rows.splice(index, 1);
-                }
-                renderBracketRows(rows);
-                writeBracketRows(rows);
-            });
-
-            if (useMultiBracketCheckbox) {
-                useMultiBracketCheckbox.addEventListener(
-                    "change",
-                    function() {
-                        if (
-                            useMultiBracketCheckbox.checked
-                            && bracketRowsBody.children.length === 0
-                        ) {
-                            const rows = [{ name: "", pair_count: null }];
-                            renderBracketRows(rows);
-                            writeBracketRows(rows);
-                        }
-                        toggleStageSlotSetup();
-                    }
-                );
-            }
-        }
-
         const initialValues = {
             name: "",
             stageType: "",
@@ -571,6 +353,7 @@
             advancementSourceStage: "",
             useMultiBracket: false,
             bracketPairCounts: [],
+            bracketStartRounds: [],
         };
 
         function captureInitialValues() {
@@ -626,6 +409,7 @@
                 useMultiBracketCheckbox && useMultiBracketCheckbox.checked
             );
             initialValues.bracketPairCounts = currentBracketPairCounts();
+            initialValues.bracketStartRounds = currentBracketStartRounds();
         }
 
         function markChangedIfDifferent(input, originalValue) {
@@ -800,7 +584,8 @@
                 return true;
             }
 
-            return false;
+            return JSON.stringify(currentBracketStartRounds())
+                !== JSON.stringify(initialValues.bracketStartRounds);
         }
 
         document.addEventListener("DOMContentLoaded", function() {
@@ -824,7 +609,7 @@
                 "id_use_multi_bracket"
             );
             const bracketRowsBody = document.getElementById(
-                "tournament-bracket-rows-body"
+                "tournament-bracket-blocks"
             );
 
             setupBracketRowEditing();
@@ -845,7 +630,6 @@
             }
 
             if (pairCountInput) {
-                pairCountInput.addEventListener("input", updateTournamentSlotPreview);
                 pairCountInput.addEventListener("input", updateGroupCountOptions);
             }
 
@@ -862,7 +646,9 @@
                         "現在の枠構成を削除して作り直します。よろしいですか？"
                     );
                     {% if has_start_rounds %}
-                    confirmMessage += "\n\n開始回戦の指定は解除され、自動の配置に戻ります。";
+                    if (hasClearedStartRounds(initialValues.bracketStartRounds)) {
+                        confirmMessage += "\n\n開始回戦の指定は解除され、自動の配置に戻ります。";
+                    }
                     {% endif %}
                     const downstreamCount = (
                         regenerateForm.dataset.downstreamAdvancementCount

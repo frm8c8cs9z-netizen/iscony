@@ -10,6 +10,8 @@ from django.contrib.auth.decorators import login_not_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -17,7 +19,10 @@ from django.utils import timezone
 from .league import build_category_group_data
 from ..forms import StageEditForm, StageForm, StageSlotSetupForm
 from ..helpers.view import safe_next_url
-from ..helpers.brackets import get_bracket_size
+from ..helpers.brackets import (
+    get_bracket_size, parse_start_round_text, build_start_round_bracket_slots,
+    StartRoundValidationError, stage_bracket_preview,
+)
 from ..helpers.league_grouping import (
     build_group_count_candidates,
     find_group_count_candidate,
@@ -116,11 +121,18 @@ def _current_stage_slot_values(stage):
             {
                 "name": bracket.name,
                 "pair_count": bracket.tournamententry_set.count(),
+                "start_rounds": list(bracket.tournamententry_set.order_by("display_order").values_list(
+                    "start_round", flat=True,
+                )),
             }
             for bracket in TournamentBracket.objects.filter(
                 stage=stage,
             ).order_by("display_order", "name")
         ]
+
+        for row in values["bracket_list"]:
+            if all(value is None for value in row["start_rounds"]):
+                row["start_rounds"] = []
 
     return values
 
@@ -140,7 +152,13 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
     else:
         bracket_list = current.get("bracket_list") or []
         initial["use_multi_bracket"] = len(bracket_list) > 1
-        initial["bracket_list"] = json.dumps(bracket_list)
+        initial["bracket_list"] = json.dumps([
+            {**row, "start_rounds": ",".join(str(v) for v in row["start_rounds"])}
+            for row in bracket_list
+        ])
+        initial["start_rounds"] = (
+            ",".join(str(v) for v in bracket_list[0]["start_rounds"]) if bracket_list else ""
+        )
 
     if current["advancement_source_stage_id"]:
         initial["advancement_source_stage"] = (
@@ -161,6 +179,7 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
         slot_form.fields["advancement_source_stage"].widget.attrs["disabled"] = True
         slot_form.fields["use_multi_bracket"].widget.attrs["disabled"] = True
         slot_form.fields["bracket_list"].widget.attrs["disabled"] = True
+        slot_form.fields["start_rounds"].widget.attrs["disabled"] = True
 
     return slot_form, initial["pair_count"]
 
@@ -730,6 +749,30 @@ def _stage_setup_preview(pair_count):
     }
 
 
+@require_GET
+def stage_start_round_preview(request, code, category_id):
+    # Use the same category lookup and login middleware as add_stage/edit_stage.
+    get_object_or_404(Category, id=category_id, tournament__code=code)
+    return JsonResponse(stage_bracket_preview(
+        text=request.GET.get("start_rounds", ""), pair_count=request.GET.get("pair_count"),
+    ))
+
+
+def _validate_form_start_rounds(text, pair_count):
+    rounds = parse_start_round_text(text)
+    if rounds:
+        if len(rounds) != pair_count:
+            raise StartRoundValidationError(
+                "開始回戦の数が組数と一致しません。", kind="count_mismatch",
+            )
+        slots = build_start_round_bracket_slots(rounds, range(pair_count))
+        return rounds, len(slots)
+    preview = stage_bracket_preview(pair_count=pair_count)
+    if not preview["valid"]:
+        raise StartRoundValidationError(preview["error"], kind=preview["kind"])
+    return [], preview["size"]
+
+
 def _parse_bracket_list(slot_form):
     """
     複数ブラケット入力欄(bracket_list、JSON文字列)をパースし、
@@ -783,9 +826,14 @@ def _parse_bracket_list(slot_form):
             )
             return None
 
+        try:
+            rounds, size = _validate_form_start_rounds(item.get("start_rounds", ""), pair_count)
+        except StartRoundValidationError as error:
+            slot_form.add_error("bracket_list", f"{name}: {error}")
+            return None
         bracket_specs.append({
-            "name": name,
-            "pair_count": pair_count,
+            "name": name, "pair_count": pair_count,
+            "start_rounds": rounds, "bracket_size": size,
         })
 
     return bracket_specs
@@ -904,12 +952,16 @@ def _validate_stage_slot_setup(stage_type, slot_form, *, current_stage=None):
 
             slot_form.cleaned_data["bracket_specs"] = bracket_specs
 
-        elif pair_count < 1:
-            slot_form.add_error(
-                "pair_count",
-                "参加ペア数は1以上で入力してください。",
-            )
-            return False
+        else:
+            try:
+                rounds, size = _validate_form_start_rounds(
+                    slot_form.cleaned_data.get("start_rounds"), pair_count,
+                )
+            except StartRoundValidationError as error:
+                slot_form.add_error("start_rounds", str(error))
+                return False
+            slot_form.cleaned_data["parsed_start_rounds"] = rounds
+            slot_form.cleaned_data["bracket_size"] = size
 
     return True
 
@@ -1021,7 +1073,7 @@ def add_stage(request, code, category_id):
                             )
 
                     bracket_summary = "、".join(
-                        f"{spec['name']}({get_bracket_size(spec['pair_count'])}枠)"
+                        f"{spec['name']}({spec['bracket_size']}枠)"
                         for spec in bracket_specs
                     )
                     messages.success(
@@ -1034,12 +1086,13 @@ def add_stage(request, code, category_id):
                     )
 
                 else:
-                    bracket_size = get_bracket_size(pair_count)
+                    bracket_size = slot_form.cleaned_data["bracket_size"]
                     with transaction.atomic():
                         stage.save()
                         bracket = create_tournament_stage_bracket(
                             stage,
                             pair_count,
+                            start_rounds=slot_form.cleaned_data.get("parsed_start_rounds"),
                         )
                         generate_tournament_bracket_matches(
                             bracket,
@@ -1359,6 +1412,7 @@ def edit_stage(request, code, category_id, stage_id):
                         new_bracket_rows = [{
                             "name": current_single_name,
                             "pair_count": new_pair_count,
+                            "start_rounds": slot_form.cleaned_data.get("parsed_start_rounds", []),
                         }]
 
                     bracket_sizes_changed = (
@@ -1367,6 +1421,10 @@ def edit_stage(request, code, category_id, stage_id):
                             row["pair_count"]
                             for row in current_bracket_rows
                         ]
+                    )
+                    start_rounds_changed = (
+                        [row.get("start_rounds", []) for row in new_bracket_rows]
+                        != [row.get("start_rounds", []) for row in current_bracket_rows]
                     )
                     bracket_names_changed = (
                         not bracket_sizes_changed
@@ -1378,6 +1436,7 @@ def edit_stage(request, code, category_id, stage_id):
                         or advancement_mode_changed
                         or advancement_source_changed
                         or bracket_sizes_changed
+                        or start_rounds_changed
                     )
 
                 match_games_only_change = (
@@ -1448,12 +1507,11 @@ def edit_stage(request, code, category_id, stage_id):
                                         new_match_games,
                                     )
                             else:
-                                bracket_size = get_bracket_size(
-                                    new_pair_count
-                                )
+                                bracket_size = slot_form.cleaned_data["bracket_size"]
                                 bracket = create_tournament_stage_bracket(
                                     stage,
                                     new_pair_count,
+                                    start_rounds=slot_form.cleaned_data.get("parsed_start_rounds"),
                                 )
                                 generate_tournament_bracket_matches(
                                     bracket,
@@ -1503,7 +1561,7 @@ def edit_stage(request, code, category_id, stage_id):
 
                 elif needs_slot_rebuild and new_bracket_specs:
                     bracket_summary = "、".join(
-                        f"{spec['name']}({get_bracket_size(spec['pair_count'])}枠)"
+                        f"{spec['name']}({spec['bracket_size']}枠)"
                         for spec in new_bracket_specs
                     )
                     messages.success(

@@ -1,5 +1,7 @@
 """開始回戦からの生成と、従来の全標準ドローの回帰テスト。"""
 import os
+import json
+import time
 import re
 import csv
 import io
@@ -683,6 +685,207 @@ class IrregularTournamentTests(TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.assertEqual([e.start_round for e in self.csv_entries()], [None] * 4)
+
+
+    def stage_form_url(self, edit=False):
+        kwargs = {"code": self.tournament.code, "category_id": self.category.id}
+        if edit:
+            kwargs["stage_id"] = self.stage.id
+        return reverse("edit_stage" if edit else "add_stage", kwargs=kwargs)
+
+    def stage_form_data(self, **kwargs):
+        data = {"name": "追加の本戦", "stage_type": "tournament", "display_order": "2",
+                "pair_count": "4", "match_games": "7", "advancement_mode": "direct"}
+        data.update(kwargs)
+        return data
+
+    def test_form_single_explicit_and_automatic_graph_and_slot_message(self):
+        for text, expected, size in [("2,1,1,3", [2,1,1,3], 8), ("", [None]*4, 4)]:
+            with self.subTest(text=text):
+                response = self.client.post(self.stage_form_url(), self.stage_form_data(start_rounds=text))
+                self.assertEqual(response.status_code, 302)
+                stage = Stage.objects.get(name="追加の本戦", category=self.category)
+                bracket = TournamentBracket.objects.get(stage=stage)
+                entries = list(TournamentEntry.objects.filter(bracket=bracket).order_by("display_order"))
+                self.assertEqual([e.start_round for e in entries], expected)
+                self.assertEqual(bracket.tournamentmatch_set.count(), size-1)
+                self.assertEqual(bracket.tournamentmatch_set.filter(match_code__startswith="M").count(), 3)
+                if text:
+                    final = bracket.tournamentmatch_set.get(round_number=3)
+                    self.assertEqual(final.pair2, entries[3])
+                    first = bracket.tournamentmatch_set.get(round_number=1, match_number=2)
+                    self.assertEqual((first.pair1, first.pair2), (entries[1], entries[2]))
+                self.assertIn(f"{size}枠", " / ".join(str(m) for m in response.wsgi_request._messages))
+                stage.delete()
+
+    def test_form_multiple_mixed_explicit_and_automatic_graph_and_slot_message(self):
+        rows = [{"name": "上位", "pair_count": 4, "start_rounds": "2,1,1,3"},
+                {"name": "下位", "pair_count": 3, "start_rounds": ""}]
+        response = self.client.post(self.stage_form_url(), self.stage_form_data(
+            pair_count="7", use_multi_bracket="on", bracket_list=json.dumps(rows)))
+        self.assertEqual(response.status_code, 302)
+        stage = Stage.objects.get(name="追加の本戦")
+        for name, expected, size in [("上位", [2,1,1,3], 8), ("下位", [None]*3, 4)]:
+            bracket = TournamentBracket.objects.get(stage=stage, name=name)
+            entries = list(bracket.tournamententry_set.order_by("display_order"))
+            self.assertEqual([e.start_round for e in entries], expected)
+            self.assertEqual(bracket.tournamentmatch_set.count(), size-1)
+            first = bracket.tournamentmatch_set.get(match_code="M1")
+            self.assertEqual((first.pair1, first.pair2), (entries[1], entries[2]))
+        message = " / ".join(str(m) for m in response.wsgi_request._messages)
+        self.assertIn("上位(8枠)", message)
+        self.assertIn("下位(4枠)", message)
+
+    def test_form_fullwidth_and_all_separators(self):
+        for separator in (",", " ", "\n", "、", "，", "\t"):
+            text = separator.join(["２", "１", "１", "３"])
+            response = self.client.post(self.stage_form_url(), self.stage_form_data(start_rounds=text))
+            self.assertEqual(response.status_code, 302)
+            stage = Stage.objects.get(name="追加の本戦")
+            self.assertEqual(list(TournamentEntry.objects.filter(bracket__stage=stage).order_by(
+                "display_order").values_list("start_round", flat=True)), [2,1,1,3])
+            stage.delete()
+
+    def test_form_invalid_arrays_write_nothing_with_bracket_name(self):
+        cases = [("2,2,2", 3, "開始回戦が1"), ("3,1,1", 3, "合計が6"),
+                 ("1,2,1", 3, "2組目"), ("0,1", 2, "1組目"),
+                 ("a,1", 2, "1組目"), ("2,1,1", 4, "開始回戦の数が組数と一致しません。"),
+                 ("11,1,1", 3, "512枠まで"), ("40,1,1", 3, "512枠まで"),
+                 ("9999999999999999999999999999999,1,1", 3, "512枠まで")]
+        for text, count, message in cases:
+            for multi in (False, True):
+                with self.subTest(text=text, multi=multi):
+                    data = self.stage_form_data(start_rounds=text, pair_count=str(count))
+                    if multi:
+                        data.update(use_multi_bracket="on", bracket_list=json.dumps([
+                            {"name": "先の正常な表", "pair_count": 3, "start_rounds": "2,1,1"},
+                            {"name": "誤りの表", "pair_count": count, "start_rounds": text}]))
+                    response = self.client.post(self.stage_form_url(), data)
+                    self.assertEqual(response.status_code, 200)
+                    errors = str(response.context["slot_form"].errors)
+                    self.assertIn(message, errors)
+                    if multi:
+                        self.assertIn("誤りの表:", errors)
+                    self.assertEqual(Stage.objects.count(), 1)
+                    self.assertEqual(TournamentBracket.objects.count(), 1)
+                    self.assertFalse(TournamentEntry.objects.exists())
+                    self.assertFalse(TournamentMatch.objects.exists())
+
+    def test_slot_limit_csv_includes_line_and_bracket_and_bounds_large_values(self):
+        from .helpers.brackets import StartRoundValidationError
+        before = time.monotonic()
+        for value in (11, 40, 10**100):
+            with self.assertRaises(StartRoundValidationError) as caught:
+                build_start_round_bracket_slots([value, 1, 1], range(3))
+            self.assertEqual(caught.exception.kind, "too_many_slots")
+        self.assertLess(time.monotonic() - before, 1)
+        response = self.import_csv(self.stage_csv([40,1,1]))
+        self.assertEqual(response.status_code, 200)
+        errors = " / ".join(response.context["errors"])
+        self.assertIn("2行目", errors)
+        self.assertIn(self.bracket.name, errors)
+        self.assertIn("512枠まで", errors)
+        self.assertFalse(TournamentEntry.objects.exists())
+        self.assertEqual(len(build_start_round_bracket_slots([1]*512, range(512))), 512)
+
+    def test_preview_api_explicit_error_and_automatic(self):
+        url = reverse("stage_start_round_preview", kwargs={"code": self.tournament.code, "category_id": self.category.id})
+        data = self.client.get(url, {"start_rounds": "２、１，１\n３"}).json()
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["start_rounds"], [2,1,1,3])
+        self.assertEqual(data["slots"], [1,None,2,3,None,None,None,4])
+        self.assertEqual(data["size"], 8)
+        self.assertEqual(data["round_labels"], ["準々決勝", "準決勝", "決勝"])
+        error = self.client.get(url, {"start_rounds": "1,2,1"}).json()
+        self.assertFalse(error["valid"])
+        self.assertEqual(error["entry_number"], 2)
+        self.assertEqual(error["kind"], "alignment")
+        for count in (1, 3, 6, 512):
+            data = self.client.get(url, {"pair_count": count}).json()
+            self.assertTrue(data["valid"])
+            self.assertEqual(data["size"], get_bracket_size(count))
+            if count > 1:
+                self.assertEqual(data["start_rounds"], build_standard_start_rounds(count))
+        for params in ({"pair_count": "bad"}, {"pair_count": 513}, {"start_rounds": "40,1,1"}):
+            self.assertFalse(self.client.get(url, params).json()["valid"])
+        self.assertEqual(self.client.post(url).status_code, 405)
+        with self.settings(ISCONY_LOGIN_REQUIRED=True):
+            self.assertEqual(self.client.get(url, {"pair_count": 3}).status_code, 302)
+            self.assertEqual(self.client.get(self.stage_form_url()).status_code, 302)
+        self.assertEqual(self.client.get(url.replace(f"category/{self.category.id}/", "category/999999/")).status_code, 404)
+
+    def test_edit_rounds_initial_value_rebuild_and_no_rebuild(self):
+        self.generate([2,1,1,3])
+        url = self.stage_form_url(edit=True)
+        response = self.client.get(url)
+        self.assertEqual(response.context["slot_form"]["start_rounds"].value(), "2,1,1,3")
+        self.assertIn("2,1,1,3", response.context["slot_form"]["bracket_list"].value())
+        ids = list(self.bracket.tournamentmatch_set.order_by("id").values_list("id", flat=True))
+        data = self.stage_form_data(name="名前だけ", start_rounds="２ １ １ ３", match_games="5")
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        self.assertEqual(list(self.bracket.tournamentmatch_set.order_by("id").values_list("id", flat=True)), ids)
+        self.assertEqual(set(self.bracket.tournamentmatch_set.values_list("match_games", flat=True)), {5})
+        data["start_rounds"] = "1,1,1,1"
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(TournamentMatch.objects.filter(pk__in=ids).exists())
+        self.assertEqual([e.start_round for e in self.csv_entries()], [1]*4)
+        self.assertIn("4枠", " / ".join(str(m) for m in response.wsgi_request._messages))
+        data["start_rounds"] = ""
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        self.assertEqual([e.start_round for e in self.csv_entries()], [None]*4)
+        data["start_rounds"] = "2,1,1,3"
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual([e.start_round for e in self.csv_entries()], [2,1,1,3])
+        self.assertIn("8枠", " / ".join(str(m) for m in response.wsgi_request._messages))
+        self.assertContains(self.client.get(url), "if (hasClearedStartRounds(initialValues.bracketStartRounds))")
+
+    def test_edit_multi_preserves_names_games_and_rebuilds_round_changes(self):
+        self.generate([2,1,1])
+        from .services.stage_setup import create_tournament_stage_brackets
+        second = create_tournament_stage_brackets(self.stage, [{"name": "下位", "pair_count": 3}])[0]
+        generate_tournament_bracket_matches(second, 7)
+        url = self.stage_form_url(edit=True)
+        initial = json.loads(self.client.get(url).context["slot_form"]["bracket_list"].value())
+        self.assertEqual([row["start_rounds"] for row in initial], ["2,1,1", ""])
+        ids = list(TournamentMatch.objects.order_by("id").values_list("id", flat=True))
+        initial[0]["name"] = "名前だけ変更"
+        data = self.stage_form_data(pair_count="6", use_multi_bracket="on", bracket_list=json.dumps(initial), match_games="5")
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        self.assertEqual(list(TournamentMatch.objects.order_by("id").values_list("id", flat=True)), ids)
+        self.bracket.refresh_from_db()
+        self.assertEqual(self.bracket.name, "名前だけ変更")
+        initial[0]["start_rounds"] = "1,1,2"
+        data["bracket_list"] = json.dumps(initial)
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(TournamentMatch.objects.filter(pk__in=ids).exists())
+        self.assertEqual(list(TournamentEntry.objects.filter(bracket__stage=self.stage,
+            bracket__display_order=1).order_by("bracket__id", "display_order").values_list("start_round", flat=True))[:3], [1,1,2])
+
+    def test_invalid_edit_keeps_entries_matches_and_downstream(self):
+        self.generate([2,1,1])
+        ids = list(TournamentEntry.objects.values_list("id", flat=True))
+        matches = self.states()
+        downstream = Stage.objects.create(category=self.category, name="次", stage_type="tournament", advancement_source_stage=self.stage)
+        response = self.client.post(self.stage_form_url(edit=True), self.stage_form_data(start_rounds="1,2,1", pair_count="3"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(TournamentEntry.objects.values_list("id", flat=True)), ids)
+        self.assertEqual(self.states(), matches)
+        self.assertTrue(Stage.objects.filter(pk=downstream.pk).exists())
+
+    def test_result_locked_form_disables_round_controls_and_preserves_entries(self):
+        self.generate([2,1,1])
+        match = self.bracket.tournamentmatch_set.get(match_code="M1")
+        match.pair1_games = 4
+        match.save(update_fields=["pair1_games"])
+        response = self.client.get(self.stage_form_url(edit=True))
+        self.assertTrue(response.context["slot_form"].fields["start_rounds"].widget.attrs["disabled"])
+        ids = list(TournamentEntry.objects.values_list("id", flat=True))
+        self.assertEqual(self.client.post(self.stage_form_url(edit=True), self.stage_form_data(start_rounds="1,1,2")).status_code, 302)
+        self.assertEqual(list(TournamentEntry.objects.values_list("id", flat=True)), ids)
+        self.assertEqual([e.start_round for e in self.csv_entries()], [2,1,1])
 
 
 # Frozen pre-change construction rules, represented as records to avoid writing

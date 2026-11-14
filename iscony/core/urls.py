@@ -16,6 +16,11 @@ from .views import (
 
 
 urlpatterns = [
+    path(
+        "tournament/<str:code>/category/<int:category_id>/stage-start-round-preview/",
+        stage.stage_start_round_preview,
+        name="stage_start_round_preview",
+    ),
     path("login/", LoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("tournament/<str:code>/delete/", dashboard.delete_tournament_confirm, name="delete_tournament"),

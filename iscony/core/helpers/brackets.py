@@ -14,6 +14,7 @@ CSV取込、複製、分割SVG、上位トーナメント表示のテストを�
 """
 
 import math
+import re
 
 
 def calc_seed_positions(base_positions=None):
@@ -183,8 +184,20 @@ def build_start_round_bracket_slots(start_rounds, entries):
             )
     if 1 not in start_rounds:
         raise StartRoundValidationError("開始回戦が1の組がありません。", kind="missing_first_round")
+    # Bound shifts before calculating widths, and allocate slots only after validation.
+    if any(value > 64 for value in start_rounds):
+        size = "非常に大きな数"
+        raise StartRoundValidationError(
+            f"開始回戦から計算した枠の合計が{size}で、多すぎます(512枠まで)。",
+            kind="too_many_slots",
+        )
     widths = [1 << (value - 1) for value in start_rounds]
     size = sum(widths)
+    if size > 512:
+        raise StartRoundValidationError(
+            f"開始回戦から計算した枠の合計が{size}で、多すぎます(512枠まで)。",
+            kind="too_many_slots", total_slots=size,
+        )
     if size < 2 or size & (size - 1):
         raise StartRoundValidationError(
             f"開始回戦から計算した枠の合計が{size}で、2・4・8…のどれにもなりません。",
@@ -205,3 +218,48 @@ def build_start_round_bracket_slots(start_rounds, entries):
         slots[slot] = entry
         position += width
     return slots
+
+
+def parse_start_round_text(text):
+    """画面の入力と保存で共用する、上から順の開始回戦の読み取り。"""
+    normalized = str(text or "").translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+    tokens = [token for token in re.split(r"[\s,、，]+", normalized.strip()) if token]
+    values = []
+    for index, token in enumerate(tokens, start=1):
+        if re.fullmatch(r"[0-9]+", token):
+            if len(token.lstrip("0")) > 18:
+                raise StartRoundValidationError(
+                    "開始回戦から計算した枠の合計が非常に大きな数で、多すぎます(512枠まで)。",
+                    kind="too_many_slots", entry_number=index,
+                )
+            values.append(int(token.lstrip("0") or "0"))
+        else:
+            # Leave invalid tokens for the shared validator's Japanese message.
+            values.append(token)
+    return values
+
+
+def stage_bracket_preview(*, text="", pair_count=None):
+    """Validate a Stage form bracket and return JSON-safe drawing data."""
+    values = []
+    try:
+        values = parse_start_round_text(text)
+        if not values:
+            try:
+                count = int(pair_count)
+            except (ValueError, TypeError, OverflowError):
+                raise StartRoundValidationError("参加ペア数は1以上で入力してください。", kind="entry_count")
+            if count < 1:
+                raise StartRoundValidationError("参加ペア数は1以上で入力してください。", kind="entry_count")
+            if count > 512:
+                raise StartRoundValidationError("参加ペア数が多すぎます(512組まで)。", kind="too_many_slots")
+            if count == 1:
+                return {"valid": True, "start_rounds": [], "size": 1, "slots": [1], "round_labels": []}
+            values = build_standard_start_rounds(count)
+        slots = build_start_round_bracket_slots(values, range(1, len(values) + 1))
+        size = len(slots)
+        return {"valid": True, "start_rounds": values, "size": size, "slots": slots,
+                "round_labels": [get_round_label(r, size) for r in range(1, size.bit_length())]}
+    except StartRoundValidationError as error:
+        return {"valid": False, "error": str(error), "kind": error.kind,
+                "entry_number": error.entry_number, "start_rounds": values}

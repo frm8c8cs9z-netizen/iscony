@@ -172,7 +172,11 @@ class StageSlotSetupForm(forms.Form):
     )
     use_multi_bracket = forms.BooleanField(
         required=False,
-        label="複数ブラケットに分ける",
+        label="複数のトーナメント表を作る",
+    )
+    start_rounds = forms.CharField(
+        required=False, widget=forms.HiddenInput,
+        label="開始回戦(上の組から順に)",
     )
     bracket_list = forms.CharField(
         required=False,

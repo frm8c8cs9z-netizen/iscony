@@ -25067,8 +25067,8 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(
             json.loads(slot_form.initial["bracket_list"]),
             [
-                {"name": "決勝1-2位T", "pair_count": 4},
-                {"name": "決勝3-4位T", "pair_count": 3},
+                {"name": "決勝1-2位T", "pair_count": 4, "start_rounds": ""},
+                {"name": "決勝3-4位T", "pair_count": 3, "start_rounds": ""},
             ],
         )
 

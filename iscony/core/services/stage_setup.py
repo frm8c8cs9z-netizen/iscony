@@ -310,6 +310,9 @@ def create_tournament_stage_brackets(stage, bracket_specs):
         for display_order, spec in enumerate(bracket_specs, start=1):
             pair_count = spec["pair_count"]
             get_bracket_size(pair_count)
+            start_rounds = spec.get("start_rounds") or []
+            if start_rounds:
+                build_start_round_bracket_slots(start_rounds, range(pair_count))
 
             bracket = TournamentBracket.objects.create(
                 category=stage.category,
@@ -324,6 +327,7 @@ def create_tournament_stage_brackets(stage, bracket_specs):
                     participant=None,
                     pair_code=str(entry_display_order),
                     display_order=entry_display_order,
+                    start_round=(start_rounds[entry_display_order - 1] if start_rounds else None),
                 )
 
             brackets.append(bracket)
@@ -331,12 +335,12 @@ def create_tournament_stage_brackets(stage, bracket_specs):
         return brackets
 
 
-def create_tournament_stage_bracket(stage, pair_count):
+def create_tournament_stage_bracket(stage, pair_count, *, start_rounds=None):
     """Stage配下に空のTournamentBracketとTournamentEntryを1つ作成する。"""
 
     brackets = create_tournament_stage_brackets(
         stage,
-        [{"name": "本戦", "pair_count": pair_count}],
+        [{"name": "本戦", "pair_count": pair_count, "start_rounds": start_rounds}],
     )
 
     return brackets[0]
