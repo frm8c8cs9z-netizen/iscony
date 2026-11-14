@@ -21,7 +21,7 @@ from ..forms import StageEditForm, StageForm, StageSlotSetupForm
 from ..helpers.view import safe_next_url
 from ..helpers.brackets import (
     get_bracket_size, parse_start_round_text, build_start_round_bracket_slots,
-    StartRoundValidationError, stage_bracket_preview,
+    StartRoundValidationError, stage_bracket_preview, build_standard_start_rounds,
 )
 from ..helpers.league_grouping import (
     build_group_count_candidates,
@@ -1252,6 +1252,7 @@ def delete_stage_confirm(request, code, category_id, stage_id):
     )
 
 
+@transaction.atomic
 def edit_stage(request, code, category_id, stage_id):
     """カテゴリ内Stageの名称、種別、表示順を編集する。"""
 
@@ -1265,10 +1266,12 @@ def edit_stage(request, code, category_id, stage_id):
         tournament=tournament,
     )
     stage = get_object_or_404(
-        Stage,
+        Stage.objects.select_for_update(),
         id=stage_id,
         category=category,
     )
+    original_stage_type = stage.stage_type
+    current_values = _current_stage_slot_values(stage)
     has_results = (
         RoundRobinMatch.objects.filter(
             group__stage=stage,
@@ -1336,7 +1339,6 @@ def edit_stage(request, code, category_id, stage_id):
                     )
 
             if form_valid and slot_form_valid:
-                current_values = _current_stage_slot_values(stage)
                 new_stage_type = form.cleaned_data.get("stage_type")
                 new_pair_count = slot_form.cleaned_data["pair_count"]
                 new_advancement_mode = slot_form.cleaned_data.get(
@@ -1351,7 +1353,7 @@ def edit_stage(request, code, category_id, stage_id):
                     else None
                 )
 
-                stage_type_changed = new_stage_type != stage.stage_type
+                stage_type_changed = new_stage_type != original_stage_type
                 pair_count_changed = (
                     new_pair_count != current_values["pair_count"]
                 )
@@ -1370,6 +1372,9 @@ def edit_stage(request, code, category_id, stage_id):
                 new_bracket_specs = None
                 new_bracket_rows = None
                 bracket_names_changed = False
+                changed_shape_indices = []
+                start_rounds_only_change = False
+                keep_start_rounds = False
                 new_match_games = (
                     slot_form.cleaned_data.get("match_games")
                     or _default_match_games(category)
@@ -1413,6 +1418,7 @@ def edit_stage(request, code, category_id, stage_id):
                             "name": current_single_name,
                             "pair_count": new_pair_count,
                             "start_rounds": slot_form.cleaned_data.get("parsed_start_rounds", []),
+                            "bracket_size": slot_form.cleaned_data["bracket_size"],
                         }]
 
                     bracket_sizes_changed = (
@@ -1422,10 +1428,18 @@ def edit_stage(request, code, category_id, stage_id):
                             for row in current_bracket_rows
                         ]
                     )
-                    start_rounds_changed = (
-                        [row.get("start_rounds", []) for row in new_bracket_rows]
-                        != [row.get("start_rounds", []) for row in current_bracket_rows]
-                    )
+                    def effective_rounds(row):
+                        return row.get("start_rounds") or (
+                            build_standard_start_rounds(row["pair_count"])
+                            if row["pair_count"] > 1 else []
+                        )
+
+                    changed_shape_indices = [
+                        index for index, (old, new) in enumerate(zip(
+                            current_bracket_rows, new_bracket_rows,
+                        )) if effective_rounds(old) != effective_rounds(new)
+                    ]
+                    start_rounds_changed = bool(changed_shape_indices)
                     bracket_names_changed = (
                         not bracket_sizes_changed
                         and [row["name"] for row in new_bracket_rows]
@@ -1438,6 +1452,21 @@ def edit_stage(request, code, category_id, stage_id):
                         or bracket_sizes_changed
                         or start_rounds_changed
                     )
+
+                start_rounds_only_change = (
+                    new_stage_type == Stage.TYPE_TOURNAMENT
+                    and not stage_type_changed
+                    and not advancement_mode_changed
+                    and not advancement_source_changed
+                    and not bracket_sizes_changed
+                    and bool(changed_shape_indices)
+                )
+                keep_start_rounds = (
+                    start_rounds_only_change
+                    and request.POST.get("start_round_change_mode") == "keep"
+                )
+                if keep_start_rounds:
+                    needs_slot_rebuild = False
 
                 match_games_only_change = (
                     not needs_slot_rebuild and match_games_changed
@@ -1519,7 +1548,32 @@ def edit_stage(request, code, category_id, stage_id):
                                 )
 
                     else:
+                        # Match deletion cascades to schedules and their replacement
+                        # history, just as in the full slot rebuild above.
+                        if keep_start_rounds:
+                            Stage.objects.filter(advancement_source_stage=stage).delete()
                         stage = form.save()
+
+                        if new_stage_type == Stage.TYPE_TOURNAMENT:
+                            existing_brackets = list(TournamentBracket.objects.filter(
+                                stage=stage,
+                            ).order_by("display_order", "name"))
+                            for index, (bracket, row) in enumerate(zip(
+                                existing_brackets, new_bracket_rows,
+                            )):
+                                entries = list(bracket.tournamententry_set.order_by("display_order"))
+                                rounds = row.get("start_rounds") or [None] * len(entries)
+                                updated_entries = []
+                                for entry, value in zip(entries, rounds):
+                                    if entry.start_round != value:
+                                        entry.start_round = value
+                                        updated_entries.append(entry)
+                                if updated_entries:
+                                    TournamentEntry.objects.bulk_update(updated_entries, ["start_round"])
+                                if keep_start_rounds and index in changed_shape_indices:
+                                    generate_tournament_bracket_matches(
+                                        bracket, new_match_games, entries=entries,
+                                    )
 
                         if match_games_only_change:
                             if stage.stage_type == Stage.TYPE_LEAGUE:
@@ -1546,7 +1600,16 @@ def edit_stage(request, code, category_id, stage_id):
                                         update_fields=["name"],
                                     )
 
-                if (
+                if keep_start_rounds:
+                    summary = "、".join(
+                        f"{new_bracket_rows[index]['name']}({new_bracket_rows[index]['bracket_size']}枠)"
+                        for index in changed_shape_indices
+                    )
+                    messages.success(request, (
+                        f"{stage.name} を更新しました({summary}の形を変えました。"
+                        f"割り付けた組はそのまま残しています。ゲーム数{new_match_games})"
+                    ))
+                elif (
                     needs_slot_rebuild
                     and stage.stage_type == Stage.TYPE_LEAGUE
                 ):
@@ -1638,6 +1701,12 @@ def edit_stage(request, code, category_id, stage_id):
         "stage_type_locked": stage_type_locked,
         "downstream_advancement_count": downstream_advancement_count,
         "downstream_advancement_stage_names": downstream_advancement_stage_names,
+        "bracket_change_impact": [
+            {"name": bracket.name, "schedule_count": Schedule.objects.filter(
+                tournament_match__bracket=bracket,
+            ).count()}
+            for bracket in TournamentBracket.objects.filter(stage=stage).order_by("display_order", "name")
+        ],
         "has_start_rounds": TournamentEntry.objects.filter(
             bracket__stage=stage, start_round__isnull=False,
         ).exists(),

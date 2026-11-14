@@ -27,6 +27,7 @@
 
 <form method="post"{% if stage and not stage_type_locked %} data-confirm-regenerate="true"{% if downstream_advancement_count %} data-downstream-advancement-count="{{ downstream_advancement_count }}" data-downstream-advancement-stages="{{ downstream_advancement_stage_names|join:'、' }}"{% endif %}{% endif %}>
     {% csrf_token %}
+    <input type="hidden" name="start_round_change_mode" id="start-round-change-mode" value="rebuild">
 
     {{ form.as_p }}
 
@@ -114,6 +115,21 @@
         キャンセル
     </a>
 </form>
+{% if stage and not stage_type_locked %}
+{{ bracket_change_impact|json_script:"bracket-change-impact" }}
+<dialog id="start-round-change-dialog" aria-labelledby="start-round-change-title">
+    <h3 id="start-round-change-title">開始回戦の形を変更</h3>
+    <p id="start-round-change-impact" style="white-space: pre-line"></p>
+    <p>割り付けを残す場合、割り付けた組は残り、上から並んだ組に新しい開始回戦を当てはめ直します。</p>
+    <p>全部作り直す場合、このStageのすべての表・組・試合・日程を削除して作り直します。</p>
+    <div class="action-row">
+        <button type="button" data-start-round-mode="keep" autofocus>割り付けを残して形だけ変える</button>
+        <button type="button" data-start-round-mode="rebuild">全部作り直す</button>
+        <button type="button" data-start-round-mode="cancel">キャンセル</button>
+    </div>
+</dialog>
+{% endif %}
+
 
 {% if slot_form %}
     <link rel="stylesheet" href="{% static 'core/stage_start_rounds.css' %}">
@@ -515,7 +531,7 @@
             markBracketListChanged();
         }
 
-        function computeNeedsRebuild() {
+        function computeNeedsRebuild(includeStartRounds = true) {
             const stageType = document.getElementById("id_stage_type");
             if (!stageType) {
                 return false;
@@ -584,7 +600,7 @@
                 return true;
             }
 
-            return JSON.stringify(currentBracketStartRounds())
+            return includeStartRounds && JSON.stringify(currentBracketStartRounds())
                 !== JSON.stringify(initialValues.bracketStartRounds);
         }
 
@@ -637,37 +653,72 @@
                 "form[data-confirm-regenerate]"
             );
             if (regenerateForm) {
-                regenerateForm.addEventListener("submit", function(event) {
-                    if (!computeNeedsRebuild()) {
+                let approvedSubmission = false;
+                let checkingSubmission = false;
+                regenerateForm.addEventListener("submit", async function(event) {
+                    if (approvedSubmission) {
+                        approvedSubmission = false;
                         return;
                     }
-
-                    let confirmMessage = (
-                        "現在の枠構成を削除して作り直します。よろしいですか？"
-                    );
-                    {% if has_start_rounds %}
-                    if (hasClearedStartRounds(initialValues.bracketStartRounds)) {
-                        confirmMessage += "\n\n開始回戦の指定は解除され、自動の配置に戻ります。";
+                    event.preventDefault();
+                    if (checkingSubmission) return;
+                    checkingSubmission = true;
+                    const submitter = event.submitter;
+                    function submit(mode = "rebuild") {
+                        document.getElementById("start-round-change-mode").value = mode;
+                        approvedSubmission = true;
+                        try {
+                            if (submitter) regenerateForm.requestSubmit(submitter);
+                            else regenerateForm.requestSubmit();
+                        } finally {
+                            approvedSubmission = false;
+                        }
                     }
-                    {% endif %}
-                    const downstreamCount = (
-                        regenerateForm.dataset.downstreamAdvancementCount
-                    );
-                    const downstreamStages = (
-                        regenerateForm.dataset.downstreamAdvancementStages
-                    );
-                    if (downstreamCount) {
-                        confirmMessage += (
-                            "\n\nさらに、このStageを進出元にしている後続Stage("
-                            + downstreamStages
-                            + ")の進出元設定が"
-                            + downstreamCount
-                            + "件失われます。"
+                    try {
+                        if (!computeNeedsRebuild(false)
+                            && document.getElementById("id_stage_type").value === "tournament") {
+                            const changed = await changedStartRoundShapes(initialValues);
+                            if (changed.length) {
+                                const mode = await chooseStartRoundChange(regenerateForm, changed);
+                                if (mode) submit(mode);
+                            } else {
+                                submit();
+                            }
+                            return;
+                        }
+                        if (!computeNeedsRebuild()) {
+                            submit();
+                            return;
+                        }
+                        let confirmMessage = (
+                            "現在の枠構成を削除して作り直します。よろしいですか？"
                         );
-                    }
-                    const confirmed = window.confirm(confirmMessage);
-                    if (!confirmed) {
-                        event.preventDefault();
+                        {% if has_start_rounds %}
+                        if (hasClearedStartRounds(initialValues.bracketStartRounds)) {
+                            confirmMessage += "\n\n開始回戦の指定は解除され、自動の配置に戻ります。";
+                        }
+                        {% endif %}
+                        const downstreamCount = (
+                            regenerateForm.dataset.downstreamAdvancementCount
+                        );
+                        const downstreamStages = (
+                            regenerateForm.dataset.downstreamAdvancementStages
+                        );
+                        if (downstreamCount) {
+                            confirmMessage += (
+                                "\n\nさらに、このStageを進出元にしている後続Stage("
+                                + downstreamStages
+                                + ")の進出元設定が"
+                                + downstreamCount
+                                + "件失われます。"
+                            );
+                        }
+                        const confirmed = window.confirm(confirmMessage);
+                        if (confirmed) submit();
+                    } catch (error) {
+                        window.alert("開始回戦の形を確認できませんでした。入力内容や通信状態を確認して、もう一度更新してください。");
+                    } finally {
+                        checkingSubmission = false;
                     }
                 });
 

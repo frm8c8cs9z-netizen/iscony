@@ -210,3 +210,56 @@ function setupBracketRowEditing() {
     box.replaceChildren(svg);
   }
 
+
+// Compare actual layouts using the same standard-placement API as the preview.
+async function changedStartRoundShapes(initial) {
+    const rows = syncBracketRowsFromDom();
+    const url = document.getElementById("tournament-bracket-list-setup").dataset.previewUrl;
+    const effective = async (rounds, count) => {
+        if (rounds.length) return rounds.map(String);
+        const response = await fetch(url + "?" + new URLSearchParams({pair_count: count}), {
+            headers: {Accept: "application/json"},
+        });
+        if (!response.ok) throw new Error("placement unavailable");
+        const data = await response.json();
+        if (!data.valid) throw new Error("invalid placement");
+        return data.start_rounds.map(String);
+    };
+    const changed = [];
+    for (let index = 0; index < rows.length; index++) {
+        const previous = initial.bracketStartRounds[index];
+        const current = bracketRoundTokens(rows[index].start_rounds).map(v => String(Number(v)));
+        if (JSON.stringify(previous) === JSON.stringify(current)) continue;
+        const before = await effective(previous, initial.bracketPairCounts[index]);
+        const after = await effective(current, rows[index].pair_count);
+        if (JSON.stringify(before) !== JSON.stringify(after)) changed.push(index);
+    }
+    return changed;
+}
+function chooseStartRoundChange(form, indices) {
+    const dialog = document.getElementById("start-round-change-dialog");
+    const impact = JSON.parse(document.getElementById("bracket-change-impact").textContent);
+    const rows = syncBracketRowsFromDom();
+    let text = indices.map(i => `${rows[i].name || impact[i].name}: 試合を作り直し、日程(コートの割り付け)${impact[i].schedule_count}件を削除します。`).join("\n");
+    if (form.dataset.downstreamAdvancementCount) {
+        text += `\nさらに、このStageを進出元にしている後続Stage(${form.dataset.downstreamAdvancementStages})を削除し、進出元設定が${form.dataset.downstreamAdvancementCount}件失われます。`;
+    }
+    document.getElementById("start-round-change-impact").textContent = text;
+    return new Promise(resolve => {
+        function finish(mode) {
+            dialog.removeEventListener("click", click);
+            dialog.removeEventListener("close", close);
+            dialog.close();
+            resolve(mode);
+        }
+        function click(event) {
+            const mode = event.target.dataset.startRoundMode;
+            if (mode) finish(mode === "cancel" ? null : mode);
+        }
+        function close() { finish(null); }
+        dialog.addEventListener("click", click);
+        dialog.addEventListener("close", close);
+        dialog.showModal();
+        dialog.querySelector('[data-start-round-mode="keep"]').focus();
+    });
+}
