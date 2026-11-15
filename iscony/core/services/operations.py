@@ -750,6 +750,25 @@ def schedule_referee_key(schedule):
     return None
 
 
+def schedule_umpire_conflict_groups(schedules):
+    """同じ日程区分・順番で同じ審判を指定した、2件以上の日程の組を返す。"""
+
+    grouped = {}
+    for schedule in schedules:
+        key = schedule_referee_key(schedule)
+        if key:
+            grouped.setdefault(
+                (schedule.schedule_block_id, schedule.order), {}
+            ).setdefault(key, []).append(schedule)
+
+    return [
+        (key, schedule_list)
+        for key_map in grouped.values()
+        for key, schedule_list in key_map.items()
+        if len(schedule_list) >= 2
+    ]
+
+
 def schedule_referee_source_key(
         source_type,
         group=None,

@@ -86,7 +86,7 @@ from ..services import (
     save_day_player_change_organization_values,
     save_participant_organization_values,
     schedule_referee_conflicts_at_same_order,
-    schedule_referee_key,
+    schedule_umpire_conflict_groups,
     schedule_referee_source_key,
     schedule_match_participant_ids,
     tournament_pair_organization_sets,
@@ -4314,36 +4314,24 @@ def schedule_referee_conflicts_view(request, code):
     )
 
     prepare_related_result_labels(schedules)
-    grouped = {}
-    for schedule in schedules:
-        key = schedule_referee_key(schedule)
-        if not key:
-            continue
-        grouped.setdefault(
-            (schedule.schedule_block_id, schedule.order), {}
-        ).setdefault(key, []).append(schedule)
-
     conflicts = []
-    for (_block_id, order), key_map in grouped.items():
-        for key, schedule_list in key_map.items():
-            if len(schedule_list) < 2:
-                continue
+    for key, schedule_list in schedule_umpire_conflict_groups(schedules):
+        order = schedule_list[0].order
+        if key[0] == "participant":
+            participant = Participant.objects.filter(id=key[1]).first()
+            referee_label = (
+                f"{participant.code} {participant.display_name}"
+                if participant else "(不明)"
+            )
+        else:
+            referee_label = schedule_list[0].referee_source_label
 
-            if key[0] == "participant":
-                participant = Participant.objects.filter(id=key[1]).first()
-                referee_label = (
-                    f"{participant.code} {participant.display_name}"
-                    if participant else "(不明)"
-                )
-            else:
-                referee_label = schedule_list[0].referee_source_label
-
-            conflicts.append({
-                "schedule_block": schedule_list[0].schedule_block,
-                "order": order,
-                "referee_label": referee_label,
-                "schedules": schedule_list,
-            })
+        conflicts.append({
+            "schedule_block": schedule_list[0].schedule_block,
+            "order": order,
+            "referee_label": referee_label,
+            "schedules": schedule_list,
+        })
 
     conflicts.sort(
         key=lambda c: (c["schedule_block"].display_order, c["order"])

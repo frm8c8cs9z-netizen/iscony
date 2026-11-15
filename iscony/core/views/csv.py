@@ -13,11 +13,14 @@ import secrets
 import tempfile
 from itertools import combinations
 
+from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.html import format_html
 
 from ..helpers.brackets import StartRoundValidationError, build_start_round_bracket_slots
 from ..forms import CSVUploadForm
@@ -43,6 +46,8 @@ from ..models import (
 from ..services import (
     generate_tournament_bracket_matches,
     schedule_import_lock_reason,
+    schedule_match_participant_ids,
+    schedule_umpire_conflict_groups,
 )
 from ..constants import (
     PARTICIPANT_ORGANIZATION_CODES,
@@ -149,6 +154,7 @@ CSV_FORMAT_HEADERS = {
         "match_code",
         "match_label",
         "match_games",
+        "umpire_entry_code",
     ],
 }
 
@@ -2479,6 +2485,37 @@ def import_schedule(request, tournament_code):
                     )
                     target_brackets.add(bracket.id)
 
+                umpire_entry_code = _cell(row, "umpire_entry_code")
+                umpire = None
+                if umpire_entry_code:
+                    match_category = (
+                        match.group.category
+                        if stage_type == Stage.TYPE_LEAGUE
+                        else match.bracket.category
+                    )
+                    umpire = Participant.objects.filter(
+                        category=match_category,
+                        entry_code=umpire_entry_code,
+                    ).first()
+                    if umpire is None:
+                        errors.append(
+                            f"{row_number}行目: umpire_entry_code(審判) "
+                            f"{umpire_entry_code} は、カテゴリ「{match_category.name}」に見つかりません。"
+                        )
+                        continue
+
+                    umpire_schedule = (
+                        Schedule(round_robin_match=match)
+                        if stage_type == Stage.TYPE_LEAGUE
+                        else Schedule(tournament_match=match)
+                    )
+                    if umpire.id in schedule_match_participant_ids(umpire_schedule):
+                        errors.append(
+                            f"{row_number}行目: umpire_entry_code(審判) "
+                            f"{umpire_entry_code} は、この試合に出場する組です。"
+                        )
+                        continue
+
                 if match_key in used_matches:
                     errors.append(
                         f"{row_number}行目: "
@@ -2511,6 +2548,7 @@ def import_schedule(request, tournament_code):
                     "match_games": match_games,
                     "match_games_supplied": bool(match_games_value),
                     "match_label": match_label,
+                    "umpire": umpire,
                 })
 
             all_matches = RoundRobinMatch.objects.filter(
@@ -2563,6 +2601,7 @@ def import_schedule(request, tournament_code):
                     }
                 )
 
+            imported_schedule_ids = set()
             existing_schedule_flags = {}
 
             for schedule in Schedule.objects.filter(
@@ -2645,13 +2684,15 @@ def import_schedule(request, tournament_code):
                         match.match_games = row["match_games"]
                         match.save()
 
-                        Schedule.objects.create(
+                        schedule = Schedule.objects.create(
                             schedule_block=schedule_block,
                             round_robin_match=match,
                             court=court,
                             order=row["order"],
+                            referee_participant=row["umpire"],
                             **schedule_flags,
                         )
+                        imported_schedule_ids.add(schedule.id)
 
                     else:
                         if row["match_label"]:
@@ -2661,13 +2702,38 @@ def import_schedule(request, tournament_code):
                         if row["match_label"] or row["match_games_supplied"]:
                             match.save()
 
-                        Schedule.objects.create(
+                        schedule = Schedule.objects.create(
                             schedule_block=schedule_block,
                             tournament_match=match,
                             court=court,
                             order=row["order"],
+                            referee_participant=row["umpire"],
                             **schedule_flags,
                         )
+                        imported_schedule_ids.add(schedule.id)
+
+            umpire_schedules = Schedule.objects.filter(
+                court__tournament=tournament,
+                schedule_block__name__in={
+                    row["schedule_block_name"] for row in validated_rows
+                },
+                order__in={row["order"] for row in validated_rows},
+            ).select_related(
+                "referee_source_group",
+                "referee_source_match__pair1__participant",
+                "referee_source_match__pair2__participant",
+                "referee_source_match__winner__participant",
+            )
+            umpire_conflict_count = sum(
+                1 for _, schedules in schedule_umpire_conflict_groups(umpire_schedules)
+                if any(schedule.id in imported_schedule_ids for schedule in schedules)
+            )
+            if umpire_conflict_count:
+                messages.warning(request, format_html(
+                    '審判の重複が{}件あります。<a href="{}">「審判の重複」画面</a>で確認してください。',
+                    umpire_conflict_count,
+                    reverse("schedule_referee_conflicts_view", kwargs={"code": tournament.code}),
+                ))
 
             return redirect(
                 "schedule_view",

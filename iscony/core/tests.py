@@ -15656,6 +15656,225 @@ class ImportScheduleCsvTests(TestCase):
         self.assertEqual(schedule.court.name, "旧コート")
         self.assertEqual(schedule.order, 5)
 
+    def _create_umpire_csv_matches(self):
+        stage, _, league_match = self._create_league_match("予選リーグ")
+        participants = [
+            Participant.objects.create(
+                category=self.category,
+                entry_code=str(number),
+                player1_name=f"選手{number}",
+            )
+            for number in range(1, 5)
+        ]
+        for entry, participant in zip(
+            (league_match.pair1, league_match.pair2), participants
+        ):
+            entry.participant = participant
+            entry.save()
+        tournament_stage = Stage.objects.create(
+            category=self.category,
+            name="決勝T",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category, stage=tournament_stage, name="本戦",
+        )
+        entries = [
+            TournamentEntry.objects.create(
+                bracket=bracket, participant=participant,
+                pair_code=str(number), display_order=number,
+            )
+            for number, participant in enumerate(participants[:2], start=1)
+        ]
+        tournament_match = TournamentMatch.objects.create(
+            bracket=bracket, round_number=1, match_number=1,
+            match_code="M1", pair1=entries[0], pair2=entries[1],
+        )
+        return stage, league_match, tournament_match, participants
+
+    def _umpire_csv(self, league_code="3", tournament_code="4", *, column=True,
+                    tournament_block="本日程", tournament_order=1):
+        headers = (
+            "schedule_block,category,stage,court,order,slot1_code,slot2_code,match_code"
+        )
+        league_row = "本日程,男子A,予選リーグ,1コート,1,1,2,"
+        tournament_row = (
+            f"{tournament_block},男子A,決勝T,2コート,{tournament_order},,,M1"
+        )
+        if column:
+            headers += ",umpire_entry_code"
+            league_row += f",{league_code}"
+            tournament_row += f",{tournament_code}"
+        return f"{headers}\n{league_row}\n{tournament_row}\n"
+
+    def _umpire_warnings(self, response):
+        from django.contrib.messages import WARNING
+        return [
+            str(message) for message in get_messages(response.wsgi_request)
+            if message.level == WARNING
+        ]
+
+    def _assert_only_direct_umpire(self, schedule, umpire):
+        self.assertEqual(schedule.referee_participant, umpire)
+        for field in ("referee_note", "referee_source_type", "referee_source_result"):
+            self.assertEqual(getattr(schedule, field), "")
+        for field in (
+            "referee_source_stage", "referee_source_group",
+            "referee_source_rank", "referee_source_match",
+        ):
+            self.assertIsNone(getattr(schedule, field))
+
+    def test_umpire_csv_assigns_league_and_tournament_umpires(self):
+        _, league_match, tournament_match, participants = self._create_umpire_csv_matches()
+        response = self._post_csv(self._umpire_csv(" 3 ", " 4 "))
+        self.assertRedirects(response, reverse(
+            "schedule_view", kwargs={"tournament_code": self.tournament.code},
+        ), fetch_redirect_response=False)
+        self._assert_only_direct_umpire(
+            Schedule.objects.get(round_robin_match=league_match), participants[2],
+        )
+        self._assert_only_direct_umpire(
+            Schedule.objects.get(tournament_match=tournament_match), participants[3],
+        )
+        self.assertEqual(self._umpire_warnings(response), [])
+
+    def test_umpire_csv_reimport_replaces_manual_assignments(self):
+        _, league_match, tournament_match, participants = self._create_umpire_csv_matches()
+        for column, code in ((False, ""), (True, ""), (True, "4")):
+            with self.subTest(column=column, code=code):
+                self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+                Schedule.objects.update(referee_participant=participants[2], referee_note="手動")
+                response = self._post_csv(self._umpire_csv(code, code, column=column))
+                self.assertEqual(response.status_code, 302)
+                for schedule in Schedule.objects.all():
+                    self._assert_only_direct_umpire(
+                        schedule, participants[3] if code else None,
+                    )
+                self.assertEqual(Schedule.objects.count(), 2)
+
+    def test_umpire_csv_rejects_missing_or_other_category_codes_atomically(self):
+        _, league_match, _, participants = self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        before = list(Schedule.objects.order_by("id").values())
+        other_category = Category.objects.create(tournament=self.tournament, name="女子A")
+        Participant.objects.create(category=other_category, entry_code="12", player1_name="別カテゴリ")
+        for league_code, tournament_code, row, bad_code in (
+            ("99", "4", 2, "99"), ("3", "12", 3, "12"),
+        ):
+            with self.subTest(code=bad_code):
+                response = self._post_csv(self._umpire_csv(league_code, tournament_code))
+                self.assertContains(response, (
+                    f"{row}行目: umpire_entry_code(審判) {bad_code} は、"
+                    "カテゴリ「男子A」に見つかりません。"
+                ))
+                self.assertEqual(list(Schedule.objects.order_by("id").values()), before)
+
+    def test_umpire_csv_rejects_players_on_either_side_in_both_formats(self):
+        self._create_umpire_csv_matches()
+        for league_code, tournament_code, row, bad_code in (
+            ("1", "4", 2, "1"), ("2", "4", 2, "2"),
+            ("3", "1", 3, "1"), ("3", "2", 3, "2"),
+        ):
+            with self.subTest(league_code=league_code, tournament_code=tournament_code):
+                response = self._post_csv(self._umpire_csv(league_code, tournament_code))
+                self.assertContains(response, (
+                    f"{row}行目: umpire_entry_code(審判) {bad_code} は、この試合に出場する組です。"
+                ))
+                self.assertFalse(Schedule.objects.exists())
+                self.assertFalse(Court.objects.exists())
+
+    def test_umpire_csv_allows_unresolved_tournament_slots(self):
+        _, _, match, _ = self._create_umpire_csv_matches()
+        match.pair1 = None
+        match.pair2 = None
+        match.save()
+        response = self._post_csv(self._umpire_csv("3", "1"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Schedule.objects.get(tournament_match=match).referee_participant.entry_code, "1")
+
+    def test_umpire_csv_entry_code_uses_existing_exact_matching(self):
+        _, _, _, participants = self._create_umpire_csv_matches()
+        participants[2].entry_code = "Ab3"
+        participants[2].save()
+        for code in ("ab3", "Ａb3"):
+            with self.subTest(code=code):
+                response = self._post_csv(self._umpire_csv(code, "4"))
+                self.assertContains(response, f"umpire_entry_code(審判) {code} は、カテゴリ「男子A」に見つかりません。")
+                self.assertFalse(Schedule.objects.exists())
+        self.assertEqual(self._post_csv(self._umpire_csv(" Ab3 ", "4")).status_code, 302)
+
+    def test_umpire_csv_warns_once_per_conflict_and_links_to_list(self):
+        self._create_umpire_csv_matches()
+        response = self._post_csv(self._umpire_csv("3", "3"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Schedule.objects.count(), 2)
+        warnings = self._umpire_warnings(response)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("審判の重複が1件あります。", warnings[0])
+        self.assertIn(reverse("schedule_referee_conflicts_view", kwargs={"code": self.tournament.code}), warnings[0])
+        conflicts = self.client.get(reverse(
+            "schedule_referee_conflicts_view", kwargs={"code": self.tournament.code},
+        ))
+        self.assertEqual(len(conflicts.context["conflicts"]), 1)
+
+    def test_umpire_csv_does_not_warn_across_blocks_or_orders(self):
+        self._create_umpire_csv_matches()
+        for block, order in (("2日目", 1), ("本日程", 2)):
+            with self.subTest(block=block, order=order):
+                response = self._post_csv(self._umpire_csv(
+                    "3", "3", tournament_block=block, tournament_order=order,
+                ))
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(self._umpire_warnings(response), [])
+
+    def test_umpire_csv_warns_for_conflict_with_unmodified_schedule(self):
+        _, _, tournament_match, _ = self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        old_tournament_schedule = Schedule.objects.get(tournament_match=tournament_match)
+        response = self._post_csv(
+            "category,stage,court,order,slot1_code,slot2_code,umpire_entry_code\n"
+            "男子A,予選リーグ,1コート,1,1,2,4\n"
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(len(self._umpire_warnings(response)), 1)
+        self.assertTrue(Schedule.objects.filter(pk=old_tournament_schedule.pk).exists())
+
+    def test_umpire_csv_ignores_unrelated_existing_conflicts(self):
+        _, _, _, participants = self._create_umpire_csv_matches()
+        # 同じ日程区分・順番でも、取り込む日程を含まない審判の重複は通知しない。
+        for court_name in ("3コート", "4コート"):
+            court = Court.objects.create(tournament=self.tournament, name=court_name)
+            Schedule.objects.create(court=court, order=1, referee_participant=participants[3])
+        response = self._post_csv(self._umpire_csv("3", "", tournament_order=2))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self._umpire_warnings(response), [])
+
+    def test_umpire_csv_preserves_flags_when_replacement_is_allowed(self):
+        from unittest.mock import patch
+        self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        Schedule.objects.update(called=True, started=True, finished=True)
+        # 通常は進行済みの再取込が禁止。許可された場合の既存の印のマージを検証する。
+        with patch("core.views.csv._schedule_import_block_errors", return_value=[]):
+            response = self._post_csv(self._umpire_csv("4", "3"))
+        self.assertEqual(response.status_code, 302)
+        for schedule in Schedule.objects.all():
+            self.assertTrue(schedule.called)
+            self.assertTrue(schedule.started)
+            self.assertTrue(schedule.finished)
+
+    def test_umpire_csv_format_and_explanation(self):
+        response = self.client.get(reverse("download_csv_format", kwargs={
+            "tournament_code": self.tournament.code, "format_type": "schedule",
+        }))
+        self.assertEqual(response.content.decode("utf-8-sig").strip().split(",")[-1], "umpire_entry_code")
+        response = self.client.get(reverse("import_schedule", kwargs={
+            "tournament_code": self.tournament.code,
+        }))
+        self.assertContains(response, "umpire_entry_code")
+        self.assertContains(response, "画面で指定した審判もCSVの内容で置き換わります。")
+
+
 
 class CsvFormatDownloadTests(TestCase):
 
