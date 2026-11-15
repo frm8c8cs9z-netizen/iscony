@@ -11,6 +11,7 @@ import io
 import os
 import secrets
 import tempfile
+import time
 from itertools import combinations
 
 from django.contrib import messages
@@ -64,6 +65,8 @@ STAGE_SLOT_REQUIRED_COLUMNS = {
 }
 
 STAGE_REIMPORT_SESSION_KEY = "stage_reimport_pending"
+SCHEDULE_REIMPORT_SESSION_KEY = "schedule_reimport_pending"
+SCHEDULE_REIMPORT_MAX_AGE = 30 * 60
 
 
 def _participant_csv_headers():
@@ -145,6 +148,7 @@ CSV_FORMAT_HEADERS = {
         "category",
         "stage_code",
         "stage",
+        "group",
         "bracket",
         "court",
         "order",
@@ -351,6 +355,57 @@ def _sanitize_csv_cell(value):
         return f"'{value}"
 
     return value
+
+
+def export_schedule(request, tournament_code):
+    """現在の日程を、同じ試合を特定して取り込み直せるCSVで返す。"""
+    tournament = get_object_or_404(Tournament, code=tournament_code)
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = (
+        f'attachment; filename="schedule_{tournament.code}.csv"'
+    )
+    response.write("\ufeff")
+    writer = csv.writer(response)
+    headers = CSV_FORMAT_HEADERS["schedule"]
+    writer.writerow(headers)
+    schedules = Schedule.objects.filter(
+        court__tournament=tournament,
+    ).select_related(
+        "schedule_block", "court", "referee_participant",
+        "round_robin_match__group__stage", "round_robin_match__group__category",
+        "round_robin_match__pair1", "round_robin_match__pair2",
+        "tournament_match__bracket__stage", "tournament_match__bracket__category",
+    ).order_by("schedule_block__display_order", "order", "court__display_order", "id")
+    for schedule in schedules:
+        match = schedule.match
+        container = match.group if schedule.round_robin_match_id else match.bracket
+        stage = container.stage
+        row = {
+            "schedule_block": schedule.schedule_block.name,
+            "category": container.category.name,
+            "stage_code": stage.code if stage else "",
+            "stage": stage.name if stage else "",
+            "court": schedule.court.name,
+            "order": schedule.order,
+            "match_label": getattr(match, "match_label", ""),
+            "match_games": match.match_games,
+            "umpire_entry_code": (
+                schedule.referee_participant.entry_code
+                if schedule.referee_participant_id else ""
+            ),
+        }
+        if schedule.round_robin_match_id:
+            row.update(group=container.name, slot1_code=match.pair1.pair_code,
+                       slot2_code=match.pair2.pair_code, meeting_number=match.meeting_number)
+        else:
+            row.update(bracket=container.name, match_code=match.match_code)
+        # _cell は先頭の引用符を1つ外すため、元からある引用符も保護する。
+        writer.writerow([
+            "'" + value if isinstance(value, str) and value.startswith("'")
+            else _sanitize_csv_cell(value)
+            for value in (row.get(key, "") for key in headers)
+        ])
+    return response
 
 
 def export_stage_slots(request, tournament_code):
@@ -846,8 +901,8 @@ def _stage_reimport_protection_messages(stages):
     return errors, warnings
 
 
-def _stage_reimport_temp_path(request, token):
-    pending = request.session.get(STAGE_REIMPORT_SESSION_KEY, {})
+def _stage_reimport_temp_path(request, token, session_key=STAGE_REIMPORT_SESSION_KEY):
+    pending = request.session.get(session_key, {})
     if pending.get("token") != token:
         return ""
 
@@ -858,7 +913,7 @@ def _stage_reimport_temp_path(request, token):
     return ""
 
 
-def _store_stage_reimport_upload(request, uploaded_file):
+def _store_stage_reimport_upload(request, uploaded_file, session_key=STAGE_REIMPORT_SESSION_KEY):
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
     try:
         for chunk in uploaded_file.chunks():
@@ -867,7 +922,7 @@ def _store_stage_reimport_upload(request, uploaded_file):
         temp_file.close()
 
     token = secrets.token_urlsafe(16)
-    request.session[STAGE_REIMPORT_SESSION_KEY] = {
+    request.session[session_key] = {
         "token": token,
         "path": temp_file.name,
         "name": getattr(uploaded_file, "name", ""),
@@ -876,8 +931,8 @@ def _store_stage_reimport_upload(request, uploaded_file):
     return token
 
 
-def _clear_stage_reimport_upload(request):
-    pending = request.session.pop(STAGE_REIMPORT_SESSION_KEY, None)
+def _clear_stage_reimport_upload(request, session_key=STAGE_REIMPORT_SESSION_KEY):
+    pending = request.session.pop(session_key, None)
     request.session.modified = True
 
     if not pending:
@@ -2141,6 +2196,47 @@ def import_stage_slots(request, tournament_code):
     )
 
 
+def _schedule_csv_match_key(schedule):
+    return (
+        ("league", schedule.round_robin_match_id)
+        if schedule.round_robin_match_id
+        else ("tournament", schedule.tournament_match_id)
+    )
+
+
+def _schedule_umpire_losses(schedules, rows_by_match):
+    losses = []
+    for schedule in schedules:
+        if not any((schedule.referee_participant_id, schedule.referee_note,
+                    schedule.referee_source_type, schedule.referee_source_stage_id,
+                    schedule.referee_source_group_id, schedule.referee_source_rank,
+                    schedule.referee_source_match_id, schedule.referee_source_result)):
+            continue
+        row = rows_by_match.get(_schedule_csv_match_key(schedule))
+        if row and row["umpire"]:
+            continue
+        match = schedule.match
+        container = match.group if schedule.round_robin_match_id else match.bracket
+        stage_name = container.stage.name if container.stage_id else ""
+        match_label = (
+            f"{match.pair1.pair_code} vs {match.pair2.pair_code} ({match.meeting_number}回目)"
+            if schedule.round_robin_match_id else (match.match_label or match.match_code)
+        )
+        if schedule.referee_participant_id:
+            umpire_label = str(schedule.referee_participant)
+        elif schedule.referee_source_type:
+            umpire_label = schedule.referee_source_label
+        else:
+            umpire_label = schedule.referee_note or schedule.referee_source_label
+        losses.append({
+            "schedule": schedule,
+            "match_label": f"{container.category.name} / {stage_name} / {container.name} / {match_label}",
+            "umpire_label": umpire_label,
+            "reason": "CSVで審判が空欄" if row else "CSVに試合がない",
+        })
+    return losses
+
+
 def import_schedule(request, tournament_code):
     """
     コート割CSVを取り込む。
@@ -2155,6 +2251,10 @@ def import_schedule(request, tournament_code):
         code=tournament_code
     )
 
+    if request.GET.get("discard_schedule_reimport") == "1":
+        _clear_stage_reimport_upload(request, SCHEDULE_REIMPORT_SESSION_KEY)
+        return redirect("import_schedule", tournament_code=tournament.code)
+
     if request.method == "POST":
 
         form = CSVUploadForm(
@@ -2164,10 +2264,24 @@ def import_schedule(request, tournament_code):
 
         if form.is_valid():
 
-            csv_file = request.FILES["file"]
-            reader, rows = _read_csv_rows(
-                csv_file
-            )
+            confirm_token = form.cleaned_data.get("reimport_confirm_token", "")
+            if confirm_token:
+                pending = request.session.get(SCHEDULE_REIMPORT_SESSION_KEY, {})
+                csv_path = _stage_reimport_temp_path(
+                    request, confirm_token, SCHEDULE_REIMPORT_SESSION_KEY,
+                )
+                if (not csv_path or pending.get("tournament_id") != tournament.id
+                        or time.time() - pending.get("created_at", 0) > SCHEDULE_REIMPORT_MAX_AGE):
+                    return render(request, "core/import_schedule.html", {
+                        "tournament": tournament, "form": CSVUploadForm(),
+                        "errors": ["再取込用の一時データが見つかりません。期限切れの場合はCSVを選び直してください。"],
+                    })
+                with open(csv_path, "rb") as csv_file:
+                    reader, rows = _read_csv_rows(csv_file)
+            else:
+                _clear_stage_reimport_upload(request, SCHEDULE_REIMPORT_SESSION_KEY)
+                csv_file = request.FILES["file"]
+                reader, rows = _read_csv_rows(csv_file)
             fieldnames = set(reader.fieldnames or [])
             errors = []
 
@@ -2581,6 +2695,20 @@ def import_schedule(request, tournament_code):
                     "取込対象の行がありません。"
                 )
 
+            target_schedules = list(Schedule.objects.filter(
+                Q(round_robin_match__group_id__in=target_groups)
+                | Q(tournament_match__bracket_id__in=target_brackets)
+            ).select_related(
+                "schedule_block", "court", "referee_participant",
+                "referee_source_group", "referee_source_match__bracket",
+                "round_robin_match__group__stage", "round_robin_match__group__category",
+                "round_robin_match__pair1", "round_robin_match__pair2",
+                "tournament_match__bracket__stage", "tournament_match__bracket__category",
+            ).order_by("schedule_block__display_order", "order", "court__display_order", "id"))
+            rows_by_match = {
+                ("league" if row["stage_type"] == Stage.TYPE_LEAGUE else "tournament",
+                 row["match"].id): row for row in validated_rows
+            }
             if not errors:
                 errors.extend(
                     _schedule_import_block_errors(
@@ -2600,6 +2728,20 @@ def import_schedule(request, tournament_code):
                         "errors": errors,
                     }
                 )
+
+            umpire_losses = _schedule_umpire_losses(target_schedules, rows_by_match)
+            if umpire_losses and not confirm_token:
+                csv_file.seek(0)
+                token = _store_stage_reimport_upload(
+                    request, csv_file, SCHEDULE_REIMPORT_SESSION_KEY,
+                )
+                pending = request.session[SCHEDULE_REIMPORT_SESSION_KEY]
+                pending.update(tournament_id=tournament.id, created_at=time.time())
+                request.session.modified = True
+                return render(request, "core/import_schedule.html", {
+                    "tournament": tournament, "form": CSVUploadForm(),
+                    "umpire_losses": umpire_losses, "reimport_confirm_token": token,
+                })
 
             imported_schedule_ids = set()
             existing_schedule_flags = {}
@@ -2735,6 +2877,7 @@ def import_schedule(request, tournament_code):
                     reverse("schedule_referee_conflicts_view", kwargs={"code": tournament.code}),
                 ))
 
+            _clear_stage_reimport_upload(request, SCHEDULE_REIMPORT_SESSION_KEY)
             return redirect(
                 "schedule_view",
                 tournament_code=tournament.code

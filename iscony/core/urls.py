@@ -255,6 +255,12 @@ urlpatterns = [
         name='export_stage_slots'
     ),
 
+    path(
+        'tournament/<str:tournament_code>/export-schedule/',
+        csv.export_schedule,
+        name='export_schedule'
+    ),
+
     # コート割
     path(
         'tournament/<str:tournament_code>/import/schedule/',

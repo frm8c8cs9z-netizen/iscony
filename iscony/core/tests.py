@@ -15745,6 +15745,10 @@ class ImportScheduleCsvTests(TestCase):
                 self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
                 Schedule.objects.update(referee_participant=participants[2], referee_note="手動")
                 response = self._post_csv(self._umpire_csv(code, code, column=column))
+                if not code:
+                    self.assertContains(response, "CSVで審判が空欄", count=2)
+                    self.assertEqual(Schedule.objects.filter(referee_participant=participants[2]).count(), 2)
+                    response = self._confirm_schedule(response)
                 self.assertEqual(response.status_code, 302)
                 for schedule in Schedule.objects.all():
                     self._assert_only_direct_umpire(
@@ -15863,6 +15867,265 @@ class ImportScheduleCsvTests(TestCase):
             self.assertTrue(schedule.started)
             self.assertTrue(schedule.finished)
 
+    def _export_schedule(self):
+        return self.client.get(reverse("export_schedule", kwargs={
+            "tournament_code": self.tournament.code,
+        }))
+
+    def _confirm_schedule(self, response):
+        return self.client.post(reverse("import_schedule", kwargs={
+            "tournament_code": self.tournament.code,
+        }), {"reimport_confirm_token": response.context["reimport_confirm_token"]})
+
+    def _schedule_state(self):
+        return list(Schedule.objects.order_by("id").values())
+
+    def _roundtrip_state(self):
+        return sorted((
+            s.schedule_block_id, s.court_id, s.order,
+            s.round_robin_match_id or 0, s.tournament_match_id or 0,
+            getattr(s.match, "match_label", ""), s.match.match_games,
+            s.referee_participant_id or 0, s.called, s.started, s.finished,
+        ) for s in Schedule.objects.all())
+
+    def _schedule_export_fixture(self):
+        stage, league, tournament, participants = self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        second = RoundRobinMatch.objects.create(
+            group=league.group, pair1=league.pair1, pair2=league.pair2, meeting_number=2,
+            match_games=5,
+        )
+        day2 = ScheduleBlock.objects.create(
+            tournament=self.tournament, name="2日目", display_order=2,
+        )
+        court = Court.objects.get(name="1コート")
+        court.display_order = 5
+        court.save()
+        Schedule.objects.create(
+            schedule_block=day2, court=court, order=1,
+            round_robin_match=second, referee_participant=participants[2],
+        )
+        bracket = TournamentBracket.objects.create(
+            category=self.category, stage=tournament.bracket.stage, name="別の表",
+        )
+        other = TournamentMatch.objects.create(
+            bracket=bracket, round_number=1, match_number=1, match_code="M1",
+            match_label="=決勝", match_games=9,
+        )
+        Schedule.objects.create(
+            schedule_block=day2, court=court, order=2,
+            tournament_match=other, referee_participant=participants[3],
+        )
+        # 旧データのコードなしStageも名前で読み込める。
+        Stage.objects.filter(pk=stage.pk).update(code="")
+        return league, second, tournament, other, participants
+
+    def test_schedule_export_headers_bom_order_and_roundtrip(self):
+        from .views.csv import CSV_FORMAT_HEADERS
+        league, second, tournament, other, _ = self._schedule_export_fixture()
+        response = self._export_schedule()
+        self.assertTrue(response.content.startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="schedule_SCHEDCSV.csv"')
+        reader = csv.DictReader(io.StringIO(response.content.decode("utf-8-sig")))
+        rows = list(reader)
+        self.assertEqual(reader.fieldnames, CSV_FORMAT_HEADERS["schedule"])
+        self.assertEqual([(r["schedule_block"], r["court"], r["order"]) for r in rows], [
+            ("本日程", "2コート", "1"), ("本日程", "1コート", "1"),
+            ("2日目", "1コート", "1"), ("2日目", "1コート", "2"),
+        ])
+        self.assertEqual([r["umpire_entry_code"] for r in rows], ["4", "3", "3", "4"])
+        self.assertEqual(rows[2]["meeting_number"], "2")
+        self.assertEqual(rows[1]["group"], "A")
+        self.assertEqual(rows[1]["stage_code"], "")
+        self.assertEqual(rows[3]["match_label"], "'=決勝")
+        before = self._roundtrip_state()
+        result = self._post_csv(response.content.decode("utf-8-sig"))
+        self.assertEqual(result.status_code, 302)
+        self.assertEqual(self._roundtrip_state(), before)
+
+    def test_schedule_export_roundtrip_rejects_progress_or_results(self):
+        league, _, tournament, _, _ = self._schedule_export_fixture()
+        schedule = Schedule.objects.get(round_robin_match=league)
+        ScheduleReplacementHistory.objects.create(
+            schedule=schedule, original_match=league,
+            original_schedule_block=schedule.schedule_block,
+            original_court=schedule.court, original_order=schedule.order,
+        )
+        history_before = list(ScheduleReplacementHistory.objects.values())
+        for match in (league, tournament):
+            schedule = Schedule.objects.get(**{
+                "round_robin_match" if match == league else "tournament_match": match,
+            })
+            for flag in ("called", "started", "finished"):
+                with self.subTest(match=type(match).__name__, flag=flag):
+                    setattr(schedule, flag, True)
+                    schedule.save()
+                    before = self._schedule_state()
+                    exported = self._export_schedule().content.decode("utf-8-sig")
+                    response = self._post_csv(exported)
+                    self.assertContains(response, "進行済み")
+                    self.assertNotContains(response, "それでも取り込む")
+                    self.assertEqual(self._schedule_state(), before)
+                    self.assertEqual(list(ScheduleReplacementHistory.objects.values()), history_before)
+                    setattr(schedule, flag, False)
+                    schedule.save()
+            with self.subTest(match=type(match).__name__, result=True):
+                match.pair1_games = 4
+                match.pair2_games = 2
+                match.save()
+                before = self._schedule_state()
+                exported = self._export_schedule().content.decode("utf-8-sig")
+                response = self._post_csv(exported)
+                self.assertContains(response, "試合結果が入力済みです")
+                self.assertNotContains(response, "それでも取り込む")
+                self.assertEqual(self._schedule_state(), before)
+                self.assertEqual(list(ScheduleReplacementHistory.objects.values()), history_before)
+                match.pair1_games = None
+                match.pair2_games = None
+                match.save()
+
+    def test_schedule_export_sources_and_note_confirm_before_clearing(self):
+        league, second, tournament, other, _ = self._schedule_export_fixture()
+        Schedule.objects.filter(round_robin_match=league).update(
+            referee_participant=None, referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=league.group, referee_source_rank=1,
+        )
+        Schedule.objects.filter(tournament_match=tournament).update(
+            referee_participant=None, referee_source_type=AdvancementSource.SOURCE_TOURNAMENT_RESULT,
+            referee_source_match=other, referee_source_result=AdvancementSource.RESULT_LOSER,
+        )
+        Schedule.objects.filter(round_robin_match=second).update(
+            referee_participant=None, referee_note="大会本部",
+        )
+        response = self._export_schedule()
+        rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
+        self.assertEqual([r["umpire_entry_code"] for r in rows], ["", "", "", "4"])
+        before = self._schedule_state()
+        confirm = self._post_csv(response.content.decode("utf-8-sig"))
+        self.assertContains(confirm, "次の3件")
+        self.assertContains(confirm, "A－1位")
+        self.assertContains(confirm, "大会本部")
+        self.assertContains(confirm, "CSVで審判が空欄", count=3)
+        self.assertEqual(self._schedule_state(), before)
+        self.assertEqual(self._confirm_schedule(confirm).status_code, 302)
+        for schedule in Schedule.objects.exclude(tournament_match=other):
+            self._assert_only_direct_umpire(schedule, None)
+
+    def test_schedule_missing_match_prompts_and_deletes_only_after_confirmation(self):
+        league, second, tournament, other, _ = self._schedule_export_fixture()
+        exported = self._export_schedule().content.decode("utf-8-sig")
+        rows = list(csv.DictReader(io.StringIO(exported)))
+        # リーグは全試合を残し、同じトーナメント表の一部を省く。
+        extra = TournamentMatch.objects.create(
+            bracket=tournament.bracket, round_number=1, match_number=2, match_code="M2",
+        )
+        existing = Schedule.objects.get(tournament_match=tournament)
+        Schedule.objects.create(court=existing.court, order=2, tournament_match=extra)
+        extra_row = dict(rows[0], match_code="M2", order="2", umpire_entry_code="")
+        kept_rows = [r for r in rows if r["bracket"] != "本戦"]
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(kept_rows + [extra_row])
+        before = self._schedule_state()
+        confirm = self._post_csv(output.getvalue())
+        self.assertContains(confirm, "CSVに試合がない", count=1)
+        self.assertEqual(self._schedule_state(), before)
+        self.assertEqual(self._confirm_schedule(confirm).status_code, 302)
+        self.assertTrue(Schedule.objects.filter(round_robin_match=second).exists())
+        self.assertFalse(Schedule.objects.filter(tournament_match=tournament).exists())
+
+    def test_schedule_cancel_invalid_expired_and_cross_tournament_tokens(self):
+        from .views.csv import SCHEDULE_REIMPORT_SESSION_KEY
+        self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        before = self._schedule_state()
+        confirm = self._post_csv(self._umpire_csv("", ""))
+        token = confirm.context["reimport_confirm_token"]
+        pending = self.client.session[SCHEDULE_REIMPORT_SESSION_KEY]
+        path = pending["path"]
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        url = reverse("import_schedule", kwargs={"tournament_code": self.tournament.code})
+        invalid = self.client.post(url, {"reimport_confirm_token": token + "wrong"})
+        self.assertContains(invalid, "一時データが見つかりません")
+        other = Tournament.objects.create(name="別大会", code="OTHERCSV")
+        cross = self.client.post(reverse("import_schedule", kwargs={
+            "tournament_code": other.code,
+        }), {"reimport_confirm_token": token})
+        self.assertContains(cross, "一時データが見つかりません")
+        session = self.client.session
+        session[SCHEDULE_REIMPORT_SESSION_KEY] = dict(pending, created_at=0)
+        session.save()
+        expired = self.client.post(url, {"reimport_confirm_token": token})
+        self.assertContains(expired, "期限切れ")
+        self.assertEqual(self._schedule_state(), before)
+        self.assertEqual(self.client.get(url + "?discard_schedule_reimport=1").status_code, 302)
+        self.assertFalse(os.path.exists(path))
+        self.assertNotIn(SCHEDULE_REIMPORT_SESSION_KEY, self.client.session)
+        self.assertEqual(self._schedule_state(), before)
+        self.assertContains(self.client.post(url, {"reimport_confirm_token": token}), "一時データが見つかりません")
+
+    def test_schedule_csv_errors_take_precedence_over_umpire_confirmation(self):
+        self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        before = self._schedule_state()
+        response = self._post_csv(self._umpire_csv("", "UNKNOWN"))
+        self.assertContains(response, "見つかりません")
+        self.assertNotContains(response, "それでも取り込む")
+        self.assertEqual(self._schedule_state(), before)
+
+    def test_schedule_confirmation_revalidates_before_import_and_consumes_token(self):
+        self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        confirm = self._post_csv(self._umpire_csv("", ""))
+        schedule = Schedule.objects.first()
+        schedule.called = True
+        schedule.save()
+        before = self._schedule_state()
+        response = self._confirm_schedule(confirm)
+        self.assertContains(response, "進行済み")
+        self.assertEqual(self._schedule_state(), before)
+        Schedule.objects.update(called=False)
+        self.assertEqual(self._confirm_schedule(confirm).status_code, 302)
+        self.assertContains(self._confirm_schedule(confirm), "一時データが見つかりません")
+
+    def test_schedule_partial_league_export_roundtrip_is_rejected(self):
+        _, league, _, _ = self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        RoundRobinMatch.objects.create(
+            group=league.group, pair1=league.pair1, pair2=league.pair2, meeting_number=2,
+        )
+        TournamentMatch.objects.update(match_label="'決勝")
+        group = Group.objects.create(category=self.category, stage=league.group.stage, name="B")
+        entries = [LeagueEntry.objects.create(
+            category=self.category, group=group, pair_code=str(number), display_order=number,
+        ) for number in (5, 6)]
+        match = RoundRobinMatch.objects.create(group=group, pair1=entries[0], pair2=entries[1])
+        Schedule.objects.create(court=Court.objects.get(name="1コート"), order=2, round_robin_match=match)
+        before = self._roundtrip_state()
+        exported = self._export_schedule().content.decode("utf-8-sig")
+        response = self._post_csv(exported)
+        self.assertContains(response, "未スケジュール:")
+        self.assertNotContains(response, "それでも取り込む")
+        self.assertEqual(self._roundtrip_state(), before)
+
+    def test_schedule_sources_replaced_by_participant_need_no_confirmation(self):
+        _, league, tournament, participants = self._create_umpire_csv_matches()
+        self.assertEqual(self._post_csv(self._umpire_csv()).status_code, 302)
+        Schedule.objects.update(
+            referee_participant=None, referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+            referee_source_group=league.group, referee_source_rank=1,
+        )
+        response = self._post_csv(self._umpire_csv("4", "3"))
+        self.assertEqual(response.status_code, 302)
+        self._assert_only_direct_umpire(Schedule.objects.get(round_robin_match=league), participants[3])
+        self._assert_only_direct_umpire(Schedule.objects.get(tournament_match=tournament), participants[2])
+
+    def test_schedule_export_links(self):
+        for name in ("import_schedule", "maintenance_menu"):
+            response = self.client.get(reverse(name, args=[self.tournament.code]))
+            self.assertContains(response, "進行表CSVを書き出す")
+
     def test_umpire_csv_format_and_explanation(self):
         response = self.client.get(reverse("download_csv_format", kwargs={
             "tournament_code": self.tournament.code, "format_type": "schedule",
@@ -15922,12 +16185,12 @@ class CsvFormatDownloadTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(content.startswith("schedule_block,"))
         self.assertIn(
-            "category,stage_code,stage,bracket,court,order",
+            "category,stage_code,stage,group,bracket,court,order",
             content,
         )
         header = content.strip().splitlines()[0].split(",")
         self.assertNotIn("stage_type", header)
-        self.assertNotIn("group", header)
+        self.assertIn("group", header)
         self.assertNotIn("pair1", header)
         self.assertNotIn("pair2", header)
         self.assertIn("meeting_number", header)
