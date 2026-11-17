@@ -3215,6 +3215,11 @@ def _advancement_impact_for_sources(sources):
 
 
 def _stage_has_results(stage):
+    return stage_has_results(stage)
+
+
+def stage_has_results(stage):
+    """Stage編集と共通の、結果入力済み判定。"""
     if stage.stage_type == Stage.TYPE_LEAGUE:
         return RoundRobinMatch.objects.filter(
             group__stage=stage,

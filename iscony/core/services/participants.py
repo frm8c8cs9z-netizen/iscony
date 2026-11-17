@@ -24,12 +24,13 @@ from ..models import (
     TournamentMatch,
     TournamentOrganizationField,
 )
-from .operations import tournament_match_has_score
+from .operations import stage_has_results, tournament_match_has_score
 from .stage_setup import (
     _create_empty_league_entry_slot,
     add_league_entry_slot,
     group_base_size,
     group_slot_reference_total,
+    validate_league_slot_number_change,
 )
 
 
@@ -454,6 +455,7 @@ def _delete_league_entry_and_renumber(entry):
     """
 
     group = entry.group
+    validate_league_slot_number_change(group)
 
     old_code = (
         int(entry.pair_code)
@@ -514,6 +516,7 @@ def unassign_league_entry_participant(entry):
     -1ずつ前へシフトする(グループごとのブロック連番を維持した
     まま詰める)。この場合は None を返す。
 
+    Stageに結果がある場合も枠は残し、番号を変えない。
     それ以外(グループがちょうどベース枠数の)場合は、従来通り
     participant を None にして保存するだけで、枠自体は残す。
     この場合は entry を返す。
@@ -531,7 +534,10 @@ def unassign_league_entry_participant(entry):
             group=group,
         ).count()
 
-        if group_entry_count > base:
+        if (
+            group_entry_count > base
+            and not (group.stage_id and stage_has_results(group.stage))
+        ):
             _delete_league_entry_and_renumber(entry)
             return None
 
@@ -539,6 +545,17 @@ def unassign_league_entry_participant(entry):
         entry.save(update_fields=["participant"])
 
         return entry
+
+
+def remove_league_entry_slot(entry):
+    """追加枠の明示的な解除。結果入力後は参加者解除も行わない。"""
+    with transaction.atomic():
+        if _entry_has_completed_match(entry):
+            raise ValidationError(
+                "結果入力済みの試合があるため、参加者割当を解除できません。"
+            )
+        validate_league_slot_number_change(entry.group)
+        return unassign_league_entry_participant(entry)
 
 
 def move_empty_league_entry_slot(source_entry, target_group):
@@ -558,8 +575,10 @@ def move_empty_league_entry_slot(source_entry, target_group):
 
     参加者を割り振る段階(結果未入力)で、余りをどのグループに
     持たせるかを調整するための機能。結果入力済みの場合は
-    呼び出し元(ビュー)で弾くこと。
+    サービス層で拒否する。
     """
+
+    validate_league_slot_number_change(source_entry.group)
 
     if source_entry.participant is not None:
         raise ValidationError(

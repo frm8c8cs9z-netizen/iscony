@@ -44,6 +44,8 @@ from ..models import (
 )
 from ..services import (
     cancel_pair_retirement,
+    stage_has_results,
+    remove_league_entry_slot,
     retire_league_entry,
     add_league_entry_slot,
     assign_league_entry_advancement_piece,
@@ -1531,12 +1533,14 @@ def pair_maintenance(request, category_id, stage_id=None):
             if groups
             else 0
         )
+        slots_locked = stage_has_results(stage)
         group_rows = [
             {
                 "group": group,
                 "entries": entries_by_group_id.get(group.id, []),
                 "can_add_slot": (
-                    group.entry_count == group_base_size(group)
+                    not slots_locked
+                    and group.entry_count == group_base_size(group)
                     and not any(
                         entry.participant_id is None
                         for entry in entries_by_group_id.get(group.id, [])
@@ -1545,24 +1549,28 @@ def pair_maintenance(request, category_id, stage_id=None):
                     and not is_advancement_source_stage
                 ),
                 "can_remove_slot": (
-                    group.entry_count > group_base_size(group)
+                    not slots_locked
+                    and group.entry_count > group_base_size(group)
                     and not is_advancement_source_stage
                 ),
                 "can_give_up_slot": (
-                    group.entry_count > (
+                    not slots_locked
+                    and group.entry_count > (
                         plain_base_total // len(groups)
                         if groups
                         else 0
                     )
                 ),
                 "can_receive_moved_slot": (
-                    group.entry_count == group_base_size(group)
+                    not slots_locked
+                    and group.entry_count == group_base_size(group)
                 ),
             }
             for group in groups
         ]
 
         context.update({
+            "slots_locked": slots_locked,
             "is_advancement_source_stage": is_advancement_source_stage,
             "advancement_source_is_tournament": advancement_source_is_tournament,
             "group_rows": group_rows,
@@ -2261,7 +2269,7 @@ def remove_league_entry_slot_view(request, group_id):
     else:
         had_participant = entry.participant_id is not None
         try:
-            unassign_league_entry_participant(entry)
+            remove_league_entry_slot(entry)
             if had_participant:
                 messages.success(
                     request,
@@ -2356,7 +2364,8 @@ def assign_league_entry_participant_api(request, entry_id):
         category_id=group.category_id,
     ).count()
     group_can_add_slot = (
-        LeagueEntry.objects.filter(group=group).count() == base
+        not (group.stage_id and stage_has_results(group.stage))
+        and LeagueEntry.objects.filter(group=group).count() == base
         and not has_empty_slot
         and stage_total_entries < participant_count
     )

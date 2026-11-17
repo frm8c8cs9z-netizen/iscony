@@ -28,6 +28,7 @@ from ..models import (
 from .operations import (
     advance_tournament_bye_winners,
     auto_apply_stage_advancements_if_ready,
+    stage_has_results,
 )
 
 
@@ -164,6 +165,14 @@ def group_base_size(group):
     return base
 
 
+def validate_league_slot_number_change(group):
+    """結果入力後はStage内の枠番号を変える操作を拒否する。"""
+    if group.stage_id is not None and stage_has_results(group.stage):
+        raise ValidationError(
+            "このStageには結果が入っているため、枠の追加・移動・解除はできません(番号が変わってしまうため)。"
+        )
+
+
 def _create_empty_league_entry_slot(group):
     """
     グループへ、空のLeagueEntryを1件追加する共通処理。
@@ -175,6 +184,8 @@ def _create_empty_league_entry_slot(group):
     呼び出し側で、追加してよいかどうかの判定・ロックは済ませてから
     呼ぶこと。
     """
+
+    validate_league_slot_number_change(group)
 
     group_numeric_codes = [
         int(pair_code)
@@ -261,6 +272,7 @@ def add_league_entry_slot(group):
             )
         )
 
+        validate_league_slot_number_change(group)
         base = group_base_size(group)
 
         current_count = LeagueEntry.objects.filter(
