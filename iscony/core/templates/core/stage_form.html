@@ -666,13 +666,15 @@
                     const submitter = event.submitter;
                     function submit(mode = "rebuild") {
                         document.getElementById("start-round-change-mode").value = mode;
-                        approvedSubmission = true;
-                        try {
-                            if (submitter) regenerateForm.requestSubmit(submitter);
-                            else regenerateForm.requestSubmit();
-                        } finally {
-                            approvedSubmission = false;
-                        }
+                        setTimeout(function() {
+                            approvedSubmission = true;
+                            try {
+                                if (submitter) regenerateForm.requestSubmit(submitter);
+                                else regenerateForm.requestSubmit();
+                            } finally {
+                                approvedSubmission = false;
+                            }
+                        }, 0);
                     }
                     try {
                         if (!computeNeedsRebuild(false)

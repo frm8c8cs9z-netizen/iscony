@@ -39112,6 +39112,7 @@ from .organization_display_tests import OrganizationDisplayTests  # noqa: E402,F
 
 
 from .irregular_tournament_tests import StartRoundArrayTests, IrregularTournamentTests
+from .test_stage_form_submission import StageFormSubmissionTests  # noqa: E402,F401
 
 
 class LeagueSlotResultLockTests(TestCase):
