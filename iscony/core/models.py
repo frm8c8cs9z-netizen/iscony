@@ -990,6 +990,8 @@ class ParticipantOrganizationValue(models.Model):
 # =========================================================
 class Group(models.Model):
 
+    planned_slot_count = models.PositiveIntegerField(null=True, blank=True)
+
     category = models.ForeignKey(
         Category,
         on_delete=models.CASCADE

@@ -166,6 +166,12 @@ class StageSlotSetupForm(forms.Form):
         min_value=1,
         label="グループ数",
     )
+    group_sizes = forms.CharField(
+        required=False,
+        label="グループごとの組数",
+        help_text="上のグループから順に入力します(例: 4,3,3)。空欄なら若いグループから+1にします。",
+        widget=forms.TextInput(attrs={"placeholder": "例: 4,3,3", "autocomplete": "off"}),
+    )
     match_games = forms.IntegerField(
         required=False,
         label="ゲーム数",

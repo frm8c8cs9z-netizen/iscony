@@ -2081,6 +2081,9 @@ def import_stage_slots(request, tournament_code):
                             )
                         )
 
+                        group.planned_slot_count = len(entries)
+                        group.save(update_fields=["planned_slot_count"])
+
                         for pair1, pair2 in combinations(entries, 2):
                             RoundRobinMatch.objects.create(
                                 group=group,

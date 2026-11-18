@@ -25,6 +25,8 @@ from ..helpers.brackets import (
 )
 from ..helpers.league_grouping import (
     build_group_count_candidates,
+    parse_group_sizes_text,
+    resolve_group_sizes,
     find_group_count_candidate,
 )
 from ..models import (
@@ -90,13 +92,18 @@ def _current_stage_slot_values(stage):
     }
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
-        values["pair_count"] = LeagueEntry.objects.filter(
-            group__stage=stage,
-        ).count()
-
-        values["group_count"] = Group.objects.filter(
-            stage=stage,
-        ).count() or None
+        groups = list(Group.objects.filter(stage=stage).annotate(
+            entry_count=Count("leagueentry"),
+        ).order_by("display_order", "name"))
+        values["group_sizes"] = [
+            group.planned_slot_count if group.planned_slot_count is not None
+            else group.entry_count
+            for group in groups
+        ]
+        # 編集欄の参加ペア数も本来の組数に揃える。追加枠がある状態での
+        # 名前だけの更新で、合計不一致や意図しない再生成を起こさない。
+        values["pair_count"] = sum(values["group_sizes"])
+        values["group_count"] = len(groups) or None
 
         values["match_games"] = RoundRobinMatch.objects.filter(
             group__stage=stage,
@@ -149,6 +156,7 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
 
     if stage.stage_type == Stage.TYPE_LEAGUE:
         initial["group_count"] = current.get("group_count")
+        initial["group_sizes"] = ",".join(str(size) for size in current["group_sizes"])
     else:
         bracket_list = current.get("bracket_list") or []
         initial["use_multi_bracket"] = len(bracket_list) > 1
@@ -174,6 +182,7 @@ def _stage_slot_form_for_current_entries(stage, disabled=False):
     if disabled:
         slot_form.fields["pair_count"].widget.attrs["disabled"] = True
         slot_form.fields["group_count"].widget.attrs["disabled"] = True
+        slot_form.fields["group_sizes"].widget.attrs["disabled"] = True
         slot_form.fields["match_games"].widget.attrs["disabled"] = True
         slot_form.fields["advancement_mode"].widget.attrs["disabled"] = True
         slot_form.fields["advancement_source_stage"].widget.attrs["disabled"] = True
@@ -927,6 +936,16 @@ def _validate_stage_slot_setup(stage_type, slot_form, *, current_stage=None):
 
     if stage_type == Stage.TYPE_LEAGUE:
         group_count = slot_form.cleaned_data.get("group_count")
+        try:
+            explicit_sizes = parse_group_sizes_text(slot_form.cleaned_data.get("group_sizes"))
+            if explicit_sizes is not None:
+                slot_form.cleaned_data["parsed_group_sizes"] = resolve_group_sizes(
+                    pair_count, group_count, explicit_sizes,
+                )
+        except ValidationError as error:
+            slot_form.add_error("group_sizes", error)
+            return False
+
         candidate = find_group_count_candidate(
             pair_count,
             group_count,
@@ -941,6 +960,9 @@ def _validate_stage_slot_setup(stage_type, slot_form, *, current_stage=None):
                 ),
             )
             return False
+
+        if explicit_sizes is None:
+            slot_form.cleaned_data["parsed_group_sizes"] = candidate["group_sizes"]
 
     if stage_type == Stage.TYPE_TOURNAMENT:
 
@@ -1033,6 +1055,7 @@ def add_stage(request, code, category_id):
                         pair_count,
                         group_count,
                         match_games,
+                        group_sizes=slot_form.cleaned_data["parsed_group_sizes"],
                     )
 
                 messages.success(
@@ -1396,6 +1419,7 @@ def edit_stage(request, code, category_id, stage_id):
                         or advancement_mode_changed
                         or advancement_source_changed
                         or group_count_changed
+                        or slot_form.cleaned_data["parsed_group_sizes"] != current_values.get("group_sizes")
                     )
 
                 else:
@@ -1509,6 +1533,7 @@ def edit_stage(request, code, category_id, stage_id):
                                 new_pair_count,
                                 new_group_count,
                                 new_match_games,
+                                group_sizes=slot_form.cleaned_data["parsed_group_sizes"],
                             )
 
                         else:
@@ -1553,6 +1578,15 @@ def edit_stage(request, code, category_id, stage_id):
                         if keep_start_rounds:
                             Stage.objects.filter(advancement_source_stage=stage).delete()
                         stage = form.save()
+
+                        if new_stage_type == Stage.TYPE_LEAGUE:
+                            for group, size in zip(
+                                Group.objects.filter(stage=stage).order_by("display_order", "name"),
+                                slot_form.cleaned_data["parsed_group_sizes"],
+                            ):
+                                if group.planned_slot_count != size:
+                                    group.planned_slot_count = size
+                                    group.save(update_fields=["planned_slot_count"])
 
                         if new_stage_type == Stage.TYPE_TOURNAMENT:
                             existing_brackets = list(TournamentBracket.objects.filter(

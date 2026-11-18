@@ -26,10 +26,8 @@ from ..models import (
 )
 from .operations import stage_has_results, tournament_match_has_score
 from .stage_setup import (
-    _create_empty_league_entry_slot,
     add_league_entry_slot,
     group_base_size,
-    group_slot_reference_total,
     validate_league_slot_number_change,
 )
 
@@ -354,7 +352,7 @@ def assign_participant_to_league_entry(entry, participant):
 
 # --------------------------------------------------------------------
 # 以下、リーグの「＋1枠」まわりの操作(玉突き割り当て・枠追加・
-# 枠解除・グループ間の枠移動)は、いずれも「裏機能」として維持して
+# 枠解除)は、いずれも「裏機能」として維持して
 # いる。iscony は、大会構成(組み合わせ・試合順)が遅くとも前日までに
 # 確定していることを前提としたシステムであり、結果入力が始まった
 # 大会本番中に、参加者を追加したり枠をグループ間で動かしたりする
@@ -556,85 +554,6 @@ def remove_league_entry_slot(entry):
             )
         validate_league_slot_number_change(entry.group)
         return unassign_league_entry_participant(entry)
-
-
-def move_empty_league_entry_slot(source_entry, target_group):
-    """
-    参加者が割り当てられていない枠(source_entry)を削除し、
-    target_groupに新しい未割当枠を1つ追加する。
-
-    source_entryは、そのグループの現在の枠数が、ステージ全体の
-    素の基本枠数(参加者数 // グループ数の切り捨て)より多い場合
-    (=そのグループが余りを受け持っている場合)のみ削除できる。
-
-    target_groupは、現在の枠数がそのグループ本来のベース枠数
-    (group_base_size)とちょうど一致している場合のみ移動先にできる。
-    target_group側の枠に未割当のものが残っていても移動先にできる
-    (「参加者を割り振る前に、余りをどのグループに持たせるか決める」
-    という使い方を想定しているため)。
-
-    参加者を割り振る段階(結果未入力)で、余りをどのグループに
-    持たせるかを調整するための機能。結果入力済みの場合は
-    サービス層で拒否する。
-    """
-
-    validate_league_slot_number_change(source_entry.group)
-
-    if source_entry.participant is not None:
-        raise ValidationError(
-            "この枠には参加者が割り当てられています。"
-        )
-
-    if hasattr(source_entry, "advancement_source"):
-        raise ValidationError(
-            "この枠には進出元が割り当てられています。"
-        )
-
-    group = source_entry.group
-
-    if group.id == target_group.id:
-        raise ValidationError(
-            "移動元と移動先が同じグループです。"
-        )
-
-    if group.stage_id is None or target_group.stage_id != group.stage_id:
-        raise ValidationError(
-            "同じStage内のグループ間でのみ移動できます。"
-        )
-
-    stage_group_count = Group.objects.filter(
-        stage_id=group.stage_id,
-    ).count()
-    participant_count = group_slot_reference_total(group)
-    plain_base = (
-        participant_count // stage_group_count
-        if stage_group_count
-        else 0
-    )
-
-    current_count = LeagueEntry.objects.filter(
-        group=group,
-    ).count()
-
-    if current_count <= plain_base:
-        raise ValidationError(
-            f"{group.name}はこれ以上枠を減らせません。"
-        )
-
-    target_base = group_base_size(target_group)
-    target_current_count = LeagueEntry.objects.filter(
-        group=target_group,
-    ).count()
-    if target_current_count != target_base:
-        raise ValidationError(
-            f"{target_group.name}は既に追加枠があるか、基本枠数と一致していません。"
-        )
-
-    with transaction.atomic():
-        _delete_league_entry_and_renumber(source_entry)
-        new_entry = _create_empty_league_entry_slot(target_group)
-
-    return new_entry
 
 
 def move_league_entry_participant(source_entry, target_entry):

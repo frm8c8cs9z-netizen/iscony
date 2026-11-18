@@ -59,11 +59,9 @@ from ..services import (
     delete_round_robin_score,
     insert_round_robin_schedule,
     group_base_size,
-    group_slot_reference_total,
     consume_stage_advancement_result,
     move_league_entry_advancement_piece,
     move_league_entry_participant,
-    move_empty_league_entry_slot,
     move_league_entry_participant_to_new_slot,
     save_round_robin_score,
     save_round_robin_star_score,
@@ -1528,11 +1526,6 @@ def pair_maintenance(request, category_id, stage_id=None):
         category_participant_count = Participant.objects.filter(
             category=category,
         ).count()
-        plain_base_total = (
-            group_slot_reference_total(groups[0])
-            if groups
-            else 0
-        )
         slots_locked = stage_has_results(stage)
         group_rows = [
             {
@@ -1553,18 +1546,6 @@ def pair_maintenance(request, category_id, stage_id=None):
                     and group.entry_count > group_base_size(group)
                     and not is_advancement_source_stage
                 ),
-                "can_give_up_slot": (
-                    not slots_locked
-                    and group.entry_count > (
-                        plain_base_total // len(groups)
-                        if groups
-                        else 0
-                    )
-                ),
-                "can_receive_moved_slot": (
-                    not slots_locked
-                    and group.entry_count == group_base_size(group)
-                ),
             }
             for group in groups
         ]
@@ -1574,14 +1555,6 @@ def pair_maintenance(request, category_id, stage_id=None):
             "is_advancement_source_stage": is_advancement_source_stage,
             "advancement_source_is_tournament": advancement_source_is_tournament,
             "group_rows": group_rows,
-            "movable_target_groups": [
-                {
-                    "id": row["group"].id,
-                    "name": row["group"].name,
-                }
-                for row in group_rows
-                if row["can_receive_moved_slot"]
-            ],
             "unassigned_participants": unassigned_participants,
             "unassigned_pieces": unassigned_pieces,
             "piece_ranks": piece_ranks,
@@ -2111,64 +2084,6 @@ def unassign_league_entry_participant_api(request, entry_id):
             "participant_organization": participant_organization,
             "slot_removed": result is None,
             "group_id": group_id,
-        }
-    )
-
-
-def move_empty_league_entry_slot_api(request, entry_id):
-    """POSTで呼ばれ、未割当のLeagueEntry枠を別グループへ移動する。"""
-
-    if request.method != "POST":
-        return JsonResponse(
-            {
-                "success": False,
-                "error": "POSTで送信してください。",
-            },
-            status=405,
-        )
-
-    source_entry = get_object_or_404(
-        LeagueEntry,
-        id=entry_id,
-    )
-    target_group_id = request.POST.get("target_group_id")
-
-    if not target_group_id:
-        return JsonResponse(
-            {
-                "success": False,
-                "error": "移動先を指定してください。",
-            },
-            status=400,
-        )
-
-    target_group = get_object_or_404(
-        Group,
-        id=target_group_id,
-        category=source_entry.category,
-    )
-    source_group_id = source_entry.group_id
-
-    try:
-        new_entry = move_empty_league_entry_slot(
-            source_entry,
-            target_group,
-        )
-    except ValidationError as error:
-        return JsonResponse(
-            {
-                "success": False,
-                "error": " ".join(error.messages),
-            },
-            status=400,
-        )
-
-    return JsonResponse(
-        {
-            "success": True,
-            "source_group_id": source_group_id,
-            "target_group_id": target_group.id,
-            "new_entry_id": new_entry.id,
         }
     )
 

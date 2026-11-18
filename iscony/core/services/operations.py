@@ -286,6 +286,7 @@ def clone_tournament_without_results(source, *, name, code):
             group_map[old.id] = Group.objects.create(
                 category=category_map[old.category_id],
                 stage=stage_map.get(old.stage_id),
+                planned_slot_count=old.planned_slot_count,
                 name=old.name,
                 display_order=old.display_order,
             )

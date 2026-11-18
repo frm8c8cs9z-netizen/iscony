@@ -15,7 +15,7 @@ from ..helpers.brackets import (
     build_start_round_bracket_slots,
     get_bracket_size,
 )
-from ..helpers.league_grouping import find_group_count_candidate
+from ..helpers.league_grouping import resolve_group_sizes
 from ..models import (
     Group,
     LeagueEntry,
@@ -45,28 +45,16 @@ def _group_name(index):
             return name
 
 
-def create_league_stage_groups(stage, pair_count, group_count, match_games=7):
+def create_league_stage_groups(stage, pair_count, group_count, match_games=7, *, group_sizes=None):
     """
     Stage配下に空のGroupとLeagueEntryを作成し、あわせて各グループの
     総当たり試合(RoundRobinMatch)も作成する。
     """
 
     with transaction.atomic():
-        candidate = find_group_count_candidate(
-            pair_count,
-            group_count,
-        )
-
-        if not candidate:
-            raise ValidationError(
-                "入力した参加ペア数に対して無効なグループ数です。"
-            )
-
+        group_sizes = resolve_group_sizes(pair_count, group_count, group_sizes)
         groups = []
         pair_number = 1
-
-        group_count = candidate["group_count"]
-        group_sizes = candidate["group_sizes"]
 
         for group_index in range(group_count):
             group = Group.objects.create(
@@ -74,6 +62,7 @@ def create_league_stage_groups(stage, pair_count, group_count, match_games=7):
                 stage=stage,
                 name=_group_name(group_index),
                 display_order=group_index + 1,
+                planned_slot_count=group_sizes[group_index],
             )
             groups.append(group)
 
@@ -112,8 +101,7 @@ def group_slot_reference_total(group):
     設定されている)は、参加者登録数とは無関係にStage作成時の参加
     ペア数で枠が決まっているため、代わりにそのStage自体の現在の
     枠総数を基準にする。このStage種別では「+1枠を追加/解除」を
-    使わない(枠の増減はStage編集からの再生成のみで行う)ため、
-    グループ間の枠移動だけでは変化しない安定した値になる。
+    使わない(枠の増減はStage編集からの再生成のみで行う)。
     """
 
     if group.stage_id is None:
@@ -131,8 +119,8 @@ def group_slot_reference_total(group):
 
 def group_base_size(group):
     """
-    グループの本来のベース枠数を、group_slot_reference_total()の値と
-    グループ数から算出する。
+    作成時に記録した本来の枠数を返す。記録のない既存グループのみ、
+    group_slot_reference_total()の値とグループ数から算出する。
 
     既存の枠数がどう変化していても結果がぶれないよう、
     「その時点のグループ間の最小エントリー数」ではなく、
@@ -142,6 +130,9 @@ def group_base_size(group):
     グループから順に+1人多く配分するため、ここでも同じ規則で
     「このグループの本来のベース枠数」を算出する。
     """
+
+    if group.planned_slot_count is not None:
+        return group.planned_slot_count
 
     if group.stage_id is None:
         return 0

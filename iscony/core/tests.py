@@ -116,7 +116,6 @@ from .services import (
     day_of_referee_status_map,
     insert_round_robin_schedule,
     move_schedule,
-    move_empty_league_entry_slot,
     move_league_entry_advancement_piece,
     move_league_entry_participant,
     move_league_entry_participant_to_new_slot,
@@ -4332,25 +4331,6 @@ class AdvancementPieceServiceTests(TestCase):
             context.exception.messages,
         )
 
-    def test_move_empty_league_entry_slot_rejects_advancement_piece_entry(self):
-        fixture = self._create_fixture()
-        source_entry = fixture["target_entries"][4]
-        assign_league_entry_advancement_piece(
-            source_entry,
-            fixture["source_groups"][0],
-            1,
-        )
-
-        with self.assertRaises(ValidationError) as context:
-            move_empty_league_entry_slot(
-                source_entry,
-                fixture["target_groups"][1],
-            )
-
-        self.assertIn(
-            "この枠には進出元が割り当てられています。",
-            context.exception.messages,
-        )
 
     def test_assign_league_entry_advancement_piece_api_assigns_piece(self):
         fixture = self._create_fixture()
@@ -18949,166 +18929,9 @@ class CategoryManagementTests(TestCase):
             group_base_size(groups[0]),
         )
 
-    def test_move_empty_league_entry_slot_moves_remainder_empty_slot(self):
-        (
-            _category,
-            stage,
-            groups,
-            _participants,
-            source_entry,
-        ) = self._create_empty_slot_move_fixture()
-        source_entry_id = source_entry.id
 
-        new_entry = move_empty_league_entry_slot(
-            source_entry,
-            groups[1],
-        )
 
-        self.assertFalse(
-            LeagueEntry.objects.filter(id=source_entry_id).exists()
-        )
-        self.assertIsNone(new_entry.participant)
-        self.assertEqual(new_entry.group, groups[1])
-        self.assertEqual(new_entry.display_order, 5)
-        self.assertEqual(new_entry.pair_code, "9")
-        self.assertEqual(
-            LeagueEntry.objects.filter(group=groups[0]).count(),
-            4,
-        )
-        self.assertEqual(
-            LeagueEntry.objects.filter(group=groups[1]).count(),
-            5,
-        )
-        self.assertEqual(
-            list(
-                LeagueEntry.objects.filter(
-                    group=groups[1],
-                ).order_by(
-                    "display_order",
-                ).values_list(
-                    "pair_code",
-                    flat=True,
-                )
-            ),
-            ["5", "6", "7", "8", "9"],
-        )
-        self.assertEqual(
-            LeagueEntry.objects.filter(group__stage=stage).count(),
-            9,
-        )
 
-    def test_move_empty_league_entry_slot_allows_target_with_unassigned_slots(self):
-        category = Category.objects.create(
-            tournament=self.tournament,
-            name="男子A",
-            display_order=1,
-        )
-        _stage, groups = self._create_league_stage(category, 2)
-        participants = self._create_participants(category, 9)
-
-        for display_order in range(1, 5):
-            self._create_entry(
-                category,
-                groups[0],
-                display_order,
-                display_order,
-                participants[display_order - 1],
-            )
-        source_entry = self._create_entry(
-            category,
-            groups[0],
-            5,
-            5,
-            None,
-        )
-        # 移動先グループは、ベース枠数(4)ちょうどだが、
-        # 参加者はまだ誰も割り当てられていない(全て空き枠)。
-        for display_order, pair_code in enumerate(range(6, 10), start=1):
-            self._create_entry(
-                category,
-                groups[1],
-                pair_code,
-                display_order,
-                None,
-            )
-
-        new_entry = move_empty_league_entry_slot(
-            source_entry,
-            groups[1],
-        )
-
-        self.assertIsNone(new_entry.participant)
-        self.assertEqual(new_entry.group, groups[1])
-        self.assertEqual(
-            LeagueEntry.objects.filter(group=groups[1]).count(),
-            5,
-        )
-
-    def test_move_empty_league_entry_slot_rejects_base_group(self):
-        category = Category.objects.create(
-            tournament=self.tournament,
-            name="男子A",
-            display_order=1,
-        )
-        _stage, groups = self._create_league_stage(category, 2)
-        participants = self._create_participants(category, 9)
-
-        for display_order in range(1, 6):
-            self._create_entry(
-                category,
-                groups[0],
-                display_order,
-                display_order,
-                participants[display_order - 1],
-            )
-        for display_order, pair_code in enumerate(range(6, 9), start=1):
-            self._create_entry(
-                category,
-                groups[1],
-                pair_code,
-                display_order,
-                participants[pair_code - 1],
-            )
-        source_entry = self._create_entry(
-            category,
-            groups[1],
-            9,
-            4,
-            None,
-        )
-
-        with self.assertRaises(ValidationError):
-            move_empty_league_entry_slot(
-                source_entry,
-                groups[0],
-            )
-
-        self.assertTrue(
-            LeagueEntry.objects.filter(id=source_entry.id).exists()
-        )
-
-    def test_move_empty_league_entry_slot_rejects_assigned_slot(self):
-        (
-            _category,
-            _stage,
-            groups,
-            _participants,
-            _source_entry,
-        ) = self._create_empty_slot_move_fixture()
-        assigned_entry = LeagueEntry.objects.get(
-            group=groups[0],
-            display_order=1,
-        )
-        participant = assigned_entry.participant
-
-        with self.assertRaises(ValidationError):
-            move_empty_league_entry_slot(
-                assigned_entry,
-                groups[1],
-            )
-
-        assigned_entry.refresh_from_db()
-        self.assertEqual(assigned_entry.participant, participant)
 
     def test_move_league_entry_participant_moves_to_empty_base_slot(self):
         category = Category.objects.create(
@@ -20322,97 +20145,6 @@ class CategoryManagementTests(TestCase):
         )
         self.assertNotIn('data-role="unassign-form"', extra_row.group(0))
 
-    def test_stage_pair_maintenance_shows_move_empty_slot_button(self):
-        category = Category.objects.create(
-            tournament=self.tournament,
-            name="男子A",
-            display_order=1,
-        )
-        stage, groups = self._create_league_stage(category, 3)
-        participants = self._create_participants(category, 11)
-
-        for display_order in range(1, 4):
-            self._create_entry(
-                category,
-                groups[0],
-                display_order,
-                display_order,
-                participants[display_order - 1],
-            )
-        source_entry = self._create_entry(
-            category,
-            groups[0],
-            4,
-            4,
-            None,
-        )
-        for display_order, pair_code in enumerate(range(5, 9), start=1):
-            self._create_entry(
-                category,
-                groups[1],
-                pair_code,
-                display_order,
-                participants[pair_code - 2],
-            )
-        for display_order, pair_code in enumerate(range(9, 11), start=1):
-            self._create_entry(
-                category,
-                groups[2],
-                pair_code,
-                display_order,
-                participants[pair_code - 2],
-            )
-
-        response = self.client.get(
-            reverse(
-                "stage_pair_maintenance",
-                kwargs={
-                    "category_id": category.id,
-                    "stage_id": stage.id,
-                },
-            )
-        )
-
-        content = response.content.decode()
-        source_row = re.search(
-            (
-                r"<tr(?=[^>]*data-entry-id=\""
-                + str(source_entry.id)
-                + r"\")[\s\S]*?</tr>"
-            ),
-            content,
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(source_row)
-        self.assertEqual(content.count('class="move-empty-slot-trigger"'), 1)
-        self.assertIn("別グループへ移動", source_row.group(0))
-        self.assertIn(
-            reverse(
-                "move_empty_league_entry_slot_api",
-                kwargs={"entry_id": source_entry.id},
-            ),
-            source_row.group(0),
-        )
-        self.assertIn(
-            f'data-source-group-id="{groups[0].id}"',
-            source_row.group(0),
-        )
-        self.assertNotIn("枠を解除", source_row.group(0))
-        self.assertEqual(
-            response.context["movable_target_groups"],
-            [
-                {
-                    "id": groups[0].id,
-                    "name": groups[0].name,
-                },
-                {
-                    "id": groups[1].id,
-                    "name": groups[1].name,
-                },
-            ],
-        )
-        self.assertContains(response, 'id="move-empty-slot-dialog"')
 
     def test_add_league_entry_slot_view_rejects_already_added_group(self):
         category = Category.objects.create(
@@ -21901,107 +21633,9 @@ class CategoryManagementTests(TestCase):
         self.assertEqual(response.status_code, 405)
         self.assertFalse(response.json()["success"])
 
-    def test_move_empty_league_entry_slot_api_moves_slot(self):
-        (
-            _category,
-            _stage,
-            groups,
-            _participants,
-            source_entry,
-        ) = self._create_empty_slot_move_fixture()
 
-        response = self.client.post(
-            reverse(
-                "move_empty_league_entry_slot_api",
-                kwargs={"entry_id": source_entry.id},
-            ),
-            {
-                "target_group_id": str(groups[1].id),
-            },
-        )
 
-        new_entry = LeagueEntry.objects.get(
-            group=groups[1],
-            display_order=5,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(
-            LeagueEntry.objects.filter(id=source_entry.id).exists()
-        )
-        self.assertEqual(
-            response.json(),
-            {
-                "success": True,
-                "source_group_id": groups[0].id,
-                "target_group_id": groups[1].id,
-                "new_entry_id": new_entry.id,
-            },
-        )
 
-    def test_move_empty_league_entry_slot_api_rejects_get(self):
-        (
-            _category,
-            _stage,
-            _groups,
-            _participants,
-            source_entry,
-        ) = self._create_empty_slot_move_fixture()
-
-        response = self.client.get(
-            reverse(
-                "move_empty_league_entry_slot_api",
-                kwargs={"entry_id": source_entry.id},
-            )
-        )
-
-        self.assertEqual(response.status_code, 405)
-        self.assertFalse(response.json()["success"])
-
-    def test_move_empty_league_entry_slot_api_requires_target(self):
-        (
-            _category,
-            _stage,
-            _groups,
-            _participants,
-            source_entry,
-        ) = self._create_empty_slot_move_fixture()
-
-        response = self.client.post(
-            reverse(
-                "move_empty_league_entry_slot_api",
-                kwargs={"entry_id": source_entry.id},
-            )
-        )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            response.json(),
-            {
-                "success": False,
-                "error": "移動先を指定してください。",
-            },
-        )
-
-    def test_move_empty_league_entry_slot_api_rejects_invalid_target(self):
-        (
-            _category,
-            _stage,
-            _groups,
-            _participants,
-            source_entry,
-        ) = self._create_empty_slot_move_fixture()
-
-        response = self.client.post(
-            reverse(
-                "move_empty_league_entry_slot_api",
-                kwargs={"entry_id": source_entry.id},
-            ),
-            {
-                "target_group_id": "999999",
-            },
-        )
-
-        self.assertEqual(response.status_code, 404)
 
     def test_unassign_league_entry_participant_view_clears_participant(self):
         category = Category.objects.create(
@@ -39159,7 +38793,6 @@ class LeagueSlotResultLockTests(TestCase):
         before = self.snapshot()
         actions = [
             lambda: add_league_entry_slot(self.groups[1]),
-            lambda: move_empty_league_entry_slot(self.entries[4], self.groups[1]),
             lambda: remove_league_entry_slot(self.entries[4]),
             lambda: _create_empty_league_entry_slot(self.groups[1]),
             lambda: _delete_league_entry_and_renumber(self.entries[4]),
@@ -39181,8 +38814,6 @@ class LeagueSlotResultLockTests(TestCase):
              {"participant_id": self.participants[-1].id}),
             ("group_add_league_entry_slot_and_assign", [self.groups[1].id],
              {"source_entry_id": self.entries[0].id}),
-            ("move_empty_league_entry_slot_api", [self.entries[4].id],
-             {"target_group_id": self.groups[1].id}),
             ("remove_league_entry_slot", [self.groups[0].id], {}),
         ]
         for name, args, data in requests:
@@ -39239,9 +38870,8 @@ class LeagueSlotResultLockTests(TestCase):
         self.assertNotContains(response, 'data-add-slot-url=')
         self.assertNotContains(response, 'class="move-empty-slot-trigger"')
         self.assertNotContains(response, ">枠を解除</button>")
-        self.assertEqual(response.context["movable_target_groups"], [])
         for row in response.context["group_rows"]:
-            for key in ["can_add_slot", "can_remove_slot", "can_give_up_slot", "can_receive_moved_slot"]:
+            for key in ["can_add_slot", "can_remove_slot"]:
                 self.assertFalse(row[key])
 
     def test_assignment_api_does_not_reenable_add_slot(self):
@@ -39261,15 +38891,234 @@ class LeagueSlotResultLockTests(TestCase):
         added = add_league_entry_slot(groups[1])
         remove_league_entry_slot(added)
         self.assertEqual(len(self.snapshot(stage)), 11)
-        moved = move_empty_league_entry_slot(entries[4], groups[1])
-        self.assertFalse(LeagueEntry.objects.filter(id=entries[4].id).exists())
-        self.assertEqual(moved.group_id, groups[1].id)
         # +1枠を持つグループからの解除は、結果未入力なら枠ごと削除する。
-        entries[5].refresh_from_db()
-        self.assertIsNone(unassign_league_entry_participant(entries[5]))
-        self.assertFalse(LeagueEntry.objects.filter(id=entries[5].id).exists())
+        entries[4].refresh_from_db()
+        self.assertIsNone(unassign_league_entry_participant(entries[4]))
+        self.assertFalse(LeagueEntry.objects.filter(id=entries[4].id).exists())
         self.assertEqual(len(self.snapshot(stage)), 10)
         self.assertEqual(self.snapshot(), locked_before)
         response = self.client.get(reverse("stage_pair_maintenance", args=[self.category.id, stage.id]))
         self.assertFalse(response.context["slots_locked"])
         self.assertNotContains(response, "このStageには結果が入っているため")
+
+
+class PlannedLeagueGroupSizesTests(TestCase):
+    """作成時の組数指定と、その記録を使う準備操作の回帰テスト。"""
+
+    def setUp(self):
+        self.tournament = Tournament.objects.create(name="組数指定", code="PLANNEDSIZES")
+        self.category = Category.objects.create(tournament=self.tournament, name="一般")
+        self.participants = [Participant.objects.create(
+            category=self.category, entry_code=f"P{i}", player1_name=f"選手{i}",
+        ) for i in range(10)]
+
+    def stage_url(self, name, stage=None):
+        args = [self.tournament.code, self.category.id]
+        if stage:
+            args.append(stage.id)
+        return reverse(name, args=args)
+
+    def post_stage(self, sizes="", stage=None, **overrides):
+        data = dict(name="予選", stage_type="league", display_order=1,
+                    pair_count=10, group_count=3, group_sizes=sizes,
+                    advancement_mode="direct", match_games=7)
+        data.update(overrides)
+        return self.client.post(self.stage_url("edit_stage" if stage else "add_stage", stage), data)
+
+    def make_stage(self, sizes=None):
+        stage = Stage.objects.create(category=self.category, code="L1", name="予選", stage_type="league")
+        groups = create_league_stage_groups(stage, 10, 3, group_sizes=sizes)
+        return stage, groups
+
+    def assert_sizes(self, stage, sizes):
+        groups = list(Group.objects.filter(stage=stage).order_by("display_order", "name"))
+        self.assertEqual([g.planned_slot_count for g in groups], sizes)
+        self.assertEqual([g.leagueentry_set.count() for g in groups], sizes)
+        self.assertEqual(list(LeagueEntry.objects.filter(group__stage=stage)
+                              .order_by("group__display_order", "display_order")
+                              .values_list("pair_code", flat=True)), [str(i) for i in range(1, 11)])
+        self.assertEqual([g.roundrobinmatch_set.count() for g in groups],
+                         [size * (size - 1) // 2 for size in sizes])
+
+    def test_create_with_explicit_sizes_and_full_width_separators(self):
+        response = self.post_stage("３，４、３")
+        self.assertEqual(response.status_code, 302)
+        self.assert_sizes(Stage.objects.get(category=self.category), [3, 4, 3])
+
+    def test_create_blank_uses_and_records_standard_sizes(self):
+        self.assertEqual(self.post_stage().status_code, 302)
+        self.assert_sizes(Stage.objects.get(category=self.category), [4, 3, 3])
+
+    def test_server_validation_errors_are_under_group_sizes(self):
+        cases = [("5,5", 10, "組数の数(2)"), ("3,3,3", 10, "合計(9)"),
+                 ("2,4,4", 10, "3組以上"), ("2,2,2", 6, "3組以上"),
+                 ("3,5,4", 12, "差は1まで"),
+                 ("3,x,3", 10, "1以上の整数"), ("0,5,5", 10, "1以上の整数"),
+                 ("-1,5,6", 10, "1以上の整数")]
+        for text, total, error in cases:
+            with self.subTest(text=text):
+                response = self.post_stage(text, pair_count=total)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(error, str(response.context["slot_form"].errors["group_sizes"]))
+                self.assertFalse(Stage.objects.filter(category=self.category).exists())
+
+    def test_service_validates_before_creating_any_groups(self):
+        stage = Stage.objects.create(category=self.category, code="L1", name="予選", stage_type="league")
+        with self.assertRaises(ValidationError):
+            create_league_stage_groups(stage, 10, 3, group_sizes=[2, 4, 4])
+        self.assertFalse(Group.objects.filter(stage=stage).exists())
+
+    def test_space_separators(self):
+        self.assertEqual(self.post_stage("３　４ ３").status_code, 302)
+        self.assert_sizes(Stage.objects.get(category=self.category), [3, 4, 3])
+
+    def test_middle_larger_group_is_base_and_extra_slot_controls_follow_record(self):
+        stage, groups = self.make_stage([3, 4, 3])
+        self.assertEqual([group_base_size(g) for g in groups], [3, 4, 3])
+        entries = list(LeagueEntry.objects.filter(group__stage=stage).order_by("group__display_order", "display_order"))
+        for entry, participant in zip(entries, self.participants):
+            entry.participant = participant
+            entry.save(update_fields=["participant"])
+        self.participants.append(Participant.objects.create(
+            category=self.category, entry_code="EXTRA", player1_name="追加"))
+        page_url = reverse("stage_pair_maintenance", args=[self.category.id, stage.id])
+        response = self.client.get(page_url)
+        rows = response.context["group_rows"]
+        self.assertEqual([row["can_add_slot"] for row in rows], [True, True, True])
+        self.assertEqual([row["can_remove_slot"] for row in rows], [False, False, False])
+        self.assertNotContains(response, "別グループへ移動")
+        self.assertNotContains(response, "move-empty-slot-dialog")
+        # Removing a base entry's assignment must retain that entry, even in the middle group.
+        middle_entry = groups[1].leagueentry_set.order_by("display_order").last()
+        self.assertIsNotNone(unassign_league_entry_participant(middle_entry))
+        middle_entry.participant = self.participants[6]
+        middle_entry.save(update_fields=["participant"])
+        extra = add_league_entry_slot(groups[1])
+        response = self.client.get(page_url)
+        rows = response.context["group_rows"]
+        self.assertEqual([row["can_remove_slot"] for row in rows], [False, True, False])
+        self.assertContains(response, ">枠を解除</button>", html=False)
+        from .services import remove_league_entry_slot
+        remove_league_entry_slot(extra)
+        self.assertEqual(groups[1].leagueentry_set.count(), 4)
+
+    def test_null_records_keep_legacy_youngest_first_rule(self):
+        stage, groups = self.make_stage([3, 4, 3])
+        Group.objects.filter(stage=stage).update(planned_slot_count=None)
+        groups = list(Group.objects.filter(stage=stage).order_by("display_order"))
+        self.assertEqual([group_base_size(g) for g in groups], [4, 3, 3])
+
+    def test_edit_initial_and_change_rebuilds_slots_and_matches(self):
+        stage, groups = self.make_stage([4, 3, 3])
+        page = self.client.get(self.stage_url("edit_stage", stage))
+        self.assertEqual(page.context["slot_form"]["group_sizes"].value(), "4,3,3")
+        ids = list(LeagueEntry.objects.filter(group__stage=stage).values_list("id", flat=True))
+        self.assertEqual(self.post_stage("3,4,3", stage).status_code, 302)
+        self.assertFalse(LeagueEntry.objects.filter(id__in=ids).exists())
+        self.assert_sizes(stage, [3, 4, 3])
+
+    def test_name_only_and_equivalent_blank_explicit_keep_ids_and_assignments(self):
+        stage, groups = self.make_stage()
+        entry = groups[0].leagueentry_set.first()
+        entry.participant = self.participants[0]
+        entry.save(update_fields=["participant"])
+        ids = list(LeagueEntry.objects.filter(group__stage=stage).values_list("id", flat=True))
+        match_ids = list(RoundRobinMatch.objects.filter(group__stage=stage).values_list("id", flat=True))
+        for sizes in ["4,3,3", "", "４ ３ ３"]:
+            self.assertEqual(self.post_stage(sizes, stage, name="名前だけ変更").status_code, 302)
+            self.assertEqual(list(LeagueEntry.objects.filter(group__stage=stage)
+                                  .values_list("id", flat=True)), ids)
+            self.assertEqual(list(RoundRobinMatch.objects.filter(group__stage=stage)
+                                  .values_list("id", flat=True)), match_ids)
+            entry.refresh_from_db()
+            self.assertEqual(entry.participant_id, self.participants[0].id)
+
+    def test_name_only_edit_with_extra_slot_keeps_slots_and_recorded_base(self):
+        stage, groups = self.make_stage([3, 4, 3])
+        for entry, participant in zip(groups[1].leagueentry_set.order_by("display_order"), self.participants):
+            entry.participant = participant
+            entry.save(update_fields=["participant"])
+        Participant.objects.create(category=self.category, entry_code="EXTRA", player1_name="追加")
+        extra = add_league_entry_slot(groups[1])
+        page = self.client.get(self.stage_url("edit_stage", stage))
+        self.assertEqual(page.context["slot_form"]["pair_count"].value(), 10)
+        self.assertEqual(page.context["slot_form"]["group_sizes"].value(), "3,4,3")
+        self.assertEqual(self.post_stage("3,4,3", stage, name="名前だけ変更").status_code, 302)
+        self.assertTrue(LeagueEntry.objects.filter(id=extra.id).exists())
+        groups[1].refresh_from_db()
+        self.assertEqual(groups[1].planned_slot_count, 4)
+
+    def test_edit_null_record_initial_uses_actual_slots_and_records_without_rebuild(self):
+        stage, groups = self.make_stage([3, 4, 3])
+        Group.objects.filter(stage=stage).update(planned_slot_count=None)
+        ids = list(Group.objects.filter(stage=stage).values_list("id", flat=True))
+        page = self.client.get(self.stage_url("edit_stage", stage))
+        self.assertEqual(page.context["slot_form"]["group_sizes"].value(), "3,4,3")
+        self.assertEqual(self.post_stage("3,4,3", stage).status_code, 302)
+        self.assertEqual(list(Group.objects.filter(stage=stage).values_list("id", flat=True)), ids)
+        self.assert_sizes(stage, [3, 4, 3])
+
+    def test_result_lock_disables_field_and_ignores_posted_sizes(self):
+        stage, groups = self.make_stage([3, 4, 3])
+        match = groups[2].roundrobinmatch_set.first()
+        match.completed = True
+        match.save(update_fields=["completed"])
+        page = self.client.get(self.stage_url("edit_stage", stage))
+        self.assertTrue(page.context["slot_form"].fields["group_sizes"].widget.attrs["disabled"])
+        self.assertEqual(self.post_stage("4,3,3", stage).status_code, 302)
+        self.assert_sizes(stage, [3, 4, 3])
+
+    def test_csv_import_records_row_counts_including_middle_larger_group(self):
+        header = "category,stage,stage_type,group,bracket,slot_label,display_order,entry_code\n"
+        rows = []
+        number = 1
+        for group, size in zip("ABC", [3, 4, 3]):
+            for order in range(1, size + 1):
+                rows.append(f"一般,予選,L,{group},,{number},{order},\n")
+                number += 1
+        response = self.client.post(reverse("import_stage_slots", args=[self.tournament.code]), {
+            "file": SimpleUploadedFile("slots.csv", (header + "".join(rows)).encode("utf-8-sig"), content_type="text/csv"),
+        })
+        self.assertEqual(response.status_code, 302)
+        stage = Stage.objects.get(category=self.category)
+        self.assert_sizes(stage, [3, 4, 3])
+        self.assertEqual([group_base_size(g) for g in Group.objects.filter(stage=stage)
+                          .order_by("display_order")], [3, 4, 3])
+        response = self.client.get(reverse("stage_pair_maintenance", args=[self.category.id, stage.id]))
+        self.assertFalse(any(row["can_remove_slot"] for row in response.context["group_rows"]))
+
+    def test_clone_preserves_values_and_null(self):
+        stage, groups = self.make_stage([3, 4, 3])
+        groups[2].planned_slot_count = None
+        groups[2].save(update_fields=["planned_slot_count"])
+        cloned = clone_tournament_without_results(self.tournament, name="複製", code="PLANNEDCOPY")
+        self.assertEqual(list(Group.objects.filter(category__tournament=cloned)
+                              .order_by("display_order").values_list("planned_slot_count", flat=True)), [3, 4, None])
+
+    def test_backup_restore_preserves_values_and_null(self):
+        from .services.backups import create_tournament_backup, restore_tournament_backup
+        stage, groups = self.make_stage([3, 4, 3])
+        groups[2].planned_slot_count = None
+        groups[2].save(update_fields=["planned_slot_count"])
+        backup = create_tournament_backup(self.tournament, label="組数保存")
+        Group.objects.filter(stage=stage).update(planned_slot_count=9)
+        restore_tournament_backup(backup)
+        self.assertEqual(list(Group.objects.filter(stage=stage).order_by("display_order")
+                              .values_list("planned_slot_count", flat=True)), [3, 4, None])
+
+    def test_snapshot_restore_keeps_group_records(self):
+        from .services.snapshots import create_tournament_snapshot, restore_tournament_snapshot
+        stage, groups = self.make_stage([3, 4, 3])
+        groups[2].planned_slot_count = None
+        groups[2].save(update_fields=["planned_slot_count"])
+        snapshot = create_tournament_snapshot(self.tournament, "組数を保持")
+        restore_tournament_snapshot(snapshot)
+        self.assertEqual(list(Group.objects.filter(stage=stage).order_by("display_order")
+                              .values_list("planned_slot_count", flat=True)), [3, 4, None])
+
+    def test_removed_move_slot_url_cannot_resolve(self):
+        from django.urls import NoReverseMatch, Resolver404, resolve
+        with self.assertRaises(NoReverseMatch):
+            reverse("move_empty_league_entry_slot_api", args=[1])
+        with self.assertRaises(Resolver404):
+            resolve("/pair/1/move-empty-slot/")

@@ -89,6 +89,17 @@
                         {{ slot_form.group_count.errors }}
                     </p>
                 </div>
+                <p>
+                    {{ slot_form.group_sizes.label_tag }}
+                    {{ slot_form.group_sizes }}
+                    {{ slot_form.group_sizes.errors }}
+                    <span class="helptext">{{ slot_form.group_sizes.help_text }}</span>
+                </p>
+                <p>
+                    <button type="button" id="standard-group-sizes"{% if slot_form.group_sizes.field.widget.attrs.disabled %} disabled{% endif %}>標準の配置を入れる</button>
+                    <span id="standard-group-sizes-preview"></span>
+                </p>
+                <p id="group-sizes-preview" aria-live="polite"></p>
             </div>
 
             <div id="tournament-slot-setup"{% if stage and stage.stage_type != "tournament" %} hidden{% endif %}>
@@ -324,6 +335,44 @@
             }
         }
 
+        function standardGroupSizes() {
+            const pairCount = Number(document.getElementById("id_pair_count").value);
+            const groupCount = Number(document.getElementById("id_group_count")?.value);
+            const candidate = buildGroupCountCandidates(pairCount).find(row => row.groupCount === groupCount);
+            return candidate ? candidate.groupSizes : [];
+        }
+
+        function currentGroupSizes() {
+            const text = document.getElementById("id_group_sizes").value.trim();
+            if (!text) return standardGroupSizes();
+            return text.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+                .split(/[\s,、，]+/).filter(Boolean).map(token => /^[0-9]+$/.test(token) ? Number(token) : NaN);
+        }
+
+        function refreshGroupSizes() {
+            const standard = standardGroupSizes();
+            document.getElementById("standard-group-sizes-preview").textContent = standard.length
+                ? "標準: " + standard.join(", ") : "参加ペア数とグループ数を選んでください。";
+            const sizes = currentGroupSizes();
+            const preview = document.getElementById("group-sizes-preview");
+            if (!sizes.length) {
+                preview.textContent = "";
+            } else if (sizes.some(size => !Number.isSafeInteger(size) || size <= 0)) {
+                preview.textContent = "組数は1以上の整数で入力してください。";
+            } else {
+                const total = sizes.reduce((sum, size) => sum + size, 0);
+                const pairCount = Number(document.getElementById("id_pair_count").value);
+                const groupCount = Number(document.getElementById("id_group_count")?.value);
+                const errors = [];
+                if (sizes.length !== groupCount) errors.push("組数の数がグループ数と一致しません。");
+                if (total !== pairCount) errors.push("合計が参加ペア数と一致しません。");
+                if (Math.min(...sizes) < 3) errors.push("各グループ3組以上にしてください。");
+                if (Math.max(...sizes) - Math.min(...sizes) > 1) errors.push("組数の差は1までにしてください。");
+                preview.textContent = sizes.map((size, i) => (i + 1) + "番目: " + size + "組").join("、")
+                    + " / 合計: " + total + "組。" + errors.join(" ");
+            }
+        }
+
         function readBracketRowsFromInput() {
             const bracketListInput = document.getElementById(
                 "id_bracket_list"
@@ -364,6 +413,7 @@
             displayOrder: "",
             pairCount: "",
             groupCount: "",
+            groupSizes: [],
             matchGames: "",
             advancementMode: "direct",
             advancementSourceStage: "",
@@ -406,6 +456,7 @@
             initialValues.groupCount = (
                 groupCountSelect ? groupCountSelect.value : ""
             );
+            initialValues.groupSizes = currentGroupSizes();
             initialValues.matchGames = (
                 matchGamesInput ? matchGamesInput.value : ""
             );
@@ -590,7 +641,7 @@
                     return true;
                 }
 
-                return false;
+                return JSON.stringify(currentGroupSizes()) !== JSON.stringify(initialValues.groupSizes);
             }
 
             if (
@@ -628,6 +679,21 @@
                 "tournament-bracket-blocks"
             );
 
+            const groupSizesInput = document.getElementById("id_group_sizes");
+            groupSizesInput.addEventListener("input", refreshGroupSizes);
+            document.getElementById("standard-group-sizes").addEventListener("click", function() {
+                if (groupSizesInput.disabled) return;
+                groupSizesInput.value = standardGroupSizes().join(",");
+                refreshGroupSizes();
+            });
+            // Update the options before calculating the standard group sizes.
+            if (pairCountInput) pairCountInput.addEventListener("input", function() {
+                updateGroupCountOptions();
+                refreshGroupSizes();
+            });
+            if (groupCountSelect) groupCountSelect.addEventListener("change", refreshGroupSizes);
+            refreshGroupSizes();
+
             setupBracketRowEditing();
 
             if (stageType) {
@@ -643,10 +709,6 @@
                     "change",
                     toggleStageSlotSetup
                 );
-            }
-
-            if (pairCountInput) {
-                pairCountInput.addEventListener("input", updateGroupCountOptions);
             }
 
             const regenerateForm = document.querySelector(
@@ -695,6 +757,10 @@
                         let confirmMessage = (
                             "現在の枠構成を削除して作り直します。よろしいですか？"
                         );
+                        if (document.getElementById("id_stage_type").value === "league"
+                            && JSON.stringify(currentGroupSizes()) !== JSON.stringify(initialValues.groupSizes)) {
+                            confirmMessage += "\n\nグループごとの組数の並びを変更します。割り付けた組・試合・日程も削除して作り直します。";
+                        }
                         {% if has_start_rounds %}
                         if (hasClearedStartRounds(initialValues.bracketStartRounds)) {
                             confirmMessage += "\n\n開始回戦の指定は解除され、自動の配置に戻ります。";
