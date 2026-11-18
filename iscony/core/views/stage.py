@@ -16,6 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from ..services.league_group_sizes import league_group_size_impact, resize_league_groups
 from .league import build_category_group_data
 from ..forms import StageEditForm, StageForm, StageSlotSetupForm
 from ..helpers.view import safe_next_url
@@ -51,6 +52,7 @@ from ..services import (
     generate_tournament_bracket_matches,
     inspect_stage_advancement_readiness,
     stage_deletion_impact,
+    stage_has_results,
     clear_stage_results,
     stage_result_clear_impact,
     delete_stage,
@@ -1295,18 +1297,7 @@ def edit_stage(request, code, category_id, stage_id):
     )
     original_stage_type = stage.stage_type
     current_values = _current_stage_slot_values(stage)
-    has_results = (
-        RoundRobinMatch.objects.filter(
-            group__stage=stage,
-            completed=True,
-        ).exists()
-        or TournamentMatch.objects.filter(
-            bracket__stage=stage,
-        ).filter(
-            Q(pair1_games__isnull=False)
-            | Q(pair2_games__isnull=False)
-        ).exists()
-    )
+    has_results = stage_has_results(stage)
     stage_type_locked = has_results
     advancement_targets = _advancement_data(stage)
     downstream_advancement_count = sum(
@@ -1324,6 +1315,9 @@ def edit_stage(request, code, category_id, stage_id):
         )
 
         if stage_type_locked:
+            if request.POST.get("league_group_change_mode") == "keep":
+                messages.error(request, "結果が入力済みのため組数を変更できません。")
+                return redirect("edit_stage", code=code, category_id=category.id, stage_id=stage.id)
             if form.is_valid():
                 form.save()
                 messages.success(
@@ -1398,6 +1392,7 @@ def edit_stage(request, code, category_id, stage_id):
                 changed_shape_indices = []
                 start_rounds_only_change = False
                 keep_start_rounds = False
+                keep_group_sizes = False
                 new_match_games = (
                     slot_form.cleaned_data.get("match_games")
                     or _default_match_games(category)
@@ -1412,6 +1407,18 @@ def edit_stage(request, code, category_id, stage_id):
                     )
                     group_count_changed = (
                         new_group_count != current_values.get("group_count")
+                    )
+                    group_sizes_changed = (
+                        slot_form.cleaned_data["parsed_group_sizes"] != current_values.get("group_sizes")
+                    )
+                    group_sizes_only_change = (
+                        not stage_type_changed and not pair_count_changed
+                        and not advancement_mode_changed and not advancement_source_changed
+                        and not group_count_changed and group_sizes_changed
+                    )
+                    keep_group_sizes = (
+                        group_sizes_only_change
+                        and request.POST.get("league_group_change_mode") == "keep"
                     )
                     needs_slot_rebuild = (
                         stage_type_changed
@@ -1489,7 +1496,7 @@ def edit_stage(request, code, category_id, stage_id):
                     start_rounds_only_change
                     and request.POST.get("start_round_change_mode") == "keep"
                 )
-                if keep_start_rounds:
+                if keep_start_rounds or keep_group_sizes:
                     needs_slot_rebuild = False
 
                 match_games_only_change = (
@@ -1579,6 +1586,11 @@ def edit_stage(request, code, category_id, stage_id):
                             Stage.objects.filter(advancement_source_stage=stage).delete()
                         stage = form.save()
 
+                        if keep_group_sizes:
+                            group_resize_result = resize_league_groups(
+                                stage, slot_form.cleaned_data["parsed_group_sizes"], new_match_games,
+                            )
+
                         if new_stage_type == Stage.TYPE_LEAGUE:
                             for group, size in zip(
                                 Group.objects.filter(stage=stage).order_by("display_order", "name"),
@@ -1634,7 +1646,18 @@ def edit_stage(request, code, category_id, stage_id):
                                         update_fields=["name"],
                                     )
 
-                if keep_start_rounds:
+                if keep_group_sizes:
+                    before = ",".join(map(str, current_values["group_sizes"]))
+                    after = ",".join(map(str, slot_form.cleaned_data["parsed_group_sizes"]))
+                    removed = "、".join(group_resize_result["removed_labels"]) or "なし"
+                    messages.success(request, (
+                        f"{stage.name} を更新しました(グループの組数を {before} から {after} に変えました。"
+                        f"割り付けた組はそのまま残しています。未割り付けに戻った組: {removed}。"
+                        f"削除した日程: {group_resize_result['schedule_count']}件、"
+                        f"外した進出元: {group_resize_result['source_count']}件、"
+                        f"審判の指定: {group_resize_result['referee_count']}件。ゲーム数{new_match_games})"
+                    ))
+                elif keep_start_rounds:
                     summary = "、".join(
                         f"{new_bracket_rows[index]['name']}({new_bracket_rows[index]['bracket_size']}枠)"
                         for index in changed_shape_indices
@@ -1735,6 +1758,7 @@ def edit_stage(request, code, category_id, stage_id):
         "stage_type_locked": stage_type_locked,
         "downstream_advancement_count": downstream_advancement_count,
         "downstream_advancement_stage_names": downstream_advancement_stage_names,
+        "league_group_change_impact": league_group_size_impact(stage) if original_stage_type == Stage.TYPE_LEAGUE else [],
         "bracket_change_impact": [
             {"name": bracket.name, "schedule_count": Schedule.objects.filter(
                 tournament_match__bracket=bracket,

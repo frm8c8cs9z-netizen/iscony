@@ -3224,7 +3224,10 @@ def stage_has_results(stage):
     if stage.stage_type == Stage.TYPE_LEAGUE:
         return RoundRobinMatch.objects.filter(
             group__stage=stage,
-            completed=True,
+        ).filter(
+            Q(completed=True)
+            | Q(pair1_games__isnull=False)
+            | Q(pair2_games__isnull=False)
         ).exists()
 
     return TournamentMatch.objects.filter(

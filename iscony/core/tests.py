@@ -38884,6 +38884,35 @@ class LeagueSlotResultLockTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["group_can_add_slot"])
 
+    def test_partial_scores_lock_slot_changes_and_preserve_unassigned_slot(self):
+        from .services import remove_league_entry_slot
+
+        match = RoundRobinMatch.objects.get(group=self.groups[2])
+        match.completed = False
+        for field in ["pair1_games", "pair2_games"]:
+            with self.subTest(field=field):
+                match.pair1_games = None
+                match.pair2_games = None
+                setattr(match, field, 0)
+                match.save(update_fields=["completed", "pair1_games", "pair2_games"])
+                before = self.snapshot()
+                self.entries[1].refresh_from_db()
+                for action in [
+                    lambda: add_league_entry_slot(self.groups[1]),
+                    lambda: remove_league_entry_slot(self.entries[4]),
+                    lambda: move_league_entry_participant_to_new_slot(self.entries[1], self.groups[1]),
+                ]:
+                    with self.assertRaisesMessage(ValidationError, "このStageには結果が入っているため"):
+                        action()
+                    self.assertEqual(self.snapshot(), before)
+                page = self.client.get(reverse("stage_pair_maintenance",
+                                               args=[self.category.id, self.stage.id]))
+                self.assertTrue(page.context["slots_locked"])
+                self.assertNotContains(page, 'data-add-slot-url=')
+                # 参加者の解除は許可するが、+1枠と番号は残す。
+                self.assertIsNotNone(unassign_league_entry_participant(self.entries[0]))
+                self.assertEqual(self.snapshot(), before)
+
     def test_result_free_stage_in_same_category_allows_all_operations(self):
         from .services import remove_league_entry_slot
         stage, groups, entries = self.make_stage("L2", completed=False)
@@ -39122,3 +39151,258 @@ class PlannedLeagueGroupSizesTests(TestCase):
             reverse("move_empty_league_entry_slot_api", args=[1])
         with self.assertRaises(Resolver404):
             resolve("/pair/1/move-empty-slot/")
+
+
+class KeepLeagueGroupSizesTests(TestCase):
+    """組数だけの変更では残る枠・試合・日程と後続Stageを保つ。"""
+
+    setUp = PlannedLeagueGroupSizesTests.setUp
+    stage_url = PlannedLeagueGroupSizesTests.stage_url
+    post_stage = PlannedLeagueGroupSizesTests.post_stage
+    make_stage = PlannedLeagueGroupSizesTests.make_stage
+    assert_sizes = PlannedLeagueGroupSizesTests.assert_sizes
+
+    def assigned_stage(self):
+        stage, groups = self.make_stage()
+        entries = list(LeagueEntry.objects.filter(group__stage=stage).order_by(
+            "group__display_order", "display_order"))
+        for entry, participant in zip(entries, self.participants):
+            entry.participant = participant
+            entry.save(update_fields=["participant"])
+        return stage, groups, entries
+
+    def keep(self, stage, **overrides):
+        return self.post_stage("3,4,3", stage, league_group_change_mode="keep", **overrides)
+
+    def schedules(self, stage):
+        block = ScheduleBlock.objects.create(tournament=self.tournament, name="本日程")
+        court = Court.objects.create(tournament=self.tournament, name="1コート")
+        return [Schedule.objects.create(schedule_block=block, court=court, order=i,
+                                       round_robin_match=match)
+                for i, match in enumerate(RoundRobinMatch.objects.filter(group__stage=stage), 1)]
+
+    def downstream(self, stage, groups):
+        later = Stage.objects.create(category=self.category, code="L2", name="後のリーグ",
+                                     stage_type="league", display_order=2, advancement_source_stage=stage)
+        target_group = create_league_stage_groups(later, 3, 1)[0]
+        targets = list(target_group.leagueentry_set.all())
+        sources = [AdvancementSource.objects.create(
+            target_league_entry=entry, source_type="league_rank", source_stage=stage,
+            source_group=group, source_rank=rank,
+        ) for entry, group, rank in zip(targets, [groups[0], groups[0], groups[1]], [4, 3, 3])]
+        return later, sources
+
+    def test_keep_preserves_entries_matches_and_schedules_and_renumbers(self):
+        stage, groups, entries = self.assigned_stage()
+        removed = entries[3]
+        matches = list(RoundRobinMatch.objects.filter(group__stage=stage))
+        schedules = self.schedules(stage)
+        deleted_match_ids = {m.id for m in matches if removed.id in [m.pair1_id, m.pair2_id]}
+        response = self.keep(stage)
+        self.assertEqual(response.status_code, 302)
+        self.assert_sizes(stage, [3, 4, 3])
+        self.assertFalse(LeagueEntry.objects.filter(pk=removed.pk).exists())
+        self.assertFalse(LeagueEntry.objects.filter(participant=removed.participant).exists())
+        for entry in entries:
+            if entry.id == removed.id:
+                continue
+            saved = LeagueEntry.objects.get(pk=entry.pk)
+            self.assertEqual((saved.group_id, saved.participant_id), (entry.group_id, entry.participant_id))
+        for match in matches:
+            self.assertEqual(RoundRobinMatch.objects.filter(pk=match.pk).exists(), match.pk not in deleted_match_ids)
+        for schedule in schedules:
+            self.assertEqual(Schedule.objects.filter(pk=schedule.pk).exists(), schedule.round_robin_match_id not in deleted_match_ids)
+        added = groups[1].leagueentry_set.order_by("display_order").last()
+        self.assertIsNone(added.participant_id)
+        added_matches = RoundRobinMatch.objects.filter(Q(pair1=added) | Q(pair2=added))
+        self.assertEqual(added_matches.count(), 3)
+        self.assertFalse(Schedule.objects.filter(round_robin_match__in=added_matches).exists())
+        message = str(list(get_messages(response.wsgi_request))[0])
+        self.assertIn("選手3", message)
+        self.assertIn("削除した日程: 3件", message)
+
+    def test_extra_slots_are_preserved_as_delta_on_both_changed_groups(self):
+        stage, groups, entries = self.assigned_stage()
+        for group in groups[:2]:
+            # Existing +1 slots are deliberately separate from planned counts.
+            LeagueEntry.objects.create(category=self.category, group=group, pair_code=f"X{group.pk}", display_order=9)
+        self.assertEqual(self.keep(stage).status_code, 302)
+        self.assertEqual([g.leagueentry_set.count() for g in groups], [4, 5, 3])
+        self.assertEqual(list(Group.objects.filter(stage=stage).order_by("display_order")
+                              .values_list("planned_slot_count", flat=True)), [3, 4, 3])
+        self.assertEqual(list(LeagueEntry.objects.filter(group__stage=stage).order_by(
+            "group__display_order", "display_order").values_list("pair_code", flat=True)),
+                         [str(i) for i in range(1, 13)])
+
+    def test_incoming_advancement_piece_is_released(self):
+        upstream = Stage.objects.create(category=self.category, code="L0", name="元リーグ", stage_type="league")
+        upstream_group = create_league_stage_groups(upstream, 4, 1)[0]
+        stage, groups = self.make_stage()
+        stage.advancement_source_stage = upstream
+        stage.display_order = 2
+        stage.save()
+        entry = groups[0].leagueentry_set.order_by("display_order").last()
+        source = AdvancementSource.objects.create(target_league_entry=entry, source_type="league_rank",
+                                                  source_stage=upstream, source_group=upstream_group, source_rank=1)
+        other = AdvancementSource.objects.create(target_league_entry=groups[0].leagueentry_set.first(),
+                                                 source_type="league_rank", source_stage=upstream,
+                                                 source_group=upstream_group, source_rank=2)
+        response = self.keep(stage, display_order=2, advancement_mode="source", advancement_source_stage=upstream.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(AdvancementSource.objects.filter(pk=source.pk).exists())
+        self.assertTrue(AdvancementSource.objects.filter(pk=other.pk).exists())
+        self.assertFalse(AdvancementSource.objects.filter(source_group=upstream_group, source_rank=1).exists())
+        page = self.client.get(reverse("stage_pair_maintenance", args=[self.category.id, stage.id]))
+        self.assertTrue(any(piece["source_group_id"] == upstream_group.pk and piece["source_rank"] == 1
+                            for piece in page.context["unassigned_pieces"]))
+
+    def test_downstream_and_referees_only_invalid_ranks_are_released(self):
+        stage, groups, entries = self.assigned_stage()
+        later, sources = self.downstream(stage, groups)
+        targets = [source.target_entry for source in sources]
+        targets[0].participant = self.participants[0]
+        targets[0].save(update_fields=["participant"])
+        schedules = self.schedules(later)
+        for schedule, rank in zip(schedules, [4, 3, 1]):
+            schedule.referee_source_type = "league_rank"
+            schedule.referee_source_stage = stage
+            schedule.referee_source_group = groups[0]
+            schedule.referee_source_rank = rank
+            schedule.save()
+        self.assertEqual(self.keep(stage).status_code, 302)
+        self.assertTrue(Stage.objects.filter(pk=later.pk).exists())
+        self.assertFalse(AdvancementSource.objects.filter(pk=sources[0].pk).exists())
+        self.assertEqual(AdvancementSource.objects.filter(pk__in=[s.pk for s in sources[1:]]).count(), 2)
+        targets[0].refresh_from_db()
+        self.assertIsNone(targets[0].participant_id)
+        for schedule, rank in zip(schedules, [None, 3, 1]):
+            schedule.refresh_from_db()
+            self.assertEqual(schedule.referee_source_rank, rank)
+            if rank is None:
+                self.assertIsNone(schedule.referee_source_group_id)
+                self.assertEqual(schedule.referee_source_type, "")
+
+    def test_rebuild_removes_all_slots_and_downstream(self):
+        stage, groups, entries = self.assigned_stage()
+        later, sources = self.downstream(stage, groups)
+        self.assertEqual(self.post_stage("3,4,3", stage, league_group_change_mode="rebuild").status_code, 302)
+        self.assertFalse(Stage.objects.filter(pk=later.pk).exists())
+        self.assertFalse(LeagueEntry.objects.filter(pk__in=[e.pk for e in entries]).exists())
+        self.assert_sizes(stage, [3, 4, 3])
+
+    def test_keep_with_changed_pair_count_rebuilds(self):
+        stage, groups, entries = self.assigned_stage()
+        self.assertEqual(self.post_stage("4,4,3", stage, pair_count=11, league_group_change_mode="keep").status_code, 302)
+        self.assertFalse(Group.objects.filter(pk__in=[g.pk for g in groups]).exists())
+
+    def test_keep_with_changed_group_count_rebuilds(self):
+        stage, groups, entries = self.assigned_stage()
+        self.assertEqual(self.post_stage("5,5", stage, group_count=2, league_group_change_mode="keep").status_code, 302)
+        self.assertFalse(Group.objects.filter(pk__in=[g.pk for g in groups]).exists())
+
+    def test_keep_with_changed_advancement_mode_rebuilds(self):
+        upstream = Stage.objects.create(category=self.category, code="L0", name="元", stage_type="league")
+        create_league_stage_groups(upstream, 10, 3)
+        stage, groups, entries = self.assigned_stage()
+        self.assertEqual(self.keep(stage, display_order=2, advancement_mode="source", advancement_source_stage=upstream.pk).status_code, 302)
+        self.assertFalse(Group.objects.filter(pk__in=[g.pk for g in groups]).exists())
+
+    def test_name_and_games_are_saved_with_keep(self):
+        stage, groups, entries = self.assigned_stage()
+        self.assertEqual(self.keep(stage, name="新しい名称", match_games=5).status_code, 302)
+        stage.refresh_from_db()
+        self.assertEqual(stage.name, "新しい名称")
+        self.assertEqual(set(RoundRobinMatch.objects.filter(group__stage=stage).values_list("match_games", flat=True)), {5})
+        self.assert_sizes(stage, [3, 4, 3])
+
+    def test_results_prevent_keep_including_partial_score(self):
+        for field, value in [("completed", True), ("pair1_games", 1), ("pair2_games", 0)]:
+            with self.subTest(field=field):
+                stage, groups, entries = self.assigned_stage()
+                match = groups[0].roundrobinmatch_set.first()
+                setattr(match, field, value)
+                match.save(update_fields=[field])
+                page = self.client.get(self.stage_url("edit_stage", stage))
+                self.assertTrue(page.context["stage_type_locked"])
+                self.assertNotContains(page, 'id="league-group-change-dialog"')
+                self.assertEqual(self.keep(stage, name="変更不可").status_code, 302)
+                self.assertIn("結果が入力済みのため組数を変更できません。",
+                              " ".join(str(m) for m in get_messages(self.client.get(
+                                  self.stage_url("edit_stage", stage)).wsgi_request)))
+                from .services.league_group_sizes import resize_league_groups
+                with self.assertRaisesMessage(ValidationError, "結果が入力済み"):
+                    resize_league_groups(stage, [3, 4, 3], 7)
+                stage.refresh_from_db()
+                self.assertEqual(stage.name, "予選")
+                self.assert_sizes(stage, [4, 3, 3])
+                stage.delete()
+
+    def test_dialog_and_impact_are_rendered(self):
+        stage, groups, entries = self.assigned_stage()
+        schedules = self.schedules(stage)
+        later, sources = self.downstream(stage, groups)
+        sources[2].source_group = groups[0]
+        sources[2].save(update_fields=["source_group"])
+        for schedule, rank in zip(schedules, [4, 3, 3]):
+            schedule.referee_source_type = "league_rank"
+            schedule.referee_source_stage = stage
+            schedule.referee_source_group = groups[0]
+            schedule.referee_source_rank = rank
+            schedule.save()
+        page = self.client.get(self.stage_url("edit_stage", stage))
+        for text in ["league-group-change-dialog", "割り付けを残して組数だけ変える", 'data-league-group-mode="cancel"',
+                     'data-league-group-mode="rebuild"', "stage_group_sizes.js", "setTimeout(function()", "league-group-change-impact"]:
+            self.assertContains(page, text)
+        impact = page.context["league_group_change_impact"]
+        self.assertIn("選手3", impact[0]["entries"][3]["label"])
+        self.assertEqual(len(impact[0]["entries"][3]["schedule_ids"]), 3)
+        for key in ["sources", "referees"]:
+            references = impact[0][key]
+            self.assertIn(4, [reference["rank"] for reference in references])
+            self.assertEqual(len(references), 3)
+            order = [(reference["rank"], reference["id"]) for reference in references]
+            self.assertEqual(order, sorted(order))
+
+    def test_tournament_targets_are_cleared_but_tournament_result_sources_are_kept(self):
+        from .services import create_tournament_stage_bracket
+        stage, groups, entries = self.assigned_stage()
+        later = Stage.objects.create(category=self.category, code="T2", name="決勝",
+                                     stage_type="tournament", display_order=2, advancement_source_stage=stage)
+        bracket = create_tournament_stage_bracket(later, 3)
+        generate_tournament_bracket_matches(bracket, 7)
+        targets = list(bracket.tournamententry_set.order_by("display_order"))
+        invalid = AdvancementSource.objects.create(target_tournament_entry=targets[0], source_type="league_rank",
+                                                    source_stage=stage, source_group=groups[0], source_rank=4)
+        valid = AdvancementSource.objects.create(target_tournament_entry=targets[1], source_type="league_rank",
+                                                  source_stage=stage, source_group=groups[0], source_rank=3)
+        tournament_source = AdvancementSource.objects.create(
+            target_tournament_entry=targets[2], source_type="tournament_result", source_stage=later,
+            source_match=bracket.tournamentmatch_set.first(), source_result="winner")
+        schedule = self.schedules(stage)[0]
+        schedule.referee_source_type = "tournament_result"
+        schedule.referee_source_stage = later
+        schedule.referee_source_match = tournament_source.source_match
+        schedule.referee_source_result = "winner"
+        schedule.save()
+        self.assertEqual(self.keep(stage).status_code, 302)
+        self.assertTrue(Stage.objects.filter(pk=later.pk).exists())
+        self.assertFalse(AdvancementSource.objects.filter(pk=invalid.pk).exists())
+        self.assertEqual(AdvancementSource.objects.filter(pk__in=[valid.pk, tournament_source.pk]).count(), 2)
+        schedule.refresh_from_db()
+        self.assertEqual(schedule.referee_source_type, "tournament_result")
+        self.assertEqual(schedule.referee_source_match_id, tournament_source.source_match_id)
+
+    def test_failed_resize_rolls_back_name_slots_references_and_schedules(self):
+        from unittest.mock import patch
+        stage, groups, entries = self.assigned_stage()
+        later, sources = self.downstream(stage, groups)
+        schedules = self.schedules(stage)
+        with patch("core.services.league_group_sizes.RoundRobinMatch.objects.create", side_effect=RuntimeError("失敗")):
+            with self.assertRaises(RuntimeError):
+                self.keep(stage, name="保存されない")
+        stage.refresh_from_db()
+        self.assertEqual(stage.name, "予選")
+        self.assert_sizes(stage, [4, 3, 3])
+        self.assertEqual(LeagueEntry.objects.filter(pk__in=[e.pk for e in entries]).count(), 10)
+        self.assertEqual(AdvancementSource.objects.filter(pk__in=[s.pk for s in sources]).count(), 3)
+        self.assertEqual(Schedule.objects.filter(pk__in=[s.pk for s in schedules]).count(), len(schedules))

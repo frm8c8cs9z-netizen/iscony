@@ -29,6 +29,8 @@
     {% csrf_token %}
     <input type="hidden" name="start_round_change_mode" id="start-round-change-mode" value="rebuild">
 
+    <input type="hidden" name="league_group_change_mode" id="league-group-change-mode" value="rebuild">
+
     {{ form.as_p }}
 
     {% if slot_form %}
@@ -127,6 +129,18 @@
     </a>
 </form>
 {% if stage and not stage_type_locked %}
+{{ league_group_change_impact|json_script:"league-group-change-impact" }}
+<dialog id="league-group-change-dialog" aria-labelledby="league-group-change-title">
+    <h3 id="league-group-change-title">グループの組数の並びを変更</h3>
+    <p id="league-group-change-summary" style="white-space: pre-line"></p>
+    <p>割り付けを残す場合、残るグループの組・試合・日程はそのまま残り、番号は上から連番に振り直します。</p>
+    <p>全部作り直す場合、このStageのすべての組・試合・日程を削除して作り直し、このStageを進出元にしている後のStageも削除します。</p>
+    <div class="action-row">
+        <button type="button" data-league-group-mode="keep" autofocus>割り付けを残して組数だけ変える</button>
+        <button type="button" data-league-group-mode="rebuild">全部作り直す</button>
+        <button type="button" data-league-group-mode="cancel">キャンセル</button>
+    </div>
+</dialog>
 {{ bracket_change_impact|json_script:"bracket-change-impact" }}
 <dialog id="start-round-change-dialog" aria-labelledby="start-round-change-title">
     <h3 id="start-round-change-title">開始回戦の形を変更</h3>
@@ -145,6 +159,7 @@
 {% if slot_form %}
     <link rel="stylesheet" href="{% static 'core/stage_start_rounds.css' %}">
     <script src="{% static 'core/js/stage_start_rounds.js' %}"></script>
+    <script src="{% static 'core/js/stage_group_sizes.js' %}"></script>
     <script>
         function toggleStageSlotSetup() {
             const stageType = document.getElementById("id_stage_type");
@@ -582,7 +597,7 @@
             markBracketListChanged();
         }
 
-        function computeNeedsRebuild(includeStartRounds = true) {
+        function computeNeedsRebuild(includeStartRounds = true, includeGroupSizes = true) {
             const stageType = document.getElementById("id_stage_type");
             if (!stageType) {
                 return false;
@@ -641,7 +656,7 @@
                     return true;
                 }
 
-                return JSON.stringify(currentGroupSizes()) !== JSON.stringify(initialValues.groupSizes);
+                return includeGroupSizes && JSON.stringify(currentGroupSizes()) !== JSON.stringify(initialValues.groupSizes);
             }
 
             if (
@@ -739,6 +754,16 @@
                         }, 0);
                     }
                     try {
+                        if (document.getElementById("id_stage_type").value === "league"
+                            && !computeNeedsRebuild(false, false)
+                            && JSON.stringify(currentGroupSizes()) !== JSON.stringify(initialValues.groupSizes)) {
+                            const mode = await chooseLeagueGroupChange(currentGroupSizes());
+                            if (mode) {
+                                document.getElementById("league-group-change-mode").value = mode;
+                                submit();
+                            }
+                            return;
+                        }
                         if (!computeNeedsRebuild(false)
                             && document.getElementById("id_stage_type").value === "tournament") {
                             const changed = await changedStartRoundShapes(initialValues);
