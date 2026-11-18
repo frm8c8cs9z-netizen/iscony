@@ -130,6 +130,11 @@
         <td>当日に出場者が変わる場合の入口です。通常の名簿修正とは分けて扱います。</td>
     </tr>
     <tr>
+        <td>当日の追加(エントリー漏れ)</td>
+        <td><a href="{% url 'day_addition_category_select' tournament.code %}">カテゴリを選んで追加する</a></td>
+        <td>当日にエントリー漏れが見つかったとき、決まったリーグのグループへ組を足します。ほかの番号は動きません。</td>
+    </tr>
+    <tr>
         <td>進出元の整理</td>
         <td>
             <a href="{% url 'advancement_source_list' tournament.code %}">

@@ -7,6 +7,7 @@ from .views import (
     backup,
     csv,
     dashboard,
+    day_addition,
     league,
     pdf,
     snapshot,
@@ -16,6 +17,10 @@ from .views import (
 
 
 urlpatterns = [
+    path("tournament/<str:code>/day-addition/", day_addition.category_select, name="day_addition_category_select"),
+    path("tournament/<str:code>/day-addition/<int:category_id>/", day_addition.stage_select, name="day_addition_stage_select"),
+    path("tournament/<str:code>/day-addition/<int:category_id>/<int:stage_id>/", day_addition.edit, name="day_addition_edit"),
+    path("tournament/<str:code>/day-addition/<int:category_id>/<int:stage_id>/done/", day_addition.done, name="day_addition_done"),
     path(
         "tournament/<str:code>/category/<int:category_id>/stage-start-round-preview/",
         stage.stage_start_round_preview,

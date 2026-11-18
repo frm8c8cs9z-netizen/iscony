@@ -1,0 +1,30 @@
+{% extends "core/base.html" %}
+{% load static %}
+{% block title %}当日の追加(エントリー漏れ){% endblock %}
+{% block content %}
+<div class="page-heading"><div><h2>{{ category.name }} / {{ stage.name }} 当日の追加(エントリー漏れ)</h2><p class="subtle-text">{{ tournament.name }} / ほかの枠の番号は動きません。</p></div>
+<a href="{% url 'day_addition_stage_select' tournament.code category.id %}">Stageを選び直す</a></div>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if reason %}<p>{{ reason }}</p>{% else %}
+<form method="post" class="participant-form" id="day-addition-form" data-next-number="{{ next_number }}">
+{% csrf_token %}{{ formset.management_form }}{{ formset.non_form_errors }}
+<div id="addition-rows">
+{% for form in formset %}<section class="participant-form-panel addition-row">
+<h3>予定の番号: <span class="planned-number"></span></h3>
+{{ form.non_field_errors }}
+<div class="participant-field-stack">{% for field in form %}<div class="participant-field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}</div>
+<button type="button" class="remove-row">この行を削除</button>
+</section>{% endfor %}
+</div>
+<noscript><p>予定の番号は {{ next_number }} から行の順に付きます。確認画面で番号を確認してください。</p></noscript>
+<template id="addition-row-template"><section class="participant-form-panel addition-row"><h3>予定の番号: <span class="planned-number"></span></h3><div class="participant-field-stack">{% for field in formset.empty_form %}<div class="participant-field">{{ field.label_tag }}{{ field }}</div>{% endfor %}</div><button type="button" class="remove-row">この行を削除</button></section></template>
+<div class="participant-form-actions"><button type="button" id="add-row">行を追加</button><button type="submit" name="action" value="confirm">確認へ</button></div>
+</form>
+<script src="{% static 'core/day_addition.js' %}" defer></script>
+{% endif %}
+<h3>このStageで当日の追加をした組</h3>
+<p>当日の追加の取り消しは、この画面の「取り消し」を使ってください。ペア割り付け画面で外すと、既存の動作により番号が詰まることがあります。</p>
+<ul>{% for entry in additions %}<li>{{ entry.pair_code }} {{ entry.display_name }} → {{ entry.group.name }}グループ
+{% if not reason %}<form method="post" onsubmit="return confirm('この組と、その試合・日程を取り消しますか？');">{% csrf_token %}<input type="hidden" name="entry_id" value="{{ entry.id }}"><button name="action" value="cancel">取り消し</button></form>{% endif %}
+</li>{% empty %}<li>当日の追加をした組はありません。</li>{% endfor %}</ul>
+{% endblock %}

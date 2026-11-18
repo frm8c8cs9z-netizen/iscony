@@ -1032,6 +1032,11 @@ class Group(models.Model):
 # =========================================================
 class LeagueEntry(models.Model):
 
+    added_on_day = models.BooleanField(default=False)
+    added_on_day_participant = models.ForeignKey(
+        Participant, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+
     category = models.ForeignKey(
         Category,
         on_delete=models.CASCADE

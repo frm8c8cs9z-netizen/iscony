@@ -1,0 +1,14 @@
+{% extends "core/base.html" %}
+{% block title %}当日の追加の確認{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h2>当日の追加の確認</h2><p>{{ tournament.name }} / {{ category.name }} / {{ stage.name }}</p></div></div>
+<p>ほかの枠の番号は動きません。作った試合の日程は、追加後に配置してください。</p>
+<ul>{% for row in rows %}<li>{{ row.code }} {{ row.form.cleaned_data.player1_name }}{% if row.form.cleaned_data.player2_name %}・{{ row.form.cleaned_data.player2_name }}{% endif %}
+{% with organization_fields=row.form.organization_display_fields %}{% if organization_fields %}({% for field in organization_fields %}{{ field.label }}: {{ field.value }} / {% endfor %}) {% endif %}{% endwith %}→ {{ row.group.name }}グループ({{ row.before }}組 → {{ row.after }}組)、試合{{ row.match_count }}件を作ります</li>{% endfor %}</ul>
+<form method="post">{% csrf_token %}{{ formset.management_form }}
+{% for form in formset %}{% for field in form %}{{ field.as_hidden }}{% endfor %}{% endfor %}
+<input type="hidden" name="confirmation" value="{{ confirmation }}">
+<button type="submit" name="action" value="add">追加する</button>
+<button type="submit" name="action" value="back">戻る</button>
+</form>
+{% endblock %}
