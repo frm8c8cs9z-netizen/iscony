@@ -143,13 +143,13 @@ class DrawConfirmationTests(TestCase):
             with self.subTest(stage_type=stage.stage_type):
                 self.confirm(stage)
                 matches = self.stage_matches(stage)
-                before = list(matches.values_list("pk", flat=True))
+                before = list(matches.order_by("pk").values_list("pk", flat=True))
                 response = self.client.get(self.url("edit_stage", stage))
                 self.assertNotIn("disabled", response.context["slot_form"].fields["match_games"].widget.attrs)
                 self.assertEqual(self.edit(stage, name=f"新しい名前{stage.stage_type}", display_order=8, match_games=5).status_code, 302)
                 stage.refresh_from_db()
                 self.assertEqual((stage.name, stage.display_order), (f"新しい名前{stage.stage_type}", 8))
-                self.assertEqual(list(matches.values_list("pk", flat=True)), before)
+                self.assertEqual(list(matches.order_by("pk").values_list("pk", flat=True)), before)
                 self.assertEqual(set(matches.values_list("match_games", flat=True)), {5})
 
     def test_tournament_pair_count_start_rounds_and_bracket_count_rejected(self):

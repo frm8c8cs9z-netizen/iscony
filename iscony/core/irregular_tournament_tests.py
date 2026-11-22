@@ -598,7 +598,7 @@ class IrregularTournamentTests(TestCase):
         ]
         self.generate([2,1,1])
         original = self.states()
-        original_ids = list(TournamentEntry.objects.values_list("id", flat=True))
+        original_ids = list(TournamentEntry.objects.order_by("pk").values_list("id", flat=True))
         for rounds, stage_type, fragments in cases:
             for category in (self.category.name, "未作成カテゴリ"):
                 with self.subTest(rounds=rounds, category=category):
@@ -609,7 +609,7 @@ class IrregularTournamentTests(TestCase):
                         self.assertIn(fragment, errors)
                     self.assertIn(f"{category} / {self.stage.name} / ", errors)
                     self.assertEqual(self.states(), original)
-                    self.assertEqual(list(TournamentEntry.objects.values_list("id", flat=True)), original_ids)
+                    self.assertEqual(list(TournamentEntry.objects.order_by("pk").values_list("id", flat=True)), original_ids)
                     self.assertFalse(Category.objects.filter(name="未作成カテゴリ").exists())
                     self.assertFalse(Group.objects.exists())
 
@@ -866,12 +866,12 @@ class IrregularTournamentTests(TestCase):
 
     def test_invalid_edit_keeps_entries_matches_and_downstream(self):
         self.generate([2,1,1])
-        ids = list(TournamentEntry.objects.values_list("id", flat=True))
+        ids = list(TournamentEntry.objects.order_by("pk").values_list("id", flat=True))
         matches = self.states()
         downstream = Stage.objects.create(category=self.category, name="次", stage_type="tournament", advancement_source_stage=self.stage)
         response = self.client.post(self.stage_form_url(edit=True), self.stage_form_data(start_rounds="1,2,1", pair_count="3"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(TournamentEntry.objects.values_list("id", flat=True)), ids)
+        self.assertEqual(list(TournamentEntry.objects.order_by("pk").values_list("id", flat=True)), ids)
         self.assertEqual(self.states(), matches)
         self.assertTrue(Stage.objects.filter(pk=downstream.pk).exists())
 
@@ -882,9 +882,9 @@ class IrregularTournamentTests(TestCase):
         match.save(update_fields=["pair1_games"])
         response = self.client.get(self.stage_form_url(edit=True))
         self.assertTrue(response.context["slot_form"].fields["start_rounds"].widget.attrs["disabled"])
-        ids = list(TournamentEntry.objects.values_list("id", flat=True))
+        ids = list(TournamentEntry.objects.order_by("pk").values_list("id", flat=True))
         self.assertEqual(self.client.post(self.stage_form_url(edit=True), self.stage_form_data(start_rounds="1,1,2")).status_code, 302)
-        self.assertEqual(list(TournamentEntry.objects.values_list("id", flat=True)), ids)
+        self.assertEqual(list(TournamentEntry.objects.order_by("pk").values_list("id", flat=True)), ids)
         self.assertEqual([e.start_round for e in self.csv_entries()], [2,1,1])
 
     def assigned_round_entries(self, rounds):
@@ -921,7 +921,7 @@ class IrregularTournamentTests(TestCase):
         from .services.stage_setup import create_tournament_stage_brackets
         second = create_tournament_stage_brackets(self.stage, [{"name": "下位", "pair_count": 3}])[0]
         generate_tournament_bracket_matches(second, 7)
-        entry_ids = list(second.tournamententry_set.values_list("id", flat=True))
+        entry_ids = list(second.tournamententry_set.order_by("pk").values_list("id", flat=True))
         matches = list(second.tournamentmatch_set.order_by("id").values_list("id", flat=True))
         rows = json.loads(self.client.get(self.stage_form_url(edit=True)).context["slot_form"]["bracket_list"].value())
         rows[0].update(name="上位変更", start_rounds="1,1,2")
@@ -931,7 +931,7 @@ class IrregularTournamentTests(TestCase):
             start_round_change_mode="keep", match_games="5",
         ))
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(list(second.tournamententry_set.values_list("id", flat=True)), entry_ids)
+        self.assertEqual(list(second.tournamententry_set.order_by("pk").values_list("id", flat=True)), entry_ids)
         self.assertEqual(list(second.tournamentmatch_set.order_by("id").values_list("id", flat=True)), matches)
         self.bracket.refresh_from_db()
         second.refresh_from_db()
@@ -960,7 +960,7 @@ class IrregularTournamentTests(TestCase):
         block = ScheduleBlock.objects.create(tournament=self.tournament, name="午前")
         match = self.bracket.tournamentmatch_set.get(match_code="M1")
         assign_match_to_schedule_slot(match, block, court)
-        schedule_ids = list(Schedule.objects.values_list("id", flat=True))
+        schedule_ids = list(Schedule.objects.order_by("pk").values_list("id", flat=True))
         match_ids = list(self.bracket.tournamentmatch_set.order_by("id").values_list("id", flat=True))
         for text, expected in [("2,1,1", [2,1,1]), ("", [None]*3)]:
             response = self.client.post(self.stage_form_url(edit=True), self.stage_form_data(
@@ -970,7 +970,7 @@ class IrregularTournamentTests(TestCase):
             self.assertEqual(list(self.bracket.tournamentmatch_set.order_by("id").values_list("id", flat=True)), match_ids)
             self.assertEqual(list(self.bracket.tournamententry_set.order_by("display_order").values_list("start_round", flat=True)), expected)
             self.assertEqual(list(self.bracket.tournamententry_set.order_by("display_order").values_list("id", flat=True)), [e.id for e in entries])
-            self.assertEqual(list(Schedule.objects.values_list("id", flat=True)), schedule_ids)
+            self.assertEqual(list(Schedule.objects.order_by("pk").values_list("id", flat=True)), schedule_ids)
             self.assertTrue(Stage.objects.filter(pk=downstream.pk).exists())
 
     def test_keep_and_rebuild_delete_downstream_and_affected_schedules(self):

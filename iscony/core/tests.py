@@ -34991,15 +34991,15 @@ class TournamentBackupTests(TestCase):
         backup.save(update_fields=["payload"])
         Category.objects.filter(pk=self.category.pk).update(name="復元直前")
         before = self.serialized_state()
-        backup_ids = list(self.backup_model.objects.values_list("pk", flat=True))
+        backup_ids = list(self.backup_model.objects.order_by("pk").values_list("pk", flat=True))
         with self.assertRaisesMessage(ValidationError, "何も変更していません"):
             self.backups.restore_tournament_backup(backup)
         self.assertEqual(self.serialized_state(), before)
-        self.assertEqual(list(self.backup_model.objects.values_list("pk", flat=True)), backup_ids)
+        self.assertEqual(list(self.backup_model.objects.order_by("pk").values_list("pk", flat=True)), backup_ids)
         response = self.client.post(self.backup_url("restore", backup), follow=True)
         self.assertContains(response, "何も変更していません")
         self.assertEqual(self.serialized_state(), before)
-        self.assertEqual(list(self.backup_model.objects.values_list("pk", flat=True)), backup_ids)
+        self.assertEqual(list(self.backup_model.objects.order_by("pk").values_list("pk", flat=True)), backup_ids)
 
     def test_malformed_payload_and_missing_tournament_are_rejected_without_changes(self):
         from copy import deepcopy
@@ -39052,14 +39052,14 @@ class PlannedLeagueGroupSizesTests(TestCase):
         entry = groups[0].leagueentry_set.first()
         entry.participant = self.participants[0]
         entry.save(update_fields=["participant"])
-        ids = list(LeagueEntry.objects.filter(group__stage=stage).values_list("id", flat=True))
-        match_ids = list(RoundRobinMatch.objects.filter(group__stage=stage).values_list("id", flat=True))
+        ids = list(LeagueEntry.objects.filter(group__stage=stage).order_by("pk").values_list("id", flat=True))
+        match_ids = list(RoundRobinMatch.objects.filter(group__stage=stage).order_by("pk").values_list("id", flat=True))
         for sizes in ["4,3,3", "", "４ ３ ３"]:
             self.assertEqual(self.post_stage(sizes, stage, name="名前だけ変更").status_code, 302)
             self.assertEqual(list(LeagueEntry.objects.filter(group__stage=stage)
-                                  .values_list("id", flat=True)), ids)
+                                  .order_by("pk").values_list("id", flat=True)), ids)
             self.assertEqual(list(RoundRobinMatch.objects.filter(group__stage=stage)
-                                  .values_list("id", flat=True)), match_ids)
+                                  .order_by("pk").values_list("id", flat=True)), match_ids)
             entry.refresh_from_db()
             self.assertEqual(entry.participant_id, self.participants[0].id)
 
@@ -39081,11 +39081,11 @@ class PlannedLeagueGroupSizesTests(TestCase):
     def test_edit_null_record_initial_uses_actual_slots_and_records_without_rebuild(self):
         stage, groups = self.make_stage([3, 4, 3])
         Group.objects.filter(stage=stage).update(planned_slot_count=None)
-        ids = list(Group.objects.filter(stage=stage).values_list("id", flat=True))
+        ids = list(Group.objects.filter(stage=stage).order_by("pk").values_list("id", flat=True))
         page = self.client.get(self.stage_url("edit_stage", stage))
         self.assertEqual(page.context["slot_form"]["group_sizes"].value(), "3,4,3")
         self.assertEqual(self.post_stage("3,4,3", stage).status_code, 302)
-        self.assertEqual(list(Group.objects.filter(stage=stage).values_list("id", flat=True)), ids)
+        self.assertEqual(list(Group.objects.filter(stage=stage).order_by("pk").values_list("id", flat=True)), ids)
         self.assert_sizes(stage, [3, 4, 3])
 
     def test_result_lock_disables_field_and_ignores_posted_sizes(self):
