@@ -1,0 +1,9 @@
+{% extends "core/base.html" %}
+{% block title %}当日の追加の確認{% endblock %}
+{% block content %}
+<h2>当日の追加の確認</h2><p>{{ tournament.name }} / {{ category.name }} / {{ stage.name }} / {{ bracket.name }}</p>
+<ul>{% for line in lines %}<li>{{ line }}</li>{% endfor %}</ul>
+{% if not stage.draw_confirmed_at %}<p>追加すると、このStageは組み合わせ確定になります。</p>{% endif %}
+<p>ほかの番号・マッチコードは変わりません。増えた試合の日程は、追加後に配置してください。</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="bracket" value="{{ bracket.pk }}">{% for field in form %}{{ field.as_hidden }}{% endfor %}<input type="hidden" name="confirmation" value="{{ confirmation }}"><button name="action" value="add">追加する</button><button name="action" value="back">戻る</button></form>
+{% endblock %}

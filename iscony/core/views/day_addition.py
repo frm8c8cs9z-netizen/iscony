@@ -12,6 +12,8 @@ from django.utils.html import format_html
 from ..form_defs.setup import ParticipantForm
 from ..models import Category, Group, LeagueEntry, Participant, RoundRobinMatch, Stage, Tournament
 from ..services import day_addition as service
+from ..services import tournament_day_addition as tournament_service
+from . import tournament_day_addition as tournament_views
 from .dashboard import _participant_category_select
 
 
@@ -41,7 +43,7 @@ AdditionFormSet = formset_factory(AdditionForm, extra=0, min_num=1, validate_min
 
 def category_select(request, code):
     return _participant_category_select(request, code, page_title="当日の追加(エントリー漏れ)",
-        lead_text="カテゴリを選んで、決まったリーグのグループへ組を足します。ほかの番号は動きません。",
+        lead_text="カテゴリを選んで、リーグのグループやトーナメント表へ組を足します。ほかの番号は動きません。",
         category_link_url_name="day_addition_stage_select", action_label="Stageを選ぶ")
 
 
@@ -56,7 +58,7 @@ def context_for(code, category_id, stage_id=None):
 
 def stage_select(request, code, category_id):
     context = context_for(code, category_id)
-    context["choices"] = [(stage, service.unavailable_reason(stage)) for stage in context["category"].stage_set.all()]
+    context["choices"] = [(stage, (tournament_service if stage.stage_type == Stage.TYPE_TOURNAMENT else service).unavailable_reason(stage)) for stage in context["category"].stage_set.all()]
     return render(request, "core/day_addition_stages.html", context)
 
 
@@ -96,6 +98,8 @@ def rank_warnings(impact, action, *, completed=False):
 def edit(request, code, category_id, stage_id):
     context = context_for(code, category_id, stage_id)
     stage = context["stage"]
+    if stage.stage_type == Stage.TYPE_TOURNAMENT:
+        return tournament_views.edit(request, context)
     reason = service.unavailable_reason(stage)
     context["reason"] = reason
     if request.method == "POST" and reason:
@@ -154,6 +158,8 @@ def edit(request, code, category_id, stage_id):
 
 def done(request, code, category_id, stage_id):
     context = context_for(code, category_id, stage_id)
+    if context["stage"].stage_type == Stage.TYPE_TOURNAMENT:
+        return tournament_views.done(request, context)
     entries = LeagueEntry.objects.filter(group__stage=context["stage"], added_on_day=True,
         pk__in=request.session.get(f"day_addition_{stage_id}", [])).select_related("participant", "group")
     context.update(confirmed_now=request.session.get(f"day_addition_confirmed_{stage_id}", False),

@@ -39409,3 +39409,4 @@ class KeepLeagueGroupSizesTests(TestCase):
         self.assertEqual(Schedule.objects.filter(pk__in=[s.pk for s in schedules]).count(), len(schedules))
 
 from .draw_confirmation_tests import DrawConfirmationTests, ConfirmedDayAdditionTests  # noqa: E402,F401
+from .tournament_day_addition_tests import TournamentDayAdditionTests  # noqa: E402,F401

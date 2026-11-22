@@ -1,0 +1,23 @@
+{% extends "core/base.html" %}
+{% block title %}当日の追加(エントリー漏れ){% endblock %}
+{% block content %}
+<div class="page-heading"><div><h2>{{ category.name }} / {{ stage.name }} 当日の追加(エントリー漏れ)</h2><p>{{ tournament.name }} / ほかの番号・マッチコードは変わりません。</p></div><a href="{% url 'day_addition_stage_select' tournament.code category.id %}">Stageを選び直す</a></div>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if reason %}<p>{{ reason }}</p>{% else %}
+{% if brackets|length > 1 %}
+<form method="get"><label for="bracket-select">トーナメント表</label><select name="bracket" id="bracket-select" required><option value="">表を選んでください</option>{% for item in brackets %}<option value="{{ item.pk }}"{% if item.pk == bracket.pk %} selected{% endif %}>{{ item.name }}</option>{% endfor %}</select><button>表を選ぶ</button></form>
+{% endif %}
+{% if bracket %}
+<h3>{{ bracket.name }} / 予定の番号: {{ next_number }}</h3>
+{% if not stage.draw_confirmed_at %}<p>追加すると、このStageは組み合わせ確定になります。</p>{% endif %}
+{% if form %}<form method="post" class="participant-form">{% csrf_token %}<input type="hidden" name="bracket" value="{{ bracket.pk }}">
+{{ form.non_field_errors }}<div class="participant-field-stack">{% for field in form %}<div class="participant-field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}</div>
+<button name="action" value="confirm">確認へ</button></form>{% endif %}
+{% elif not brackets %}<p>トーナメント表がありません。</p>{% endif %}
+<h3>このStageで当日の追加をした組</h3>
+<p>入れる場所を間違えたときは、取り消してから足し直してください。</p>
+<ul>{% for entry in additions %}<li>{{ entry.bracket.name }}: {{ entry.pair_code }} {{ entry.display_name }}
+<form method="post" onsubmit="return confirm('この組と、その試合・日程を取り消しますか？');">{% csrf_token %}<input type="hidden" name="entry_id" value="{{ entry.pk }}"><button name="action" value="cancel"{% if entry.cancel_reason %} disabled{% endif %}>取り消し</button></form>
+{% if entry.cancel_reason %}<p>{{ entry.cancel_reason }}</p>{% endif %}</li>{% empty %}<li>当日の追加をした組はありません。</li>{% endfor %}</ul>
+{% endif %}
+{% endblock %}

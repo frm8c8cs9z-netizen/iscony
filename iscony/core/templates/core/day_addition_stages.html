@@ -1,7 +1,7 @@
 {% extends "core/base.html" %}
 {% block title %}当日の追加(エントリー漏れ){% endblock %}
 {% block content %}
-<div class="page-heading"><div><h2>{{ category.name }} 当日の追加(エントリー漏れ)</h2><p class="subtle-text">{{ tournament.name }} / リーグStageを選びます。</p></div>
+<div class="page-heading"><div><h2>{{ category.name }} 当日の追加(エントリー漏れ)</h2><p class="subtle-text">{{ tournament.name }} / 追加するStageを選びます。</p></div>
 <a href="{% url 'day_addition_category_select' tournament.code %}">カテゴリを選び直す</a></div>
 <table><tr><th>Stage</th><th>追加</th></tr>
 {% for stage, reason in choices %}<tr><td>{{ stage.name }}</td><td>{% if reason %}{{ reason }}{% else %}<a href="{% url 'day_addition_edit' tournament.code category.id stage.id %}">組を追加する</a>{% endif %}</td></tr>

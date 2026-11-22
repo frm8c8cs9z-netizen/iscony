@@ -2033,6 +2033,11 @@ class TournamentBracket(models.Model):
 
 class TournamentEntry(models.Model):
 
+    added_on_day = models.BooleanField(default=False)
+    added_on_day_participant = models.ForeignKey(
+        Participant, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+
     start_round = models.PositiveIntegerField(
         null=True,
         blank=True,
