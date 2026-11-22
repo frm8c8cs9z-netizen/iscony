@@ -6,6 +6,7 @@ Stage追加時に、参加者未割当のリーグ枠・トーナメント枠を
 import string
 from itertools import combinations
 
+from .draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max
@@ -158,6 +159,8 @@ def group_base_size(group):
 
 def validate_league_slot_number_change(group):
     """結果入力後はStage内の枠番号を変える操作を拒否する。"""
+    if stage_draw_confirmed(group.stage):
+        raise ValidationError(DRAW_CONFIRMED_REASON)
     if group.stage_id is not None and stage_has_results(group.stage):
         raise ValidationError(
             "このStageには結果が入っているため、枠の追加・移動・解除はできません(番号が変わってしまうため)。"

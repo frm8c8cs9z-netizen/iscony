@@ -9,6 +9,7 @@ from ..constants import (
     PARTICIPANT_ORGANIZATION_CODES,
     PARTICIPANT_ORGANIZATION_INPUT_CODES,
 )
+from .draw_confirmation import stage_draw_confirmed
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, Q
@@ -20,6 +21,7 @@ from ..models import (
     ParticipantOrganizationValue,
     RoundRobinMatch,
     Schedule,
+    Stage,
     TournamentEntry,
     TournamentMatch,
     TournamentOrganizationField,
@@ -527,6 +529,8 @@ def unassign_league_entry_participant(entry):
 
     with transaction.atomic():
         group = entry.group
+        if group.stage_id:
+            group.stage = Stage.objects.select_for_update().get(pk=group.stage_id)
         base = group_base_size(group)
         group_entry_count = LeagueEntry.objects.filter(
             group=group,
@@ -534,7 +538,7 @@ def unassign_league_entry_participant(entry):
 
         if (
             group_entry_count > base
-            and not (group.stage_id and stage_has_results(group.stage))
+            and not (stage_draw_confirmed(group.stage) or (group.stage_id and stage_has_results(group.stage)))
         ):
             _delete_league_entry_and_renumber(entry)
             return None
@@ -552,6 +556,8 @@ def remove_league_entry_slot(entry):
             raise ValidationError(
                 "結果入力済みの試合があるため、参加者割当を解除できません。"
             )
+        if entry.group.stage_id:
+            entry.group.stage = Stage.objects.select_for_update().get(pk=entry.group.stage_id)
         validate_league_slot_number_change(entry.group)
         return unassign_league_entry_participant(entry)
 

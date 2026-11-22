@@ -6,6 +6,7 @@
 <a href="{% url 'day_addition_stage_select' tournament.code category.id %}">Stageを選び直す</a></div>
 {% if error %}<p role="alert">{{ error }}</p>{% endif %}
 {% if reason %}<p>{{ reason }}</p>{% else %}
+{% if not stage.draw_confirmed_at %}<p>追加すると、このStageは組み合わせ確定になります。</p>{% endif %}
 <form method="post" class="participant-form" id="day-addition-form" data-next-number="{{ next_number }}">
 {% csrf_token %}{{ formset.management_form }}{{ formset.non_form_errors }}
 <div id="addition-rows">
@@ -23,8 +24,12 @@
 <script src="{% static 'core/day_addition.js' %}" defer></script>
 {% endif %}
 <h3>このStageで当日の追加をした組</h3>
-<p>当日の追加の取り消しは、この画面の「取り消し」を使ってください。ペア割り付け画面で外すと、既存の動作により番号が詰まることがあります。</p>
+<p>当日の追加の取り消しは、この画面の「取り消し」を使ってください。確定したStageでは、ペア割り付け画面で外しても枠と番号は残ります。グループを間違えたときは、この画面の「グループを移す」を使ってください。</p>
 <ul>{% for entry in additions %}<li>{{ entry.pair_code }} {{ entry.display_name }} → {{ entry.group.name }}グループ
-{% if not reason %}<form method="post" onsubmit="return confirm('この組と、その試合・日程を取り消しますか？');">{% csrf_token %}<input type="hidden" name="entry_id" value="{{ entry.id }}"><button name="action" value="cancel">取り消し</button></form>{% endif %}
+{% if not reason %}<form method="post" class="day-addition-cancel-form" data-rank-warning="{{ entry.cancel_rank_warning }}" onsubmit="return confirm('この組と、その試合・日程を取り消しますか？' + (this.dataset.rankWarning ? '\n' + this.dataset.rankWarning : ''));">{% csrf_token %}<input type="hidden" name="entry_id" value="{{ entry.id }}"><button name="action" value="cancel">取り消し</button></form>
+<form method="post" class="day-addition-move-form" data-rank-warning="{{ entry.move_rank_warning }}">{% csrf_token %}<input type="hidden" name="entry_id" value="{{ entry.id }}">
+<label for="move-group-{{ entry.id }}">移す先のグループ</label>
+<select name="group_id" id="move-group-{{ entry.id }}" required><option value="">グループを選んでください</option>{% for group in groups %}{% if group.id != entry.group_id %}<option value="{{ group.id }}">{{ group.name }}グループ</option>{% endif %}{% endfor %}</select>
+<button name="action" value="move">グループを移す</button></form>{% endif %}
 </li>{% empty %}<li>当日の追加をした組はありません。</li>{% endfor %}</ul>
 {% endblock %}

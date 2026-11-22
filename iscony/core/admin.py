@@ -2,6 +2,7 @@
 # core/admin.py
 
 from django.contrib import admin
+from .draw_confirmation_admin import DrawConfirmationAdminMixin
 
 from .models import (
     Tournament,
@@ -131,7 +132,7 @@ class CategoryAdmin(admin.ModelAdmin):
 # Stage
 # =========================================================
 @admin.register(Stage)
-class StageAdmin(admin.ModelAdmin):
+class StageAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "code",
@@ -153,6 +154,7 @@ class StageAdmin(admin.ModelAdmin):
 
     readonly_fields = (
         "code",
+        "draw_confirmed_at",
     )
 
 
@@ -160,7 +162,7 @@ class StageAdmin(admin.ModelAdmin):
 # Group
 # =========================================================
 @admin.register(Group)
-class GroupAdmin(admin.ModelAdmin):
+class GroupAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "name",
@@ -182,7 +184,7 @@ class GroupAdmin(admin.ModelAdmin):
 # リーグ枠
 # =========================================================
 @admin.register(LeagueEntry)
-class LeagueEntryAdmin(admin.ModelAdmin):
+class LeagueEntryAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "league_entry_code",
@@ -244,7 +246,7 @@ class LeagueEntryAdmin(admin.ModelAdmin):
 # RoundRobinMatch
 # =========================================================
 @admin.register(RoundRobinMatch)
-class RoundRobinMatchAdmin(admin.ModelAdmin):
+class RoundRobinMatchAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "group",
@@ -403,7 +405,7 @@ class ScheduleAdmin(admin.ModelAdmin):
 
 
 @admin.register(TournamentBracket)
-class TournamentBracketAdmin(admin.ModelAdmin):
+class TournamentBracketAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "name",
@@ -454,7 +456,7 @@ class ScheduleBlockAdmin(admin.ModelAdmin):
 
 
 @admin.register(TournamentMatch)
-class TournamentMatchAdmin(admin.ModelAdmin):
+class TournamentMatchAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "next_match":
@@ -494,7 +496,7 @@ class TournamentMatchAdmin(admin.ModelAdmin):
 
 
 @admin.register(TournamentEntry)
-class TournamentEntryAdmin(admin.ModelAdmin):
+class TournamentEntryAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
 
     # 開始回戦の入力は第2段階で扱う。
     exclude = ("start_round",)
@@ -591,4 +593,6 @@ class AdvancementSourceAdmin(admin.ModelAdmin):
 
 
 admin.site.register(ScoreSheetTemplate)
-admin.site.register(Participant)
+@admin.register(Participant)
+class ParticipantAdmin(DrawConfirmationAdminMixin, admin.ModelAdmin):
+    pass

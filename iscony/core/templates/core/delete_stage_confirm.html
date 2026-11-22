@@ -66,7 +66,9 @@
     </div>
 {% endif %}
 
-{% if impact.blocked %}
+{% if impact.draw_confirmed %}
+    <p class="score-input-safety-note">{{ impact.draw_confirmed_reason }}</p>
+{% elif impact.blocked %}
     <p class="score-input-safety-note">結果が入力済みのため削除できません。先に結果を削除してください。</p>
     <p><a href="{% url 'clear_stage_results' tournament.code stage.category_id stage.id %}?next={{ request.get_full_path|urlencode:"" }}">このStageの結果をまとめて削除する</a></p>
 {% else %}

@@ -7,6 +7,7 @@ core.views.dashboard
 
 from collections import defaultdict
 
+from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
 from django.contrib import messages
 from django.contrib.auth.decorators import login_not_required
 from django.core.cache import cache
@@ -2097,9 +2098,16 @@ def delete_group_confirm(request, group_id):
         kwargs={"code": tournament.code, "category_id": category.id},
     )
     impact = group_deletion_impact(group)
+    if stage_draw_confirmed(group.stage):
+        impact["blocked"] = True
+        impact["draw_confirmed"] = True
+        impact["draw_confirmed_reason"] = DRAW_CONFIRMED_REASON
+        messages.error(request, DRAW_CONFIRMED_REASON)
 
     if request.method == "POST":
-        if impact["blocked"]:
+        if stage_draw_confirmed(group.stage):
+            pass  # 上で確定解除の案内を表示済み。
+        elif impact["blocked"]:
             messages.error(
                 request,
                 "結果が入力済みのため削除できません。先に結果を削除してください。",
@@ -2137,9 +2145,16 @@ def delete_tournament_bracket_confirm(request, code, bracket_id):
         kwargs={"code": tournament.code, "category_id": category.id},
     )
     impact = tournament_bracket_deletion_impact(bracket)
+    if stage_draw_confirmed(bracket.stage):
+        impact["blocked"] = True
+        impact["draw_confirmed"] = True
+        impact["draw_confirmed_reason"] = DRAW_CONFIRMED_REASON
+        messages.error(request, DRAW_CONFIRMED_REASON)
 
     if request.method == "POST":
-        if impact["blocked"]:
+        if stage_draw_confirmed(bracket.stage):
+            pass  # 上で確定解除の案内を表示済み。
+        elif impact["blocked"]:
             messages.error(
                 request,
                 "結果が入力済みのため削除できません。先に結果を削除してください。",
@@ -2209,6 +2224,12 @@ def order_maintenance(request, code, category_id=None, stage_id=None):
         groups = groups.filter(stage=stage)
 
     if request.method == "POST":
+
+        for group in groups:
+            value = request.POST.get(f"group_order_{group.id}")
+            if value is not None and stage_draw_confirmed(group.stage) and int(value or 0) != group.display_order:
+                messages.error(request, DRAW_CONFIRMED_REASON)
+                return redirect(request.path)
 
         for group in groups:
 
@@ -2319,6 +2340,7 @@ def order_maintenance(request, code, category_id=None, stage_id=None):
             grouped_rows.append(current_entry)
             current_key = key
 
+        group.draw_confirmed = stage_draw_confirmed(group.stage)
         current_entry["groups"].append(group)
 
     return render(

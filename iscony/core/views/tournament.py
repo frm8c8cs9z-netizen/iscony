@@ -6,6 +6,7 @@ core.views.tournament
 画面構築と試合生成・CSV取込の入口をここにまとめている。
 """
 
+from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -660,7 +661,9 @@ def generate_tournament_matches(request, code, bracket_id):
 
         if form.is_valid():
 
-            if has_scored_matches:
+            if stage_draw_confirmed(bracket.stage):
+                form.add_error(None, DRAW_CONFIRMED_REASON)
+            elif has_scored_matches:
 
                 form.add_error(
                     None,

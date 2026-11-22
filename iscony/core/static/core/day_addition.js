@@ -1,4 +1,13 @@
 (() => {
+    document.querySelectorAll('.day-addition-move-form').forEach(moveForm => {
+        moveForm.addEventListener('submit', event => {
+            const group = moveForm.elements.group_id.selectedOptions[0].textContent;
+            const warning = moveForm.dataset.rankWarning ? `\n${moveForm.dataset.rankWarning}` : '';
+            if (!confirm(`この組を${group}へ移します。元のグループでの試合と日程は消え、移した先で新しい試合を作ります(日程は未配置)。番号は変わりません。${warning}`)) {
+                event.preventDefault();
+            }
+        });
+    });
     const form = document.getElementById('day-addition-form');
     if (!form) return;
     const rows = document.getElementById('addition-rows');

@@ -60,7 +60,10 @@ def _temporary_pair_code(used_codes):
 @transaction.atomic
 def resize_league_groups(stage, sizes, match_games):
     """既存の枠・残る試合は更新せず、組数の差分だけを増減する。"""
-    Stage.objects.select_for_update().get(pk=stage.pk)
+    stage = Stage.objects.select_for_update().get(pk=stage.pk)
+    from .draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
+    if stage_draw_confirmed(stage):
+        raise ValidationError(DRAW_CONFIRMED_REASON)
     if stage_has_results(stage):
         raise ValidationError("結果が入力済みのため組数を変更できません。")
     impact = league_group_size_impact(stage)

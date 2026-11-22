@@ -5,6 +5,7 @@ import secrets
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
+from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
 from django.contrib import messages
 from django.contrib.auth.decorators import login_not_required
 from django.core.exceptions import ValidationError
@@ -739,6 +740,24 @@ def category_stage_management(request, code, category_id):
     )
 
 
+@transaction.atomic
+def set_stage_draw_confirmation(request, code, category_id, stage_id):
+    from django.http import HttpResponseNotAllowed
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    stage = get_object_or_404(Stage.objects.select_for_update(), pk=stage_id,
+                              category_id=category_id, category__tournament__code=code)
+    if stage.advancement_source_stage_id:
+        messages.error(request, "進出元のあるStageの組み合わせは確定できません。")
+    elif request.POST.get("action") in {"confirm", "release"}:
+        stage.draw_confirmed_at = timezone.now() if request.POST["action"] == "confirm" else None
+        stage.save(update_fields=["draw_confirmed_at"])
+        messages.success(request, "組み合わせを確定しました。" if stage_draw_confirmed(stage) else "組み合わせの確定を解除しました。")
+    else:
+        messages.error(request, "確定・解除の操作を指定してください。")
+    return redirect(safe_next_url(request) or reverse("category_stage_management", kwargs={"code": code, "category_id": category_id}))
+
+
 def _stage_setup_preview(pair_count):
     if pair_count and pair_count >= 1:
         bracket_size = get_bracket_size(pair_count)
@@ -1251,9 +1270,16 @@ def delete_stage_confirm(request, code, category_id, stage_id):
     )
 
     impact = stage_deletion_impact(stage)
+    if stage_draw_confirmed(stage):
+        impact["blocked"] = True
+        impact["draw_confirmed"] = True
+        impact["draw_confirmed_reason"] = DRAW_CONFIRMED_REASON
+        messages.error(request, DRAW_CONFIRMED_REASON)
 
     if request.method == "POST":
-        if impact["blocked"]:
+        if stage_draw_confirmed(stage):
+            pass  # 上で確定解除の案内を表示済み。
+        elif impact["blocked"]:
             messages.error(
                 request,
                 "結果が入力済みのため削除できません。先に結果を削除してください。",
@@ -1277,6 +1303,103 @@ def delete_stage_confirm(request, code, category_id, stage_id):
     )
 
 
+def _confirmed_stage_edit(request, stage):
+    """確定時は名称・表示順と、結果未入力の場合だけゲーム数を更新する。"""
+    has_results = stage_has_results(stage)
+    slot_form, pair_count = _stage_slot_form_for_current_entries(stage, disabled=True)
+    if has_results:
+        slot_form.fields["match_games"].help_text = "結果が入力済みのためゲーム数を変更できません。"
+    else:
+        slot_form.fields["match_games"].widget.attrs.pop("disabled", None)
+    form = StageForm(request.POST or None, instance=stage)
+    form.fields["stage_type"].widget.attrs["disabled"] = True
+    if request.method == "POST":
+        data = request.POST.copy()
+        data.setdefault("stage_type", stage.stage_type)
+        form = StageForm(data, instance=stage)
+        original_type = stage.stage_type
+        original = _current_stage_slot_values(stage)
+        values = dict(slot_form.initial)
+        values.update(request.POST.dict())
+        check = StageSlotSetupForm(values, category=stage.category, exclude_stage_id=stage.pk)
+        form_valid = form.is_valid()
+        slots_valid = check.is_valid()
+        if slots_valid:
+            try:
+                if original_type == Stage.TYPE_LEAGUE:
+                    sizes = parse_group_sizes_text(check.cleaned_data.get("group_sizes"))
+                    if sizes is None:
+                        candidate = find_group_count_candidate(check.cleaned_data["pair_count"], check.cleaned_data["group_count"])
+                        sizes = candidate["group_sizes"] if candidate else []
+                    check.cleaned_data["parsed_group_sizes"] = sizes
+                elif check.cleaned_data.get("use_multi_bracket"):
+                    specs = _parse_bracket_list(check)
+                    slots_valid = specs is not None
+                    check.cleaned_data["bracket_specs"] = specs
+                else:
+                    rounds, _ = _validate_form_start_rounds(check.cleaned_data.get("start_rounds"), check.cleaned_data["pair_count"])
+                    check.cleaned_data["parsed_start_rounds"] = rounds
+            except (ValidationError, StartRoundValidationError):
+                slots_valid = False
+        changed = data["stage_type"] != original_type
+        if slots_valid:
+            clean = check.cleaned_data
+            changed |= clean["advancement_mode"] != original["advancement_mode"]
+            changed |= bool(clean.get("advancement_source_stage"))
+            changed |= clean["pair_count"] != original["pair_count"]
+            if original_type == Stage.TYPE_LEAGUE:
+                changed |= clean["group_count"] != original["group_count"]
+                changed |= clean["parsed_group_sizes"] != original["group_sizes"]
+            else:
+                rows = clean.get("bracket_specs") or [{
+                    "pair_count": clean["pair_count"],
+                    "start_rounds": clean.get("parsed_start_rounds", []),
+                }]
+                def shape(row):
+                    count = row["pair_count"]
+                    return (count, row.get("start_rounds") or (build_standard_start_rounds(count) if count > 1 else []))
+                changed |= [shape(row) for row in rows] != [shape(row) for row in original["bracket_list"]]
+        else:
+            # 不正な枠変更も保存せず、確定による制限を明示する。
+            changed = True
+        structural_fields = set(slot_form.fields) - {"match_games"}
+        if not structural_fields.intersection(request.POST) and data["stage_type"] == original_type:
+            changed = False
+        games = check.cleaned_data.get("match_games") or _default_match_games(stage.category)
+        games_valid = "match_games" not in check.errors
+        if stage.category.scoring_mode != Category.SCORING_MODE_STAR and (games < 3 or games > 9 or games % 2 == 0):
+            games_valid = False
+        if not games_valid:
+            form.add_error(None, "ゲーム数を確認してください。通常は3〜9の奇数で入力してください。")
+        if has_results and games != original["match_games"]:
+            form.add_error(None, "結果が入力済みのためゲーム数を変更できません。")
+            games_valid = False
+        if changed:
+            form.add_error(None, DRAW_CONFIRMED_REASON)
+        elif form_valid and games_valid:
+            form.save()
+            if not has_results:
+                if original_type == Stage.TYPE_LEAGUE:
+                    RoundRobinMatch.objects.filter(group__stage=stage).update(match_games=games)
+                else:
+                    TournamentMatch.objects.filter(bracket__stage=stage).update(match_games=games)
+            messages.success(request, f"{stage.name} を更新しました。")
+            return redirect("category_stage_management", code=stage.category.tournament.code, category_id=stage.category_id)
+        form.fields["stage_type"].widget.attrs["disabled"] = True
+        # ModelFormの検証でinstanceに代入された種別を表示用に元へ戻す。
+        stage.stage_type = original_type
+        slot_form.fields["match_games"].initial = request.POST.get("match_games", original["match_games"])
+    return render(request, "core/stage_form.html", {
+        "tournament": stage.category.tournament, "category": stage.category,
+        "stage": stage, "form": form, "slot_form": slot_form,
+        "stage_type_locked": True, "draw_confirmed": True,
+        "draw_confirmed_reason": DRAW_CONFIRMED_REASON,
+        "selected_group_count": slot_form["group_count"].value(),
+        "page_title": "Stage編集", "submit_label": "更新",
+        **_stage_setup_preview(pair_count),
+    })
+
+
 @transaction.atomic
 def edit_stage(request, code, category_id, stage_id):
     """カテゴリ内Stageの名称、種別、表示順を編集する。"""
@@ -1295,6 +1418,8 @@ def edit_stage(request, code, category_id, stage_id):
         id=stage_id,
         category=category,
     )
+    if stage_draw_confirmed(stage):
+        return _confirmed_stage_edit(request, stage)
     original_stage_type = stage.stage_type
     current_values = _current_stage_slot_values(stage)
     has_results = stage_has_results(stage)

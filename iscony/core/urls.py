@@ -107,6 +107,8 @@ urlpatterns = [
         name="add_stage",
     ),
 
+    path("tournament/<str:code>/category/<int:category_id>/stage/<int:stage_id>/draw-confirmation/", stage.set_stage_draw_confirmation, name="set_stage_draw_confirmation"),
+
     path(
         "tournament/<str:code>/category/<int:category_id>/stage/<int:stage_id>/edit/",
         stage.edit_stage,

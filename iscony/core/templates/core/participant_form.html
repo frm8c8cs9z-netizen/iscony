@@ -24,6 +24,7 @@
     <div class="participant-form-shell">
         <section class="participant-form-panel participant-input-panel">
             <h3>基本情報</h3>
+            {% if form.entry_code.help_text %}<p class="helptext">{{ form.entry_code.help_text }}</p>{% endif %}
             <div class="participant-field-stack">
                 <div class="participant-field participant-field--short">
                     {{ form.entry_code.label_tag }}

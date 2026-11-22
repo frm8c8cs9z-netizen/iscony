@@ -431,6 +431,8 @@ class Category(models.Model):
 # =========================================================
 class Stage(models.Model):
 
+    draw_confirmed_at = models.DateTimeField(null=True, blank=True)
+
     TYPE_LEAGUE = "league"
     TYPE_TOURNAMENT = "tournament"
 

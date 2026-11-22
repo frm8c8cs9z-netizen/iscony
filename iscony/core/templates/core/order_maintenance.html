@@ -37,10 +37,11 @@
                 <td>
                     <input
                         type="number"
-                        name="group_order_{{ group.id }}"
+                        name="group_order_{{ group.id }}"{% if group.draw_confirmed %} disabled{% endif %}
                         value="{{ group.display_order }}"
                         style="width:70px;"
                     >
+                    {% if group.draw_confirmed %}<p>組み合わせ確定済みのため表示順は変更できません。必要なら確定を解除してください。</p>{% endif %}
                 </td>
                 <td>
                     <input

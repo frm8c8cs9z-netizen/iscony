@@ -1,0 +1,14 @@
+{% if stage and not stage.advancement_source_stage_id %}
+<div class="draw-confirmation">
+    <p>組み合わせ: {% if stage.draw_confirmed_at %}<strong>確定済み</strong>{% else %}未確定{% endif %}</p>
+    <form method="post" action="{% url 'set_stage_draw_confirmation' tournament.code category.id stage.id %}?next={{ request.get_full_path|urlencode }}"
+          onsubmit="return confirm('{% if stage.draw_confirmed_at %}解除すると、編集で番号が振り直されることがあります。印刷・公開した組み合わせと食い違わないよう注意してください。{% else %}確定すると、番号や組み合わせの形が変わる操作(Stage編集での作り直し、Stage枠CSV、+1枠、削除、エントリー番号の変更)ができなくなります。{% endif %}');">
+        {% csrf_token %}
+        {% if stage.draw_confirmed_at %}
+            <button type="submit" name="action" value="release">確定を解除する</button>
+        {% else %}
+            <button type="submit" name="action" value="confirm">組み合わせを確定する</button>
+        {% endif %}
+    </form>
+</div>
+{% endif %}

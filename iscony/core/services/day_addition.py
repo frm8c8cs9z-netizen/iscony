@@ -1,9 +1,10 @@
 """当日の追加専用。既存の枠の番号・並び順・試合には触れない。"""
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
+from django.utils import timezone
 
-from ..models import Category, Group, LeagueEntry, Participant, RoundRobinMatch, Stage, TournamentEntry
+from ..models import AdvancementSource, Schedule, Category, Group, LeagueEntry, Participant, RoundRobinMatch, Stage, TournamentEntry
 from .operations import stage_has_results
 from .participants import save_participant_organization_values
 
@@ -14,8 +15,37 @@ def unavailable_reason(stage):
     if stage.advancement_source_stage_id:
         return "予選などの結果から組が入るStageには追加できません。"
     if stage_has_results(stage):
-        return "結果が入っているStageには追加・取り消しできません。"
+        return "結果が入っているStageには追加・取り消し・グループ移動できません。"
     return ""
+
+
+def removal_rank_impact(group):
+    """1枠減った後に範囲外になる順位参照を返す。参照自体は更新しない。"""
+    after = max(0, group.leagueentry_set.count() - 1)
+    sources = AdvancementSource.objects.filter(
+        source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+        source_group=group, source_rank__gt=after,
+    ).select_related(
+        "target_league_entry__group__stage__category__tournament",
+        "target_tournament_entry__bracket__stage__category__tournament",
+    ).order_by("source_rank", "pk")
+    references = []
+    for source in sources:
+        if source.target_league_entry_id:
+            stage = source.target_league_entry.group.stage
+            bracket = None
+        elif source.target_tournament_entry_id:
+            bracket = source.target_tournament_entry.bracket
+            stage = bracket.stage
+        else:
+            continue
+        references.append({"rank": source.source_rank, "stage": stage, "bracket": bracket})
+    for schedule in Schedule.objects.filter(
+        referee_source_type=AdvancementSource.SOURCE_LEAGUE_RANK,
+        referee_source_group=group, referee_source_rank__gt=after,
+    ).select_related("schedule_block__tournament").order_by("referee_source_rank", "pk"):
+        references.append({"rank": schedule.referee_source_rank, "block": schedule.schedule_block})
+    return {"group_name": group.name, "after": after, "references": references}
 
 
 def next_number(stage):
@@ -80,7 +110,11 @@ def add(stage, forms, expected):
         for other in others:
             RoundRobinMatch.objects.create(group=group, pair1=other, pair2=entry, match_games=games)
         entries.append(entry)
-    return entries
+    confirmed_now = stage.draw_confirmed_at is None
+    if confirmed_now:
+        stage.draw_confirmed_at = timezone.now()
+        stage.save(update_fields=["draw_confirmed_at"])
+    return entries, confirmed_now
 
 
 def summary(rows):
@@ -95,6 +129,7 @@ def cancel(stage, entry_id):
             pk=entry_id, group__stage=stage, added_on_day=True)
     except LeagueEntry.DoesNotExist:
         raise ValidationError("取り消す組が見つかりません。")
+    impact = removal_rank_impact(entry.group)
     group, participant = entry.group, entry.added_on_day_participant
     count = group.planned_slot_count
     if count is None:
@@ -104,3 +139,37 @@ def cancel(stage, entry_id):
     group.save(update_fields=["planned_slot_count"])
     if participant and not LeagueEntry.objects.filter(participant=participant).exists() and not TournamentEntry.objects.filter(participant=participant).exists():
         participant.delete()
+    return impact
+
+
+@transaction.atomic
+def move(stage, entry_id, group_id):
+    stage = lock_stage(stage)
+    try:
+        entry = LeagueEntry.objects.select_related("group", "participant").get(
+            pk=entry_id, group__stage=stage, added_on_day=True)
+        destination = stage.group_set.get(pk=group_id)
+    except (LeagueEntry.DoesNotExist, Group.DoesNotExist):
+        raise ValidationError("移す組または移す先のグループが見つかりません。")
+    source = entry.group
+    if source.pk == destination.pk:
+        raise ValidationError("今いるグループには移せません。")
+    impact = removal_rank_impact(source)
+    source_count = source.planned_slot_count
+    if source_count is None:
+        source_count = source.leagueentry_set.count()
+    others = list(destination.leagueentry_set.order_by("display_order", "pk"))
+    games = RoundRobinMatch.objects.filter(group__stage=stage).order_by("pk").values_list("match_games", flat=True).first() or 7
+    # Entry自体は残し、取り消しと同じCASCADEで対象試合の日程も消す。
+    RoundRobinMatch.objects.filter(Q(pair1=entry) | Q(pair2=entry)).delete()
+    entry.group = destination
+    entry.display_order = max((other.display_order for other in others), default=0) + 1
+    entry.save(update_fields=["group", "display_order"])
+    source.planned_slot_count = max(0, source_count - 1)
+    source.save(update_fields=["planned_slot_count"])
+    destination.planned_slot_count = (destination.planned_slot_count if destination.planned_slot_count is not None else len(others)) + 1
+    destination.save(update_fields=["planned_slot_count"])
+    for other in others:
+        RoundRobinMatch.objects.create(group=destination, pair1=other, pair2=entry, match_games=games)
+    entry.removal_rank_impact = impact
+    return entry

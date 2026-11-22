@@ -18,6 +18,7 @@ operations.py の公開関数を再公開している。
 分けて考える。
 """
 
+from .draw_confirmation import *  # noqa: F401,F403
 from .operations import *  # noqa: F401,F403
 from .participants import *  # noqa: F401,F403
 from .stage_setup import *  # noqa: F401,F403

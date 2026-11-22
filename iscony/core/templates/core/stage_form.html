@@ -19,6 +19,8 @@
     </div>
 </div>
 
+{% include "core/_draw_confirmation.html" %}
+{% if draw_confirmed %}<p>{{ draw_confirmed_reason }}</p>{% endif %}
 {% if stage and stage_type_locked %}
     <p>
         種別: {{ stage.get_stage_type_display }}（リーグ/トーナメントの枠が既に作成されているため変更できません）
@@ -109,13 +111,23 @@
                     <label>{{ slot_form.use_multi_bracket }} {{ slot_form.use_multi_bracket.label }}</label>
                     {{ slot_form.use_multi_bracket.errors }}
                 </p>
+                {% if draw_confirmed %}
+                    <p>参加ペア数・開始回戦・表の構成は確定済みです。</p>
+                    {% for bracket in stage.tournamentbracket_set.all %}
+                    <fieldset disabled aria-label="確定済みのトーナメント構成">
+                        <legend>{{ bracket.name }}</legend>
+                        <p><label>参加ペア数 <input value="{{ bracket.tournamententry_set.count }}" disabled></label></p>
+                        <p><label>開始回戦 <input value="{% if bracket.tournamententry_set.first.start_round %}{% for entry in bracket.tournamententry_set.all %}{{ entry.start_round|default_if_none:'' }}{% if not forloop.last %},{% endif %}{% endfor %}{% endif %}" placeholder="標準の配置" disabled></label></p>
+                    </fieldset>
+                    {% endfor %}
+                {% endif %}
                 {{ slot_form.start_rounds }}
                 {{ slot_form.start_rounds.errors }}
                 <div id="tournament-bracket-list-setup"
                      data-preview-url="{% url 'stage_start_round_preview' tournament.code category.id %}">
                     {{ slot_form.bracket_list }}
                     <div id="tournament-bracket-blocks"></div>
-                    <button type="button" id="tournament-bracket-add-row">+トーナメント表を追加</button>
+                    <button type="button" id="tournament-bracket-add-row"{% if draw_confirmed %} disabled{% endif %}>+トーナメント表を追加</button>
                     {{ slot_form.bracket_list.errors }}
                 </div>
             </div>
@@ -156,7 +168,7 @@
 {% endif %}
 
 
-{% if slot_form %}
+{% if slot_form and not draw_confirmed %}
     <link rel="stylesheet" href="{% static 'core/stage_start_rounds.css' %}">
     <script src="{% static 'core/js/stage_start_rounds.js' %}"></script>
     <script src="{% static 'core/js/stage_group_sizes.js' %}"></script>

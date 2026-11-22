@@ -14,6 +14,7 @@ import tempfile
 import time
 from itertools import combinations
 
+from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -1141,6 +1142,14 @@ def import_participants(request, tournament_code):
                     }
                 )
 
+            from ..services.draw_confirmation import participant_draw_confirmed
+            protected = Participant.objects.filter(category__tournament=tournament, category__name__in=category_names)
+            if any(participant_draw_confirmed(p) for p in protected):
+                return render(request, "core/import_participants.html", {
+                    "tournament": tournament, "form": form,
+                    "errors": ["確定したStageに割り付けた参加者がいるため、名簿を置き換えるCSV取込はできません。必要なら確定を解除してください。"],
+                })
+
             # 参加者CSVはカテゴリ作成の入口として扱う。
             for category_name in category_names:
                 Category.objects.get_or_create(
@@ -1773,6 +1782,13 @@ def import_stage_slots(request, tournament_code):
 
                 if existing_stage:
                     existing_target_stages.append(existing_stage)
+                    if stage_draw_confirmed(existing_stage):
+                        for csv_row in validated_rows:
+                            if csv_row["category"].id == category_id and (
+                                (stage_code and csv_row["stage_code"] == stage_code)
+                                or (not stage_code and csv_row["stage_name"] == stage_name)
+                            ):
+                                errors.append(f"{csv_row['row_number']}行目: {DRAW_CONFIRMED_REASON}")
 
                     name_conflict = Stage.objects.filter(
                         category_id=category_id,

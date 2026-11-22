@@ -316,6 +316,10 @@ class ParticipantForm(forms.ModelForm):
                 }
             )
 
+        from ..services.draw_confirmation import participant_draw_confirmed, protect_form_fields
+        if participant_draw_confirmed(self.instance):
+            protect_form_fields(self, ["entry_code"])
+
         field_labels = {}
         if tournament:
             field_labels = {
@@ -344,7 +348,11 @@ class ParticipantForm(forms.ModelForm):
                 )
 
     def clean_entry_code(self):
-        return self.cleaned_data["entry_code"].strip()
+        from ..services.draw_confirmation import participant_draw_confirmed, DRAW_CONFIRMED_REASON
+        value = self.cleaned_data["entry_code"].strip()
+        if participant_draw_confirmed(self.instance) and value != self.instance.entry_code:
+            raise forms.ValidationError(DRAW_CONFIRMED_REASON)
+        return value
 
     def clean_player1_name(self):
         return self.cleaned_data["player1_name"].strip()

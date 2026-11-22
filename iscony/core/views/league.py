@@ -8,6 +8,7 @@ LeagueEntry モデルは当面「リーグ枠/LeagueEntry」として扱って�
 
 from itertools import combinations
 
+from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -1526,7 +1527,7 @@ def pair_maintenance(request, category_id, stage_id=None):
         category_participant_count = Participant.objects.filter(
             category=category,
         ).count()
-        slots_locked = stage_has_results(stage)
+        slots_locked = stage_has_results(stage) or stage_draw_confirmed(stage)
         group_rows = [
             {
                 "group": group,
@@ -1541,6 +1542,7 @@ def pair_maintenance(request, category_id, stage_id=None):
                     and stage_total_entries < category_participant_count
                     and not is_advancement_source_stage
                 ),
+                "has_extra_slot": group.entry_count > group_base_size(group),
                 "can_remove_slot": (
                     not slots_locked
                     and group.entry_count > group_base_size(group)
@@ -1552,6 +1554,8 @@ def pair_maintenance(request, category_id, stage_id=None):
 
         context.update({
             "slots_locked": slots_locked,
+            "draw_confirmed": stage_draw_confirmed(stage),
+            "draw_confirmed_reason": DRAW_CONFIRMED_REASON,
             "is_advancement_source_stage": is_advancement_source_stage,
             "advancement_source_is_tournament": advancement_source_is_tournament,
             "group_rows": group_rows,
@@ -2279,7 +2283,7 @@ def assign_league_entry_participant_api(request, entry_id):
         category_id=group.category_id,
     ).count()
     group_can_add_slot = (
-        not (group.stage_id and stage_has_results(group.stage))
+        not (stage_draw_confirmed(group.stage) or (group.stage_id and stage_has_results(group.stage)))
         and LeagueEntry.objects.filter(group=group).count() == base
         and not has_empty_slot
         and stage_total_entries < participant_count

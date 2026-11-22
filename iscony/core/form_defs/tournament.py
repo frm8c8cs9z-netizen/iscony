@@ -142,6 +142,9 @@ class TournamentMatchEditForm(forms.ModelForm):
 
     def __init__(self, *args, category=None, **kwargs):
         super().__init__(*args, **kwargs)
+        from ..services.draw_confirmation import stage_draw_confirmed, protect_form_fields
+        if self.instance.pk and stage_draw_confirmed(self.instance.bracket.stage):
+            protect_form_fields(self, ['pair1', 'pair2'])
 
         match_category = category
         if self.instance.bracket_id:
@@ -200,6 +203,9 @@ class TournamentMatchEditForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        from ..services.draw_confirmation import stage_draw_confirmed, validate_protected_form_fields
+        if self.instance.pk and stage_draw_confirmed(self.instance.bracket.stage):
+            validate_protected_form_fields(self, cleaned_data, ['pair1', 'pair2'])
         pair1 = cleaned_data.get("pair1")
         pair2 = cleaned_data.get("pair2")
         winner = cleaned_data.get("winner")
@@ -313,6 +319,10 @@ class TournamentBracketForm(forms.ModelForm):
             *args,
             **kwargs
         )
+        from ..services.draw_confirmation import stage_draw_confirmed, protect_form_fields
+        if self.instance.pk and stage_draw_confirmed(self.instance.stage):
+            protect_form_fields(self, ["category", "display_order"])
+
 
         if tournament:
 
@@ -322,3 +332,10 @@ class TournamentBracketForm(forms.ModelForm):
                 "display_order",
                 "name"
             )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        from ..services.draw_confirmation import stage_draw_confirmed, validate_protected_form_fields
+        if self.instance.pk and stage_draw_confirmed(self.instance.stage):
+            validate_protected_form_fields(self, cleaned_data, ["category", "display_order"])
+        return cleaned_data

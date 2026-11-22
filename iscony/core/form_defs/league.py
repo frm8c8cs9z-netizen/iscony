@@ -131,6 +131,9 @@ class LeagueEntryEditForm(forms.ModelForm):
 
     def __init__(self, *args, category=None, **kwargs):
         super().__init__(*args, **kwargs)
+        from ..services.draw_confirmation import stage_draw_confirmed, protect_form_fields
+        if self.instance.pk and stage_draw_confirmed(self.instance.group.stage):
+            protect_form_fields(self, ['pair_code', 'display_order'])
 
         if category:
             self.fields["participant"].queryset = (
@@ -144,6 +147,9 @@ class LeagueEntryEditForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        from ..services.draw_confirmation import stage_draw_confirmed, validate_protected_form_fields
+        if self.instance.pk and stage_draw_confirmed(self.instance.group.stage):
+            validate_protected_form_fields(self, cleaned_data, ['pair_code', 'display_order'])
         participant = cleaned_data.get("participant")
 
         if participant:

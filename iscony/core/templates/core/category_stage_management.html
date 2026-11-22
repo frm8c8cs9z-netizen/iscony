@@ -45,6 +45,7 @@
             <td>{{ row.stage.display_order }}</td>
             <td>
                 {{ row.stage.name }}
+                {% include "core/_draw_confirmation.html" with stage=row.stage %}
                 {% if row.stage.code %}
                     <span class="subtle-text">({{ row.stage.code }})</span>
                 {% endif %}

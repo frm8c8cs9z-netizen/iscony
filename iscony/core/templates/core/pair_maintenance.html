@@ -4,7 +4,9 @@
 
 <h2>{{ category.name }} リーグ枠編集</h2>
 
-{% if slots_locked %}
+{% if draw_confirmed %}
+    <p>{{ draw_confirmed_reason }}</p>
+{% elif slots_locked %}
     <p>このStageには結果が入っているため、枠の追加・移動・解除はできません(番号が変わってしまうため)。</p>
 {% endif %}
 
@@ -127,6 +129,9 @@
                                 </button>
                             {% endif %}
                             {# +1枠が割当済みの場合は、未割当に戻すボタンが同じ結果(参加者解除+枠削除)になるため、枠を解除は未割当のときだけ表示する #}
+                            {% if forloop.last and draw_confirmed and row.has_extra_slot and not pair.participant %}
+                                <button type="button" disabled title="{{ draw_confirmed_reason }}">枠を解除</button>
+                            {% endif %}
                             {% if forloop.last and row.can_remove_slot and not pair.participant %}
                                 <form method="post" action="{% url 'remove_league_entry_slot' row.group.id %}" data-role="remove-slot-form">
                                     {% csrf_token %}
@@ -142,6 +147,9 @@
                     </tr>
                     {% endfor %}
 
+                    {% if draw_confirmed %}
+                    <tr><td colspan="7"><button type="button" disabled title="{{ draw_confirmed_reason }}">+1枠を追加</button></td></tr>
+                    {% endif %}
                     {% if row.can_add_slot %}
                     <tr
                         class="entry-ghost-row"
@@ -329,11 +337,12 @@
         </p>
         <p>
             <label for="edit-pair-pair-code">枠番号</label>
-            <input type="text" id="edit-pair-pair-code">
+            <input type="text" id="edit-pair-pair-code"{% if draw_confirmed %} disabled{% endif %}>
         </p>
         <p>
             <label for="edit-pair-display-order">表示順</label>
-            <input type="number" id="edit-pair-display-order" min="1">
+            <input type="number" id="edit-pair-display-order" min="1"{% if draw_confirmed %} disabled{% endif %}>
+            {% if draw_confirmed %}<p>{{ draw_confirmed_reason }}</p>{% endif %}
         </p>
         <div class="edit-pair-dialog-actions">
             <button type="button" id="edit-pair-cancel">キャンセル</button>
