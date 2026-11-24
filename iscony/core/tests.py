@@ -27395,6 +27395,53 @@ class ReceptionMatchSearchTests(TestCase):
 
             self.assertNotIn('data-value="4"', buttons.group(0))
 
+    def test_normal_score_inputs_allow_numeric_keyboard(self):
+        urls = [
+            reverse("input_match_score", kwargs={"match_id": self.round_robin_match.id}),
+            reverse("input_tournament_match_score", kwargs={
+                "code": self.tournament.code, "match_id": self.tournament_match.id,
+            }),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                for side in ["pair1", "pair2"]:
+                    field = re.search(
+                        rf'<input\s+[^>]*id="{side}_games"[^>]*>',
+                        response.content.decode(),
+                    )
+                    self.assertIsNotNone(field)
+                    for attribute in [
+                        'type="text"', 'inputmode="numeric"', 'pattern="[0-9]*"',
+                        'autocomplete="off"', f'name="{side}_games"',
+                        'class="score-input"', 'readonly',
+                    ]:
+                        self.assertIn(attribute, field.group(0))
+                    self.assertNotIn('disabled', field.group(0))
+
+    def test_normal_score_rejects_out_of_range_loser_without_saving(self):
+        matches_and_urls = [
+            (self.round_robin_match, reverse("input_match_score", kwargs={
+                "match_id": self.round_robin_match.id,
+            })),
+            (self.tournament_match, reverse("input_tournament_match_score", kwargs={
+                "code": self.tournament.code, "match_id": self.tournament_match.id,
+            })),
+        ]
+        for match, url in matches_and_urls:
+            match.match_games = 7
+            match.save(update_fields=["match_games"])
+            with self.subTest(url=url):
+                response = self.client.post(url, {
+                    "action": "save", "pair1_games": "4", "pair2_games": "5",
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["error"])
+                match.refresh_from_db()
+                self.assertIsNone(match.pair1_games)
+                self.assertIsNone(match.pair2_games)
+
     def test_saved_score_input_outputs_loser_score_button_elements(self):
         self.round_robin_match.match_games = 7
         self.round_robin_match.pair1_games = 4

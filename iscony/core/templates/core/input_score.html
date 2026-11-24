@@ -212,14 +212,16 @@
 
             <td>
                 <input
-                    type="number"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    autocomplete="off"
                     id="pair1_games"
                     name="pair1_games"
-                    min="0"
-                    max="{{ winning_games }}"
                     value="{{ match.pair1_games|default_if_none:'' }}"
                     class="score-input"
                     readonly
+                    tabindex="-1"
                     {% if not can_input_score %}disabled{% endif %}
                 >
 
@@ -240,14 +242,16 @@
 
             <td>
                 <input
-                    type="number"
+                    type="text"
+                    inputmode="numeric"
+                    pattern="[0-9]*"
+                    autocomplete="off"
                     id="pair2_games"
                     name="pair2_games"
-                    min="0"
-                    max="{{ winning_games }}"
                     value="{{ match.pair2_games|default_if_none:'' }}"
                     class="score-input"
                     readonly
+                    tabindex="-1"
                     {% if not can_input_score %}disabled{% endif %}
                 >
 
@@ -396,6 +400,11 @@
     width: 80px;
     font-size: 28px;
     text-align: center;
+}
+
+.score-input.score-input-invalid {
+    border: 2px solid #b00020;
+    outline: 2px solid #b00020;
 }
 
 .loser-score-buttons {
@@ -552,6 +561,8 @@ function setWinner(winner) {
     const pair1Buttons = document.getElementById("pair1_loser_buttons");
     const pair2Buttons = document.getElementById("pair2_loser_buttons");
 
+    setScoreInputState(winner, winner === "pair1" ? "pair2" : "pair1");
+
     pair1Box.classList.remove("winner-box", "loser-box");
     pair2Box.classList.remove("winner-box", "loser-box");
 
@@ -582,6 +593,59 @@ function setWinner(winner) {
     }
 }
 
+function setScoreInputState(winnerSide, loserSide) {
+    [winnerSide, loserSide].forEach(function (side) {
+        const input = document.getElementById(side + "_games");
+        input.readOnly = side === winnerSide;
+        input.tabIndex = side === winnerSide ? -1 : 0;
+        input.classList.remove("score-input-invalid");
+        input.removeAttribute("aria-invalid");
+    });
+}
+
+const composingScoreInputs = new WeakSet();
+
+function syncLoserScore(input) {
+    if (input.readOnly || input.disabled || composingScoreInputs.has(input)) {
+        return;
+    }
+    const originalValue = input.value;
+    const normalizedValue = originalValue.replace(/[０-９]/g, function (digit) {
+        return String.fromCharCode(digit.charCodeAt(0) - 0xFEE0);
+    }).trim();
+    if (normalizedValue !== originalValue) {
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const direction = input.selectionDirection;
+        const leadingSpaces = originalValue.length - originalValue.trimStart().length;
+        input.value = normalizedValue;
+        if (start !== null && end !== null) {
+            input.setSelectionRange(
+                Math.max(0, Math.min(start - leadingSpaces, normalizedValue.length)),
+                Math.max(0, Math.min(end - leadingSpaces, normalizedValue.length)),
+                direction
+            );
+        }
+    }
+    const buttons = document.getElementById(input.id.replace("_games", "_loser_buttons"));
+    const valid = /^[0-9]+$/.test(input.value)
+        && Number(input.value) < {{ winning_games }};
+    const invalid = input.value !== "" && !valid;
+    input.classList.toggle("score-input-invalid", invalid);
+    if (invalid) {
+        input.setAttribute("aria-invalid", "true");
+    } else {
+        input.removeAttribute("aria-invalid");
+    }
+    clearLoserButtonSelection(buttons);
+    if (valid) {
+        const button = buttons.querySelector('[data-value="' + Number(input.value) + '"]');
+        if (button) {
+            button.classList.add("selected");
+        }
+    }
+}
+
 function clearLoserButtonSelection(buttonsContainer) {
     buttonsContainer
         .querySelectorAll(".loser-score-button")
@@ -593,12 +657,24 @@ function clearLoserButtonSelection(buttonsContainer) {
 function selectLoserScore(side, value, buttonEl) {
     const input = document.getElementById(side + "_games");
     input.value = value;
+    input.classList.remove("score-input-invalid");
+    input.removeAttribute("aria-invalid");
 
     clearLoserButtonSelection(buttonEl.closest(".loser-score-buttons"));
     buttonEl.classList.add("selected");
 }
 
 function handleWinnerCellKey(event, winner) {
+    if (event.target !== event.currentTarget) {
+        return;
+    }
+    if (event.key === "Tab" && !event.shiftKey
+            && event.currentTarget.classList.contains("winner-box")) {
+        event.preventDefault();
+        const loserSide = winner === "pair1" ? "pair2" : "pair1";
+        document.getElementById(loserSide + "_games").focus();
+        return;
+    }
     if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         setWinner(winner);
@@ -606,6 +682,42 @@ function handleWinnerCellKey(event, winner) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".score-input").forEach(function (input) {
+        // 不正値もサーバー側で検証するため、patternによる送信の阻止はしない。
+        input.form.noValidate = true;
+        input.addEventListener("compositionstart", function () {
+            composingScoreInputs.add(input);
+        });
+        input.addEventListener("compositionend", function () {
+            composingScoreInputs.delete(input);
+            syncLoserScore(input);
+        });
+        input.addEventListener("input", function (event) {
+            if (!event.isComposing) {
+                syncLoserScore(input);
+            }
+        });
+        input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter" && !event.isComposing && !composingScoreInputs.has(input)) {
+                event.preventDefault();
+                const saveButton = input.form.querySelector('button[name="action"][value="save"]');
+                if (!input.readOnly && !input.disabled && !saveButton.disabled) {
+                    syncLoserScore(input);
+                    input.form.requestSubmit(saveButton);
+                }
+            }
+        });
+    });
+
+    const scoreForms = new Set(Array.from(document.querySelectorAll(".score-input"), function (input) {
+        return input.form;
+    }));
+    scoreForms.forEach(function (form) {
+        form.addEventListener("submit", function () {
+            form.querySelectorAll(".score-input").forEach(syncLoserScore);
+        });
+    });
+
     const pair1Games = {{ match.pair1_games|default_if_none:"null" }};
     const pair2Games = {{ match.pair2_games|default_if_none:"null" }};
 
@@ -621,6 +733,7 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 function initializeSavedScore(winnerSide, loserSide, loserValue) {
+    setScoreInputState(winnerSide, loserSide);
     document.getElementById(winnerSide + "_box").classList.add("winner-box");
     document.getElementById(loserSide + "_box").classList.add("loser-box");
 
