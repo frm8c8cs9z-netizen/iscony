@@ -430,6 +430,11 @@
             <th>説明</th>
         </tr>
         <tr>
+            <td>{{ form.score_sheet_print_match_code.label_tag }}</td>
+            <td>{{ form.score_sheet_print_match_code }}{{ form.score_sheet_print_match_code.errors }}</td>
+            <td>{{ form.score_sheet_print_match_code.help_text }}</td>
+        </tr>
+        <tr>
             <td>{{ form.score_sheet_template.label_tag }}</td>
             <td>{{ form.score_sheet_template }}</td>
             <td>{{ form.score_sheet_template.help_text }}</td>

@@ -39,8 +39,10 @@ from ..models import (
     Tournament,
     TournamentBracket,
     TournamentMatch,
+    TournamentEntry,
 )
 from ..helpers.brackets import get_round_label
+from ..selectors.score_sheet_preprint import ScoreSheetPreprint
 
 
 SCORE_SHEET_BASE_FONT = "NotoSansJP"
@@ -136,12 +138,12 @@ def _match_key_qr_url(request, tournament_code, match_key):
     return normalize_match_key(match_key)
 
 
-def _scope_counts(schedules, total_matches):
+def _scope_counts(schedules, total_matches, include_undecided=False):
     scheduled_count = schedules.count()
     printable_count = sum(
         1
         for schedule in schedules
-        if is_schedule_score_sheet_printable(schedule)
+        if is_match_score_sheet_printable(schedule.match, include_undecided=include_undecided)
     )
 
     return {
@@ -153,12 +155,12 @@ def _scope_counts(schedules, total_matches):
     }
 
 
-def _schedule_scope_counts(schedules):
+def _schedule_scope_counts(schedules, include_undecided=False):
     scheduled_count = schedules.count()
     printable_count = sum(
         1
         for schedule in schedules
-        if is_schedule_score_sheet_printable(schedule)
+        if is_match_score_sheet_printable(schedule.match, include_undecided=include_undecided)
     )
 
     return {
@@ -182,7 +184,7 @@ def _query_suffix(params):
     return urlencode(filtered)
 
 
-def _court_scope_rows(tournament, court_id=None):
+def _court_scope_rows(tournament, court_id=None, include_undecided=False):
     rows = []
     blocks = ScheduleBlock.objects.filter(
         tournament=tournament,
@@ -217,7 +219,7 @@ def _court_scope_rows(tournament, court_id=None):
                 "court": court,
                 "label": f"{block.name} / {court.name}コート",
                 "url": f"?schedule_block={block.id}",
-                **_schedule_scope_counts(schedules),
+                **_schedule_scope_counts(schedules, include_undecided),
             })
 
     return rows
@@ -286,7 +288,7 @@ def _round_label_for_bracket(bracket, round_number):
     )
 
 
-def _tournament_scope_rows(tournament, stage_id=None, court_id=None):
+def _tournament_scope_rows(tournament, stage_id=None, court_id=None, include_undecided=False):
     rows = []
     brackets = TournamentBracket.objects.filter(
         category__tournament=tournament,
@@ -347,7 +349,7 @@ def _tournament_scope_rows(tournament, stage_id=None, court_id=None):
                 "url": (
                     f"?bracket={bracket.id}&round={round_number}"
                 ),
-                **_scope_counts(schedules, total_matches),
+                **_scope_counts(schedules, total_matches, include_undecided),
             })
 
     return rows
@@ -361,6 +363,7 @@ def bulk_score_sheet_select(request, code):
         code=code,
     )
 
+    include_undecided = request.GET.get("include_undecided") == "1"
     league_stage_id = request.GET.get("league_stage")
     tournament_stage_id = request.GET.get("tournament_stage")
     court_id = request.GET.get("court")
@@ -431,7 +434,19 @@ def bulk_score_sheet_select(request, code):
         "name",
     )
 
+    all_tournament_schedules = Schedule.objects.filter(
+        court__tournament=tournament, tournament_match__isnull=False,
+    ).select_related("tournament_match")
+    all_tournament_matches = TournamentMatch.objects.filter(bracket__category__tournament=tournament)
+    if tournament_stage_id:
+        all_tournament_schedules = all_tournament_schedules.filter(
+            tournament_match__bracket__stage_id=tournament_stage_id)
+        all_tournament_matches = all_tournament_matches.filter(bracket__stage_id=tournament_stage_id)
+    if court_id:
+        all_tournament_schedules = all_tournament_schedules.filter(court_id=court_id)
+
     active_query = _query_suffix({
+        "include_undecided": "1" if include_undecided else None,
         "league_stage": league_stage_id,
         "tournament_stage": tournament_stage_id,
         "court": court_id,
@@ -442,6 +457,8 @@ def bulk_score_sheet_select(request, code):
         "core/bulk_score_sheet_select.html",
         {
             "tournament": tournament,
+            "include_undecided": include_undecided,
+            "tournament_all": _scope_counts(all_tournament_schedules, all_tournament_matches.count(), True),
             "league_all": _scope_counts(
                 all_league_schedules,
                 all_league_count,
@@ -449,8 +466,9 @@ def bulk_score_sheet_select(request, code):
             "tournament_first_round_all": _scope_counts(
                 first_round_schedules,
                 first_round_count,
+                include_undecided,
             ),
-            "court_rows": _court_scope_rows(tournament, court_id=court_id),
+            "court_rows": _court_scope_rows(tournament, court_id=court_id, include_undecided=include_undecided),
             "league_rows": _league_scope_rows(
                 tournament,
                 stage_id=league_stage_id,
@@ -458,6 +476,7 @@ def bulk_score_sheet_select(request, code):
             ),
             "tournament_rows": _tournament_scope_rows(
                 tournament,
+                include_undecided=include_undecided,
                 stage_id=tournament_stage_id,
                 court_id=court_id,
             ),
@@ -536,7 +555,7 @@ def get_score_sheet_entry_data(entry, *, tournament=None):
     display_* / code を持つ前提で、PDF側は同じ辞書として扱う。
     """
 
-    if not entry:
+    if not entry or (isinstance(entry, TournamentEntry) and not is_score_sheet_entry_printable(entry)):
         return {
             "code": "",
             "organization": "",
@@ -571,11 +590,14 @@ def is_score_sheet_entry_printable(entry):
     )
 
 
-def is_match_score_sheet_printable(match):
+def is_match_score_sheet_printable(match, *, include_undecided=False):
     if not match:
         return False
     if isinstance(match, TournamentMatch) and match.match_code.startswith("S"):
         return False
+
+    if include_undecided and isinstance(match, TournamentMatch):
+        return True
 
     return (
         is_score_sheet_entry_printable(match.pair1)
@@ -605,11 +627,33 @@ def _schedule_outside_text(schedule):
     )
 
 
-def _add_schedule_score_sheet_page(writer, schedule, settings_tuple, request):
+def _preprint_context(request, tournament):
+    if not hasattr(request, "_score_sheet_preprints"):
+        request._score_sheet_preprints = {}
+    if tournament.pk not in request._score_sheet_preprints:
+        request._score_sheet_preprints[tournament.pk] = ScoreSheetPreprint(tournament)
+    return request._score_sheet_preprints[tournament.pk]
+
+
+def _prepare_score_sheet_match(request, tournament, match):
+    if isinstance(match, TournamentMatch):
+        return _preprint_context(request, tournament).matches[match.pk]
+    return match
+
+
+def _preprint_details(request, tournament, match):
+    if isinstance(match, TournamentMatch):
+        return _preprint_context(request, tournament).details(match)
+    return {}
+
+
+def _add_schedule_score_sheet_page(writer, schedule, settings_tuple, request, *, include_undecided=False):
     match = schedule.match
     tournament = schedule.court.tournament
 
-    if not is_match_score_sheet_printable(match):
+    match = _prepare_score_sheet_match(request, tournament, match)
+
+    if not is_match_score_sheet_printable(match, include_undecided=include_undecided):
         return False
 
     (
@@ -638,13 +682,11 @@ def _add_schedule_score_sheet_page(writer, schedule, settings_tuple, request):
         category_name = match.bracket.category.name
         round_label = get_round_label(
             match.round_number,
-            TournamentMatch.objects.filter(
-                bracket=match.bracket,
-                round_number=1,
-            ).count() * 2,
+            _preprint_context(request, tournament).first_round_counts[match.bracket_id] * 2,
         )
 
     page = create_score_sheet_page(
+        **_preprint_details(request, tournament, match),
         category_name=category_name,
         court_name=schedule.court.name,
         round_label=round_label,
@@ -662,18 +704,22 @@ def _add_schedule_score_sheet_page(writer, schedule, settings_tuple, request):
     return True
 
 
-def _scheduled_score_sheets_response(schedules, tournament, filename, request):
+def _scheduled_score_sheets_response(
+    schedules, tournament, filename, request, *, include_undecided=False,
+):
     settings_tuple = get_score_sheet_template_settings(
         tournament
     )
     writer = PdfWriter()
 
     for schedule in schedules:
+        schedule.court.tournament = tournament
         _add_schedule_score_sheet_page(
             writer,
             schedule,
             settings_tuple,
             request,
+            include_undecided=include_undecided or request.GET.get("include_undecided") == "1",
         )
 
     output = io.BytesIO()
@@ -701,6 +747,7 @@ def score_sheet_pdf(request, schedule_id):
     )
 
     match = schedule.match
+    tournament = schedule.court.tournament
 
     if not match:
 
@@ -708,6 +755,8 @@ def score_sheet_pdf(request, schedule_id):
             "schedule_view",
             tournament_code=schedule.court.tournament.code
         )
+
+    match = _prepare_score_sheet_match(request, tournament, match)
 
     if not is_match_score_sheet_printable(match):
 
@@ -768,6 +817,7 @@ def score_sheet_pdf(request, schedule_id):
     writer = PdfWriter()
 
     page = create_score_sheet_page(
+        **_preprint_details(request, tournament, match),
         category_name=category_name,
         court_name=schedule.court.name,
         round_label=round_label,
@@ -798,7 +848,7 @@ def court_score_sheets_pdf(request, court_id):
     """
     指定コートに割り当てられた試合の採点票を一括PDF出力する。
 
-    対戦相手が未確定のトーナメント試合は採点票にできないためスキップする。
+    チェック指定時は相手未定のトーナメント試合も含める。
     """
 
     court = get_object_or_404(
@@ -859,7 +909,9 @@ def court_score_sheets_pdf(request, court_id):
 
         match = schedule.match
 
-        if not is_match_score_sheet_printable(match):
+        match = _prepare_score_sheet_match(request, tournament, match)
+
+        if not is_match_score_sheet_printable(match, include_undecided=request.GET.get("include_undecided") == "1"):
             continue
 
         pair1_data = get_score_sheet_entry_data(
@@ -902,6 +954,7 @@ def court_score_sheets_pdf(request, court_id):
             outside_text = None
 
         page = create_score_sheet_page(
+            **_preprint_details(request, tournament, match),
             category_name=category_name,
             court_name=schedule.court.name,
             round_label=round_label,
@@ -945,6 +998,8 @@ def tournament_match_score_sheet_pdf(
         id=match_id,
         bracket__category__tournament=tournament
     )
+
+    match = _prepare_score_sheet_match(request, tournament, match)
 
     if not is_match_score_sheet_printable(match):
         return redirect(
@@ -990,6 +1045,7 @@ def tournament_match_score_sheet_pdf(
     writer = PdfWriter()
 
     page = create_score_sheet_page(
+        **_preprint_details(request, tournament, match),
         category_name=match.bracket.category.name,
         court_name="",
         round_label=round_label,
@@ -1056,6 +1112,8 @@ def tournament_first_round_score_sheets_pdf(request, code, bracket_id):
 
     for match in matches:
 
+        match = _prepare_score_sheet_match(request, tournament, match)
+
         if not is_match_score_sheet_printable(match):
             continue
 
@@ -1074,6 +1132,7 @@ def tournament_first_round_score_sheets_pdf(request, code, bracket_id):
         )
 
         page = create_score_sheet_page(
+            **_preprint_details(request, tournament, match),
             category_name=match.bracket.category.name,
             court_name="",
             round_label="1回戦",
@@ -1205,15 +1264,16 @@ def tournament_first_round_scheduled_score_sheets_pdf(request, code):
     schedule_id = request.GET.get("schedule")
     round_number = request.GET.get("round", "1")
 
+    all_rounds = round_number == "all"
     try:
-        round_number = int(round_number)
+        round_number = 0 if all_rounds else int(round_number)
     except ValueError as exc:
         raise Http404("Invalid round number") from exc
 
     schedules = (
         Schedule.objects.filter(
             court__tournament=tournament,
-            tournament_match__round_number=round_number,
+            tournament_match__isnull=False,
         )
         .select_related(
             "schedule_block",
@@ -1232,6 +1292,8 @@ def tournament_first_round_scheduled_score_sheets_pdf(request, code):
             "order",
         )
     )
+    if not all_rounds:
+        schedules = schedules.filter(tournament_match__round_number=round_number)
     if stage_id:
         schedules = schedules.filter(
             tournament_match__bracket__stage_id=stage_id,
@@ -1282,11 +1344,15 @@ def tournament_first_round_scheduled_score_sheets_pdf(request, code):
             f"schedule_{schedule_id}.pdf"
         )
 
+    if all_rounds:
+        filename = f"tournament_all_score_sheets_{tournament.code}.pdf"
+
     return _scheduled_score_sheets_response(
         schedules,
         tournament,
         filename=filename,
         request=request,
+        include_undecided=all_rounds,
     )
 
 
@@ -1300,6 +1366,9 @@ def create_score_sheet_page(
     match_key="",
     qr_url="",
     outside_text=None,
+    margin_match="",
+    pair1_range="",
+    pair2_range="",
     position_key="standard",
     use_base_pdf=True,
     base_pdf_path="",
@@ -1360,6 +1429,9 @@ def create_score_sheet_page(
         match_key=match_key,
         qr_url=qr_url,
         outside_text=outside_text,
+        margin_match=margin_match,
+        pair1_range=pair1_range,
+        pair2_range=pair2_range,
     )
 
     c.save()
@@ -1395,6 +1467,9 @@ def draw_score_sheet_content(
     match_key="",
     qr_url="",
     outside_text=None,
+    margin_match="",
+    pair1_range="",
+    pair2_range="",
 ):
     """
     採点票上の各項目を指定座標へ描画する。
@@ -1402,6 +1477,13 @@ def draw_score_sheet_content(
     座標は constants.SCORE_SHEET_POSITION_PATTERNS に持たせ、
     テンプレート差し替え時は座標定義だけを調整できるようにしている。
     """
+
+    c.setFont(SCORE_SHEET_BASE_FONT, 12)
+    if margin_match:
+        c.drawString(*positions["margin_match"], margin_match)
+    for key, text in (("pair1_range", pair1_range), ("pair2_range", pair2_range)):
+        if text:
+            c.drawString(*positions[key], text)
 
     org_w = positions.get(
         "org_width",

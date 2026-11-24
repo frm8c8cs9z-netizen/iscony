@@ -497,6 +497,7 @@ class TournamentSettingsForm(forms.ModelForm):
 
         fields = [
             "score_sheet_template",
+            "score_sheet_print_match_code",
             "organization_display_mode",
             "default_league_entry_display_mode",
             "default_league_score_color_mode",

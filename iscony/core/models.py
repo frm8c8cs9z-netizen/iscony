@@ -204,6 +204,12 @@ class Tournament(models.Model):
         auto_now_add=True
     )
 
+    score_sheet_print_match_code = models.BooleanField(
+        default=True,
+        verbose_name="試合名があるときにマッチコードも印字する",
+        help_text="トーナメント採点票の欄外に、試合名とマッチコードを併記します。",
+    )
+
     score_sheet_template = models.ForeignKey(
         ScoreSheetTemplate,
         null=True,

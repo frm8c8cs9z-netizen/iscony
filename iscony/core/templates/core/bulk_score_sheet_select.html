@@ -6,7 +6,7 @@
     <div>
         <h2>{{ tournament.name }} 採点票一括出力</h2>
         <p class="subtle-text">
-            出力範囲を選んで、印刷可能な試合だけPDFにします。
+            進行表に入っている試合を、範囲を選んでPDFにします。
         </p>
     </div>
     <div class="action-row">
@@ -51,6 +51,9 @@
             {% endfor %}
         </select>
 
+        <label><input type="checkbox" name="include_undecided" value="1" {% if include_undecided %}checked{% endif %}>
+            相手が決まっていない試合も出す(トーナメント)
+        </label>
         <button type="submit">絞り込み</button>
     </p>
 </form>
@@ -210,6 +213,20 @@
                 </a>
             {% else %}
                 <span class="subtle-text">印刷可能な試合なし</span>
+            {% endif %}
+        </td>
+    </tr>
+    <tr>
+        <td>トーナメント全試合(相手未定を含む)</td>
+        <td>{{ tournament_all.scheduled_count }}</td>
+        <td>{{ tournament_all.printable_count }}</td>
+        <td>{{ tournament_all.skipped_count }}</td>
+        <td>{{ tournament_all.unscheduled_count }}</td>
+        <td>
+            {% if tournament_all.printable_count %}
+                <a href="{% url 'tournament_first_round_scheduled_score_sheets_pdf' tournament.code %}?round=all{% if selected_query %}&{{ selected_query }}{% endif %}" target="_blank">PDF出力</a>
+            {% else %}
+                <span class="subtle-text">出力する試合なし</span>
             {% endif %}
         </td>
     </tr>

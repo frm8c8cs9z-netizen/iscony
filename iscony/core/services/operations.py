@@ -135,6 +135,7 @@ def clone_tournament_without_results(source, *, name, code):
             is_public=source.is_public,
             organization_display_mode=source.organization_display_mode,
             score_sheet_template=source.score_sheet_template,
+            score_sheet_print_match_code=source.score_sheet_print_match_code,
             default_league_entry_display_mode=source.default_league_entry_display_mode,
             default_league_score_color_mode=source.default_league_score_color_mode,
             default_tournament_entry_display_mode=source.default_tournament_entry_display_mode,

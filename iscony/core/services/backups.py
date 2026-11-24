@@ -239,9 +239,14 @@ def backup_tournament_identity(payload):
 
 
 def _compatible_schema_version(saved, current):
+    compatible = [
+        "0063_tournamententry_added_on_day_and_more",
+        "0064_tournament_leg_numbers",
+        "0065_tournament_score_sheet_print_match_code",
+    ]
     return saved == current or (
-        saved == "0063_tournamententry_added_on_day_and_more"
-        and current == "0064_tournament_leg_numbers"
+        saved in compatible and current in compatible
+        and compatible.index(saved) < compatible.index(current)
     )
 
 

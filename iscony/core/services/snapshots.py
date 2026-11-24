@@ -273,6 +273,7 @@ def build_tournament_snapshot_payload(tournament):
         "tournament_id": tournament.id,
         "created_at": timezone.now().isoformat(),
         "categories": categories,
+        "score_sheet_print_match_code": tournament.score_sheet_print_match_code,
     }
 
 
@@ -683,6 +684,9 @@ def restore_tournament_snapshot(snapshot):
 
     try:
         with transaction.atomic():
+            Tournament.objects.filter(pk=snapshot.tournament_id).update(
+                score_sheet_print_match_code=payload.get("score_sheet_print_match_code", True),
+            )
             for category in categories.values():
                 _category_schedule_queryset(category).delete()
 
