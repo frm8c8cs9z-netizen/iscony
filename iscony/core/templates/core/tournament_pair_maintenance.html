@@ -117,7 +117,7 @@
                     >
                         <span>{{ piece.label }}</span>
                         <a
-                            href="{% url 'tournament_bracket_detail' tournament.code piece.source_bracket_id %}"
+                            href="{{ piece.detail_url }}"
                             target="_blank"
                             rel="noopener"
                             class="piece-view-bracket-link"

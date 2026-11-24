@@ -4057,12 +4057,9 @@ class AdvancementPieceServiceTests(TestCase):
         )
         content = response.content.decode()
         detail_url = reverse(
-            "tournament_bracket_detail",
-            kwargs={
-                "code": self.tournament.code,
-                "bracket_id": fixture["source_bracket"].id,
-            },
-        )
+            "category_stage_overview",
+            kwargs={"category_id": fixture["source_bracket"].category_id},
+        ) + f"#tournament-match-{fixture['source_match'].id}"
         self.assertIn('data-round-best-n="1"', content)
         self.assertIn('data-round-best-n="2"', content)
         self.assertIn("この試合を見る", content)
@@ -4881,12 +4878,9 @@ class TournamentAdvancementPieceServiceTests(TestCase):
         )
         content = response.content.decode()
         detail_url = reverse(
-            "tournament_bracket_detail",
-            kwargs={
-                "code": self.tournament.code,
-                "bracket_id": fixture["source_bracket"].id,
-            },
-        )
+            "category_stage_overview",
+            kwargs={"category_id": fixture["source_bracket"].category_id},
+        ) + f"#tournament-match-{fixture['source_match'].id}"
         self.assertIn('data-round-best-n="1"', content)
         self.assertIn('data-round-best-n="2"', content)
         self.assertIn("この試合を見る", content)
@@ -27150,6 +27144,70 @@ class ReceptionMatchSearchTests(TestCase):
             tournament_match=self.tournament_match,
         )
 
+    def test_search_results_link_to_stage_overview_positions(self):
+        overview_url = reverse(
+            "category_stage_overview",
+            kwargs={"category_id": self.category.id},
+        )
+        response = self.client.get(
+            reverse("reception_match_search", kwargs={"code": self.tournament.code}),
+            {"search_mode": "entry", "category": self.category.id, "entry_number": "1"},
+        )
+        self.assertContains(response, f'href="{overview_url}#group-{self.group.id}"')
+        self.assertContains(
+            response, f'href="{overview_url}#tournament-match-{self.tournament_match.id}"'
+        )
+
+    def test_result_input_candidates_link_to_stage_overview_positions(self):
+        from unittest.mock import patch
+        from .views.dashboard import _round_robin_search_row, _tournament_search_row
+
+        # Normally a single determined match redirects to input. Exercise the
+        # candidate rendering path with both kinds of real search rows.
+        rows = [
+            _round_robin_search_row(self.round_robin_match, self.tournament),
+            _tournament_search_row(self.tournament_match, self.tournament),
+        ]
+        with patch("core.views.dashboard._search_matches_by_schedule", return_value=rows):
+            response = self.client.get(
+                reverse("result_input_select", kwargs={"code": self.tournament.code}),
+                {"schedule_block": self.block.id, "court": self.court.id, "order": 3},
+            )
+        overview_url = reverse(
+            "category_stage_overview", kwargs={"category_id": self.category.id}
+        )
+        self.assertContains(response, f'href="{overview_url}#group-{self.group.id}"')
+        self.assertContains(
+            response, f'href="{overview_url}#tournament-match-{self.tournament_match.id}"'
+        )
+
+    def test_legacy_tournament_search_result_has_no_match_anchor(self):
+        self.bracket.stage = None
+        self.bracket.save(update_fields=["stage"])
+        response = self.client.get(
+            reverse("reception_match_search", kwargs={"code": self.tournament.code}),
+            {"search_mode": "entry", "category": self.category.id, "entry_number": "1"},
+        )
+        row = next(row for row in response.context["results"] if row["kind"] == "トーナメント")
+        self.assertEqual(
+            row["detail_url"],
+            reverse("category_stage_overview", kwargs={"category_id": self.category.id}),
+        )
+
+    def test_overview_url_helpers_do_not_query_related_categories(self):
+        from .helpers.view import (
+            _round_robin_stage_overview_url,
+            _tournament_stage_overview_url,
+        )
+
+        match = TournamentMatch.objects.select_related("bracket").get(pk=self.tournament_match.pk)
+        league_match = RoundRobinMatch.objects.select_related("group").get(pk=self.round_robin_match.pk)
+        with self.assertNumQueries(0):
+            self.assertTrue(_tournament_stage_overview_url(match).endswith(f"#tournament-match-{match.id}"))
+            self.assertTrue(_round_robin_stage_overview_url(league_match).endswith(f"#group-{self.group.id}"))
+            match.bracket.stage_id = None
+            self.assertNotIn("#", _tournament_stage_overview_url(match))
+
     def test_reception_search_page_is_displayed(self):
         response = self.client.get(
             reverse(
@@ -27224,12 +27282,9 @@ class ReceptionMatchSearchTests(TestCase):
         self.assertContains(
             response,
             reverse(
-                "tournament_bracket_detail",
-                kwargs={
-                    "code": self.tournament.code,
-                    "bracket_id": self.bracket.id,
-                },
-            ),
+                "category_stage_overview",
+                kwargs={"category_id": self.category.id},
+            ) + f"#tournament-match-{self.tournament_match.id}",
         )
 
     def test_reception_search_shows_empty_result_message(self):

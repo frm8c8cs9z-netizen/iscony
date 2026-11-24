@@ -78,6 +78,7 @@ from ..helpers.brackets import (
 )
 from ..validators import validate_game_score, validate_star_score
 from ..helpers.view import (
+    _tournament_stage_overview_url,
     match_pair_is_determined,
     render_score_input,
 )
@@ -110,22 +111,6 @@ def _show_stage_advancement_warning(request):
             f"{detail}"
         ),
     )
-
-
-def _tournament_stage_overview_url(match):
-    """トーナメント試合から戻るStage進行URLを返す。"""
-
-    url = reverse(
-        "category_stage_overview",
-        kwargs={
-            "category_id": match.bracket.category.id,
-        },
-    )
-
-    if match.bracket.stage_id:
-        return f"{url}#tournament-match-{match.id}"
-
-    return url
 
 
 def tournament_bracket_detail(request, code, bracket_id):
@@ -840,6 +825,7 @@ def tournament_pair_maintenance(request, code, bracket_id):
 
                     unassigned_pieces.append({
                         "source_match_id": match.id,
+                        "detail_url": _tournament_stage_overview_url(match),
                         "source_result": result,
                         "source_bracket_id": match.bracket_id,
                         "source_bracket_name": match.bracket.name,

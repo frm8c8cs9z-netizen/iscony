@@ -75,6 +75,8 @@ from ..services import (
 )
 from ..validators import validate_game_score
 from ..helpers.view import (
+    _round_robin_stage_overview_url,
+    _tournament_stage_overview_url,
     match_pair_is_determined,
     redirect_next_or_url,
     render_score_input,
@@ -84,15 +86,6 @@ from ..helpers.brackets import (
     get_best_n,
     get_best_n_label,
 )
-
-
-def _round_robin_stage_overview_url(match):
-    """リーグ試合から戻るStage進行URLを返す。"""
-
-    return (
-        f"{reverse('category_stage_overview', kwargs={'category_id': match.group.category.id})}"
-        f"#group-{match.group.id}"
-    )
 
 
 def _show_stage_advancement_warning(request):
@@ -1429,6 +1422,7 @@ def pair_maintenance(request, category_id, stage_id=None):
 
                         unassigned_pieces.append({
                             "source_match_id": match.id,
+                            "detail_url": _tournament_stage_overview_url(match),
                             "source_result": result,
                             "source_bracket_id": match.bracket_id,
                             "source_bracket_name": match.bracket.name,

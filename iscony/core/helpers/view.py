@@ -17,8 +17,34 @@
 from urllib.parse import urlencode
 
 from django.shortcuts import render, redirect
+from django.urls import reverse
 
 from ..models import Category
+
+
+def _tournament_stage_overview_url(match):
+    """トーナメント試合から戻るStage進行URLを返す。"""
+
+    url = reverse(
+        "category_stage_overview",
+        kwargs={
+            "category_id": match.bracket.category_id,
+        },
+    )
+
+    if match.bracket.stage_id:
+        return f"{url}#tournament-match-{match.id}"
+
+    return url
+
+
+def _round_robin_stage_overview_url(match):
+    """リーグ試合から戻るStage進行URLを返す。"""
+
+    return (
+        f"{reverse('category_stage_overview', kwargs={'category_id': match.group.category_id})}"
+        f"#group-{match.group.id}"
+    )
 
 
 def safe_next_url(request):

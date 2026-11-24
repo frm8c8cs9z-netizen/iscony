@@ -23,6 +23,10 @@ from django.shortcuts import (
     redirect,
 )
 
+from ..helpers.view import (
+    _round_robin_stage_overview_url,
+    _tournament_stage_overview_url,
+)
 from ..selectors.advancement_labels import prepare_related_result_labels
 from ..models import (
     Tournament,
@@ -1230,10 +1234,7 @@ def _round_robin_search_row(match, tournament, schedule=None):
             "input_match_score",
             kwargs={"match_id": match.id},
         ),
-        "detail_url": (
-            f"{reverse('category_detail', kwargs={'category_id': match.group.category.id})}"
-            f"#group-{match.group.id}"
-        ),
+        "detail_url": _round_robin_stage_overview_url(match),
         "can_input": True,
     }
 
@@ -1264,13 +1265,7 @@ def _tournament_search_row(match, tournament, schedule=None):
                 "match_id": match.id,
             },
         ),
-        "detail_url": reverse(
-            "tournament_bracket_detail",
-            kwargs={
-                "code": tournament.code,
-                "bracket_id": match.bracket.id,
-            },
-        ),
+        "detail_url": _tournament_stage_overview_url(match),
         "can_input": bool(match.pair1_id and match.pair2_id),
     }
 
