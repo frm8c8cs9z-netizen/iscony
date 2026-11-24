@@ -33746,6 +33746,13 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
 
     def test_schedule_view_shows_reception_focused_match_cards(self):
+        stage = Stage.objects.create(
+            category=self.category,
+            name="本戦",
+            stage_type=Stage.TYPE_TOURNAMENT,
+        )
+        self.bracket.stage = stage
+        self.bracket.save(update_fields=["stage"])
         group = Group.objects.create(
             category=self.category,
             name="A",
@@ -33817,28 +33824,34 @@ class TournamentScheduleBehaviorTests(TestCase):
             response,
             (
                 reverse(
-                    "public_category_results",
+                    "category_stage_overview",
                     kwargs={
-                        "code": self.tournament.code,
                         "category_id": self.category.id,
                     },
                 )
-                + f"#round-robin-match-{league_match.id}"
+                + f"#group-{group.id}"
             ),
         )
         self.assertContains(
             response,
             (
                 reverse(
-                    "public_category_results",
+                    "category_stage_overview",
                     kwargs={
-                        "code": self.tournament.code,
                         "category_id": self.category.id,
                     },
                 )
                 + f"#tournament-match-{tournament_match.id}"
             ),
         )
+        self.assertNotContains(
+            response,
+            reverse("public_category_results", kwargs={
+                "code": self.tournament.code,
+                "category_id": self.category.id,
+            }),
+        )
+        self.assertContains(response, "運営用の横断表示（Stage進行）")
         self.assertContains(response, 'id="schedule-')
         self.assertNotContains(response, "schedule-status-label")
         self.assertNotContains(response, "schedule-card-head")
@@ -33850,6 +33863,26 @@ class TournamentScheduleBehaviorTests(TestCase):
                 kwargs={"court_id": self.court.id},
             ),
         )
+
+    def test_schedule_result_link_without_tournament_stage_has_no_anchor(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", pair1=self.entry1, pair2=self.entry2,
+        )
+        schedule = Schedule.objects.create(
+            court=self.court, order=1, tournament_match=match,
+        )
+        response = self.client.get(reverse(
+            "schedule_view", kwargs={"tournament_code": self.tournament.code},
+        ))
+        self.assertEqual(response.status_code, 200)
+        cell = self._schedule_cell_html(response, schedule)
+        overview_url = reverse("category_stage_overview", args=[self.category.id])
+        self.assertRegex(cell, rf'href="{re.escape(overview_url)}">\s*結果表示')
+        self.assertNotIn(f"#tournament-match-{match.id}", cell)
+        self.assertNotIn(reverse("public_category_results", args=[
+            self.tournament.code, self.category.id,
+        ]), cell)
 
     def test_schedule_view_marks_day_changed_player_name_only(self):
         changed_match = TournamentMatch.objects.create(

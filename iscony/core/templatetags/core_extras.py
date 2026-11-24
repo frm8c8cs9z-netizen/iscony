@@ -3,6 +3,10 @@ from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 from core.helpers.display import entry_name_parts, bind_entry_organization_tournament
+from core.helpers.view import (
+    _round_robin_stage_overview_url,
+    _tournament_stage_overview_url,
+)
 
 from core.models import (
     Category,
@@ -20,6 +24,16 @@ from core.models import (
 
 
 register = template.Library()
+
+
+@register.filter
+def round_robin_stage_overview_url(match):
+    return _round_robin_stage_overview_url(match)
+
+
+@register.filter
+def tournament_stage_overview_url(match):
+    return _tournament_stage_overview_url(match)
 
 
 @register.filter

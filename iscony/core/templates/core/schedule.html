@@ -15,7 +15,7 @@
 </p>
 
 <p>
-    各試合カードの「結果表示」から、公開用のカテゴリ結果画面内の該当箇所へ移動できます。
+    各試合カードの「結果表示」から、運営用の横断表示（Stage進行）の該当する試合やリーグへ移動できます。
 </p>
 
 {% for block_table in block_tables %}
@@ -118,7 +118,7 @@
                                             <a href="{% url 'input_match_score' match.id %}?next={{ request.path }}">
                                                 結果入力
                                             </a>
-                                            <a href="{% url 'public_category_results' tournament.code match.group.category.id %}#round-robin-match-{{ match.id }}">
+                                            <a href="{{ match|round_robin_stage_overview_url }}">
                                                 結果表示
                                             </a>
                                     {% elif schedule.is_tournament %}
@@ -210,7 +210,7 @@
                                                     確認
                                                 </a>
                                             {% endif %}
-                                            <a href="{% url 'public_category_results' tournament.code match.bracket.category.id %}#tournament-match-{{ match.id }}">
+                                            <a href="{{ match|tournament_stage_overview_url }}">
                                                 結果表示
                                             </a>
                                     {% endif %}
