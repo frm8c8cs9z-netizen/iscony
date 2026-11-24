@@ -338,6 +338,8 @@ def create_tournament_stage_brackets(stage, bracket_specs):
 
             brackets.append(bracket)
 
+        from .leg_numbers import renumber_stage_legs
+        renumber_stage_legs(stage)
         return brackets
 
 
@@ -395,6 +397,13 @@ def generate_tournament_bracket_matches(bracket, match_games, *, entries=None):
             slots = build_start_round_bracket_slots(start_rounds, entries)
         except ValueError as error:
             raise ValidationError(str(error)) from error
+    from .leg_numbers import renumber_stage_legs
+    renumber_stage_legs(bracket.stage, bracket=bracket)
+    # The caller may keep these instances for rendering or advancement setup.
+    numbered = dict(bracket.tournamententry_set.values_list("pk", "leg_number"))
+    for entry in entries:
+        entry.leg_number = numbered[entry.pk]
+        entry.leg_branch = None
     size = len(slots)
 
     TournamentMatch.objects.filter(

@@ -121,6 +121,7 @@ def _deserialize_backup(backup, using, *, tournament_pk=None):
     if not isinstance(backup.payload, list):
         raise ValidationError("バックアップのデータが壊れています。")
     objects = list(serializers.deserialize("python", backup.payload, using=using))
+    _number_legacy_backup_entries(objects, backup.payload)
     keys = set()
     tournament_count = 0
     for item in objects:
@@ -151,7 +152,7 @@ def restore_tournament_backup(backup):
                 pk=backup.tournament_id,
             )
             version = current_schema_version()
-            if backup.schema_version != version:
+            if not _compatible_schema_version(backup.schema_version, version):
                 raise ValidationError(
                     "バックアップ作成時とデータ構造のバージョンが異なるため復元できません"
                     f" (バックアップ: {backup.schema_version} / 現在: {version})"
@@ -237,9 +238,42 @@ def backup_tournament_identity(payload):
         raise ValidationError("バックアップに対象大会のデータがありません。") from error
 
 
+def _compatible_schema_version(saved, current):
+    return saved == current or (
+        saved == "0063_tournamententry_added_on_day_and_more"
+        and current == "0064_tournament_leg_numbers"
+    )
+
+
+def _number_legacy_backup_entries(objects, payload):
+    from ..models import Stage, TournamentBracket, TournamentEntry
+    from .leg_numbers import number_ordered_entries
+
+    missing = {item["pk"] for item in payload if item["model"] == "core.tournamententry"
+               and "leg_number" not in item["fields"]}
+    if not missing:
+        return
+    stages = {item.object.pk: item.object for item in objects if isinstance(item.object, Stage)}
+    brackets = {item.object.pk: item.object for item in objects if isinstance(item.object, TournamentBracket)}
+    entries = [item.object for item in objects if isinstance(item.object, TournamentEntry)]
+    affected = {brackets[e.bracket_id].stage_id for e in entries if e.pk in missing}
+    counters = {}
+    for bracket in sorted(brackets.values(), key=lambda b: (b.display_order, b.name, b.pk)):
+        if bracket.stage_id not in affected:
+            continue
+        key = ("stage", bracket.stage_id) if bracket.stage_id else ("bracket", bracket.pk)
+        stage = stages.get(bracket.stage_id)
+        group = sorted((e for e in entries if e.bracket_id == bracket.pk),
+                       key=lambda e: (e.display_order, e.pk))
+        if group:
+            number_ordered_entries(group, counters.get(key, stage.leg_number_start if stage else 1),
+                                   preserve_additions=True)
+            counters[key] = max(e.leg_number for e in group) + 1
+
+
 def _validate_schema_version(version):
     current = current_schema_version()
-    if version != current:
+    if not _compatible_schema_version(version, current):
         raise ValidationError(
             "バックアップ作成時とデータ構造のバージョンが異なるため復元できません"
             f" (バックアップ: {version} / 現在: {current})"

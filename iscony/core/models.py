@@ -2,7 +2,7 @@
 
 import secrets
 
-from django.db import models
+from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.core.validators import RegexValidator
@@ -464,6 +464,11 @@ class Stage(models.Model):
         default=0
     )
 
+    leg_number_start = models.PositiveIntegerField(
+        default=1, validators=[MinValueValidator(1)], verbose_name="足の番号の振り始め",
+    )
+    show_leg_numbers = models.BooleanField(default=True, verbose_name="足の番号を出す")
+
     advancement_source_stage = models.ForeignKey(
         "self",
         null=True,
@@ -510,7 +515,18 @@ class Stage(models.Model):
 
             self.code = f"STG{number}"
 
-        super().save(*args, **kwargs)
+        with transaction.atomic():
+            previous = None
+            update_fields = kwargs.get("update_fields")
+            if self.pk and (update_fields is None or "leg_number_start" in update_fields):
+                previous = Stage.objects.select_for_update().filter(pk=self.pk).values_list(
+                    "leg_number_start", flat=True,
+                ).first()
+            super().save(*args, **kwargs)
+            if previous is not None and previous != self.leg_number_start:
+                TournamentEntry.objects.filter(bracket__stage_id=self.pk).update(
+                    leg_number=models.F("leg_number") + self.leg_number_start - previous,
+                )
 
     def __str__(self):
         return (
@@ -2032,6 +2048,38 @@ class TournamentBracket(models.Model):
 
 
 class TournamentEntry(models.Model):
+
+    leg_number = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    leg_branch = models.PositiveIntegerField(null=True, blank=True, validators=[MinValueValidator(2)])
+
+    def __init__(self, *args, **kwargs):
+        self._automatic_leg_number = not args and "leg_number" not in kwargs
+        super().__init__(*args, **kwargs)
+
+    def save(self, *args, **kwargs):
+        # Direct creation (including admin) also gets an unused address. Explicit
+        # numbers from day addition/copy/restore are retained. Full draw generation
+        # subsequently assigns the Stage's definitive display-order sequence.
+        if self._state.adding and self._automatic_leg_number and self.leg_number == 1:
+            with transaction.atomic():
+                bracket = self.bracket
+                if bracket.stage_id:
+                    stage = Stage.objects.select_for_update().get(pk=bracket.stage_id)
+                    entries = TournamentEntry.objects.filter(bracket__stage_id=stage.pk)
+                    start = stage.leg_number_start
+                else:
+                    TournamentBracket.objects.select_for_update().get(pk=bracket.pk)
+                    entries = TournamentEntry.objects.filter(bracket_id=bracket.pk)
+                    start = 1
+                last = entries.aggregate(value=models.Max("leg_number"))["value"]
+                self.leg_number = max(start, last + 1 if last is not None else start)
+                return super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
+
+    @property
+    def leg_number_label(self):
+        return (f"{self.leg_number}の{self.leg_branch}"
+                if self.leg_branch is not None else str(self.leg_number))
 
     added_on_day = models.BooleanField(default=False)
     added_on_day_participant = models.ForeignKey(

@@ -179,6 +179,8 @@ def clone_tournament_without_results(source, *, name, code):
                 code=old.code,
                 name=old.name,
                 stage_type=old.stage_type,
+                leg_number_start=old.leg_number_start,
+                show_leg_numbers=old.show_leg_numbers,
                 display_order=old.display_order,
             )
 
@@ -343,6 +345,8 @@ def clone_tournament_without_results(source, *, name, code):
         ).order_by("id"):
             tournament_entry_map[old.id] = TournamentEntry.objects.create(
                 bracket=bracket_map[old.bracket_id],
+                leg_number=old.leg_number,
+                leg_branch=old.leg_branch,
                 participant=participant_map.get(old.participant_id),
                 pair_code=old.pair_code,
                 display_order=old.display_order,

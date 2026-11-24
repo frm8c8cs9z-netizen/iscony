@@ -46,6 +46,7 @@ from .tournament_svg_labels import (
     effective_svg_layout_type,
     estimate_svg_name_width,
     estimate_svg_number_width,
+    leg_number_display_data,
     estimate_svg_round_gap,
     estimate_svg_row_gap,
     svg_player_rows_column_widths,
@@ -65,6 +66,7 @@ def build_svg_bracket_data(
     *,
     show_champion_label=True,
     forced_layout_type=None,
+    leg_number_display=None,
 ):
     """片側/左右表示に対応したSVGトーナメント表データを作る。"""
 
@@ -73,7 +75,9 @@ def build_svg_bracket_data(
 
     round_count = len(round_data)
     top = 70
-    side_margin = 28
+    leg_number_display = leg_number_display or leg_number_display_data(bracket, round_data)
+    show_leg_numbers = leg_number_display["show"]
+    side_margin = 28 + leg_number_display["width"]
     round_gap = estimate_svg_round_gap(round_data)
     entry_display_mode = resolve_entry_display_mode(
         explicit_mode=bracket.effective_entry_display_mode,
@@ -316,6 +320,7 @@ def build_svg_bracket_data(
         ],
         "round_gap": round_gap,
         "side_margin": side_margin,
+        "show_leg_numbers": show_leg_numbers,
         "name_width": name_width,
         "number_width": number_width,
         "entry_gap": entry_gap,
@@ -412,6 +417,7 @@ def build_tournament_bracket_display_data(bracket):
     """トーナメント表表示に必要な回戦データとSVGデータを作る。"""
 
     round_data = build_tournament_round_data(bracket)
+    leg_number_display = leg_number_display_data(bracket, round_data)
 
     svg_brackets = []
 
@@ -430,6 +436,7 @@ def build_tournament_bracket_display_data(bracket):
         svg_bracket = build_svg_bracket_data(
             bracket,
             round_data,
+            leg_number_display=leg_number_display,
         )
         if svg_bracket:
             svg_brackets.append(svg_bracket)
@@ -441,6 +448,7 @@ def build_tournament_bracket_display_data(bracket):
             svg_bracket = build_svg_bracket_data(
                 bracket,
                 block_round_data,
+                leg_number_display=leg_number_display,
                 show_champion_label=True,
             )
 
@@ -461,6 +469,7 @@ def build_tournament_bracket_display_data(bracket):
             winner_svg_bracket = build_svg_bracket_data(
                 bracket,
                 winner_round_data,
+                leg_number_display=leg_number_display,
                 forced_layout_type=winner_layout_type,
             )
 

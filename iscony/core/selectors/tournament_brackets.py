@@ -22,6 +22,7 @@ def build_tournament_round_data(bracket, *, organization_display_mode=None):
         "winner__advancement_source__source_group",
         "winner__advancement_source__source_match__bracket",
         "bracket__category__tournament",
+        "bracket__stage",
         "pair1__participant__category__tournament",
         "pair2__participant__category__tournament",
         "winner__participant__category__tournament",

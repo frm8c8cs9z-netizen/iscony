@@ -182,7 +182,14 @@ def add(bracket, target_entry, participant_form, expected):
     for i, entry in enumerate(entries):
         entry.start_round = (1 if i == index else rounds[i] + 1) if r == 1 else (r - 1 if i == index else rounds[i])
         entry.save(update_fields=["start_round"])
-    new = TournamentEntry.objects.create(bracket=bracket, participant=participant, pair_code=row["code"],
+    base_number = entries[index].leg_number
+    used_branches = set(TournamentEntry.objects.filter(
+        bracket__stage=stage, leg_number=base_number,
+    ).values_list("leg_branch", flat=True))
+    branch = 2
+    while branch in used_branches:
+        branch += 1
+    new = TournamentEntry.objects.create(leg_number=base_number, leg_branch=branch, bracket=bracket, participant=participant, pair_code=row["code"],
                                          display_order=entries[index].display_order + 1,
                                          start_round=row["after_round"], added_on_day=True,
                                          added_on_day_participant=participant)

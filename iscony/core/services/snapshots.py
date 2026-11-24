@@ -117,6 +117,8 @@ def build_category_snapshot_payload(category):
             "id": entry.id,
             "participant_id": entry.participant_id,
             "source_pair_id": entry.source_pair_id,
+            "leg_number": entry.leg_number,
+            "leg_branch": entry.leg_branch,
             "start_round": entry.start_round,
             "display_order": entry.display_order,
         })
@@ -241,6 +243,11 @@ def build_category_snapshot_payload(category):
         "created_at": timezone.now().isoformat(),
         "league_entries": league_entries,
         "tournament_entries": tournament_entries,
+        "stage_leg_settings": [
+            {"id": stage.pk, "leg_number_start": stage.leg_number_start,
+             "show_leg_numbers": stage.show_leg_numbers}
+            for stage in Stage.objects.filter(category=category).order_by("pk")
+        ],
         "round_robin_matches": round_robin_matches,
         "tournament_matches": tournament_matches,
         "group_rankings": rankings,
@@ -449,13 +456,28 @@ def _restore_category_payload(
                 retired_reason=item["retired_reason"],
             )
 
+        if "stage_leg_settings" not in payload:
+            Stage.objects.filter(category=category).update(leg_number_start=1, show_leg_numbers=True)
+        for item in payload.get("stage_leg_settings", []):
+            Stage.objects.filter(pk=item["id"], category=category).update(
+                leg_number_start=item["leg_number_start"], show_leg_numbers=item["show_leg_numbers"],
+            )
         for item in payload["tournament_entries"]:
             TournamentEntry.objects.filter(id=item["id"]).update(
                 participant_id=item["participant_id"],
                 source_pair_id=item["source_pair_id"],
+                leg_number=item.get("leg_number", 1),
+                leg_branch=item.get("leg_branch"),
                 start_round=item.get("start_round"),
                 display_order=item["display_order"],
             )
+
+        if any("leg_number" not in item for item in payload["tournament_entries"]):
+            from .leg_numbers import renumber_stage_legs
+            for stage in Stage.objects.filter(category=category):
+                renumber_stage_legs(stage, preserve_additions=True)
+            for bracket in category.tournamentbracket_set.filter(stage__isnull=True):
+                renumber_stage_legs(None, bracket=bracket, preserve_additions=True)
 
         for item in payload["round_robin_matches"]:
             RoundRobinMatch.objects.create(

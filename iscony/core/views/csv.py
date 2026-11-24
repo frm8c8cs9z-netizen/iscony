@@ -625,9 +625,6 @@ def _create_tournament_matches_for_bracket(bracket, entries, match_games=7):
     並び順(entries)のまま使う。
     """
 
-    if len(entries) < 2:
-        return
-
     generate_tournament_bracket_matches(
         bracket,
         match_games,

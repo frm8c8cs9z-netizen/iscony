@@ -39462,3 +39462,5 @@ from .draw_confirmation_tests import DrawConfirmationTests, ConfirmedDayAddition
 from .tournament_day_addition_tests import TournamentDayAdditionTests  # noqa: E402,F401
 
 from .csv_header_tests import JapaneseCsvHeaderTests  # noqa: E402,F401
+
+from .leg_number_tests import LegNumberTests  # noqa: F401,E402

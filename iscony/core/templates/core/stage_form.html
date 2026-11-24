@@ -902,4 +902,32 @@
     </script>
 {% endif %}
 
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const start = document.getElementById("id_leg_number_start");
+        const show = document.getElementById("id_show_leg_numbers");
+        const type = document.getElementById("id_stage_type");
+        if (!start || !show) return;
+        function toggleLegSettings() {
+            const tournament = type ? type.value === "tournament" : "{{ stage.stage_type }}" === "tournament";
+            start.closest("p").hidden = !tournament;
+            show.closest("p").hidden = !tournament;
+        }
+        if (type) type.addEventListener("change", toggleLegSettings);
+        toggleLegSettings();
+        {% if stage %}
+        let approvedStart = "{{ form.leg_number_start.initial }}";
+        start.form.addEventListener("submit", function(event) {
+            if (!start.closest("p").hidden && start.value !== approvedStart) {
+                if (!window.confirm("印刷済みの採点票・トーナメント表と足の番号が変わります。変更しますか？")) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    return;
+                }
+                approvedStart = start.value;
+            }
+        }, true);
+        {% endif %}
+    });
+</script>
 {% endblock %}

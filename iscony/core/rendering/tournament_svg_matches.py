@@ -21,6 +21,7 @@ from .tournament_svg_geometry import (
 )
 from .tournament_svg_labels import (
     append_svg_entry_block_label,
+    append_svg_leg_number_label,
     append_svg_entry_code_label,
     append_svg_match_code_label,
     append_svg_score_label,
@@ -124,6 +125,7 @@ def add_svg_match(svg, match, *, round_number, side, index):
         show_entry_text = first_match_id == match.id if first_match_id else True
 
         if show_entry_text:
+            append_svg_leg_number_label(svg, entry=entry, side=side, base_y=y)
             if is_unresolved_advancement_entry(entry):
                 append_svg_entry_block_label(
                     svg,

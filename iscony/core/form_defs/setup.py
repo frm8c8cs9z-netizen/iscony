@@ -67,6 +67,20 @@ class CategoryForm(forms.ModelForm):
 
 class StageUniqueFormMixin:
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.is_bound and "leg_number_start" not in self.data:
+            self.data = self.data.copy()
+            self.data["leg_number_start"] = self.instance.leg_number_start
+        self.fields["show_leg_numbers"].help_text = (
+            "大会内で足の番号を出す場合も、チェックを外すとこのStageには出しません。"
+            "進出元のある表では、いつも出します。"
+        )
+        self.fields["leg_number_start"].help_text = (
+            "Stage内の表の順に続き番号を振ります。"
+            "変更すると、印刷済みの採点票・トーナメント表と足の番号が変わります。"
+        )
+
     def validate_unique(self):
         exclude = self._get_validation_exclusions()
 
@@ -92,6 +106,8 @@ class StageForm(StageUniqueFormMixin, forms.ModelForm):
             "name",
             "stage_type",
             "display_order",
+            "leg_number_start",
+            "show_leg_numbers",
         ]
 
         labels = {
@@ -122,6 +138,8 @@ class StageEditForm(StageUniqueFormMixin, forms.ModelForm):
         fields = [
             "name",
             "display_order",
+            "leg_number_start",
+            "show_leg_numbers",
         ]
 
         labels = {

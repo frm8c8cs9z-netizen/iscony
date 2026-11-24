@@ -22,6 +22,7 @@ from .tournament_svg_champion import add_svg_champion_label
 from .tournament_svg_geometry import split_svg_final_y
 from .tournament_svg_labels import (
     append_svg_entry_code_label,
+    append_svg_leg_number_label,
     append_svg_match_code_label,
     append_svg_score_label,
     is_unresolved_advancement_entry,
@@ -107,6 +108,8 @@ def add_svg_final_match(svg, bracket, round_data, *, width, height):
             svg["first_entry_match_ids"].get(entry.id) == final_match.id
         )
         if should_show_entry:
+            append_svg_leg_number_label(svg, entry=entry,
+                                        side="left" if side_name == "pair1" else "right", base_y=y)
             if is_unresolved_advancement_entry(entry):
                 unresolved_lines = _svg_single_text_line(
                     entry.display_name,

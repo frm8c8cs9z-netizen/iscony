@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from ..helpers.display import ENTRY_DISPLAY_PLAYER_ROWS, build_entry_player_rows
 from ..models import AdvancementSource, Tournament, TournamentBracket
+from ..selectors.tournament_leg_numbers import tournament_leg_number_decisions
 from .svg_text_blocks import (
     ENTRY_BLOCK_MIN_HEIGHT,
     ENTRY_CODE_TEXT_BLOCK_LAYOUT,
@@ -305,6 +306,39 @@ def svg_entry_code_text(entry, reflected_entry_code_mode):
         return participant.entry_code
 
     return entry.slot_label
+
+
+def should_show_leg_numbers(bracket, *, entries=None, show_setting=None):
+    """大会内で揃える。渡されたSVGの一部分には判定を限定しない。"""
+    return bracket.pk in tournament_leg_number_decisions(bracket.category.tournament)
+
+
+def leg_number_display_data(bracket, round_data):
+    """大会共通の表示判定と、取得済みの全回戦から求めた番号列の幅を返す。"""
+    entries = {}
+    for round_item in round_data:
+        for match in round_item["matches"]:
+            for entry in (svg_match_display_entry(match, "pair1"), svg_match_display_entry(match, "pair2")):
+                if entry and getattr(entry, "leg_number", None):
+                    entries[entry.pk] = entry
+    show = should_show_leg_numbers(bracket)
+    width = max((len(f"({entry.leg_number_label})") * 16 for entry in entries.values()), default=0) if show else 0
+    return {"show": show, "width": width}
+
+
+def append_svg_leg_number_label(svg, *, entry, side, base_y):
+    """足の外側の専用列。組番号・名前・試合線の領域を使わない。"""
+    if not svg.get("show_leg_numbers") or not getattr(entry, "leg_number", None):
+        return
+    left = side == "left"
+    svg["labels"].append({
+        "text": f"({entry.leg_number_label})",
+        "x": svg["side_margin"] - 12 if left else svg["width"] - svg["side_margin"] + 12,
+        "y": base_y + 5,
+        "anchor": "end" if left else "start",
+        "class": "leg-number", "label_type": "leg_number", "entry_id": entry.pk,
+        "style": "font-size:16px;font-weight:700;fill:#263749;",
+    })
 
 
 def svg_match_code_label_spec(
