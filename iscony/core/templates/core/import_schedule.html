@@ -18,8 +18,10 @@
     <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
         CSVフォーマットをダウンロード
     </a>
-    （UTF-8 BOM付き）
+    <small><a href="{% url 'download_csv_format' tournament.code 'schedule' %}?headers=en">英語の見出しで出力</a></small>
+    （UTF-8 BOM付き。取込はUTF-8・Shift_JIS対応）
     ／ <a href="{% url 'export_schedule' tournament.code %}">進行表CSVを書き出す</a>
+    <small><a href="{% url 'export_schedule' tournament.code %}?headers=en">英語の見出しで出力</a></small>
 </p>
 
 <div class="csv-spec">
@@ -37,68 +39,68 @@
             <th>内容</th>
         </tr>
         <tr>
-            <td>schedule_block</td>
+            <td>日程区分(schedule_block)</td>
             <td>任意。開催日や時間帯を分ける名前です。例: 1日目、2日目。空欄時は「本日程」を使用します。</td>
         </tr>
         <tr>
-            <td>category</td>
+            <td>カテゴリ名(category)</td>
             <td>必須。大会に登録されているカテゴリ名です。</td>
         </tr>
         <tr>
-            <td>stage_code</td>
+            <td>ステージコード(stage_code)</td>
             <td>推奨。対象Stageの固定コードです。Stage名を変更しても同じStageを特定できます。</td>
         </tr>
         <tr>
-            <td>stage</td>
-            <td>任意。stage_codeを使わない場合に対象Stage名を指定します。</td>
+            <td>ステージ名(stage)</td>
+            <td>任意。ステージコード(stage_code)を使わない場合に対象Stage名を指定します。</td>
         </tr>
         <tr>
-            <td>stage_type</td>
-            <td>通常は不要です。現行フォーマットではstage_codeまたはstageから自動判定します。</td>
+            <td>形式(stage_type)</td>
+            <td>通常は不要です。現行フォーマットではステージコード(stage_code)またはステージ名(stage)から自動判定します。</td>
         </tr>
         <tr>
-            <td>group</td>
-            <td>リーグ名です。書き出し時は対象リーグ名を出力します。対象リーグの全試合をCSVに含めてください。対戦の指定にはslot1_code / slot2_codeを使います（旧形式のpair1 / pair2も読み込めます）。</td>
+            <td>リーグ名(group)</td>
+            <td>リーグ名です。書き出し時は対象リーグ名を出力します。対象リーグの全試合をCSVに含めてください。対戦の指定には枠1(slot1_code) / 枠2(slot2_code)を使います（旧形式のpair1 / pair2も読み込めます）。</td>
         </tr>
         <tr>
-            <td>bracket</td>
+            <td>トーナメント名(bracket)</td>
             <td>トーナメント行で使用するトーナメント表名です。同じステージ内に複数の表がある場合は必須です。</td>
         </tr>
         <tr>
-            <td>court</td>
+            <td>コート(court)</td>
             <td>必須。試合を割り当てるコート名です。未登録のコートは自動作成します。</td>
         </tr>
         <tr>
-            <td>order</td>
+            <td>順番(order)</td>
             <td>必須。日程区分内における、そのコートの試合順です。1以上の整数を指定します。</td>
         </tr>
         <tr>
-            <td>slot1_code</td>
-            <td>リーグ行では必須。対戦する一方のslot_codeです。</td>
+            <td>枠1(slot1_code)</td>
+            <td>リーグ行では必須。対戦する一方の枠名です。</td>
         </tr>
         <tr>
-            <td>slot2_code</td>
-            <td>リーグ行では必須。対戦するもう一方のslot_codeです。2枠は同じGroupに所属している必要があります。</td>
+            <td>枠2(slot2_code)</td>
+            <td>リーグ行では必須。対戦するもう一方の枠名です。2枠は同じリーグに所属している必要があります。</td>
         </tr>
         <tr>
-            <td>meeting_number</td>
+            <td>何回目(meeting_number)</td>
             <td>任意。同じ2枠による何回目の対戦かを指定します。空欄時は1です。追加対戦は2以上を指定します。</td>
         </tr>
         <tr>
-            <td>match_code</td>
+            <td>マッチコード(match_code)</td>
             <td>トーナメント行では必須。対象トーナメント表内の試合コードです。例: M1。</td>
         </tr>
         <tr>
-            <td>match_label</td>
-            <td>任意。トーナメント試合の表示名です。例: ①。内部のmatch_codeは変更しません。</td>
+            <td>試合名(match_label)</td>
+            <td>任意。トーナメント試合の表示名です。例: ①。内部のマッチコード(match_code)は変更しません。</td>
         </tr>
         <tr>
-            <td>match_games</td>
+            <td>ゲーム数(match_games)</td>
             <td>任意。ゲーム数です。リーグ行で空欄の場合は7、トーナメント行で空欄の場合は現在の設定を使用します。</td>
         </tr>
         <tr>
-            <td>umpire_entry_code</td>
-            <td>任意。指定審判の番号（参加者のentry_code）です。進行表の「1-2(3)」の3を書きます。空欄なら審判なし。取り込み直すと、画面で指定した審判もCSVの内容で置き換わります。</td>
+            <td>審判番号(umpire_entry_code)</td>
+            <td>任意。指定審判の番号（参加者の番号(entry_code)）です。進行表の「1-2(3)」の3を書きます。空欄なら審判なし。取り込み直すと、画面で指定した審判もCSVの内容で置き換わります。</td>
         </tr>
     </table>
 </div>

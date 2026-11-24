@@ -18,11 +18,13 @@
     <a href="{% url 'download_csv_format' tournament.code 'stage_slots' %}">
         CSVフォーマットをダウンロード
     </a>
-    （UTF-8 BOM付き）
+    <small><a href="{% url 'download_csv_format' tournament.code 'stage_slots' %}?headers=en">英語の見出しで出力</a></small>
+    （UTF-8 BOM付き。取込はUTF-8・Shift_JIS対応）
     ／
     <a href="{% url 'export_stage_slots' tournament.code %}">
         現在のステージ枠CSVをダウンロード
     </a>
+    <small><a href="{% url 'export_stage_slots' tournament.code %}?headers=en">英語の見出しで出力</a></small>
 </p>
 
 <div class="csv-spec">
@@ -30,19 +32,19 @@
 
     <p>
         カンマ区切りCSVとタブ区切りCSVの両方を読み込めます。
-        stage_type は L または T、source_type は LR または TR を指定します。
+        形式(stage_type) は L または T、進出元の種類(source_type) は LR または TR を指定します。
     </p>
 
     <p>
         CSVに含まれるStageだけを置き換えます。初回はCSVでの登場順をStageの表示順とし、
         再取込では既存Stageの順番を維持します。新しいStageはカテゴリ内の末尾へ追加します。
-        GroupとBracketは各Stage内での登場順になります。
+        リーグとトーナメントは各Stage内での登場順になります。
     </p>
 
     <p>
-        stage_codeは任意です。空欄の場合はアプリがSTG1、STG2のように自動発番します。
-        既存のstage_codeを指定して異なるstage名を読み込むと、同じStageの名称を変更できます。
-        source_stage_codeを指定すると、進出元Stageも名称に依存せず参照できます。
+        ステージコード(stage_code)は任意です。空欄の場合はアプリがSTG1、STG2のように自動発番します。
+        既存のステージコード(stage_code)を指定して異なるステージ名(stage)を読み込むと、同じStageの名称を変更できます。
+        進出元ステージコード(source_stage_code)を指定すると、進出元Stageも名称に依存せず参照できます。
     </p>
 
     <table>
@@ -51,19 +53,19 @@
             <th>内容</th>
         </tr>
         <tr>
-            <td>category / stage_code / stage / stage_type</td>
+            <td>カテゴリ名(category) / ステージコード(stage_code) / ステージ名(stage) / 形式(stage_type)</td>
             <td>カテゴリ、任意のStageコード、ステージ名、L/Tです。</td>
         </tr>
         <tr>
-            <td>group / bracket</td>
-            <td>Lではgroup、Tではbracketを指定します。</td>
+            <td>リーグ名(group) / トーナメント名(bracket)</td>
+            <td>Lではリーグ名(group)、Tではトーナメント名(bracket)を指定します。</td>
         </tr>
         <tr>
-            <td>slot_label / display_order</td>
+            <td>枠名(slot_label) / 表示順(display_order)</td>
             <td>枠名と表示順です。</td>
         </tr>
         <tr>
-            <td>start_round（任意・Tのみ）</td>
+            <td>開始回戦(start_round)（任意・Tのみ）</td>
             <td>各組が最初に試合をする回戦。列なし・全行空欄なら自動で組みます。
                 指定する場合は同じブラケットの全行に1以上の整数を入れてください。
                 開始回戦1=1枠、2=2枠、3=4枠…として数えます。
@@ -71,20 +73,20 @@
                 16枠で1組目が3回戦からなら 3,1,1,2,…。</td>
         </tr>
         <tr>
-            <td>entry_code</td>
+            <td>番号(entry_code)</td>
             <td>参加者を直接入れる枠で使います。</td>
         </tr>
         <tr>
-            <td>source_type</td>
+            <td>進出元の種類(source_type)</td>
             <td>LRはリーグ順位、TRはトーナメント結果です。</td>
         </tr>
         <tr>
-            <td>source_stage / source_stage_code / source_group / source_rank</td>
-            <td>LRで使用します。source_stage_codeを指定した場合は、source_stageより優先します。</td>
+            <td>進出元ステージ名(source_stage) / 進出元ステージコード(source_stage_code) / 進出元リーグ名(source_group) / 進出元順位(source_rank)</td>
+            <td>LRで使用します。進出元ステージコード(source_stage_code)を指定した場合は、進出元ステージ名(source_stage)より優先します。</td>
         </tr>
         <tr>
-            <td>source_stage / source_stage_code / source_bracket / source_match / source_result</td>
-            <td>TRで使用します。source_resultは win または lose です。同じステージ内にM1が複数ある場合はsource_bracketが必要です。</td>
+            <td>進出元ステージ名(source_stage) / 進出元ステージコード(source_stage_code) / 進出元トーナメント名(source_bracket) / 進出元マッチコード(source_match) / 進出元マッチの勝敗(source_result)</td>
+            <td>TRで使用します。進出元マッチの勝敗(source_result)は win または lose です。同じステージ内にM1が複数ある場合は進出元トーナメント名(source_bracket)が必要です。</td>
         </tr>
     </table>
 </div>

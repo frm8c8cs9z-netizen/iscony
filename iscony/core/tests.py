@@ -14443,7 +14443,8 @@ class ImportStageSlotsCsvTests(TestCase):
                 kwargs={
                     "tournament_code": self.tournament.code,
                 },
-            )
+            ),
+            {"headers": "en"},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -14493,7 +14494,8 @@ class ImportStageSlotsCsvTests(TestCase):
                 kwargs={
                     "tournament_code": self.tournament.code,
                 },
-            )
+            ),
+            {"headers": "en"},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -15850,7 +15852,7 @@ class ImportScheduleCsvTests(TestCase):
     def _export_schedule(self):
         return self.client.get(reverse("export_schedule", kwargs={
             "tournament_code": self.tournament.code,
-        }))
+        }), {"headers": "en"})
 
     def _confirm_schedule(self, response):
         return self.client.post(reverse("import_schedule", kwargs={
@@ -16110,7 +16112,7 @@ class ImportScheduleCsvTests(TestCase):
         response = self.client.get(reverse("download_csv_format", kwargs={
             "tournament_code": self.tournament.code, "format_type": "schedule",
         }))
-        self.assertEqual(response.content.decode("utf-8-sig").strip().split(",")[-1], "umpire_entry_code")
+        self.assertEqual(response.content.decode("utf-8-sig").strip().split(",")[-1], "審判番号")
         response = self.client.get(reverse("import_schedule", kwargs={
             "tournament_code": self.tournament.code,
         }))
@@ -16135,7 +16137,8 @@ class CsvFormatDownloadTests(TestCase):
                     "tournament_code": self.tournament.code,
                     "format_type": format_type,
                 }
-            )
+            ),
+            {"headers": "en"},
         )
 
     def test_stage_slots_format_includes_source_bracket_header(self):
@@ -39457,3 +39460,5 @@ class KeepLeagueGroupSizesTests(TestCase):
 
 from .draw_confirmation_tests import DrawConfirmationTests, ConfirmedDayAdditionTests  # noqa: E402,F401
 from .tournament_day_addition_tests import TournamentDayAdditionTests  # noqa: E402,F401
+
+from .csv_header_tests import JapaneseCsvHeaderTests  # noqa: E402,F401

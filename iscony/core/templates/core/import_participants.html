@@ -12,7 +12,8 @@
     <a href="{% url 'download_csv_format' tournament.code 'participants' %}">
         CSVフォーマットをダウンロード
     </a>
-    （UTF-8 BOM付き）
+    <small><a href="{% url 'download_csv_format' tournament.code 'participants' %}?headers=en">英語の見出しで出力</a></small>
+    （UTF-8 BOM付き。取込はUTF-8・Shift_JIS対応）
 </p>
 
 <div class="csv-spec">
@@ -30,35 +31,35 @@
             <th>内容</th>
         </tr>
         <tr>
-            <td>category</td>
+            <td>カテゴリ(category)</td>
             <td>必須。参加するカテゴリ名です。例: 男子A、女子B。</td>
         </tr>
         <tr>
-            <td>entry_code</td>
+            <td>番号(entry_code)</td>
             <td>必須。カテゴリ内で参加者を識別する重複しないコードです。Stage枠CSVから参加者を指定するときにも使用します。</td>
         </tr>
         <tr>
-            <td>player1_name</td>
+            <td>選手1(player1_name)</td>
             <td>必須。ペアの1人目の選手名です。</td>
         </tr>
         <tr>
-            <td>player2_name</td>
+            <td>選手2(player2_name)</td>
             <td>必須。ペアの2人目の選手名です。</td>
         </tr>
         <tr>
-            <td>organization</td>
+            <td>所属(organization)</td>
             <td>任意。所属チーム、学校、クラブなどを入力します。選手1・選手2共通の値として扱われます。</td>
         </tr>
         <tr>
-            <td>org1, org2</td>
-            <td>任意。所属1・所属2を表す共通列です(organizationと同じ考え方で、選手1・選手2共通の値になります)。</td>
+            <td>所属1(org1), 所属2(org2)</td>
+            <td>任意。所属1・所属2を表す共通列です(所属(organization)と同じ考え方で、選手1・選手2共通の値になります)。</td>
         </tr>
         <tr>
-            <td>player1_org1, player1_org2, player2_org1, player2_org2</td>
+            <td>選手1所属1(player1_org1), 選手1所属2(player1_org2), 選手2所属1(player2_org1), 選手2所属2(player2_org2)</td>
             <td>
                 任意。選手1・選手2で所属が異なる場合に、選手ごとに指定します。
-                指定した場合はorganization/org1/org2より優先されます。
-                player1側だけ指定してplayer2側を省略すると、選手1の値が選手2にもコピーされます。
+                指定した場合は所属(organization)/所属1(org1)/所属2(org2)より優先されます。
+                選手1側だけ指定して選手2側を省略すると、選手1の値が選手2にもコピーされます。
             </td>
         </tr>
     </table>

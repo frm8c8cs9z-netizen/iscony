@@ -26,6 +26,7 @@ from django.utils.html import format_html
 
 from ..helpers.brackets import StartRoundValidationError, build_start_round_bracket_slots
 from ..forms import CSVUploadForm
+from ..csv_headers import CSV_HEADERS, canonicalize_headers, header_label, output_headers
 from ..models import (
     AdvancementSource,
     Category,
@@ -53,7 +54,6 @@ from ..services import (
 )
 from ..constants import (
     PARTICIPANT_ORGANIZATION_CODES,
-    PARTICIPANT_ORGANIZATION_INPUT_CODES,
 )
 
 
@@ -71,19 +71,7 @@ SCHEDULE_REIMPORT_MAX_AGE = 30 * 60
 
 
 def _participant_csv_headers():
-    player_org_columns = [
-        f"player{player_no}_{code}"
-        for player_no in (1, 2)
-        for code in PARTICIPANT_ORGANIZATION_INPUT_CODES
-    ]
-    return [
-        "category",
-        "entry_code",
-        "player1_name",
-        "player2_name",
-        *PARTICIPANT_ORGANIZATION_INPUT_CODES,
-        *player_org_columns,
-    ]
+    return output_headers("participants")
 
 
 def _participant_common_org_value(row, code):
@@ -121,47 +109,7 @@ def _split_common_organization_value(value):
     return value, value
 
 
-CSV_FORMAT_HEADERS = {
-    "participants": _participant_csv_headers(),
-    "stage_slots": [
-        "category",
-        "stage_code",
-        "stage",
-        "stage_type",
-        "group",
-        "bracket",
-        "slot_label",
-        "display_order",
-        "entry_code",
-        "source_type",
-        "source_stage",
-        "source_stage_code",
-        "source_bracket",
-        "source_group",
-        "source_rank",
-        "source_match",
-        "source_result",
-        "match_games",
-        "start_round",
-    ],
-    "schedule": [
-        "schedule_block",
-        "category",
-        "stage_code",
-        "stage",
-        "group",
-        "bracket",
-        "court",
-        "order",
-        "slot1_code",
-        "slot2_code",
-        "meeting_number",
-        "match_code",
-        "match_label",
-        "match_games",
-        "umpire_entry_code",
-    ],
-}
+CSV_FORMAT_HEADERS = {kind: output_headers(kind) for kind in CSV_HEADERS}
 
 
 def _organization_field_label(code):
@@ -287,7 +235,7 @@ def download_csv_format(request, tournament_code, format_type):
     response.write("\ufeff")
 
     writer = csv.writer(response)
-    writer.writerow(headers)
+    writer.writerow(output_headers(format_type, request.GET.get("headers", "ja")))
 
     return response
 
@@ -301,7 +249,16 @@ def _stage_slot_source_columns(entry):
         source = None
 
     if not source:
-        return ["", "", "", "", "", "", "", ""]
+        return {
+            "source_type": "",
+            "source_stage": "",
+            "source_stage_code": "",
+            "source_bracket": "",
+            "source_group": "",
+            "source_rank": "",
+            "source_match": "",
+            "source_result": "",
+        }
 
     source_stage = source.source_stage
 
@@ -309,16 +266,16 @@ def _stage_slot_source_columns(entry):
         if not source_stage and source.source_group:
             source_stage = source.source_group.stage
 
-        return [
-            "LR",
-            source_stage.name if source_stage else "",
-            source_stage.code if source_stage else "",
-            "",
-            source.source_group.name if source.source_group else "",
-            source.source_rank or "",
-            "",
-            "",
-        ]
+        return {
+            "source_type": "LR",
+            "source_stage": source_stage.name if source_stage else "",
+            "source_stage_code": source_stage.code if source_stage else "",
+            "source_bracket": "",
+            "source_group": source.source_group.name if source.source_group else "",
+            "source_rank": source.source_rank or "",
+            "source_match": "",
+            "source_result": "",
+        }
 
     source_match = source.source_match
 
@@ -330,16 +287,16 @@ def _stage_slot_source_columns(entry):
         AdvancementSource.RESULT_LOSER: "lose",
     }.get(source.source_result, "")
 
-    return [
-        "TR",
-        source_stage.name if source_stage else "",
-        source_stage.code if source_stage else "",
-        source_match.bracket.name if source_match else "",
-        "",
-        "",
-        source_match.match_code if source_match else "",
-        result,
-    ]
+    return {
+        "source_type": "TR",
+        "source_stage": source_stage.name if source_stage else "",
+        "source_stage_code": source_stage.code if source_stage else "",
+        "source_bracket": source_match.bracket.name if source_match else "",
+        "source_group": "",
+        "source_rank": "",
+        "source_match": source_match.match_code if source_match else "",
+        "source_result": result,
+    }
 
 
 def _sanitize_csv_cell(value):
@@ -368,7 +325,7 @@ def export_schedule(request, tournament_code):
     response.write("\ufeff")
     writer = csv.writer(response)
     headers = CSV_FORMAT_HEADERS["schedule"]
-    writer.writerow(headers)
+    writer.writerow(output_headers("schedule", request.GET.get("headers", "ja")))
     schedules = Schedule.objects.filter(
         court__tournament=tournament,
     ).select_related(
@@ -425,7 +382,7 @@ def export_stage_slots(request, tournament_code):
     )
     response.write("\ufeff")
     writer = csv.writer(response)
-    writer.writerow(CSV_FORMAT_HEADERS["stage_slots"])
+    writer.writerow(output_headers("stage_slots", request.GET.get("headers", "ja")))
 
     rows = []
     group_match_games = {}
@@ -466,20 +423,20 @@ def export_stage_slots(request, tournament_code):
     for entry in league_entries:
         stage = entry.group.stage
         match_games = group_match_games.get(entry.group_id, 7)
-        row = [
-            entry.category.name,
-            stage.code,
-            stage.name,
-            "L",
-            entry.group.name,
-            "",
-            entry.pair_code,
-            entry.display_order,
-            entry.participant.entry_code if entry.participant else "",
-            *_stage_slot_source_columns(entry),
-            match_games,
-            "",
-        ]
+        row = {
+            "category": entry.category.name,
+            "stage_code": stage.code,
+            "stage": stage.name,
+            "stage_type": "L",
+            "group": entry.group.name,
+            "bracket": "",
+            "slot_label": entry.pair_code,
+            "display_order": entry.display_order,
+            "entry_code": entry.participant.entry_code if entry.participant else "",
+            **_stage_slot_source_columns(entry),
+            "match_games": match_games,
+            "start_round": "",
+        }
         rows.append((
             entry.category.display_order,
             entry.category.name,
@@ -509,20 +466,20 @@ def export_stage_slots(request, tournament_code):
         category = entry.bracket.category
         stage = entry.bracket.stage
         match_games = bracket_match_games.get(entry.bracket_id, 7)
-        row = [
-            category.name,
-            stage.code,
-            stage.name,
-            "T",
-            "",
-            entry.bracket.name,
-            entry.pair_code,
-            entry.display_order,
-            entry.participant.entry_code if entry.participant else "",
-            *_stage_slot_source_columns(entry),
-            match_games,
-            entry.start_round if entry.start_round is not None else "",
-        ]
+        row = {
+            "category": category.name,
+            "stage_code": stage.code,
+            "stage": stage.name,
+            "stage_type": "T",
+            "group": "",
+            "bracket": entry.bracket.name,
+            "slot_label": entry.pair_code,
+            "display_order": entry.display_order,
+            "entry_code": entry.participant.entry_code if entry.participant else "",
+            **_stage_slot_source_columns(entry),
+            "match_games": match_games,
+            "start_round": entry.start_round if entry.start_round is not None else "",
+        }
         rows.append((
             category.display_order,
             category.name,
@@ -536,7 +493,7 @@ def export_stage_slots(request, tournament_code):
 
     for *_, row in sorted(rows, key=lambda item: item[:-1]):
         writer.writerow(
-            [_sanitize_csv_cell(value) for value in row]
+            [_sanitize_csv_cell(row[key]) for key in CSV_FORMAT_HEADERS["stage_slots"]]
         )
 
     return response
@@ -613,8 +570,12 @@ def _cell(row, key):
     return value
 
 
-def _read_csv_rows(csv_file):
-    data = csv_file.read().decode("utf-8-sig")
+def _read_csv_rows(csv_file, kind):
+    raw = csv_file.read()
+    try:
+        data = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        data = raw.decode("cp932")
     io_string = io.StringIO(data)
     sample = data[:4096]
 
@@ -633,6 +594,7 @@ def _read_csv_rows(csv_file):
         dialect=dialect
     )
 
+    reader.fieldnames, reader.original_headers = canonicalize_headers(kind, reader.fieldnames or [])
     return reader, list(reader)
 
 
@@ -1078,10 +1040,14 @@ def import_participants(request, tournament_code):
 
             csv_file = request.FILES["file"]
 
-            reader, rows = _read_csv_rows(
-                csv_file
-            )
+            try:
+                reader, rows = _read_csv_rows(csv_file, "participants")
+            except (ValueError, UnicodeError, csv.Error) as exc:
+                return render(request, "core/import_participants.html", {
+                    "tournament": tournament, "form": form, "errors": [str(exc)],
+                })
 
+            column = lambda key: reader.original_headers.get(key, header_label("participants", key))
             errors = []
 
             fieldnames = set(
@@ -1109,7 +1075,7 @@ def import_participants(request, tournament_code):
                         "form": form,
                         "errors": [
                             "CSVに必要な列がありません: "
-                            + ", ".join(missing_columns)
+                            + ", ".join(header_label("participants", key) for key in sorted(missing_columns))
                         ],
                     }
                 )
@@ -1122,7 +1088,7 @@ def import_participants(request, tournament_code):
 
                 if not category_name:
                     errors.append(
-                        f"{row_number}行目: categoryが空です。"
+                        f"{row_number}行目: {column('category')}が空です。"
                     )
                     continue
 
@@ -1310,13 +1276,16 @@ def import_stage_slots(request, tournament_code):
                 csv_file = request.FILES["file"]
 
             try:
-                reader, rows = _read_csv_rows(
-                    csv_file
-                )
+                reader, rows = _read_csv_rows(csv_file, "stage_slots")
+            except (ValueError, UnicodeError, csv.Error) as exc:
+                return render(request, "core/import_stage_slots.html", {
+                    "tournament": tournament, "form": form, "errors": [str(exc)],
+                })
             finally:
                 if confirm_token and csv_file:
                     csv_file.close()
             fieldnames = set(reader.fieldnames or [])
+            column = lambda key: reader.original_headers.get(key, header_label("stage_slots", key))
             errors = []
 
             missing_columns = STAGE_SLOT_REQUIRED_COLUMNS - fieldnames
@@ -1330,7 +1299,7 @@ def import_stage_slots(request, tournament_code):
                         "form": form,
                         "errors": [
                             "CSVに必要な列がありません: "
-                            + ", ".join(sorted(missing_columns))
+                            + ", ".join(header_label("stage_slots", key) for key in sorted(missing_columns))
                         ],
                     }
                 )
@@ -1372,13 +1341,13 @@ def import_stage_slots(request, tournament_code):
 
                 if not category_name:
                     errors.append(
-                        f"{row_number}行目: categoryが空です。"
+                        f"{row_number}行目: {column('category')}が空です。"
                     )
                     continue
 
                 if not stage_name:
                     errors.append(
-                        f"{row_number}行目: stageが空です。"
+                        f"{row_number}行目: {column('stage')}が空です。"
                     )
                     continue
 
@@ -1387,32 +1356,32 @@ def import_stage_slots(request, tournament_code):
                     Stage.TYPE_TOURNAMENT,
                 }:
                     errors.append(
-                        f"{row_number}行目: stage_typeは L/T または league/tournament を入力してください。"
+                        f"{row_number}行目: {column('stage_type')}は L/T または league/tournament を入力してください。"
                     )
                     continue
 
                 if stage_type == Stage.TYPE_LEAGUE and not group_name:
                     errors.append(
-                        f"{row_number}行目: league の行は group が必要です。"
+                        f"{row_number}行目: league の行は {column('group')} が必要です。"
                     )
                     continue
 
                 if stage_type == Stage.TYPE_TOURNAMENT and not bracket_name:
                     errors.append(
-                        f"{row_number}行目: tournament の行は bracket が必要です。"
+                        f"{row_number}行目: tournament の行は {column('bracket')} が必要です。"
                     )
                     continue
 
                 if not slot_label:
                     errors.append(
-                        f"{row_number}行目: slot_labelが空です。"
+                        f"{row_number}行目: {column('slot_label')}が空です。"
                     )
                     continue
 
                 display_order = _parse_positive_int(
                     _cell(row, "display_order"),
                     row_number,
-                    "display_order",
+                    column("display_order"),
                     errors,
                 )
 
@@ -1422,7 +1391,7 @@ def import_stage_slots(request, tournament_code):
                 match_games = _parse_positive_int(
                     _cell(row, "match_games") or "7",
                     row_number,
-                    "match_games",
+                    column("match_games"),
                     errors,
                 )
 
@@ -1431,7 +1400,7 @@ def import_stage_slots(request, tournament_code):
 
                 if entry_code and source_type:
                     errors.append(
-                        f"{row_number}行目: entry_code と source_type は同時に指定できません。"
+                        f"{row_number}行目: {column('entry_code')} と {column('source_type')} は同時に指定できません。"
                     )
                     continue
 
@@ -1440,7 +1409,7 @@ def import_stage_slots(request, tournament_code):
                     AdvancementSource.SOURCE_TOURNAMENT_RESULT,
                 }:
                     errors.append(
-                        f"{row_number}行目: source_typeは LR/TR または league_rank/tournament_result を入力してください。"
+                        f"{row_number}行目: {column('source_type')}は LR/TR または league_rank/tournament_result を入力してください。"
                     )
                     continue
 
@@ -1449,8 +1418,8 @@ def import_stage_slots(request, tournament_code):
                     or source_stage_code
                 ):
                     errors.append(
-                        f"{row_number}行目: source_typeを指定する場合は、"
-                        "source_stage または source_stage_code が必要です。"
+                        f"{row_number}行目: {column('source_type')}を指定する場合は、"
+                        f"{column('source_stage')} または {column('source_stage_code')} が必要です。"
                     )
                     continue
 
@@ -1459,14 +1428,14 @@ def import_stage_slots(request, tournament_code):
                 if source_type == AdvancementSource.SOURCE_LEAGUE_RANK:
                     if not source_group:
                         errors.append(
-                            f"{row_number}行目: league_rank には source_group が必要です。"
+                            f"{row_number}行目: league_rank には {column('source_group')} が必要です。"
                         )
                         continue
 
                     source_rank = _parse_positive_int(
                         _cell(row, "source_rank"),
                         row_number,
-                        "source_rank",
+                        column("source_rank"),
                         errors,
                     )
 
@@ -1476,7 +1445,7 @@ def import_stage_slots(request, tournament_code):
                 if source_type == AdvancementSource.SOURCE_TOURNAMENT_RESULT:
                     if not source_match or not source_result:
                         errors.append(
-                            f"{row_number}行目: tournament_result には source_match と source_result が必要です。"
+                            f"{row_number}行目: tournament_result には {column('source_match')} と {column('source_result')} が必要です。"
                         )
                         continue
 
@@ -1485,7 +1454,7 @@ def import_stage_slots(request, tournament_code):
                         AdvancementSource.RESULT_LOSER,
                     }:
                         errors.append(
-                            f"{row_number}行目: source_resultは win/lose または winner/loser を入力してください。"
+                            f"{row_number}行目: {column('source_result')}は win/lose または winner/loser を入力してください。"
                         )
                         continue
 
@@ -1496,12 +1465,12 @@ def import_stage_slots(request, tournament_code):
                     if stage_type == Stage.TYPE_LEAGUE:
                         errors.append(
                             f"{row_number}行目: {bracket_label}: "
-                            "start_round(開始回戦)はトーナメントの行にだけ指定できます。"
+                            f"{column('start_round')}(開始回戦)はトーナメントの行にだけ指定できます。"
                         )
                         continue
                     start_round = _parse_positive_int(
                         raw_start_round, row_number,
-                        f"{bracket_label}: start_round(開始回戦)", errors,
+                        f"{bracket_label}: {column('start_round')}(開始回戦)", errors,
                     )
                     if start_round is None:
                         continue
@@ -1527,7 +1496,7 @@ def import_stage_slots(request, tournament_code):
                     if not participant:
                         errors.append(
                             f"{row_number}行目: Participantが存在しません。"
-                            f"カテゴリ={category.name} / entry_code={entry_code}"
+                            f"カテゴリ={category.name} / {column('entry_code')}={entry_code}"
                         )
                         continue
 
@@ -1556,7 +1525,7 @@ def import_stage_slots(request, tournament_code):
                     and stage_definitions[definition_key] != definition
                 ):
                     errors.append(
-                        f"{row_number}行目: 同じstage_codeに異なるStage名またはstage_typeが指定されています。"
+                        f"{row_number}行目: 同じ{column('stage_code')}に異なるStage名または{column('stage_type')}が指定されています。"
                     )
                     continue
 
@@ -1578,7 +1547,7 @@ def import_stage_slots(request, tournament_code):
 
                 if slot_key in seen_slots:
                     errors.append(
-                        f"{row_number}行目: slot_labelが重複しています。"
+                        f"{row_number}行目: {column('slot_label')}が重複しています。"
                         f"{category_name} / {stage_name} / {container_name} / {slot_label}"
                     )
                     continue
@@ -1595,9 +1564,9 @@ def import_stage_slots(request, tournament_code):
 
                     if display_order_key in seen_tournament_display_orders:
                         errors.append(
-                            f"{row_number}行目: 同じトーナメント内でdisplay_orderが重複しています。"
+                            f"{row_number}行目: 同じトーナメント内で{column('display_order')}が重複しています。"
                             f"{category_name} / {stage_name} / {container_name} / "
-                            f"display_order={display_order}"
+                            f"{column('display_order')}={display_order}"
                         )
                         continue
 
@@ -1743,15 +1712,15 @@ def import_stage_slots(request, tournament_code):
                     except Group.DoesNotExist:
                         errors.append(
                             f"{row['row_number']}行目: 進出元リーグが見つかりません。"
-                            f"category={row['category'].name} / "
-                            f"source_stage={row['source_stage'] or row['source_stage_code']} / "
-                            f"source_group={row['source_group']}"
+                            f"{column('category')}={row['category'].name} / "
+                            f"{column('source_stage')}={row['source_stage'] or row['source_stage_code']} / "
+                            f"{column('source_group')}={row['source_group']}"
                         )
                         continue
                     except Group.MultipleObjectsReturned:
                         errors.append(
                             f"{row['row_number']}行目: 進出元リーグが複数あります。"
-                            "source_stage_codeを指定してください。"
+                            f"{column('source_stage_code')}を指定してください。"
                         )
                         continue
 
@@ -2296,12 +2265,23 @@ def import_schedule(request, tournament_code):
                         "errors": ["再取込用の一時データが見つかりません。期限切れの場合はCSVを選び直してください。"],
                     })
                 with open(csv_path, "rb") as csv_file:
-                    reader, rows = _read_csv_rows(csv_file)
+                    try:
+                        reader, rows = _read_csv_rows(csv_file, "schedule")
+                    except (ValueError, UnicodeError, csv.Error) as exc:
+                        return render(request, "core/import_schedule.html", {
+                            "tournament": tournament, "form": form, "errors": [str(exc)],
+                        })
             else:
                 _clear_stage_reimport_upload(request, SCHEDULE_REIMPORT_SESSION_KEY)
                 csv_file = request.FILES["file"]
-                reader, rows = _read_csv_rows(csv_file)
+                try:
+                    reader, rows = _read_csv_rows(csv_file, "schedule")
+                except (ValueError, UnicodeError, csv.Error) as exc:
+                    return render(request, "core/import_schedule.html", {
+                        "tournament": tournament, "form": form, "errors": [str(exc)],
+                    })
             fieldnames = set(reader.fieldnames or [])
+            column = lambda key: reader.original_headers.get(key, header_label("schedule", key))
             errors = []
 
             required_columns = {
@@ -2320,7 +2300,7 @@ def import_schedule(request, tournament_code):
                         "form": form,
                         "errors": [
                             "CSVに必要な列がありません: "
-                            + ", ".join(sorted(missing_columns))
+                            + ", ".join(header_label("schedule", key) for key in sorted(missing_columns))
                         ],
                     }
                 )
@@ -2362,7 +2342,7 @@ def import_schedule(request, tournament_code):
                 meeting_number = _parse_positive_int(
                     _cell(row, "meeting_number") or "1",
                     row_number,
-                    "meeting_number",
+                    column("meeting_number"),
                     errors,
                 )
 
@@ -2371,20 +2351,20 @@ def import_schedule(request, tournament_code):
 
                 if not category_name:
                     errors.append(
-                        f"{row_number}行目: categoryが空です。"
+                        f"{row_number}行目: {column('category')}が空です。"
                     )
                     continue
 
                 if not court_name:
                     errors.append(
-                        f"{row_number}行目: courtが空です。"
+                        f"{row_number}行目: {column('court')}が空です。"
                     )
                     continue
 
                 order = _parse_positive_int(
                     _cell(row, "order"),
                     row_number,
-                    "order",
+                    column("order"),
                     errors,
                 )
 
@@ -2395,7 +2375,7 @@ def import_schedule(request, tournament_code):
                 match_games = _parse_positive_int(
                     match_games_value or "7",
                     row_number,
-                    "match_games",
+                    column("match_games"),
                     errors,
                 )
 
@@ -2424,8 +2404,8 @@ def import_schedule(request, tournament_code):
 
                     if not registered_stage:
                         errors.append(
-                            f"{row_number}行目: stage_codeが存在しません。"
-                            f"stage_code={stage_code}"
+                            f"{row_number}行目: {column('stage_code')}が存在しません。"
+                            f"{column('stage_code')}={stage_code}"
                         )
                         continue
                 elif stage_name:
@@ -2440,7 +2420,7 @@ def import_schedule(request, tournament_code):
                         and stage_type != registered_stage.stage_type
                     ):
                         errors.append(
-                            f"{row_number}行目: stage_typeが登録済みStageの種別と一致しません。"
+                            f"{row_number}行目: {column('stage_type')}が登録済みStageの種別と一致しません。"
                         )
                         continue
 
@@ -2457,7 +2437,7 @@ def import_schedule(request, tournament_code):
                     Stage.TYPE_TOURNAMENT,
                 }:
                     errors.append(
-                        f"{row_number}行目: stage_typeは L/T または league/tournament を入力してください。"
+                        f"{row_number}行目: {column('stage_type')}は L/T または league/tournament を入力してください。"
                     )
                     continue
 
@@ -2465,7 +2445,7 @@ def import_schedule(request, tournament_code):
 
                     if not pair1_code or not pair2_code:
                         errors.append(
-                            f"{row_number}行目: league の行は slot1_code と slot2_code が必要です。"
+                            f"{row_number}行目: league の行は {column('slot1_code')} と {column('slot2_code')} が必要です。"
                         )
                         continue
 
@@ -2511,7 +2491,7 @@ def import_schedule(request, tournament_code):
                     ):
                         errors.append(
                             f"{row_number}行目: slot_codeからStageを特定できません。"
-                            "stage_codeを指定してください。"
+                            f"{column('stage_code')}を指定してください。"
                         )
                         continue
 
@@ -2555,7 +2535,7 @@ def import_schedule(request, tournament_code):
 
                     if not match_code:
                         errors.append(
-                            f"{row_number}行目: tournament の行は match_code が必要です。"
+                            f"{row_number}行目: tournament の行は {column('match_code')} が必要です。"
                         )
                         continue
 
@@ -2588,14 +2568,14 @@ def import_schedule(request, tournament_code):
                     if not brackets:
                         errors.append(
                             f"{row_number}行目: トーナメントが存在しません。"
-                            f"カテゴリ={category_name} / stage={stage_name} / bracket={bracket_name}"
+                            f"カテゴリ={category_name} / {column('stage')}={stage_name} / {column('bracket')}={bracket_name}"
                         )
                         continue
 
                     if len(brackets) > 1:
                         errors.append(
                             f"{row_number}行目: トーナメントを特定できません。"
-                            "stage と bracket を指定してください。"
+                            f"{column('stage')} と {column('bracket')} を指定してください。"
                         )
                         continue
 
@@ -2607,7 +2587,7 @@ def import_schedule(request, tournament_code):
 
                     if not match:
                         errors.append(
-                            f"{row_number}行目: match_codeが存在しません。"
+                            f"{row_number}行目: {column('match_code')}が存在しません。"
                             f"{bracket.name} / {match_code}"
                         )
                         continue
@@ -2632,7 +2612,7 @@ def import_schedule(request, tournament_code):
                     ).first()
                     if umpire is None:
                         errors.append(
-                            f"{row_number}行目: umpire_entry_code(審判) "
+                            f"{row_number}行目: {column('umpire_entry_code')}(審判) "
                             f"{umpire_entry_code} は、カテゴリ「{match_category.name}」に見つかりません。"
                         )
                         continue
@@ -2644,7 +2624,7 @@ def import_schedule(request, tournament_code):
                     )
                     if umpire.id in schedule_match_participant_ids(umpire_schedule):
                         errors.append(
-                            f"{row_number}行目: umpire_entry_code(審判) "
+                            f"{row_number}行目: {column('umpire_entry_code')}(審判) "
                             f"{umpire_entry_code} は、この試合に出場する組です。"
                         )
                         continue

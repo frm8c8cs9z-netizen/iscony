@@ -230,8 +230,10 @@
             <a href="{% url 'export_stage_slots' tournament.code %}">
                 現在のStage枠CSV
             </a>
+            <small><a href="{% url 'export_stage_slots' tournament.code %}?headers=en">英語の見出しで出力</a></small>
             ／
             <a href="{% url 'export_schedule' tournament.code %}">進行表CSVを書き出す</a>
+            <small><a href="{% url 'export_schedule' tournament.code %}?headers=en">英語の見出しで出力</a></small>
         </td>
         <td>リーグ枠、トーナメント枠、進出元の参照関係を登録します。</td>
     </tr>
@@ -245,6 +247,7 @@
             <a href="{% url 'download_csv_format' tournament.code 'schedule' %}">
                 フォーマット
             </a>
+            <small><a href="{% url 'download_csv_format' tournament.code 'schedule' %}?headers=en">英語の見出しで出力</a></small>
         </td>
         <td>リーグとトーナメントのコート割・試合順を登録します。</td>
     </tr>

@@ -648,7 +648,7 @@ class IrregularTournamentTests(TestCase):
                 }))
                 self.assertEqual(response.status_code, 200)
                 records = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
-                self.assertEqual([r["start_round"] for r in records],
+                self.assertEqual([r["開始回戦"] for r in records],
                                  ["" if r is None else str(r) for r in rounds])
                 self.assertEqual(self.import_csv(response.content).status_code, 302)
                 self.assertEqual([e.start_round for e in self.csv_entries()], rounds)
