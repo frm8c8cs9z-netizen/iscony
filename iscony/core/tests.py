@@ -10977,7 +10977,7 @@ class DayOfRefereeTests(TestCase):
                         if getattr(schedule, flag):
                             self.assertRegex(
                                 cell.group(0),
-                                rf'<td\s+id="schedule-{schedule.id}"\s+class="\s*{flag}-cell\s*">',
+                                rf'<td\s+id="schedule-{schedule.id}"\s+class="\s*{flag}-cell\s*"\s*[^>]*>',
                             )
 
     @override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
@@ -11048,7 +11048,7 @@ class DayOfRefereeTests(TestCase):
                     )
                     self.assertNotIn(participant.display_name, cell.group(0))
 
-    def test_schedule_view_shows_referee_labels_and_trigger_buttons(self):
+    def test_schedule_view_shows_referee_labels_and_cell_data(self):
         direct_referee = self._create_entry("REF")
         match1_pair1 = self._create_entry("M1A")
         match1_pair2 = self._create_entry("M1B")
@@ -33913,7 +33913,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertContains(response, "採点票PDF")
         self.assertContains(response, "結果表示")
         self.assertContains(response, 'class="schedule-grid-table"')
-        self.assertContains(response, 'class="table-wrapper schedule-table-wrapper"')
+        self.assertContains(response, 'class="table-wrapper schedule-table-wrapper schedule-operation-table-wrapper"')
         self.assertContains(
             response,
             (
@@ -33958,6 +33958,317 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
+    def test_schedule_modes_and_action_urls_for_both_match_formats(self):
+        group = Group.objects.create(category=self.category, name="A")
+        entries = [create_league_entry_with_participant(
+            category=self.category, group=group, pair_code=f"L{i}",
+            display_order=i, player1_name=f"選手{i}A", player2_name=f"選手{i}B",
+        ) for i in (1, 2)]
+        league_match = RoundRobinMatch.objects.create(
+            group=group, pair1=entries[0], pair2=entries[1],
+        )
+        tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", pair1=self.entry1, pair2=self.entry2,
+        )
+        league_schedule = Schedule.objects.create(
+            court=self.court, order=1, round_robin_match=league_match,
+        )
+        tournament_schedule = Schedule.objects.create(
+            court=self.court, order=2, tournament_match=tournament_match,
+        )
+        # The toolbar is shared even when the page contains multiple blocks.
+        block = ScheduleBlock.objects.create(
+            tournament=self.tournament, name="午後", display_order=2,
+        )
+        tournament_schedule.schedule_block = block
+        tournament_schedule.save(update_fields=["schedule_block"])
+        url = reverse("schedule_view", args=[self.tournament.code])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        toolbar = re.search(
+            r'<div[^>]+id="scheduleModeToolbar".*?</div>', content, re.S,
+        ).group(0)
+        self.assertContains(response, 'id="scheduleModeToolbar"', count=1)
+        self.assertEqual(re.findall(r'data-mode="([^"]+)"', toolbar),
+                         ["score", "overview", "pdf", "move", "referee"])
+        self.assertEqual(toolbar.count('aria-pressed="true"'), 1)
+        self.assertIn('class="schedule-mode-button is-active" data-mode="score" '
+                      'aria-pressed="true"', toolbar)
+        self.assertNotContains(response, 'class="schedule-actions"')
+        self.assertNotContains(response, 'class="schedule-referee-trigger"')
+        overview = reverse("category_stage_overview", args=[self.category.id])
+        for schedule, score_url, overview_url in (
+            (league_schedule, reverse("input_match_score", args=[league_match.id]),
+             overview + f"#group-{group.id}"),
+            (tournament_schedule, reverse("input_tournament_match_score",
+             args=[self.tournament.code, tournament_match.id]), overview),
+        ):
+            with self.subTest(schedule=schedule.id):
+                cell = self._schedule_cell_html(response, schedule).split("</td>")[0]
+                for attribute, value in {
+                    "data-score-url": score_url + "?next=" + url + f"%23schedule-{schedule.id}",
+                    "data-overview-url": overview_url,
+                    "data-pdf-url": reverse("score_sheet_pdf", args=[schedule.id]),
+                    "data-move-url": reverse("move_schedule", args=[schedule.id]),
+                    "data-referee-candidates-url": reverse(
+                        "schedule_referee_candidates_api",
+                        args=[self.tournament.code, schedule.id]),
+                    "data-referee-source-options-url-template": reverse(
+                        "schedule_referee_source_options_api",
+                        args=[self.tournament.code, schedule.id, 0]),
+                    "data-referee-save-url": reverse("set_schedule_referee_api",
+                        args=[self.tournament.code, schedule.id]),
+                    "tabindex": "0", "role": "button",
+                }.items():
+                    self.assertIn(f'{attribute}="{value}"', cell)
+                self.assertNotIn("<a ", cell)
+                self.assertNotIn("<button", cell)
+
+    def test_schedule_mode_urls_respect_move_locks_and_pdf_availability(self):
+        for order, state in enumerate(
+            ("ready", "called", "started", "finished", "scored", "unresolved"), 1,
+        ):
+            with self.subTest(state=state):
+                match = TournamentMatch.objects.create(
+                    bracket=self.bracket, round_number=1, match_number=order,
+                    match_code=f"M{order}", pair1=self.entry1,
+                    pair2=None if state == "unresolved" else self.entry2,
+                    pair1_games=4 if state == "scored" else None,
+                    pair2_games=2 if state == "scored" else None,
+                )
+                flags = {state: True} if state in ("called", "started", "finished") else {}
+                schedule = Schedule.objects.create(
+                    court=self.court, order=order, tournament_match=match, **flags,
+                )
+                response = self.client.get(reverse(
+                    "schedule_view", args=[self.tournament.code],
+                ))
+                self.assertEqual(response.status_code, 200)
+                cell = self._schedule_cell_html(response, schedule).split("</td>")[0]
+                self.assertEqual('data-move-url="' in cell,
+                                 state in ("ready", "unresolved"))
+                self.assertEqual('data-pdf-url="' in cell,
+                                 state not in ("scored", "unresolved"))
+                if state == "unresolved":
+                    self.assertNotIn('data-score-url="', cell)
+                    self.assertIn('data-score-disabled-reason="対戦相手が決まっていません。"', cell)
+                else:
+                    self.assertIn('data-score-url="' + reverse(
+                        "input_tournament_match_score",
+                        args=[self.tournament.code, match.id],
+                    ) + '?next=', cell)
+                move_reasons = {
+                    "called": "呼出済", "started": "試合中",
+                    "finished": "完了", "scored": "結果入力済",
+                }
+                if state in move_reasons:
+                    self.assertIn('data-move-disabled-reason="'
+                                  + move_reasons[state] + 'のため移動できません。"', cell)
+                else:
+                    self.assertNotIn('data-move-disabled-reason=', cell)
+                if state == "scored":
+                    self.assertIn('data-pdf-disabled-reason="結果入力済のため採点票は出力できません。"', cell)
+                elif state == "unresolved":
+                    self.assertIn('data-pdf-disabled-reason="対戦相手が決まっていません。"', cell)
+                else:
+                    self.assertNotIn('data-pdf-disabled-reason=', cell)
+
+    def test_schedule_mode_reasons_for_unassigned_participant_and_lock_priority(self):
+        unresolved_entry = TournamentEntry.objects.create(
+            bracket=self.bracket, pair_code="3", display_order=3,
+        )
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", pair1=self.entry1, pair2=unresolved_entry,
+        )
+        schedule = Schedule.objects.create(
+            court=self.court, order=1, tournament_match=match,
+        )
+        url = reverse("schedule_view", args=[self.tournament.code])
+        cell = self._schedule_cell_html(self.client.get(url), schedule).split("</td>")[0]
+        self.assertNotIn('data-score-url=', cell)
+        self.assertNotIn('data-pdf-url=', cell)
+        self.assertIn('data-score-disabled-reason="対戦相手が決まっていません。"', cell)
+        self.assertIn('data-pdf-disabled-reason="対戦相手が決まっていません。"', cell)
+        match.pair1_games = 4
+        match.pair2_games = 2
+        match.save(update_fields=["pair1_games", "pair2_games"])
+        schedule.called = True
+        for started, finished, reason in (
+            (True, True, "完了"), (True, False, "試合中"), (False, False, "結果入力済"),
+        ):
+            with self.subTest(reason=reason):
+                schedule.started, schedule.finished = started, finished
+                schedule.save(update_fields=["called", "started", "finished"])
+                cell = self._schedule_cell_html(self.client.get(url), schedule).split("</td>")[0]
+                self.assertNotIn('data-move-url=', cell)
+                self.assertIn(f'data-move-disabled-reason="{reason}のため移動できません。"', cell)
+                self.assertIn('data-pdf-disabled-reason="結果入力済のため採点票は出力できません。"', cell)
+
+    def test_schedule_score_next_preserves_cell_for_both_formats(self):
+        league_match = self.create_league_match_with_unresolved_entry()
+        league_match.pair2.participant = self.entry2.participant
+        league_match.pair2.save(update_fields=["participant"])
+        tournament_match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", pair1=self.entry1, pair2=self.entry2,
+        )
+        for order, (match, field, view, args) in enumerate((
+            (league_match, "round_robin_match", "input_match_score", [league_match.id]),
+            (tournament_match, "tournament_match", "input_tournament_match_score",
+             [self.tournament.code, tournament_match.id]),
+        ), 1):
+            with self.subTest(view=view):
+                schedule = Schedule.objects.create(court=self.court, order=order, **{field: match})
+                target = reverse("schedule_view", args=[self.tournament.code]) + f"#schedule-{schedule.id}"
+                response = self.client.get(reverse("schedule_view", args=[self.tournament.code]))
+                cell = self._schedule_cell_html(response, schedule).split("</td>")[0]
+                score_url = re.search(r'data-score-url="([^"]+)"', cell).group(1)
+                self.assertEqual(score_url, reverse(view, args=args) + "?" + urlencode({"next": target}, safe="/"))
+                self.assertIn(f"%23schedule-{schedule.id}", score_url)
+                self.assertEqual(self.client.get(score_url).context["back_url"], target)
+                winning_games = match.match_games // 2 + 1
+                response = self.client.post(score_url, {"pair1_games": winning_games, "pair2_games": 0})
+                self.assertRedirects(response, target, fetch_redirect_response=False)
+                match.refresh_from_db()
+                self.assertEqual(match.pair1_games, winning_games)
+                response = self.client.post(score_url, {"action": "delete"})
+                self.assertRedirects(response, target, fetch_redirect_response=False)
+
+    def test_tournament_score_next_rejects_external_urls_for_back_save_and_delete(self):
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", pair1=self.entry1, pair2=self.entry2,
+        )
+        default_url = reverse("category_stage_overview", args=[self.category.id])
+        base_url = reverse("input_tournament_match_score", args=[self.tournament.code, match.id])
+        for next_url in ("https://example.com/", "//example.com", ""):
+            with self.subTest(next_url=next_url):
+                url = base_url + "?" + urlencode({"next": next_url})
+                self.assertEqual(self.client.get(url).context["back_url"], default_url)
+                response = self.client.post(url, {
+                    "pair1_games": match.match_games // 2 + 1, "pair2_games": 0,
+                })
+                self.assertRedirects(response, default_url, fetch_redirect_response=False)
+                response = self.client.post(url, {"action": "delete"})
+                self.assertRedirects(response, default_url, fetch_redirect_response=False)
+                response = self.client.post(url, {"action": "retire_pair1"})
+                self.assertRedirects(response, default_url, fetch_redirect_response=False)
+                self.client.post(url, {"action": "delete"})
+
+    def test_schedule_modes_browser_keyboard_storage_and_referee_dialog(self):
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            self.skipTest("Playwright is not installed")
+        match = TournamentMatch.objects.create(
+            bracket=self.bracket, round_number=1, match_number=1,
+            match_code="M1", pair1=self.entry1, pair2=self.entry2,
+        )
+        schedule = Schedule.objects.create(
+            court=self.court, order=1, tournament_match=match, called=True,
+        )
+        url = reverse("schedule_view", args=[self.tournament.code])
+        response = self.client.get(url)
+        html = response.content.decode()
+        # Enough rows to exercise both page scrolling and the table's own scroll area.
+        row = re.search(r"<tbody>\s*(<tr>.*?</tr>)", html, re.S).group(1)
+        preceding_rows = re.sub(r' id="schedule-\d+"', "", row) * 20
+        html = html.replace("<tbody>", "<tbody>" + preceding_rows, 1)
+        candidates_url = reverse("schedule_referee_candidates_api",
+                                 args=[self.tournament.code, schedule.id])
+        with sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch()
+            except Exception as exc:
+                self.skipTest(f"Chromium is unavailable: {exc}")
+            with browser:
+                page = browser.new_page()
+                errors = []
+                page.on("pageerror", lambda exc: errors.append(str(exc)))
+
+                def respond(route):
+                    if route.request.url.endswith(candidates_url):
+                        route.fulfill(json={"success": True, "match_label": "M1"})
+                    else:
+                        route.fulfill(content_type="text/html", body=html)
+
+                page.route("**/*", respond)
+                page.goto("http://schedule.test" + url)
+                cell = page.locator(f"#schedule-{schedule.id}")
+                active = page.locator("#scheduleModeToolbar .is-active")
+                self.assertEqual(active.get_attribute("data-mode"), "score")
+                page.locator('[data-mode="move"]').click()
+                self.assertEqual(cell.get_attribute("aria-disabled"), "true")
+                self.assertIn("is-mode-disabled", cell.get_attribute("class"))
+                disabled_dialog = page.locator("#scheduleDisabledDialog")
+                for operation in (lambda: cell.click(force=True), lambda: cell.press("Enter"),
+                                  lambda: cell.press("Space")):
+                    operation()
+                    page.wait_for_selector("#scheduleDisabledDialog[open]")
+                    self.assertEqual(page.locator("#scheduleDisabledReason").inner_text(),
+                                     "呼出済のため移動できません。")
+                    page.keyboard.press("Escape")
+                    self.assertFalse(disabled_dialog.evaluate("el => el.open"))
+                cell.click(force=True)
+                page.locator("#scheduleDisabledCloseButton").click()
+                self.assertFalse(disabled_dialog.evaluate("el => el.open"))
+                cell.click(force=True)
+                page.mouse.click(1, 1)
+                self.assertFalse(disabled_dialog.evaluate("el => el.open"))
+                self.assertEqual(page.url, "http://schedule.test" + url)
+                page.reload()
+                self.assertEqual(active.get_attribute("data-mode"), "move")
+                page.goto("http://schedule.test" + url + f"?anchor-check=1#schedule-{schedule.id}")
+                page.wait_for_function("""() => {
+                    const toolbar = document.querySelector('#scheduleModeToolbar');
+                    const cell = document.querySelector('td[id^="schedule-"]');
+                    const head = document.querySelector('.schedule-grid-table thead');
+                    return cell.getBoundingClientRect().top >= Math.max(
+                        toolbar.getBoundingClientRect().bottom,
+                        head.getBoundingClientRect().bottom
+                    );
+                }""")
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                toolbar_box = page.locator("#scheduleModeToolbar").bounding_box()
+                chrome_box = page.locator(".site-chrome").bounding_box()
+                self.assertGreaterEqual(toolbar_box["y"], chrome_box["y"] + chrome_box["height"] - 1)
+                self.assertLess(toolbar_box["y"], page.viewport_size["height"])
+                page.locator('[data-mode="pdf"]').click()
+                page.evaluate("window.open = (...args) => { window.openArgs = args; }")
+                cell.press("Space")
+                self.assertEqual(page.evaluate("window.openArgs"), [
+                    reverse("score_sheet_pdf", args=[schedule.id]), "_blank", "noopener",
+                ])
+                page.locator('[data-mode="referee"]').click()
+                cell.press("Enter")
+                page.wait_for_selector("#scheduleRefereeDialog[open]")
+                page.wait_for_function(
+                    "document.querySelector('#scheduleRefereeDialogTarget').textContent === 'M1'"
+                )
+                page.locator("#scheduleRefereeCancelButton").click()
+                page.locator('[data-mode="score"]').click()
+                score_url = cell.get_attribute("data-score-url")
+                cell.press("Enter")
+                page.wait_for_url("http://schedule.test" + score_url)
+                page.locator('[data-mode="overview"]').click()
+                overview_url = cell.get_attribute("data-overview-url")
+                cell.press("Space")
+                page.wait_for_url("http://schedule.test" + overview_url)
+                # Storage failures must not prevent default selection or operation.
+                page.add_init_script("""
+                    Object.defineProperty(window, 'localStorage', {
+                        get() { throw new Error('Storage unavailable'); }
+                    });
+                """)
+                page.goto("http://schedule.test" + url)
+                self.assertEqual(active.get_attribute("data-mode"), "score")
+                page.locator('[data-mode="pdf"]').click()
+                self.assertEqual(active.get_attribute("data-mode"), "pdf")
+                self.assertEqual(errors, [])
+
     def test_schedule_result_link_without_tournament_stage_has_no_anchor(self):
         match = TournamentMatch.objects.create(
             bracket=self.bracket, round_number=1, match_number=1,
@@ -33972,7 +34283,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertEqual(response.status_code, 200)
         cell = self._schedule_cell_html(response, schedule)
         overview_url = reverse("category_stage_overview", args=[self.category.id])
-        self.assertRegex(cell, rf'href="{re.escape(overview_url)}">\s*結果表示')
+        self.assertIn(f'data-overview-url="{overview_url}"', cell)
         self.assertNotIn(f"#tournament-match-{match.id}", cell)
         self.assertNotIn(reverse("public_category_results", args=[
             self.tournament.code, self.category.id,

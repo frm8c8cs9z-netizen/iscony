@@ -81,6 +81,7 @@ from ..helpers.view import (
     _tournament_stage_overview_url,
     match_pair_is_determined,
     render_score_input,
+    safe_next_url,
 )
 
 
@@ -170,10 +171,7 @@ def input_tournament_match_score(request, code, match_id):
         match.match_games // 2
     ) + 1
 
-    back_url = request.GET.get(
-        "next",
-        _tournament_stage_overview_url(match),
-    )
+    back_url = safe_next_url(request) or _tournament_stage_overview_url(match)
 
     if request.method == "POST":
 
@@ -196,7 +194,7 @@ def input_tournament_match_score(request, code, match_id):
 
             _show_stage_advancement_warning(request)
 
-            next_url = request.GET.get("next")
+            next_url = safe_next_url(request)
 
             if next_url:
                 return redirect(next_url)
@@ -241,7 +239,7 @@ def input_tournament_match_score(request, code, match_id):
 
             _show_stage_advancement_warning(request)
 
-            next_url = request.GET.get("next")
+            next_url = safe_next_url(request)
 
             if next_url:
                 return redirect(next_url)
@@ -431,7 +429,7 @@ def input_tournament_match_score(request, code, match_id):
 
         _show_stage_advancement_warning(request)
 
-        next_url = request.GET.get("next")
+        next_url = safe_next_url(request)
 
         if next_url:
             return redirect(next_url)

@@ -272,6 +272,14 @@
         overflow: auto;
     }
 
+    .schedule-operation-table-wrapper {
+        max-height: calc(100vh - var(--schedule-table-head-top, 114px) - 20px);
+    }
+
+    .schedule-operation-table-wrapper td[data-schedule-id] {
+        scroll-margin-top: calc(var(--schedule-table-head-top, 114px) + var(--schedule-head-height, 40px) + 8px);
+    }
+
     .schedule-grid-table {
         min-width: 960px;
     }
@@ -890,6 +898,24 @@
     .schedule-match-card {
         min-width: 180px;
         text-align: left;
+    }
+
+    .schedule-grid-table td[data-schedule-id][role="button"] {
+        cursor: pointer;
+    }
+
+    .schedule-grid-table td[data-schedule-id][role="button"]:not(.is-mode-disabled):hover,
+    .schedule-grid-table td[data-schedule-id][role="button"]:focus-visible {
+        outline: 2px solid #1565c0;
+        outline-offset: -2px;
+    }
+
+    .schedule-grid-table td[data-schedule-id].is-mode-disabled {
+        cursor: default;
+    }
+
+    .schedule-grid-table td[data-schedule-id].is-mode-disabled .schedule-match-card {
+        opacity: 0.45;
     }
 
     .schedule-context {

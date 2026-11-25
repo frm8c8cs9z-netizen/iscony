@@ -14,8 +14,31 @@
     </a>
 </p>
 
+<div class="schedule-mode-toolbar schedule-sticky-controls" id="scheduleModeToolbar" role="group" aria-label="試合の操作">
+    <button type="button" class="schedule-mode-button is-active" data-mode="score" aria-pressed="true">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16 3l5 5L8 21H3v-5z"/></svg>
+        結果入力
+    </button>
+    <button type="button" class="schedule-mode-button" data-mode="overview" aria-pressed="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>
+        結果表示
+    </button>
+    <button type="button" class="schedule-mode-button" data-mode="pdf" aria-pressed="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5"/></svg>
+        採点票PDF
+    </button>
+    <button type="button" class="schedule-mode-button" data-mode="move" aria-pressed="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M19 9l3 3-3 3M9 5l3-3 3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
+        移動
+    </button>
+    <button type="button" class="schedule-mode-button" data-mode="referee" aria-pressed="false">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16.8 5.6 21.2 8 14 2 9.2h7.6z"/></svg>
+        審判
+    </button>
+</div>
+
 <p>
-    各試合カードの「結果表示」から、運営用の横断表示（Stage進行）の該当する試合やリーグへ移動できます。
+    上のボタンで操作を選び、試合のマスを押してください。「結果表示」では運営用の横断表示（Stage進行）の該当する試合やリーグへ移動します。
 </p>
 
 {% for block_table in block_tables %}
@@ -24,7 +47,7 @@
     <h2>{{ block_table.block.name }}</h2>
 {% endif %}
 
-<div class="table-wrapper schedule-table-wrapper">
+<div class="table-wrapper schedule-table-wrapper schedule-operation-table-wrapper">
 <table border="1" class="schedule-grid-table">
 
     <thead>
@@ -46,6 +69,7 @@
                 <th>{{ row.order }}</th>
 
                 {% for schedule in row.cells %}
+                    {% with match=schedule.match %}
                     <td
                         {% if schedule %}id="schedule-{{ schedule.id }}"{% endif %}
                         class="
@@ -58,10 +82,46 @@
                                 called-cell
                             {% endif %}
                         {% endif %}
-                    ">
+                    "
+                        {% if schedule %}
+                            tabindex="0" role="button" aria-disabled="false"
+                            data-schedule-id="{{ schedule.id }}"
+                            data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code schedule.id %}"
+                            data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code schedule.id 0 %}"
+                            data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code schedule.id %}"
+                            {% if schedule.is_round_robin %}
+                                data-score-url="{% url 'input_match_score' match.id %}?next={{ request.path|urlencode }}%23schedule-{{ schedule.id }}"
+                                data-overview-url="{{ match|round_robin_stage_overview_url }}"
+                            {% elif schedule.is_tournament %}
+                                {% if match.pair1.participant_id and match.pair2.participant_id %}
+                                    data-score-url="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path|urlencode }}%23schedule-{{ schedule.id }}"
+                                {% else %}
+                                    data-score-disabled-reason="対戦相手が決まっていません。"
+                                {% endif %}
+                                data-overview-url="{{ match|tournament_stage_overview_url }}"
+                            {% endif %}
+                            {% if schedule.match_has_score %}
+                                data-pdf-disabled-reason="結果入力済のため採点票は出力できません。"
+                            {% elif not match.pair1.participant_id or not match.pair2.participant_id %}
+                                data-pdf-disabled-reason="対戦相手が決まっていません。"
+                            {% else %}
+                                data-pdf-url="{% url 'score_sheet_pdf' schedule.id %}"
+                            {% endif %}
+                            {% if not schedule.is_locked_for_move %}
+                                data-move-url="{% url 'move_schedule' schedule.id %}"
+                            {% elif schedule.finished %}
+                                data-move-disabled-reason="完了のため移動できません。"
+                            {% elif schedule.started %}
+                                data-move-disabled-reason="試合中のため移動できません。"
+                            {% elif schedule.match_has_score %}
+                                data-move-disabled-reason="結果入力済のため移動できません。"
+                            {% else %}
+                                data-move-disabled-reason="呼出済のため移動できません。"
+                            {% endif %}
+                        {% endif %}
+                    >
                         {% if schedule %}
 
-                            {% with match=schedule.match %}
                                 <div class="schedule-match-card">
                                     {% if schedule.is_round_robin %}
                                         <div class="schedule-context schedule-context-muted">
@@ -104,23 +164,6 @@
                                             </div>
                                         {% endif %}
 
-                                        <div class="schedule-actions">
-                                            <button
-                                                type="button"
-                                                class="schedule-referee-trigger"
-                                                data-schedule-id="{{ schedule.id }}"
-                                                data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code schedule.id %}"
-                                                data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code schedule.id 0 %}"
-                                                data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code schedule.id %}"
-                                            >
-                                                審判
-                                            </button>
-                                            <a href="{% url 'input_match_score' match.id %}?next={{ request.path }}">
-                                                結果入力
-                                            </a>
-                                            <a href="{{ match|round_robin_stage_overview_url }}">
-                                                結果表示
-                                            </a>
                                     {% elif schedule.is_tournament %}
                                         <div class="schedule-context schedule-context-muted">
                                             <span>{{ match.bracket.category.name }}</span>
@@ -190,53 +233,14 @@
                                             </div>
                                         {% endif %}
 
-                                        <div class="schedule-actions">
-                                            <button
-                                                type="button"
-                                                class="schedule-referee-trigger"
-                                                data-schedule-id="{{ schedule.id }}"
-                                                data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code schedule.id %}"
-                                                data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code schedule.id 0 %}"
-                                                data-referee-save-url="{% url 'set_schedule_referee_api' tournament.code schedule.id %}"
-                                            >
-                                                審判
-                                            </button>
-                                            {% if match.pair1 and match.pair2 %}
-                                                <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
-                                                    結果入力
-                                                </a>
-                                            {% else %}
-                                                <a href="{% url 'input_tournament_match_score' tournament.code match.id %}?next={{ request.path }}">
-                                                    確認
-                                                </a>
-                                            {% endif %}
-                                            <a href="{{ match|tournament_stage_overview_url }}">
-                                                結果表示
-                                            </a>
                                     {% endif %}
-
-                                        {% if match.pair1_games == None and match.pair2_games == None and match.pair1 and match.pair2 %}
-                                            <a
-                                                href="{% url 'score_sheet_pdf' schedule.id %}"
-                                                target="_blank"
-                                            >
-                                                採点票PDF
-                                            </a>
-                                        {% endif %}
-
-                                        {% if not schedule.is_locked_for_move %}
-                                            <a href="{% url 'move_schedule' schedule.id %}">
-                                                移動
-                                            </a>
-                                        {% endif %}
-                                    </div>
                                 </div>
-                            {% endwith %}
 
                         {% else %}
                             -
                         {% endif %}
                     </td>
+                    {% endwith %}
                 {% endfor %}
             </tr>
         {% endfor %}
@@ -253,6 +257,14 @@
 <div hidden>
     {% csrf_token %}
 </div>
+
+<dialog id="scheduleDisabledDialog" class="schedule-referee-dialog"
+        aria-labelledby="scheduleDisabledReason">
+    <p id="scheduleDisabledReason"></p>
+    <div class="schedule-referee-dialog-actions">
+        <button type="button" id="scheduleDisabledCloseButton">閉じる</button>
+    </div>
+</dialog>
 
 <dialog id="scheduleRefereeDialog" class="schedule-referee-dialog">
     <h4 id="scheduleRefereeDialogTarget"></h4>
@@ -363,7 +375,7 @@
         let sourceOptions = [];
         let selectedSourceOption = null;
         let activeTab = "direct";
-        let activeTriggerButton = null;
+        let activeCell = null;
 
         if (
             !dialog || !targetEl || !currentLabelEl
@@ -685,7 +697,7 @@
         }
 
         function loadSourceOptions(stageId, currentSource) {
-            if (!activeTriggerButton || !stageId) {
+            if (!activeCell || !stageId) {
                 sourceOptions = [];
                 selectedSourceOption = null;
                 renderSourceOptions();
@@ -694,7 +706,7 @@
             }
 
             const template = (
-                activeTriggerButton.dataset.refereeSourceOptionsUrlTemplate
+                activeCell.dataset.refereeSourceOptionsUrlTemplate
             );
             const url = template.replace("/0/", "/" + stageId + "/");
             sourceResultList.innerHTML = "";
@@ -736,11 +748,11 @@
         }
 
         function postReferee(body) {
-            if (!activeTriggerButton) {
+            if (!activeCell) {
                 return;
             }
 
-            fetch(activeTriggerButton.dataset.refereeSaveUrl, {
+            fetch(activeCell.dataset.refereeSaveUrl, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded",
@@ -761,8 +773,8 @@
                 });
         }
 
-        function openDialog(triggerButton) {
-            activeTriggerButton = triggerButton;
+        function openDialog(cell) {
+            activeCell = cell;
             selectedCandidateId = null;
             candidates = [];
             refereeGroups = [];
@@ -785,7 +797,7 @@
             updateDuplicateAlert();
             dialog.showModal();
 
-            fetch(triggerButton.dataset.refereeCandidatesUrl, {
+            fetch(cell.dataset.refereeCandidatesUrl, {
                 headers: {"X-Requested-With": "XMLHttpRequest"},
             })
                 .then(parseJsonResponse)
@@ -868,13 +880,100 @@
                 });
         }
 
-        document.querySelectorAll(".schedule-referee-trigger").forEach(
-            function(button) {
-                button.addEventListener("click", function() {
-                    openDialog(button);
-                });
-            }
+        const disabledDialog = document.querySelector("#scheduleDisabledDialog");
+        const disabledReason = document.querySelector("#scheduleDisabledReason");
+        document.querySelector("#scheduleDisabledCloseButton").addEventListener(
+            "click", () => disabledDialog.close()
         );
+        disabledDialog.addEventListener("click", function(event) {
+            const rect = disabledDialog.getBoundingClientRect();
+            if (event.target === disabledDialog && (
+                event.clientX < rect.left || event.clientX > rect.right
+                || event.clientY < rect.top || event.clientY > rect.bottom
+            )) {
+                disabledDialog.close();
+            }
+        });
+
+        const toolbar = document.querySelector("#scheduleModeToolbar");
+        const modeButtons = Array.from(toolbar.querySelectorAll("[data-mode]"));
+        const cells = document.querySelectorAll("td[data-schedule-id]");
+        const storageKey = "scheduleOperationMode";
+        let selectedMode = "score";
+        try {
+            const savedMode = localStorage.getItem(storageKey);
+            if (modeButtons.some(button => button.dataset.mode === savedMode)) {
+                selectedMode = savedMode;
+            }
+        } catch (error) {
+            selectedMode = "score";
+        }
+
+        function canOperate(cell) {
+            return Boolean(selectedMode === "referee"
+                ? cell.dataset.refereeCandidatesUrl
+                : cell.dataset[selectedMode + "Url"]);
+        }
+
+        function updateMode() {
+            const modeButton = modeButtons.find(
+                button => button.dataset.mode === selectedMode
+            );
+            modeButtons.forEach(function(button) {
+                const active = button === modeButton;
+                button.classList.toggle("is-active", active);
+                button.setAttribute("aria-pressed", String(active));
+            });
+            cells.forEach(function(cell) {
+                const enabled = canOperate(cell);
+                cell.classList.toggle("is-mode-disabled", !enabled);
+                cell.setAttribute("aria-disabled", String(!enabled));
+                cell.setAttribute("aria-label", modeButton.textContent.trim()
+                    + "：" + cell.querySelector(".schedule-match-card").textContent
+                        .trim().replace(/\s+/g, " "));
+            });
+        }
+
+        function operateCell(cell) {
+            if (!canOperate(cell)) {
+                disabledReason.textContent = cell.dataset[selectedMode + "DisabledReason"];
+                disabledDialog.showModal();
+                return;
+            }
+            if (selectedMode === "referee") {
+                openDialog(cell);
+            } else if (selectedMode === "pdf") {
+                window.open(cell.dataset.pdfUrl, "_blank", "noopener");
+            } else {
+                window.location.assign(cell.dataset[selectedMode + "Url"]);
+            }
+        }
+
+        modeButtons.forEach(function(button) {
+            button.addEventListener("click", function() {
+                selectedMode = button.dataset.mode;
+                try {
+                    localStorage.setItem(storageKey, selectedMode);
+                } catch (error) {
+                    // Storage may be unavailable; keep the selected mode in memory.
+                }
+                updateMode();
+            });
+        });
+        cells.forEach(function(cell) {
+            cell.addEventListener("click", function() {
+                operateCell(cell);
+            });
+            cell.addEventListener("keydown", function(event) {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    if (!event.repeat) {
+                        operateCell(cell);
+                    }
+                }
+            });
+        });
+        updateMode();
 
         tabButtons.forEach(function(button) {
             button.addEventListener("click", function() {
@@ -950,7 +1049,52 @@
         });
     }
 
+    function setupScheduleStickyOffsets() {
+        const siteChrome = document.querySelector(".site-chrome");
+        const stickyControls = document.querySelector(".schedule-sticky-controls");
+        if (!siteChrome || !stickyControls) {
+            return;
+        }
+
+        function updateOffset() {
+            const chromeHeight = siteChrome.offsetHeight;
+            document.documentElement.style.setProperty(
+                "--schedule-sticky-top", chromeHeight + "px"
+            );
+            document.documentElement.style.setProperty(
+                "--schedule-table-head-top",
+                (chromeHeight + stickyControls.offsetHeight) + "px"
+            );
+            document.querySelectorAll(".schedule-operation-table-wrapper").forEach(
+                function(wrapper) {
+                    wrapper.style.setProperty("--schedule-head-height",
+                        wrapper.querySelector("thead").offsetHeight + "px");
+                }
+            );
+        }
+
+        function restoreCellPosition() {
+            const target = document.getElementById(window.location.hash.slice(1));
+            if (target && target.matches("td[data-schedule-id]")) {
+                target.scrollIntoView({block: "start", inline: "nearest"});
+            }
+        }
+
+        updateOffset();
+        window.addEventListener("load", function() {
+            updateOffset();
+            window.setTimeout(restoreCellPosition, 0);
+        });
+        window.addEventListener("resize", updateOffset);
+        if (window.ResizeObserver) {
+            const observer = new ResizeObserver(updateOffset);
+            observer.observe(siteChrome);
+            observer.observe(stickyControls);
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
+        setupScheduleStickyOffsets();
         setupScheduleRefereeMode();
     });
 </script>
