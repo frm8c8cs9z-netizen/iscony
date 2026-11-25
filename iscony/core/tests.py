@@ -9124,6 +9124,7 @@ class ScheduleBlockDetailTests(TestCase):
             re.S,
         )
         self.assertIsNotNone(active_tab)
+        self.assertIn('draggable="true"', active_tab.group(0))
         self.assertContains(response, self.block1.name)
         self.assertContains(response, self.block2.name)
         self.assertContains(response, "schedule-mode-toolbar")
