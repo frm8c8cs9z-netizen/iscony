@@ -34011,7 +34011,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                     "data-score-url": score_url + "?next=" + url + f"%23schedule-{schedule.id}",
                     "data-overview-url": overview_url,
                     "data-pdf-url": reverse("score_sheet_pdf", args=[schedule.id]),
-                    "data-move-url": reverse("move_schedule", args=[schedule.id]),
+                    "data-move-enabled": "true",
                     "data-referee-candidates-url": reverse(
                         "schedule_referee_candidates_api",
                         args=[self.tournament.code, schedule.id]),
@@ -34047,7 +34047,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                 ))
                 self.assertEqual(response.status_code, 200)
                 cell = self._schedule_cell_html(response, schedule).split("</td>")[0]
-                self.assertEqual('data-move-url="' in cell,
+                self.assertEqual('data-move-enabled="' in cell,
                                  state in ("ready", "unresolved"))
                 self.assertEqual('data-pdf-url="' in cell,
                                  state not in ("scored", "unresolved"))
@@ -34473,7 +34473,7 @@ class TournamentScheduleBehaviorTests(TestCase):
         self.assertNotContains(response, "採点票PDF")
         self.assertNotContains(
             response,
-            reverse("move_schedule", kwargs={"schedule_id": league_schedule.id}),
+            f"/schedule/{league_schedule.id}/move/",
         )
         self.assertNotContains(
             response,
@@ -39958,4 +39958,4 @@ from .csv_header_tests import JapaneseCsvHeaderTests  # noqa: E402,F401
 
 from .leg_number_tests import LegNumberTests  # noqa: F401,E402
 from .score_sheet_preprint_tests import ScoreSheetPreprintTests  # noqa: F401,E402
-from .schedule_move_tests import ScheduleMoveTests  # noqa: F401,E402
+from .schedule_move_tests import ScheduleMoveTests, ScheduleMoveScreenTests  # noqa: F401,E402

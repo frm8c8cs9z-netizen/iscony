@@ -5,6 +5,7 @@ core.views.dashboard
 リーグ戦、トーナメント、CSV取込、PDF出力は専用ビューへ分離済み。
 """
 
+import json
 from collections import defaultdict
 
 from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
@@ -43,11 +44,11 @@ from ..models import (
     TournamentBracket,
     TournamentMatch,
     Schedule,
+    ScheduleMoveHistory,
 )
 
 from ..forms import (
     ScheduleEditForm,
-    ScheduleMoveForm,
     CategoryForm,
     DayPlayerChangeForm,
     ParticipantForm,
@@ -254,13 +255,19 @@ def court_status(request, tournament_code):
     )
 
 
-def _schedule_block_tables(tournament):
+
+def _attach_schedule_moves(rows, tournament):
+    from ..selectors.schedule_moves import attach_schedule_moves
+    attach_schedule_moves(rows, tournament)
+
+
+def _schedule_block_tables(tournament, *, append_slots=False):
     """
     Schedule はリーグ戦とトーナメントの両方を指すため、
     select_related では両系統の match 情報をまとめて先読みする。
     """
     schedules = (
-        Schedule.objects
+        Schedule.all_objects
         .filter(
             court__tournament=tournament
         )
@@ -310,6 +317,8 @@ def _schedule_block_tables(tournament):
     )
     schedule_list = prepare_related_result_labels(schedules)
 
+    _attach_schedule_moves(schedule_list, tournament)
+
     courts = list(Court.objects.filter(
         tournament=tournament
     ).order_by(
@@ -320,8 +329,11 @@ def _schedule_block_tables(tournament):
     court_ids_by_block = {}
     max_order_by_block = {}
     schedule_by_cell = {}
+    last_order_by_court = {}
 
     for schedule in schedule_list:
+        key = (schedule.schedule_block_id, schedule.court_id)
+        last_order_by_court[key] = max(last_order_by_court.get(key, 0), schedule.order)
         block_by_id[schedule.schedule_block_id] = schedule.schedule_block
         court_ids_by_block.setdefault(
             schedule.schedule_block_id,
@@ -338,6 +350,11 @@ def _schedule_block_tables(tournament):
                 schedule.order,
             )
         ] = schedule
+
+    if append_slots:
+        for block in ScheduleBlock.objects.filter(tournament=tournament):
+            block_by_id[block.pk] = block
+            court_ids_by_block.setdefault(block.pk, {court.pk for court in courts})
 
     blocks = sorted(
         block_by_id.values(),
@@ -357,7 +374,7 @@ def _schedule_block_tables(tournament):
         max_order = max_order_by_block.get(block.id, 0)
         table = []
 
-        for order in range(1, max_order + 1):
+        for order in range(1, max_order + 1 + int(append_slots)):
             row = {"order": order, "cells": []}
 
             for court in block_courts:
@@ -371,6 +388,15 @@ def _schedule_block_tables(tournament):
                     )
                 )
 
+            if append_slots:
+                for index, court in enumerate(block_courts):
+                    last = last_order_by_court.get((block.pk, court.pk), 0)
+                    if order == last + 1:
+                        row["cells"][index] = {
+                            "is_append_slot": True, "court_id": court.pk,
+                            "schedule_block_id": block.pk, "schedule_block": block,
+                            "order": order,
+                        }
             table.append(row)
 
         block_tables.append({
@@ -386,7 +412,7 @@ def _attach_resolved_referee_participants(block_tables):
     for block_table in block_tables:
         for row in block_table["table"]:
             for schedule in row["cells"]:
-                if schedule and schedule.referee_source_type:
+                if schedule and not isinstance(schedule, dict) and schedule.referee_source_type:
                     schedule.referee_resolved_participant = (
                         resolve_schedule_referee(schedule)
                     )
@@ -402,7 +428,7 @@ def schedule_view(
         Tournament,
         code=tournament_code
     )
-    block_tables = _schedule_block_tables(tournament)
+    block_tables = _schedule_block_tables(tournament, append_slots=True)
 
     _attach_resolved_referee_participants(block_tables)
 
@@ -413,6 +439,13 @@ def schedule_view(
             "tournament": tournament,
             "block_tables": block_tables,
             "show_block_headings": len(block_tables) > 1,
+            "last_move": ScheduleMoveHistory.objects.filter(
+                tournament=tournament, reverted_at__isnull=True,
+            ).select_related(
+                "schedule__court", "schedule__schedule_block",
+                "schedule__round_robin_match", "schedule__tournament_match",
+                "ghost__court", "ghost__schedule_block",
+            ).first(),
         }
     )
 
@@ -1845,10 +1878,17 @@ def schedule_maintenance(request, code):
 
 def edit_schedule(request, schedule_id):
     """
-    Schedule のコート・順番・状態を編集する。
+    コート・順番・呼出/試合中/完了を直接書き換える管理用の道具。
 
-    コートや順番が変わる場合は、単純な save ではなく
-    move_schedule() に任せて前詰め・挿入の整合性を保つ。
+    コート・順番の変更は services.operations.move_schedule で動かす。
+    移動元は前に詰め、抜け殻も移動履歴(ScheduleMoveHistory)も残さず、
+    元に戻す対象にもならない。
+    当日の移動は進行表の「移動」モード(抜け殻と履歴が残る)に一本化した。
+    この画面は入力ミスの修正、事前の組み直し、抜け殻を作りたくない調整など、
+    抜け殻を残さず直接直すために残している(2026-11-25 ユーザーと合意)。
+    当日にここで順番を動かすと試合が動いたことが画面から分からないため、
+    本部が必要と判断したときだけ使う前提とする。
+    詳細は docs/design_day_of_schedule_move.md の8節を参照。
     """
 
     schedule = get_object_or_404(
@@ -2553,91 +2593,6 @@ def update_schedule_status(request, schedule_id, status):
     return redirect(
         "schedule_view",
         tournament_code=schedule.court.tournament.code
-    )
-
-
-def move_schedule_view(request, schedule_id):
-    """
-    Schedule を別コート・別順番へ移動する画面。
-
-    実際の並び替えは services.move_schedule() に集約している。
-    """
-
-    schedule = get_object_or_404(
-        Schedule,
-        id=schedule_id
-    )
-
-    tournament = schedule.court.tournament
-    
-    target_court = schedule.court
-
-    if request.method == "POST":
-
-        form = ScheduleMoveForm(
-            request.POST,
-            tournament=tournament
-        )
-
-        if form.is_valid():
-            
-            target_court = form.cleaned_data["target_court"]
-
-            try:
-
-                move_schedule(
-                    schedule=schedule,
-                    source_court=schedule.court,
-                    source_order=schedule.order,
-                    target_court=form.cleaned_data["target_court"],
-                    target_order=form.cleaned_data["target_order"],
-                )
-
-                return redirect(
-                    "schedule_maintenance",
-                    code=tournament.code
-                )
-
-            except ValidationError as e:
-
-                form.add_error(
-                    None,
-                    e.message
-                )
-
-    else:
-
-        form = ScheduleMoveForm(
-            initial={
-                "target_court": schedule.court,
-                "target_order": schedule.order,
-            },
-            tournament=tournament
-        )
-
-    target_schedules = Schedule.objects.filter(
-        schedule_block=schedule.schedule_block,
-        court=target_court
-    ).select_related(
-        "round_robin_match",
-        "round_robin_match__pair1",
-        "round_robin_match__pair2",
-        "tournament_match",
-        "tournament_match__pair1",
-        "tournament_match__pair2",
-    ).order_by(
-        "order"
-    )
-
-    return render(
-        request,
-        "core/move_schedule.html",
-        {
-            "schedule": schedule,
-            "form": form,
-            "target_schedules": target_schedules,
-            "target_court": target_court,
-        }
     )
 
 
@@ -3698,7 +3653,7 @@ def schedule_block_detail(request, code, schedule_block_id):
             )
         return _schedule_block_split(request, tournament, block)
 
-    schedules = Schedule.objects.filter(
+    schedules = Schedule.all_objects.filter(
         schedule_block=block,
     ).select_related(
         "court",
@@ -3722,6 +3677,9 @@ def schedule_block_detail(request, code, schedule_block_id):
         "court__name",
         "order",
     )
+
+    schedules = list(schedules)
+    _attach_schedule_moves(schedules, tournament)
 
     unscheduled_tournament_matches = TournamentMatch.objects.filter(
         bracket__category__tournament=tournament,
@@ -3894,7 +3852,7 @@ def schedule_block_detail(request, code, schedule_block_id):
     ]
     max_schedule_count = max(
         (
-            len(column["schedules"])
+            max((s.order for s in column["schedules"]), default=0)
             for column in court_schedule_columns
         ),
         default=0,
@@ -3906,8 +3864,8 @@ def schedule_block_detail(request, code, schedule_block_id):
         for column in court_schedule_columns:
             court_schedules = column["schedules"]
 
-            if row_order <= len(court_schedules):
-                schedule = court_schedules[row_order - 1]
+            schedule = next((s for s in court_schedules if s.order == row_order), None)
+            if schedule is not None:
 
                 if schedule.is_tournament:
                     match = schedule.tournament_match
@@ -3934,12 +3892,12 @@ def schedule_block_detail(request, code, schedule_block_id):
 
                 cells.append({
                     "court": column["court"],
-                    "kind": "assigned",
+                    "kind": "ghost" if schedule.is_ghost else "assigned",
                     "schedule": schedule,
                     "context_label": context_label,
                     "label": main_label,
                 })
-            elif row_order == len(court_schedules) + 1:
+            elif row_order <= max((s.order for s in court_schedules), default=0) + 1:
                 cells.append({
                     "court": column["court"],
                     "kind": "empty",
@@ -4869,3 +4827,44 @@ def delete_tournament_confirm(request, code):
     return render(request, "core/delete_tournament_confirm.html", {
         "tournament": tournament, "impact": tournament_deletion_impact(tournament),
     })
+
+
+def day_schedule_move_api(request, code):
+    """当日の移動は抜け殻と履歴を残す。大会外のIDは受け付けない。"""
+    from ..services.schedule_moves import move_schedule_with_ghost
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "POSTで送信してください。"}, status=405)
+    tournament = get_object_or_404(Tournament, code=code)
+    try:
+        data = json.loads(request.body)
+        if not isinstance(data, dict):
+            raise ValueError
+        values = {}
+        for key in ("schedule_id", "target_block_id", "target_court_id", "target_order"):
+            value = data[key]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError
+            values[key] = value
+        schedule = Schedule.all_objects.get(pk=values["schedule_id"], schedule_block__tournament=tournament)
+        block = ScheduleBlock.objects.get(pk=values["target_block_id"], tournament=tournament)
+        court = Court.objects.get(pk=values["target_court_id"], tournament=tournament)
+        move_schedule_with_ghost(schedule, block, court, values["target_order"], user=request.user)
+    except (ValueError, KeyError, TypeError, UnicodeDecodeError):
+        return JsonResponse({"success": False, "error": "移動先と試合を正しく指定してください。"}, status=400)
+    except (Schedule.DoesNotExist, ScheduleBlock.DoesNotExist, Court.DoesNotExist):
+        return JsonResponse({"success": False, "error": "同じ大会内の試合・日程区分・コートを指定してください。"}, status=404)
+    except ValidationError as exc:
+        return JsonResponse({"success": False, "error": " / ".join(exc.messages)}, status=400)
+    return JsonResponse({"success": True, "schedule_id": schedule.pk})
+
+
+def undo_schedule_move_api(request, code):
+    from ..services.schedule_moves import undo_last_schedule_move
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "POSTで送信してください。"}, status=405)
+    tournament = get_object_or_404(Tournament, code=code)
+    try:
+        history = undo_last_schedule_move(tournament, user=request.user)
+    except ValidationError as exc:
+        return JsonResponse({"success": False, "error": " / ".join(exc.messages)}, status=400)
+    return JsonResponse({"success": True, "schedule_id": history.schedule_id})

@@ -1,0 +1,1 @@
+{% if schedule.move_origin %}<span class="schedule-move-origin">{% if schedule.move_origin.schedule_block_id != schedule.schedule_block_id %}{{ schedule.move_origin.schedule_block.name }} {% endif %}{{ schedule.move_origin.court.name }}コート第{{ schedule.move_origin.order }}試合から移動</span>{% endif %}

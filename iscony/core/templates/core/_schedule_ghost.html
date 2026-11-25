@@ -1,0 +1,16 @@
+{% load core_extras %}
+<div class="schedule-ghost{% if compact %} schedule-ghost--compact{% endif %}" data-ghost="true">
+    <span class="schedule-ghost-badge">移動済み</span>
+    {% with destination=schedule.ghost_current match=schedule.ghost_current.match %}
+    {% if compact %}
+    <div class="schedule-ghost-code">{% if destination.is_round_robin %}{{ match.match_key }}{% else %}{{ match.match_label|default:match.match_code }}{% endif %}</div>
+    <div class="schedule-ghost-destination schedule-ghost-destination--compact">→{% if destination.schedule_block_id != schedule.schedule_block_id %}{{ destination.schedule_block.name }} {% endif %}{{ destination.court.name }}第{{ destination.order }}</div>
+    {% else %}
+    <div class="schedule-ghost-description">
+        {% if destination.is_round_robin %}{{ match.group.category.name }} / {{ match.group.name }} {{ match.pair1.display_order }}-{{ match.pair2.display_order }} ({{ match.match_key }}){% else %}{{ match.bracket.category.name }} / {{ match.match_label|default:match.match_code }}{% endif %}
+        <br>{{ match.pair1.code }} {% entry_short_name_html match.pair1 %} vs {{ match.pair2.code }} {% entry_short_name_html match.pair2 %}
+    </div>
+    <div class="schedule-ghost-destination">→ {% if destination.schedule_block_id != schedule.schedule_block_id %}{{ destination.schedule_block.name }} {% endif %}{{ destination.court.name }}コート 第{{ destination.order }}試合へ</div>
+    {% endif %}
+    {% endwith %}
+</div>

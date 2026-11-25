@@ -214,8 +214,9 @@ class OrganizationDisplayTests(TestCase):
 
     def test_queries_unchanged_between_modes_and_data_sizes(self):
         self.client.logout()
+        # public_scheduleは抜け殻と移動元表示(attach_schedule_moves)で定数2本。
         # 横断表示は、大会全体の足番号表示判定をリクエスト内で1回だけ取得する。
-        for screen, expected in (("public_schedule", 12), ("overview", 48)):
+        for screen, expected in (("public_schedule", 14), ("overview", 48)):
             counts = {}
             for mode in ("formal", "abbreviation"):
                 self.mode(mode)
@@ -226,7 +227,7 @@ class OrganizationDisplayTests(TestCase):
             self.assertEqual(counts, {"formal": expected, "abbreviation": expected})
             print(f"ORGANIZATION_QUERIES {screen}: {counts}")
         self._add_pairs_and_matches(2)
-        for screen, expected in (("public_schedule", 12), ("overview", 48)):
+        for screen, expected in (("public_schedule", 14), ("overview", 48)):
             with CaptureQueriesContext(connection) as queries:
                 response = self.client.get(self.urls[screen])
             self.assertEqual(response.status_code, 200)

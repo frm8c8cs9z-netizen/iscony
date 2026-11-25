@@ -200,14 +200,7 @@
                     編集
                 </a>
 
-                {% if not schedule.is_locked_for_move %}
-                    <a
-                        href="{% url 'move_schedule' schedule.id %}"
-                        class="btn btn-sm btn-warning"
-                    >
-                        移動
-                    </a>
-                {% endif %}
+                <small>編集で順番を変えると、抜け殻と移動履歴は残りません。当日の移動は進行表の「移動」を使ってください。</small>
             </td>
         </tr>
 

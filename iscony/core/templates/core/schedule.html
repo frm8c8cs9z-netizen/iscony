@@ -2,6 +2,7 @@
 {% load core_extras %}
 
 {% block content %}
+{% include "core/_schedule_move_styles.html" %}
 
 <h1>
     {{ tournament.name }}
@@ -35,6 +36,8 @@
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 7.2H22l-6 4.8 2.4 7.2L12 16.8 5.6 21.2 8 14 2 9.2h7.6z"/></svg>
         審判
     </button>
+    <button type="button" id="scheduleUndoButton" {% if not last_move %}disabled{% endif %}>元に戻す{% if last_move %}:{% with current=last_move.schedule origin=last_move.ghost match=last_move.schedule.match %}{% if current.is_round_robin %}{{ match.match_key }}{% else %}{{ match.match_label|default:match.match_code }}{% endif %}({% if origin and current.schedule_block_id != origin.schedule_block_id %}{{ current.schedule_block.name }} {% endif %}{{ current.court.name }}コート第{{ current.order }}試合 → {% if origin %}{% if current.schedule_block_id != origin.schedule_block_id %}{{ origin.schedule_block.name }} {% endif %}{{ origin.court.name }}コート第{{ origin.order }}試合{% else %}移動元の枠がありません{% endif %}){% endwith %}{% endif %}</button>
+    <span id="scheduleMoveInstruction" role="status" aria-live="polite"></span>
 </div>
 
 <p>
@@ -71,7 +74,7 @@
                 {% for schedule in row.cells %}
                     {% with match=schedule.match %}
                     <td
-                        {% if schedule %}id="schedule-{{ schedule.id }}"{% endif %}
+                        {% if schedule.id %}id="schedule-{{ schedule.id }}"{% endif %}
                         class="
                         {% if schedule %}
                             {% if schedule.finished %}
@@ -84,7 +87,18 @@
                         {% endif %}
                     "
                         {% if schedule %}
+                            data-block-id="{{ schedule.schedule_block_id }}"
+                            data-block-name="{{ schedule.schedule_block.name }}"
+                            data-court-id="{{ schedule.court_id }}"
+                            data-order="{{ row.order }}"
+                            {% if schedule.is_ghost %}data-is-ghost="true"{% endif %}
+                            {% if schedule.is_append_slot %}data-is-append="true"{% endif %}
+                            {% if schedule.is_locked_for_move %}data-move-locked="true"{% endif %}
                             tabindex="0" role="button" aria-disabled="false"
+                            data-move-cell="true"
+                            {% if schedule.is_ghost or schedule.is_append_slot %}
+                                {% if schedule.is_ghost %}data-schedule-id="{{ schedule.id }}"{% endif %}
+                            {% else %}
                             data-schedule-id="{{ schedule.id }}"
                             data-referee-candidates-url="{% url 'schedule_referee_candidates_api' tournament.code schedule.id %}"
                             data-referee-source-options-url-template="{% url 'schedule_referee_source_options_api' tournament.code schedule.id 0 %}"
@@ -108,7 +122,7 @@
                                 data-pdf-url="{% url 'score_sheet_pdf' schedule.id %}"
                             {% endif %}
                             {% if not schedule.is_locked_for_move %}
-                                data-move-url="{% url 'move_schedule' schedule.id %}"
+                                data-move-enabled="true"
                             {% elif schedule.finished %}
                                 data-move-disabled-reason="完了のため移動できません。"
                             {% elif schedule.started %}
@@ -118,9 +132,15 @@
                             {% else %}
                                 data-move-disabled-reason="呼出済のため移動できません。"
                             {% endif %}
+                            {% endif %}
                         {% endif %}
                     >
-                        {% if schedule %}
+                        {% if schedule.is_ghost %}
+                            {% include "core/_schedule_ghost.html" %}
+                        {% elif schedule.is_append_slot %}
+                            -
+                        {% elif schedule %}
+                            {% include "core/_schedule_move_origin.html" %}
 
                                 <div class="schedule-match-card">
                                     {% if schedule.is_round_robin %}
@@ -897,7 +917,7 @@
 
         const toolbar = document.querySelector("#scheduleModeToolbar");
         const modeButtons = Array.from(toolbar.querySelectorAll("[data-mode]"));
-        const cells = document.querySelectorAll("td[data-schedule-id]");
+        const cells = document.querySelectorAll("td[data-move-cell]");
         const storageKey = "scheduleOperationMode";
         let selectedMode = "score";
         try {
@@ -910,12 +930,15 @@
         }
 
         function canOperate(cell) {
+            if (cell.dataset.isGhost || cell.dataset.isAppend) return selectedMode === "move";
+            if (selectedMode === "move") return !cell.dataset.moveLocked;
             return Boolean(selectedMode === "referee"
                 ? cell.dataset.refereeCandidatesUrl
                 : cell.dataset[selectedMode + "Url"]);
         }
 
         function updateMode() {
+            cancelMove();
             const modeButton = modeButtons.find(
                 button => button.dataset.mode === selectedMode
             );
@@ -926,15 +949,20 @@
             });
             cells.forEach(function(cell) {
                 const enabled = canOperate(cell);
+                cell.draggable = selectedMode === "move" && enabled && !cell.dataset.isGhost && !cell.dataset.isAppend;
                 cell.classList.toggle("is-mode-disabled", !enabled);
                 cell.setAttribute("aria-disabled", String(!enabled));
                 cell.setAttribute("aria-label", modeButton.textContent.trim()
-                    + "：" + cell.querySelector(".schedule-match-card").textContent
+                    + "：" + cell.textContent
                         .trim().replace(/\s+/g, " "));
             });
         }
 
         function operateCell(cell) {
+            if (busy) return;
+            if (selectedMode === "move") { operateMove(cell); return; }
+            if (cell.dataset.isAppend) return;
+            if (cell.dataset.isGhost) { showReason("移動済みの枠です。"); return; }
             if (!canOperate(cell)) {
                 disabledReason.textContent = cell.dataset[selectedMode + "DisabledReason"];
                 disabledDialog.showModal();
@@ -948,6 +976,98 @@
                 window.location.assign(cell.dataset[selectedMode + "Url"]);
             }
         }
+
+        let moveSource = null;
+        let busy = false;
+        const instruction = document.querySelector("#scheduleMoveInstruction");
+        const moveUrl = "{% url 'day_schedule_move_api' tournament.code %}";
+        const undoUrl = "{% url 'undo_schedule_move_api' tournament.code %}";
+        const targetLockedReason = "呼出済・試合中・完了・結果入力済の試合の前には移動できません。";
+        function showReason(message) {
+            disabledReason.textContent = message;
+            if (!disabledDialog.open) disabledDialog.showModal();
+        }
+        function cancelMove() {
+            moveSource = null;
+            instruction.textContent = "";
+            cells.forEach(cell => cell.classList.remove("is-move-source", "is-move-target", "is-move-candidate"));
+        }
+        function selectSource(cell) {
+            cancelMove();
+            moveSource = cell;
+            cell.classList.add("is-move-source");
+            cells.forEach(target => target.classList.toggle("is-move-candidate", target !== cell && !target.dataset.moveLocked));
+            instruction.textContent = "移動先のマスを押してください（取りやめ: もう一度押す / Esc）";
+        }
+        async function postMove(url, body) {
+            if (busy) return;
+            busy = true;
+            try {
+                const response = await fetch(url, {
+                    method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken},
+                    body: JSON.stringify(body),
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    showReason(data.error || "移動に失敗しました。");
+                    return;
+                }
+                window.location.hash = "schedule-" + data.schedule_id;
+                window.location.reload();
+            } catch (error) {
+                showReason("通信に失敗しました。進行表を読み直して確認してください。");
+            } finally {
+                busy = false;
+                cancelMove();
+            }
+        }
+        function operateMove(cell) {
+            if (!moveSource) {
+                if (cell.dataset.isGhost) { showReason("移動済みの枠です。"); return; }
+                if (cell.dataset.isAppend) return;
+                if (cell.dataset.moveLocked) { showReason(cell.dataset.moveDisabledReason); return; }
+                selectSource(cell);
+                return;
+            }
+            if (cell === moveSource) { cancelMove(); return; }
+            if (cell.dataset.moveLocked) { showReason(targetLockedReason); return; }
+            if (cell.dataset.blockId !== moveSource.dataset.blockId && !window.confirm(
+                moveSource.dataset.blockName + "から" + cell.dataset.blockName + "へ移動します。よろしいですか。"
+            )) return;
+            postMove(moveUrl, {
+                schedule_id: Number(moveSource.dataset.scheduleId),
+                target_block_id: Number(cell.dataset.blockId),
+                target_court_id: Number(cell.dataset.courtId), target_order: Number(cell.dataset.order),
+            });
+        }
+        document.addEventListener("keydown", event => { if (event.key === "Escape") cancelMove(); });
+        cells.forEach(function(cell) {
+            cell.addEventListener("dragstart", function(event) {
+                if (busy || selectedMode !== "move" || cell.dataset.moveLocked || cell.dataset.isGhost || cell.dataset.isAppend) {
+                    event.preventDefault(); return;
+                }
+                selectSource(cell);
+                event.dataTransfer.setData("text/plain", cell.dataset.scheduleId);
+                event.dataTransfer.effectAllowed = "move";
+            });
+            cell.addEventListener("dragover", function(event) {
+                if (selectedMode !== "move" || !moveSource || busy) return;
+                event.preventDefault();
+                cell.classList.add("is-move-target");
+            });
+            cell.addEventListener("dragleave", () => cell.classList.remove("is-move-target"));
+            cell.addEventListener("drop", function(event) {
+                if (selectedMode !== "move" || !moveSource || busy) return;
+                event.preventDefault();
+                cell.classList.remove("is-move-target");
+                operateMove(cell);
+                cancelMove();
+            });
+            cell.addEventListener("dragend", cancelMove);
+        });
+        document.querySelector("#scheduleUndoButton").addEventListener("click", function() {
+            if (!busy && window.confirm("この移動を元に戻します。よろしいですか。")) postMove(undoUrl, {});
+        });
 
         modeButtons.forEach(function(button) {
             button.addEventListener("click", function() {

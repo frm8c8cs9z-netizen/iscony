@@ -4,6 +4,7 @@
 {% block site_brand_url %}{% url 'public_tournament_detail' tournament.public_token %}{% endblock %}
 
 {% block content %}
+{% include "core/_schedule_move_styles.html" %}
 
 <style>
     .public-schedule-note {
@@ -214,7 +215,10 @@
                                 {% endif %}
                             {% endif %}
                         ">
-                            {% if schedule %}
+                            {% if schedule.is_ghost %}
+                                {% include "core/_schedule_ghost.html" %}
+                            {% elif schedule %}
+                                {% include "core/_schedule_move_origin.html" %}
                                 {% with match=schedule.match %}
                                     {% if schedule.is_round_robin %}
                                         <a

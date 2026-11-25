@@ -1,6 +1,7 @@
 {% extends "core/base.html" %}
 
 {% block content %}
+{% include "core/_schedule_move_styles.html" %}
 
 <h2>{{ tournament.name }} {{ schedule_block.name }}</h2>
 
@@ -100,14 +101,18 @@
                                 </th>
                                 {% for cell in row.cells %}
                                     <td
-                                        class="schedule-court-column"
+                                        class="{% if cell.kind == 'ghost' %}schedule-ghost-column{% else %}schedule-court-column{% endif %}"
                                         data-court-id="{{ cell.court.id }}"
+                                        {% if cell.kind != "ghost" %}
                                         data-assign-url="{% url 'assign_schedule_slot_api' tournament.code schedule_block.id cell.court.id %}"
                                         data-unassign-range-url="{% url 'unassign_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
                                         data-move-range-url="{% url 'move_schedule_range_api' tournament.code schedule_block.id cell.court.id %}"
                                         data-move-range-to-block-url="{% url 'move_schedule_range_to_block_api' tournament.code schedule_block.id cell.court.id %}"
+                                        {% endif %}
                                     >
-                                        {% if cell.kind == "assigned" %}
+                                        {% if cell.kind == "ghost" %}
+                                            {% include "core/_schedule_ghost.html" with schedule=cell.schedule compact=True %}
+                                        {% elif cell.kind == "assigned" %}
                                             <div
                                                 class="schedule-slot-row schedule-slot-row--assigned"
                                                 draggable="true"

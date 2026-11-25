@@ -901,9 +901,14 @@ urlpatterns = [
     ),
 
     path(
-        "schedule/<int:schedule_id>/move/",
-        dashboard.move_schedule_view,
-        name="move_schedule",
+        "tournament/<str:code>/schedule/move/",
+        dashboard.day_schedule_move_api,
+        name="day_schedule_move_api",
+    ),
+    path(
+        "tournament/<str:code>/schedule/undo-move/",
+        dashboard.undo_schedule_move_api,
+        name="undo_schedule_move_api",
     ),
 
     path(
