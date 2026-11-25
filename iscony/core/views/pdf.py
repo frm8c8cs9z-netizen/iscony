@@ -1495,14 +1495,14 @@ def draw_score_sheet_content(
         40
     )
 
-    # リーグ戦では「何コート第何試合」などを欄外に印字する。
+    # 欄外の「何コート第何試合」は、QRの左に右端をそろえて印字する。
     if outside_text:
 
         x, y = positions[
             "margin_memo"
         ]
 
-        c.drawString(
+        c.drawRightString(
             x,
             y,
             outside_text
@@ -1516,7 +1516,8 @@ def draw_score_sheet_content(
             SCORE_SHEET_BASE_FONT,
             10,
         )
-        c.drawString(
+        # 検索コードはQRの真下に、QRと中心をそろえて印字する。
+        c.drawCentredString(
             x,
             y,
             match_key

@@ -27,6 +27,7 @@ def _length_mm(value):
 
 
 # margin_match / pair1_range / pair2_range のxは文字の左端。範囲は名前欄の左罫線から約1mm内側。
+# margin_memo のxは文字の右端(QRの左3mm)、match_key_value のxはQRの中心。
 SCORE_SHEET_POSITION_PATTERNS = {
     # ---------------------------------
     # 標準採点票(黒)
@@ -43,13 +44,13 @@ SCORE_SHEET_POSITION_PATTERNS = {
         "pair1_player2": _xy_mm(61.7, 203.6),
         "pair2_player1": _xy_mm(158.8, 217.7),
         "pair2_player2": _xy_mm(158.8, 203.6),
-        "margin_memo": _xy_mm(148.2, 266.3),
+        "margin_memo": _xy_mm(171.0, 274.0),
         "margin_match": _xy_mm(20.11, 266.3),
         "pair1_range": _xy_mm(38.94, 220.8),
         "pair2_range": _xy_mm(136.26, 220.8),
         "match_key": _xy_mm(149.0, 284.0),
-        "match_key_value": _xy_mm(149.0, 278.0),
-        "qr": _xy_mm(165.0, 271.0),
+        "match_key_value": _xy_mm(181.2, 269.4),
+        "qr": _xy_mm(171.2, 271.0),
         "qr_size": _length_mm(20),
         "org_width": _length_mm(31.8),
         "org_height": _length_mm(14.1),
@@ -70,13 +71,13 @@ SCORE_SHEET_POSITION_PATTERNS = {
         "pair1_player2": _xy_mm(61.7, 206.0),
         "pair2_player1": _xy_mm(158.8, 220.1),
         "pair2_player2": _xy_mm(158.8, 206.0),
-        "margin_memo": _xy_mm(148.2, 268.8),
+        "margin_memo": _xy_mm(173.0, 276.5),
         "margin_match": _xy_mm(20.4, 268.8),
         "pair1_range": _xy_mm(38.94, 223.3),
         "pair2_range": _xy_mm(137.27, 223.3),
         "match_key": _xy_mm(149.0, 286.5),
-        "match_key_value": _xy_mm(149.0, 280.5),
-        "qr": _xy_mm(165.0, 273.5),
+        "match_key_value": _xy_mm(183.2, 271.9),
+        "qr": _xy_mm(173.2, 273.5),
         "qr_size": _length_mm(20),
         "org_width": _length_mm(31.8),
         "org_height": _length_mm(14.1),
@@ -97,13 +98,13 @@ SCORE_SHEET_POSITION_PATTERNS = {
         "pair1_player2": _xy_mm(61.7, 203.6),
         "pair2_player1": _xy_mm(158.8, 217.7),
         "pair2_player2": _xy_mm(158.8, 203.6),
-        "margin_memo": _xy_mm(148.2, 266.3),
+        "margin_memo": _xy_mm(171.0, 274.0),
         "margin_match": _xy_mm(20.11, 266.3),
         "pair1_range": _xy_mm(38.94, 220.8),
         "pair2_range": _xy_mm(136.26, 220.8),
         "match_key": _xy_mm(149.0, 284.0),
-        "match_key_value": _xy_mm(149.0, 278.0),
-        "qr": _xy_mm(165.0, 271.0),
+        "match_key_value": _xy_mm(181.2, 269.4),
+        "qr": _xy_mm(171.2, 271.0),
         "qr_size": _length_mm(20),
         "org_width": _length_mm(31.8),
         "org_height": _length_mm(14.1),
