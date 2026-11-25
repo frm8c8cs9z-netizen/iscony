@@ -17,7 +17,7 @@ from itertools import combinations
 from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Max, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1113,18 +1113,6 @@ def import_participants(request, tournament_code):
                     "errors": ["確定したStageに割り付けた参加者がいるため、名簿を置き換えるCSV取込はできません。必要なら確定を解除してください。"],
                 })
 
-            # 参加者CSVはカテゴリ作成の入口として扱う。
-            for category_name in category_names:
-                Category.objects.get_or_create(
-                    tournament=tournament,
-                    name=category_name
-                )
-
-            categories = Category.objects.filter(
-                tournament=tournament,
-                name__in=category_names
-            )
-
             if not category_names:
                 errors.append(
                     "取込対象の行がありません。"
@@ -1139,59 +1127,80 @@ def import_participants(request, tournament_code):
                         "errors": errors,
                     }
                 )
-            # 取込対象カテゴリの参加者名簿をCSV内容で置き換える。
-            Participant.objects.filter(
-                category__in=categories
-            ).delete()
+            try:
+                with transaction.atomic():
+                    # 参加者CSVはカテゴリ作成の入口として扱う。
+                    for category_name in category_names:
+                        Category.objects.get_or_create(
+                            tournament=tournament,
+                            name=category_name
+                        )
 
-            next_display_order = {}
+                    categories = Category.objects.filter(
+                        tournament=tournament,
+                        name__in=category_names
+                    )
 
-            for row in rows:
+                    # 取込対象カテゴリの参加者名簿をCSV内容で置き換える。
+                    Participant.objects.filter(
+                        category__in=categories
+                    ).delete()
 
-                category_name = row["category"].strip()
+                    next_display_order = {}
 
-                category = Category.objects.get(
-                    tournament=tournament,
-                    name=category_name
-                )
-                next_display_order[category_name] = (
-                    next_display_order.get(category_name, 0) + 1
-                )
+                    for row in rows:
 
-                entry_code = row["entry_code"].strip()
-                player1_name = row["player1_name"].strip()
-                player2_name = row["player2_name"].strip()
-                org_values = _participant_row_org_values(
-                    row,
-                    has_player2=bool(player2_name),
-                )
-                legacy_organization = (
-                    org_values.get("org1", {}).get(1)
-                    or row.get("organization", "")
-                    or ""
-                )
+                        category_name = row["category"].strip()
 
-                participant = Participant.objects.create(
-                    category=category,
-                    entry_code=entry_code,
-                    display_order=next_display_order[category_name],
-                    organization=legacy_organization,
-                    player1_name=player1_name,
-                    player2_name=player2_name,
-                    original_player1_name=player1_name,
-                    original_player2_name=player2_name,
-                    current_player1_name=None,
-                    current_player1_short_name=None,
-                    current_player2_name=None,
-                    current_player2_short_name=None,
-                    has_day_player_change=False,
-                )
+                        category = Category.objects.get(
+                            tournament=tournament,
+                            name=category_name
+                        )
+                        next_display_order[category_name] = (
+                            next_display_order.get(category_name, 0) + 1
+                        )
 
-                _save_participant_organization_values(
-                    tournament=tournament,
-                    participant=participant,
-                    org_values=org_values,
-                )
+                        entry_code = row["entry_code"].strip()
+                        player1_name = row["player1_name"].strip()
+                        player2_name = row["player2_name"].strip()
+                        org_values = _participant_row_org_values(
+                            row,
+                            has_player2=bool(player2_name),
+                        )
+                        legacy_organization = (
+                            org_values.get("org1", {}).get(1)
+                            or row.get("organization", "")
+                            or ""
+                        )
+
+                        participant = Participant.objects.create(
+                            category=category,
+                            entry_code=entry_code,
+                            display_order=next_display_order[category_name],
+                            organization=legacy_organization,
+                            player1_name=player1_name,
+                            player2_name=player2_name,
+                            original_player1_name=player1_name,
+                            original_player2_name=player2_name,
+                            current_player1_name=None,
+                            current_player1_short_name=None,
+                            current_player2_name=None,
+                            current_player2_short_name=None,
+                            has_day_player_change=False,
+                        )
+
+                        _save_participant_organization_values(
+                            tournament=tournament,
+                            participant=participant,
+                            org_values=org_values,
+                        )
+
+            except (DatabaseError, ValidationError) as exc:
+                error_text = " / ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
+                return render(request, "core/import_participants.html", {
+                    "tournament": tournament, "form": form,
+                    "errors": [f"取込中にエラーが起きたため、名簿は変更していません。(詳細: {error_text})"],
+                })
 
             return redirect(
                 "maintenance_menu",

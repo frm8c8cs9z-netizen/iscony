@@ -15,7 +15,7 @@ from django.contrib.messages import get_messages
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connection
+from django.db import DatabaseError, IntegrityError, connection
 from django.db.models import Q
 from django.db.models.signals import post_save
 from django.template import Context, Template
@@ -13649,6 +13649,99 @@ class ImportParticipantsCsvTests(TestCase):
                 2: "テスト所属",
             },
         )
+
+    def test_second_row_save_failure_preserves_existing_roster(self):
+        from unittest.mock import patch
+        from .views.csv import _save_participant_organization_values
+
+        self._post_csv(
+            "category,entry_code,organization,player1_name,player2_name\n"
+            "男子A,OLD,元の所属,元の選手1,元の選手2\n"
+        )
+        original_participants = list(Participant.objects.values())
+        original_org_values = list(ParticipantOrganizationValue.objects.values())
+
+        for error_type in (IntegrityError, DatabaseError, ValidationError):
+            with self.subTest(error_type=error_type):
+                saved_rows = []
+
+                def save_or_fail(**kwargs):
+                    saved_rows.append(kwargs["participant"].pk)
+                    if len(saved_rows) == 2:
+                        raise error_type("2行目の保存に失敗")
+                    return _save_participant_organization_values(**kwargs)
+
+                with patch(
+                    "core.views.csv._save_participant_organization_values",
+                    side_effect=save_or_fail,
+                ) as save:
+                    response = self._post_csv(
+                        "category,entry_code,organization,player1_name,player2_name\n"
+                        "男子A,NEW1,新所属1,新選手1A,新選手1B\n"
+                        "男子A,NEW2,新所属2,新選手2A,新選手2B\n"
+                    )
+
+                self.assertEqual(save.call_count, 2)
+                self.assertTemplateUsed(response, "core/import_participants.html")
+                self.assertContains(response, "取込中にエラーが起きたため、名簿は変更していません。")
+                self.assertContains(response, "詳細: 2行目の保存に失敗")
+                self.assertEqual(list(Participant.objects.values()), original_participants)
+                self.assertEqual(list(ParticipantOrganizationValue.objects.values()), original_org_values)
+                self.assertFalse(Participant.objects.filter(entry_code__in=["NEW1", "NEW2"]).exists())
+
+    def test_second_row_save_failure_rolls_back_new_category(self):
+        from unittest.mock import patch
+        from .views.csv import _save_participant_organization_values
+
+        saved_rows = []
+
+        def save_or_fail(**kwargs):
+            saved_rows.append(kwargs["participant"].pk)
+            if len(saved_rows) == 2:
+                raise IntegrityError("2行目の保存に失敗")
+            return _save_participant_organization_values(**kwargs)
+
+        with patch(
+            "core.views.csv._save_participant_organization_values",
+            side_effect=save_or_fail,
+        ) as save:
+            response = self._post_csv(
+                "category,entry_code,organization,player1_name,player2_name\n"
+                "新カテゴリ,NEW1,新所属1,新選手1A,新選手1B\n"
+                "新カテゴリ,NEW2,新所属2,新選手2A,新選手2B\n"
+            )
+
+        self.assertEqual(save.call_count, 2)
+        self.assertContains(response, "取込中にエラーが起きたため、名簿は変更していません。")
+        self.assertFalse(Category.objects.filter(tournament=self.tournament).exists())
+        self.assertFalse(Participant.objects.exists())
+        self.assertFalse(ParticipantOrganizationValue.objects.exists())
+        self.assertFalse(TournamentOrganizationField.objects.exists())
+
+    def test_unexpected_save_exception_is_not_caught(self):
+        from unittest.mock import patch
+
+        with patch(
+            "core.views.csv._save_participant_organization_values",
+            side_effect=RuntimeError("予期しない例外"),
+        ):
+            with self.assertRaisesMessage(RuntimeError, "予期しない例外"):
+                self._post_csv(
+                    "category,entry_code,player1_name,player2_name\n"
+                    "新カテゴリ,NEW1,新選手1,新選手2\n"
+                )
+
+        self.assertFalse(Category.objects.filter(tournament=self.tournament).exists())
+        self.assertFalse(Participant.objects.exists())
+
+    def test_empty_csv_does_not_create_categories(self):
+        response = self._post_csv(
+            "category,entry_code,player1_name,player2_name\n"
+        )
+
+        self.assertContains(response, "取込対象の行がありません。")
+        self.assertFalse(Category.objects.filter(tournament=self.tournament).exists())
+        self.assertFalse(Participant.objects.exists())
 
     def test_legacy_organization_delimited_by_middle_dot_is_split(self):
         response = self._post_csv(
