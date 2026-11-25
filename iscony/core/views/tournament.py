@@ -30,6 +30,7 @@ from ..models import (
     Group,
     Participant,
     Schedule,
+    ScheduleBlock,
     Stage,
     Tournament,
     TournamentBracket,
@@ -52,6 +53,8 @@ from ..rendering.tournament_svg_builder import (
     build_tournament_bracket_display_data,
 )
 from ..selectors.tournament_brackets import build_tournament_round_data
+from ..services.operations import assign_match_to_schedule_slot
+
 from ..services import (
     assign_participant_to_tournament_entry,
     assign_participant_to_tournament_entry_with_swap,
@@ -1618,16 +1621,18 @@ def add_tournament_match_schedule(request, code, match_id):
 
         if form.is_valid():
 
-            Schedule.objects.create(
-                tournament_match=match,
-                court=form.cleaned_data["court"],
-                order=form.cleaned_data["order"],
-            )
-
-            return redirect(
-                "schedule_maintenance",
-                code=tournament.code
-            )
+            try:
+                assign_match_to_schedule_slot(
+                    match, ScheduleBlock.get_default(tournament),
+                    form.cleaned_data["court"], position=form.cleaned_data["order"],
+                )
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                return redirect(
+                    "schedule_maintenance",
+                    code=tournament.code
+                )
 
     else:
 

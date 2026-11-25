@@ -39958,3 +39958,4 @@ from .csv_header_tests import JapaneseCsvHeaderTests  # noqa: E402,F401
 
 from .leg_number_tests import LegNumberTests  # noqa: F401,E402
 from .score_sheet_preprint_tests import ScoreSheetPreprintTests  # noqa: F401,E402
+from .schedule_move_tests import ScheduleMoveTests  # noqa: F401,E402

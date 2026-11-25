@@ -2,6 +2,8 @@
 
 import secrets
 
+from django.conf import settings
+
 from django.db import models, transaction
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -2749,7 +2751,21 @@ class AdvancementSource(models.Model):
 # =========================================================
 # 新コート割・進行順
 # =========================================================
+class ScheduleManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_ghost=False)
+
+
 class Schedule(models.Model):
+    objects = ScheduleManager()
+    all_objects = models.Manager()
+
+    is_ghost = models.BooleanField(default=False)
+    ghost_of = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE,
+        related_name="ghosts",
+    )
+
 
     schedule_block = models.ForeignKey(
         ScheduleBlock,
@@ -2844,6 +2860,8 @@ class Schedule(models.Model):
     )
 
     class Meta:
+        base_manager_name = "all_objects"
+        default_manager_name = "objects"
         unique_together = (
             "schedule_block",
             "court",
@@ -2865,6 +2883,18 @@ class Schedule(models.Model):
             raise ValidationError(
                 "日程区分とコートは同じ大会に属している必要があります。"
             )
+
+        if self.is_ghost:
+            if self.round_robin_match_id or self.tournament_match_id:
+                raise ValidationError("抜け殻に試合は指定できません。")
+            if not self.ghost_of_id:
+                raise ValidationError("抜け殻には移動した試合の枠を指定してください。")
+            if any((self.called, self.started, self.finished)) or any(
+                getattr(self, field.attname)
+                for field in self._meta.fields if field.name.startswith("referee_")
+            ):
+                raise ValidationError("抜け殻に進行状態や審判は指定できません。")
+            return
 
         if self.round_robin_match and self.tournament_match:
             raise ValidationError(
@@ -2889,6 +2919,14 @@ class Schedule(models.Model):
             )
 
         super().save(*args, **kwargs)
+
+    @property
+    def ghost_destination(self):
+        """表示時点の行き先。番号の変更もそのまま反映する。"""
+        if not self.is_ghost or not self.ghost_of_id:
+            return None
+        destination = self.ghost_of
+        return (destination.schedule_block, destination.court, destination.order)
 
     @property
     def match(self):
@@ -2959,6 +2997,28 @@ class Schedule(models.Model):
             f"{self.court.name} "
             f"第{self.order}試合"
         )
+
+
+class ScheduleMoveHistory(models.Model):
+    """当日の試合移動と、その取り消しの記録。"""
+
+    tournament = models.ForeignKey(Tournament, on_delete=models.CASCADE)
+    schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE, related_name="move_histories")
+    ghost = models.ForeignKey(Schedule, null=True, blank=True, on_delete=models.SET_NULL,
+                              related_name="ghost_move_histories")
+    from_schedule_block = models.ForeignKey(ScheduleBlock, on_delete=models.CASCADE, related_name="+")
+    from_court = models.ForeignKey(Court, on_delete=models.CASCADE, related_name="+")
+    from_order = models.IntegerField()
+    to_schedule_block = models.ForeignKey(ScheduleBlock, on_delete=models.CASCADE, related_name="+")
+    to_court = models.ForeignKey(Court, on_delete=models.CASCADE, related_name="+")
+    to_order = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL)
+    reverted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
 
 
 class ScheduleReplacementHistory(models.Model):

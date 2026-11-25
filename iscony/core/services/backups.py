@@ -35,6 +35,7 @@ MODEL_DISPLAY_NAMES = {
     "core.court": "コート",
     "core.scheduleblock": "日程区分",
     "core.schedule": "進行表の枠",
+    "core.schedulemovehistory": "進行表の移動履歴",
     "core.schedulereplacementhistory": "進行表の差し替え履歴",
 }
 
@@ -66,7 +67,11 @@ def collect_tournament_objects(tournament):
             if model not in (OperationSnapshot, TournamentBackup)
             for obj in objects
         ),
-        key=lambda obj: (obj._meta.label_lower, obj.pk),
+        key=lambda obj: (
+            2 if obj._meta.model_name == "schedulemovehistory" else
+            1 if obj._meta.model_name == "schedule" and obj.is_ghost else 0,
+            obj._meta.label_lower, obj.pk,
+        ),
     )
 
 
@@ -139,6 +144,10 @@ def _deserialize_backup(backup, using, *, tournament_pk=None):
             tournament_count += 1
     if tournament_count != 1:
         raise ValidationError("バックアップに対象大会のデータがありません。")
+    objects.sort(key=lambda item: (
+        2 if item.object._meta.model_name == "schedulemovehistory" else
+        1 if item.object._meta.model_name == "schedule" and item.object.is_ghost else 0,
+    ))
     return objects, keys
 
 
@@ -191,7 +200,7 @@ def restore_tournament_backup(backup):
                 if not isinstance(obj, (Tournament, OperationSnapshot, TournamentBackup)):
                     by_model[type(obj)].append(obj.pk)
             for model, pks in by_model.items():
-                model.objects.using(using).filter(pk__in=pks).delete()
+                model._base_manager.using(using).filter(pk__in=pks).delete()
             for item in objects:
                 item.save(using=using)
             connections[using].check_constraints()
@@ -243,6 +252,7 @@ def _compatible_schema_version(saved, current):
         "0063_tournamententry_added_on_day_and_more",
         "0064_tournament_leg_numbers",
         "0065_tournament_score_sheet_print_match_code",
+        "0066_schedule_ghost_and_move_history",
     ]
     return saved == current or (
         saved in compatible and current in compatible

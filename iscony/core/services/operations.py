@@ -487,13 +487,16 @@ def clone_tournament_without_results(source, *, name, code):
                     source_pair=None,
                 )
 
+        schedule_orders = {}
         for old in Schedule.objects.filter(
             court__tournament=source,
-        ).order_by("id"):
+        ).order_by("schedule_block_id", "court_id", "order", "id"):
+            key = (old.schedule_block_id, old.court_id)
+            schedule_orders[key] = schedule_orders.get(key, 0) + 1
             Schedule.objects.create(
                 schedule_block=schedule_block_map[old.schedule_block_id],
                 court=court_map[old.court_id],
-                order=old.order,
+                order=schedule_orders[key],
                 round_robin_match=round_robin_match_map.get(
                     old.round_robin_match_id
                 ),
@@ -1777,7 +1780,7 @@ def insert_round_robin_schedule(
         raise ValidationError("この追加対戦はすでに進行表へ登録されています。")
 
     with transaction.atomic():
-        target_schedule = Schedule.objects.select_for_update().filter(
+        target_schedule = Schedule.all_objects.select_for_update().filter(
             schedule_block=schedule_block,
             court=court,
             order=order,
@@ -1824,7 +1827,7 @@ def insert_round_robin_schedule(
             )
 
         target_schedules = list(
-            Schedule.objects.select_for_update().filter(
+            Schedule.all_objects.select_for_update().filter(
                 schedule_block=schedule_block,
                 court=court,
                 order__gte=order,
@@ -1969,6 +1972,9 @@ def unassign_schedule(schedule):
     後続の試合順を1つずつ前へ詰める。
     """
 
+    if schedule.is_ghost:
+        raise ValidationError("抜け殻は操作できません。")
+
     if schedule.is_locked_for_move:
         raise ValidationError(
             "呼出済・試合中・完了・結果入力済の試合は取り消せません。"
@@ -1981,7 +1987,7 @@ def unassign_schedule(schedule):
     with transaction.atomic():
         schedule.delete()
 
-        later_schedules = Schedule.objects.filter(
+        later_schedules = Schedule.all_objects.filter(
             schedule_block=schedule_block,
             court=court,
             order__gt=order,
@@ -2005,6 +2011,9 @@ def move_schedule(
         court=target_court,
         order=target_order,
     ).first()
+
+    if schedule.is_ghost:
+        raise ValidationError("抜け殻は操作できません。")
 
     if schedule.is_locked_for_move:
         raise ValidationError(
@@ -2035,14 +2044,14 @@ def move_schedule(
         ):
             insert_order -= 1
 
-        temp_order = 1000000 + schedule.id
+        temp_order = -schedule.id
 
         # 移動対象を一旦退避
         schedule.order = temp_order
         schedule.save()
 
         # 元コートを前詰め
-        source_schedules = Schedule.objects.filter(
+        source_schedules = Schedule.all_objects.filter(
             schedule_block=schedule.schedule_block,
             court=source_court,
             order__gt=source_order,
@@ -2057,7 +2066,7 @@ def move_schedule(
 
         # 移動先を一旦かなり後ろへ退避
         target_schedules = list(
-            Schedule.objects.filter(
+            Schedule.all_objects.filter(
                 schedule_block=schedule.schedule_block,
                 court=target_court,
                 order__gte=insert_order,
@@ -2091,14 +2100,18 @@ def merge_schedule_blocks(source_block, target_block):
     if source_block.tournament_id != target_block.tournament_id:
         raise ValidationError("同じ大会内のブロック同士のみ統合できます。")
 
+    from ..models import ScheduleMoveHistory
+
     courts = Court.objects.filter(
-        schedule__schedule_block=source_block,
-    ).distinct()
+        pk__in=Schedule.all_objects.filter(
+            schedule_block=source_block,
+        ).values("court_id"),
+    )
 
     with transaction.atomic():
         for court in courts:
             moving = list(
-                Schedule.objects.filter(
+                Schedule.all_objects.filter(
                     schedule_block=source_block,
                     court=court,
                 ).order_by(
@@ -2113,7 +2126,7 @@ def merge_schedule_blocks(source_block, target_block):
                 )
 
             max_order_in_target = (
-                Schedule.objects.filter(
+                Schedule.all_objects.filter(
                     schedule_block=target_block,
                     court=court,
                 )
@@ -2126,13 +2139,13 @@ def merge_schedule_blocks(source_block, target_block):
             for offset, item in enumerate(moving):
                 item.order = 1000000 + offset
 
-            Schedule.objects.bulk_update(moving, ["order"])
+            Schedule.all_objects.bulk_update(moving, ["order"])
 
             for offset, item in enumerate(moving, start=1):
                 item.schedule_block = target_block
                 item.order = max_order_in_target + offset
 
-            Schedule.objects.bulk_update(
+            Schedule.all_objects.bulk_update(
                 moving,
                 [
                     "schedule_block",
@@ -2140,6 +2153,14 @@ def merge_schedule_blocks(source_block, target_block):
                 ],
             )
 
+        # Keep move histories when deleting the source block. Undo uses the ghost
+        # position after merging, rather than the original order in the history.
+        ScheduleMoveHistory.objects.filter(from_schedule_block=source_block).update(
+            from_schedule_block=target_block,
+        )
+        ScheduleMoveHistory.objects.filter(to_schedule_block=source_block).update(
+            to_schedule_block=target_block,
+        )
         source_block.delete()
 
 
@@ -2148,6 +2169,9 @@ def move_schedule_tail_to_block(schedule, target_block):
     schedule と、同じ(schedule_block, court)内でschedule以降(order>=)の
     全Scheduleを、target_blockへ移す。
     """
+
+    if schedule.is_ghost:
+        raise ValidationError("抜け殻は操作できません。")
 
     source_block = schedule.schedule_block
     court = schedule.court
@@ -2174,7 +2198,7 @@ def move_schedule_tail_to_block(schedule, target_block):
         )
 
     max_order_in_target = (
-        Schedule.objects.filter(
+        Schedule.all_objects.filter(
             schedule_block=target_block,
             court=court,
         )
@@ -2184,23 +2208,33 @@ def move_schedule_tail_to_block(schedule, target_block):
         or 0
     )
 
+    removed_orders = [item.order for item in moving]
     with transaction.atomic():
         for offset, item in enumerate(moving):
             item.order = 1000000 + offset
 
-        Schedule.objects.bulk_update(moving, ["order"])
+        Schedule.all_objects.bulk_update(moving, ["order"])
 
         for offset, item in enumerate(moving, start=1):
             item.schedule_block = target_block
             item.order = max_order_in_target + offset
 
-        Schedule.objects.bulk_update(
+        Schedule.all_objects.bulk_update(
             moving,
             [
                 "schedule_block",
                 "order",
             ],
         )
+
+        # 範囲内に残した抜け殻も、取り除いた試合数だけ前へ詰める。
+        for item in Schedule.all_objects.filter(
+            schedule_block=source_block, court=court,
+        ).order_by("order"):
+            delta = sum(order < item.order for order in removed_orders)
+            if delta:
+                item.order -= delta
+                item.save(update_fields=["order"])
 
 
 def unassign_schedule_range(schedule_block, court, start_order, end_order):
@@ -2237,15 +2271,14 @@ def unassign_schedule_range(schedule_block, court, start_order, end_order):
         for item in range_schedules:
             item.delete()
 
-        later_schedules = Schedule.objects.filter(
-            schedule_block=schedule_block,
-            court=court,
-            order__gt=hi,
-        ).order_by("order")
-
-        for item in later_schedules:
-            item.order -= removed_count
-            item.save()
+        removed_orders = [row.order for row in range_schedules]
+        for item in Schedule.all_objects.filter(
+            schedule_block=schedule_block, court=court,
+        ).order_by("order"):
+            delta = sum(order < item.order for order in removed_orders)
+            if delta:
+                item.order -= delta
+                item.save(update_fields=["order"])
 
     return removed_count
 
@@ -2306,7 +2339,7 @@ def move_schedule_range(
                 return range_schedule_ids
 
             all_schedules = list(
-                Schedule.objects.filter(
+                Schedule.all_objects.filter(
                     schedule_block=schedule_block,
                     court=source_court,
                     order__lt=1000000,
@@ -2339,12 +2372,12 @@ def move_schedule_range(
             for offset, item in enumerate(reordered):
                 item.order = 1000000 + offset
 
-            Schedule.objects.bulk_update(reordered, ["order"])
+            Schedule.all_objects.bulk_update(reordered, ["order"])
 
             for offset, item in enumerate(reordered, start=1):
                 item.order = offset
 
-            Schedule.objects.bulk_update(reordered, ["order"])
+            Schedule.all_objects.bulk_update(reordered, ["order"])
             return range_schedule_ids
 
         current_target_order = target_order
@@ -2409,10 +2442,9 @@ def move_schedule_range_to_block(
             "呼出済み・進行中・完了済みの試合が含まれるため、移動できません。"
         )
 
-    removed_count = len(moving)
-
+    selected_orders = [row.order for row in moving]
     max_order_in_target = (
-        Schedule.objects.filter(
+        Schedule.all_objects.filter(
             schedule_block=target_block,
             court=court,
         )
@@ -2426,31 +2458,27 @@ def move_schedule_range_to_block(
         for offset, item in enumerate(moving):
             item.order = 1000000 + offset
 
-        Schedule.objects.bulk_update(moving, ["order"])
+        Schedule.all_objects.bulk_update(moving, ["order"])
 
-        later_in_source = list(
-            Schedule.objects.filter(
-                schedule_block=source_block,
-                court=court,
-                order__gt=hi,
-                order__lt=1000000,
-            ).order_by("order")
-        )
-
-        for item in later_in_source:
-            item.order -= removed_count
-
-        Schedule.objects.bulk_update(later_in_source, ["order"])
+        removed_orders = selected_orders
+        for item in Schedule.all_objects.filter(
+            schedule_block=source_block, court=court, order__lt=1000000,
+        ).order_by("order"):
+            delta = sum(order < item.order for order in removed_orders)
+            if delta:
+                item.order -= delta
+                item.save(update_fields=["order"])
 
         for offset, item in enumerate(moving, start=1):
             item.schedule_block = target_block
             item.order = max_order_in_target + offset
 
-        Schedule.objects.bulk_update(moving, ["schedule_block", "order"])
+        Schedule.all_objects.bulk_update(moving, ["schedule_block", "order"])
 
     return [item.id for item in moving]
 
 
+@transaction.atomic
 def assign_match_to_schedule_slot(match, schedule_block, court, position=None):
     """
     match(RoundRobinMatchまたはTournamentMatchのインスタンス)を、
@@ -2476,7 +2504,7 @@ def assign_match_to_schedule_slot(match, schedule_block, court, position=None):
         raise ValidationError("同じ大会内のコートを指定してください。")
 
     max_order = (
-        Schedule.objects.filter(
+        Schedule.all_objects.filter(
             schedule_block=schedule_block,
             court=court,
         )

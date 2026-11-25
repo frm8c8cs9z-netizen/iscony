@@ -25,6 +25,9 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from django.core import serializers
+import json
+
 from ..models import (
     AdvancementSource,
     Category,
@@ -35,6 +38,7 @@ from ..models import (
     Schedule,
     ScheduleBlock,
     ScheduleReplacementHistory,
+    ScheduleMoveHistory,
     Stage,
     Tournament,
     TournamentEntry,
@@ -257,6 +261,14 @@ def build_category_snapshot_payload(category):
     }
 
 
+def _serialize_schedule_records(queryset):
+    # DjangoのJSONエンコーダによる日時のミリ秒への丸めを避ける。
+    return json.loads(json.dumps(
+        serializers.serialize("python", queryset),
+        default=lambda value: value.isoformat(),
+    ))
+
+
 def build_tournament_snapshot_payload(tournament):
     """大会全体を、カテゴリ単位スナップショットの束としてJSON化する。"""
 
@@ -274,6 +286,12 @@ def build_tournament_snapshot_payload(tournament):
         "created_at": timezone.now().isoformat(),
         "categories": categories,
         "score_sheet_print_match_code": tournament.score_sheet_print_match_code,
+        "schedule_ghosts": _serialize_schedule_records(Schedule.all_objects.filter(
+            schedule_block__tournament=tournament, is_ghost=True,
+        ).order_by("id")),
+        "schedule_move_histories": _serialize_schedule_records(ScheduleMoveHistory.objects.filter(
+            tournament=tournament,
+        ).order_by("id")),
     }
 
 
@@ -365,7 +383,7 @@ def _validate_category_restore_conflicts(category, payload):
     """復元対象の進行枠が他カテゴリに使われていないか確認する。"""
 
     for item in payload["schedules"]:
-        schedule = Schedule.objects.filter(
+        schedule = Schedule.all_objects.filter(
             schedule_block_id=item["schedule_block_id"],
             court_id=item["court_id"],
             order=item["order"],
@@ -376,6 +394,9 @@ def _validate_category_restore_conflicts(category, payload):
 
         if not schedule:
             continue
+
+        if schedule.is_ghost:
+            schedule = schedule.ghost_of
 
         if schedule.round_robin_match_id:
             schedule_category = schedule.round_robin_match.group.category
@@ -393,8 +414,12 @@ def _validate_category_restore_conflicts(category, payload):
 def _validate_schedule_restore_conflicts(category, schedule_items):
     """進行表だけの復元で、別カテゴリの枠を上書きしないことを確認する。"""
 
+    replacing_ids = set(_category_schedule_queryset(category).filter(
+        Q(schedule_block_id__in={item["schedule_block_id"] for item in schedule_items})
+        | Q(pk__in=[item["id"] for item in schedule_items])
+    ).values_list("pk", flat=True))
     for item in schedule_items:
-        schedule = Schedule.objects.filter(
+        schedule = Schedule.all_objects.filter(
             schedule_block_id=item["schedule_block_id"],
             court_id=item["court_id"],
             order=item["order"],
@@ -405,6 +430,14 @@ def _validate_schedule_restore_conflicts(category, schedule_items):
 
         if not schedule:
             continue
+
+        if schedule.is_ghost:
+            if schedule.ghost_of_id not in replacing_ids:
+                raise ValidationError(
+                    "復元先に移動済みの抜け殻が残っています。"
+                    f"{schedule.schedule_block.name} {schedule.court.name} 第{schedule.order}試合"
+                )
+            schedule = schedule.ghost_of
 
         if schedule.round_robin_match_id:
             schedule_category = schedule.round_robin_match.group.category
@@ -687,6 +720,10 @@ def restore_tournament_snapshot(snapshot):
             Tournament.objects.filter(pk=snapshot.tournament_id).update(
                 score_sheet_print_match_code=payload.get("score_sheet_print_match_code", True),
             )
+            ScheduleMoveHistory.objects.filter(tournament=snapshot.tournament).delete()
+            Schedule.all_objects.filter(
+                schedule_block__tournament=snapshot.tournament, is_ghost=True,
+            ).delete()
             for category in categories.values():
                 _category_schedule_queryset(category).delete()
 
@@ -710,6 +747,9 @@ def restore_tournament_snapshot(snapshot):
                 ]
                 totals["advancement_sources"] += result["advancement_sources"]
                 totals["deleted_extra_matches"] += result["deleted_extra_matches"]
+            for key in ("schedule_ghosts", "schedule_move_histories"):
+                for item in serializers.deserialize("python", payload.get(key, [])):
+                    item.save()
             connection.check_constraints()
     except IntegrityError as error:
         raise ValidationError(SNAPSHOT_STRUCTURE_DELETED_MESSAGE) from error
@@ -748,7 +788,7 @@ def restore_category_schedule_block_from_tournament_snapshot(
     try:
         with transaction.atomic():
             _category_schedule_queryset(category).filter(
-                schedule_block=schedule_block,
+                Q(schedule_block=schedule_block) | Q(pk__in=[item["id"] for item in schedule_items])
             ).delete()
 
             created_count = 0

@@ -2722,6 +2722,21 @@ def import_schedule(request, tournament_code):
                     )
                 )
 
+            # 対象試合の削除でCASCADEされる抜け殻は衝突しない。
+            deleting_ids = {row.pk for row in target_schedules}
+            remaining_ghosts = Schedule.all_objects.filter(
+                schedule_block__tournament=tournament, is_ghost=True,
+            ).exclude(ghost_of_id__in=deleting_ids).select_related("schedule_block", "court")
+            ghost_slots = {(row.schedule_block.name, row.court.name, row.order): row
+                           for row in remaining_ghosts}
+            for row in validated_rows:
+                key = (row["schedule_block_name"], row["court_name"], row["order"])
+                if key in ghost_slots:
+                    errors.append(
+                        "移動済みの抜け殻と順番が重なっています"
+                        f"({key[0]} {key[1]}コート 第{key[2]}試合)。"
+                    )
+
             if errors:
 
                 return render(

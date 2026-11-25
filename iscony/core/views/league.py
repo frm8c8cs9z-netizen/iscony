@@ -780,7 +780,7 @@ def add_extra_round_robin_match(request, group_id):
         initial_order = 1
 
         if initial_block and initial_court:
-            last_schedule = Schedule.objects.filter(
+            last_schedule = Schedule.all_objects.filter(
                 schedule_block=initial_block,
                 court=initial_court,
             ).order_by("-order").first()
