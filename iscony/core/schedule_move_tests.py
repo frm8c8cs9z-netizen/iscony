@@ -656,16 +656,11 @@ class ScheduleMoveScreenTests(TestCase):
                                  f'元に戻す:{expected}'
                                  f'(午後 Bコート第1試合 → {self.block.name} Aコート第4試合)')
 
-    def test_legacy_url_removed_and_maintenance_has_no_edit_link(self):
+    def test_legacy_move_url_removed(self):
         from django.urls import NoReverseMatch
         with self.assertRaises(NoReverseMatch):
             reverse('move_schedule', args=[self.rows[0].pk])
         self.assertEqual(self.client.get(f'/schedule/{self.rows[0].pk}/move/').status_code, 404)
-        response = self.client.get(reverse('schedule_maintenance', args=[self.tournament.code]))
-        self.assertNotContains(response, f'/schedule/{self.rows[0].pk}/edit/')
-        self.assertNotContains(response, '抜け殻と移動履歴は残りません')
-        self.assertNotContains(response, '<th>編集</th>')
-        self.assertNotContains(response, f'/schedule/{self.rows[0].pk}/move/')
 
     def test_browser_drag_tap_escape_cross_block_confirmation_and_undo(self):
         try:

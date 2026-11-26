@@ -528,11 +528,6 @@ urlpatterns = [
         name="edit_league_entry_api",
     ),
 
-    path(
-        "tournament/<str:code>/schedule/maintenance/",
-        dashboard.schedule_maintenance,
-        name="schedule_maintenance",
-    ),
 
     path(
         "pair/<int:pair_id>/edit/",
@@ -825,11 +820,6 @@ urlpatterns = [
         name="update_schedule_status",
     ),
 
-    path(
-        "tournament/<str:code>/tournament-match/<int:match_id>/add-schedule/",
-        tournament.add_tournament_match_schedule,
-        name="add_tournament_match_schedule",
-    ),
 
     path(
         "tournament/<str:code>/schedule/move/",

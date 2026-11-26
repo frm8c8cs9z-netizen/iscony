@@ -163,7 +163,6 @@ def _tournament_code_from_request(request):
             "tournament_match_maintenance",
             "tournament_first_round_score_sheets_pdf",
             "tournament_match_score_sheet",
-            "add_tournament_match_schedule",
         }:
             return (
                 TournamentMatch.objects.filter(
@@ -342,7 +341,6 @@ def _public_token_from_request(request):
             "tournament_match_maintenance",
             "tournament_first_round_score_sheets_pdf",
             "tournament_match_score_sheet",
-            "add_tournament_match_schedule",
         }:
             return (
                 TournamentMatch.objects.filter(

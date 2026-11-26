@@ -12,7 +12,6 @@ from .league import ExtraRoundRobinMatchForm, LeagueEntryEditForm
 from .reception import ReceptionMatchSearchForm
 from .schedule import (
     ScheduleBlockSettingsForm,
-    ScheduleCreateForm,
 )
 from .setup import (
     CategoryForm,
@@ -48,7 +47,6 @@ __all__ = [
     "ParticipantForm",
     "ReceptionMatchSearchForm",
     "ScheduleBlockSettingsForm",
-    "ScheduleCreateForm",
     "StageEditForm",
     "StageForm",
     "StageSlotSetupForm",

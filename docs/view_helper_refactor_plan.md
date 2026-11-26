@@ -11,7 +11,7 @@
 
 現在の実装は、機能追加を優先して育ってきたため、次のような状態になっています。
 
-- `views.py` に大会トップ、進行表、試合選択、設定、複製、進行メンテナンスなどが混在している。
+- `views.py` に大会トップ、進行表、試合選択、設定、複製、配置画面などが混在している。
 - `tournament_views.py` に、トーナメント画面、SVG描画、分割トーナメント、結果入力、編集、CSV、進行表、採点票導線が同居している。
 - `league_views.py` に、リーグ表表示、リーグ結果入力、順位計算、同率補助表、リタイア、枠メンテナンスが同居している。
 - `forms.py` に、CSV、検索、リーグ、トーナメント、進行、設定、複製のフォームがまとめて入っている。
@@ -188,7 +188,7 @@ core/views/
 - QR/キー検索
 - 大会設定
 - 大会複製
-- 進行メンテナンス
+- 配置画面
 - 試合順変更
 - カテゴリ追加
 - コート表示順
@@ -205,7 +205,6 @@ core/views/
 - `reception_match_search`
 - `tournament_settings`
 - `clone_tournament_view`
-- `schedule_maintenance`
 - `order_maintenance`
 - `update_schedule_status`
 - `move_schedule_view`
@@ -222,13 +221,13 @@ core/views/
 | 試合選択/QR検索 | `views/result_input_pages.py` | 結果入力導線として独立させる |
 | 大会設定 | `views/settings_pages.py` | 設定画面として独立させる |
 | 大会複製 | `services/clone.py` + `views/maintenance_pages.py` | 複製処理と画面を分ける |
-| 進行メンテナンス/移動 | `services/schedule_operations.py` + `views/schedule_pages.py` | 変更履歴やundoと接続しやすくする |
+| 進行表での移動 | `services/schedule_operations.py` + `views/schedule_pages.py` | 変更履歴やundoと接続しやすくする |
 | カテゴリ追加/順序 | `views/category_pages.py` | カテゴリ操作として独立させる |
 
 優先して切り出すもの:
 
 1. 試合選択/QR検索
-2. 進行表/進行メンテナンス
+2. 進行表/配置画面
 3. 大会設定
 4. 大会複製
 
@@ -278,7 +277,6 @@ core/views/
 - `add_tournament_bracket`
 - `edit_tournament_bracket`
 - `import_tournament_schedule`
-- `add_tournament_match_schedule`
 
 移動先の方針:
 
@@ -454,7 +452,6 @@ core/views/
 - `TournamentEntryEditForm`
 - `TournamentMatchEditForm`
 - `BracketGenerateForm`
-- `ScheduleCreateForm`
 - `CategoryForm`
 - `TournamentSettingsForm`
 - `ScheduleBlockSettingsForm`
@@ -469,7 +466,7 @@ core/views/
 | ReceptionMatchSearchForm | `form_defs/search_forms.py` |
 | LeagueEntryEditForm, ExtraRoundRobinMatchForm | `form_defs/league_forms.py` |
 | TournamentEntryEditForm, TournamentMatchEditForm, TournamentBracketForm, BracketGenerateForm | `form_defs/tournament_forms.py` |
-| ScheduleCreateForm, ScheduleBlockSettingsForm | `form_defs/schedule_forms.py` |
+| ScheduleBlockSettingsForm | `form_defs/schedule_forms.py` |
 | CategoryForm, TournamentSettingsForm, TournamentCloneForm | `form_defs/settings_forms.py` |
 
 短期的には `forms.py` を互換レイヤとして残し、各分割フォームを再exportします。
@@ -803,7 +800,7 @@ iscony/core/services/schedule_operations.py
 確認:
 
 - 進行表表示
-- 進行メンテナンス
+- 配置画面
 - 試合順変更
 - 追加対戦
 

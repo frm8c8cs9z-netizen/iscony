@@ -1,45 +1,13 @@
 """Schedule operation forms.
 
-Schedule forms handle new schedule placement and result-input schedule
-block settings. Keep them focused on schedule configuration;
+Schedule forms handle result-input schedule block settings.
+Keep them focused on schedule configuration;
 match result storage and advancement logic belong in services.
 """
 
 from django import forms
 
-from ..models import Court, ScheduleBlock
-
-
-class ScheduleCreateForm(forms.Form):
-
-    court = forms.ModelChoiceField(
-        queryset=Court.objects.none()
-    )
-
-    order = forms.IntegerField(
-        min_value=1
-    )
-
-    def __init__(
-        self,
-        *args,
-        tournament=None,
-        **kwargs
-    ):
-
-        super().__init__(
-            *args,
-            **kwargs
-        )
-
-        if tournament:
-
-            self.fields["court"].queryset = Court.objects.filter(
-                tournament=tournament
-            ).order_by(
-                "display_order",
-                "name"
-            )
+from ..models import ScheduleBlock
 
 
 class ScheduleBlockSettingsForm(forms.ModelForm):

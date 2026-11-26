@@ -10,7 +10,7 @@
 - 現在の多くの画面は、開発初期の確認画面、当日運営、事前準備、メンテナンスが混在している。
 - まず既存画面を分類し、使う画面・隠す画面・削除候補を分けてから、一般公開用画面を別に設計する。
 
-2026-11-26: 進行表メンテナンスの「編集」は廃止。移動は配置画面と進行表の「移動」モードを使う。呼出済・試合中・完了の印はシステムが自動更新する。`update_schedule_status` はリンクなしで保持する。
+2026-11-26: 進行メンテナンス画面と未配置トーナメント試合の追加画面は廃止。コート進行状況・全試合は進行表、未配置試合の追加は配置画面の「未配置の試合」で扱う。「編集」も廃止。移動は配置画面と進行表の「移動」モードを使う。呼出済・試合中・完了の印はシステムが自動更新する。`update_schedule_status` はリンクなしで保持する。
 
 ## 分類
 
@@ -77,7 +77,6 @@
 | `edit_tournament_bracket` | `/tournament/<code>/bracket/<id>/edit/` | トーナメント表示設定編集。 | 設定画面として維持。 |
 | `tournament_match_maintenance` | `/tournament/<code>/bracket/<id>/maintenance/` | トーナメント試合メンテナンス。 | 運営/開発寄り。公開画面には出さない。 |
 | `edit_tournament_match` | `/tournament/<code>/tournament-match/<id>/edit/` | トーナメント試合編集。 | 高度なメンテナンス。通常運営導線からは目立たせない。 |
-| `add_tournament_match_schedule` | `/tournament/<code>/tournament-match/<id>/add-schedule/` | 未配置トーナメント試合を進行表へ追加。 | 進行メンテナンス用として維持。 |
 | `tournament_match_score_sheet` | `/tournament/<code>/tournament-match/<id>/score-sheet/` | ブラウザ表示用トーナメント採点票。 | PDF出力に寄せるなら整理候補。 |
 | `tournament_match_score_sheet_pdf` | `/tournament/<code>/tournament-match/<id>/score-sheet-pdf/` | トーナメント1試合PDF。 | 個別PDFとして維持。ただし進行表ベースの採点票と役割整理が必要。 |
 
@@ -125,7 +124,6 @@
 | `calculate_category_ranking` | 維持 | リーグ順位の再計算や確認に必要。 |
 | `edit_group_ranking` | 維持 | 同率判定など、自動判定だけでは決められない順位の手入力に必要。 |
 | `league_entry_action` / `retire_pair` / `cancel_retire_pair` | 維持 | リーグ枠のリタイア、復帰、対象外化などの事故対応に必要。 |
-| `add_tournament_match_schedule` | 維持 | 未配置になったトーナメント試合を進行表へ戻す時に必要。 |
 | `schedule_view` の「移動」モード | 維持 | 当日のコート変更・試合順変更に必要。 |
 | `restore_*` | 維持 | 誤入力や誤反映から戻すための重要な安全装置。 |
 

@@ -18,7 +18,6 @@ from django.urls import reverse
 from ..selectors.advancement_labels import prepare_related_result_labels
 from ..forms import (
     BracketGenerateForm,
-    ScheduleCreateForm,
     TournamentBracketForm,
     TournamentEntryEditForm,
     TournamentMatchEditForm,
@@ -26,10 +25,8 @@ from ..forms import (
 from ..models import (
     AdvancementSource,
     Category,
-    Court,
     Group,
     Participant,
-    ScheduleBlock,
     Stage,
     Tournament,
     TournamentBracket,
@@ -52,7 +49,6 @@ from ..rendering.tournament_svg_builder import (
     build_tournament_bracket_display_data,
 )
 from ..selectors.tournament_brackets import build_tournament_round_data
-from ..services.operations import assign_match_to_schedule_slot
 
 from ..services import (
     assign_participant_to_tournament_entry,
@@ -1516,59 +1512,5 @@ def edit_tournament_bracket(request, code, bracket_id):
             "bracket": bracket,
             "form": form,
             "page_title": "トーナメント設定変更",
-        }
-    )
-
-
-
-def add_tournament_match_schedule(request, code, match_id):
-    """未割当のトーナメント試合を手動で進行表へ追加する。"""
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=code
-    )
-
-    match = get_object_or_404(
-        TournamentMatch,
-        id=match_id,
-        bracket__category__tournament=tournament
-    )
-
-    if request.method == "POST":
-
-        form = ScheduleCreateForm(
-            request.POST,
-            tournament=tournament
-        )
-
-        if form.is_valid():
-
-            try:
-                assign_match_to_schedule_slot(
-                    match, ScheduleBlock.get_default(tournament),
-                    form.cleaned_data["court"], position=form.cleaned_data["order"],
-                )
-            except ValidationError as error:
-                form.add_error(None, error)
-            else:
-                return redirect(
-                    "schedule_maintenance",
-                    code=tournament.code
-                )
-
-    else:
-
-        form = ScheduleCreateForm(
-            tournament=tournament
-        )
-
-    return render(
-        request,
-        "core/add_tournament_match_schedule.html",
-        {
-            "tournament": tournament,
-            "match": match,
-            "form": form,
         }
     )
