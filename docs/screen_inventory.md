@@ -10,6 +10,8 @@
 - 現在の多くの画面は、開発初期の確認画面、当日運営、事前準備、メンテナンスが混在している。
 - まず既存画面を分類し、使う画面・隠す画面・削除候補を分けてから、一般公開用画面を別に設計する。
 
+2026-11-26: 進行表メンテナンスの「編集」は廃止。移動は配置画面と進行表の「移動」モードを使う。呼出済・試合中・完了の印はシステムが自動更新する。`update_schedule_status` はリンクなしで保持する。
+
 ## 分類
 
 ### 一般公開用候補
@@ -40,8 +42,8 @@
 | `court_score_sheets_pdf` | `/court/<id>/score-sheets/` | コート別採点票PDF。 | 一括出力画面から利用。直URLは互換用。 |
 | `league_score_sheets_pdf` | `/tournament/<code>/score-sheets/league/` | リーグ採点票PDF。 | 一括出力画面から利用。直URLは互換用。 |
 | `tournament_first_round_scheduled_score_sheets_pdf` | `/tournament/<code>/score-sheets/tournament-first-round/` | トーナメント回戦別採点票PDF。 | 名前は1回戦だが `round` 指定にも対応。将来URL名を整理したい。 |
-| `update_schedule_status` | `/schedule/<id>/status/<status>/` | 呼出/試合中/完了更新。 | 当日運営用。権限導入時はオペレーター権限に含める。 |
-| `move_schedule` | `/schedule/<id>/move/` | 試合順・コート移動。 | 当日運営用。将来は進行表上のタップ/ドラッグ操作に寄せる。 |
+| `update_schedule_status` | `/schedule/<id>/status/<status>/` | 呼出/試合中/完了更新。 | リンクなしで保持。印はシステムで自動更新する。 |
+| `schedule_view` の「移動」モード | `/tournament/<code>/schedule/` | 当日の試合順・コート移動。 | 抜け殻と移動履歴を残し、元に戻せる。旧単独移動画面は廃止済み。 |
 
 ### 事前準備で使う画面
 
@@ -124,7 +126,7 @@
 | `edit_group_ranking` | 維持 | 同率判定など、自動判定だけでは決められない順位の手入力に必要。 |
 | `league_entry_action` / `retire_pair` / `cancel_retire_pair` | 維持 | リーグ枠のリタイア、復帰、対象外化などの事故対応に必要。 |
 | `add_tournament_match_schedule` | 維持 | 未配置になったトーナメント試合を進行表へ戻す時に必要。 |
-| `move_schedule` | 維持 | 当日のコート変更・試合順変更に必要。 |
+| `schedule_view` の「移動」モード | 維持 | 当日のコート変更・試合順変更に必要。 |
 | `restore_*` | 維持 | 誤入力や誤反映から戻すための重要な安全装置。 |
 
 ### 互換用として一時維持

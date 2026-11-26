@@ -546,11 +546,6 @@ urlpatterns = [
         name="edit_tournament_entry",
     ),
 
-    path(
-        "schedule/<int:schedule_id>/edit/",
-        dashboard.edit_schedule,
-        name="edit_schedule",
-    ),
 
 
     path(

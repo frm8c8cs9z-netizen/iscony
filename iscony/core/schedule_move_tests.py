@@ -163,6 +163,22 @@ class ScheduleMoveTests(TestCase):
         with self.assertRaises(ValidationError):
             Schedule(schedule_block=self.block, court=self.a, order=99).clean()
 
+    def test_placement_move_rejects_other_tournament_without_changes(self):
+        other_tournament = Tournament.objects.create(name="別大会", code="OTHER")
+        other_court = Court.objects.create(tournament=other_tournament, name="A")
+        self.move(row=self.rows[1])
+        initial = self.state()
+        histories = list(ScheduleMoveHistory.objects.values())
+        row = self.rows[0]
+        original_position = (row.court_id, row.order)
+
+        with self.assertRaisesMessage(ValidationError, "同じ大会のコートを指定してください。"):
+            ops.move_schedule(row, self.a, 1, other_court, 1)
+
+        self.assertEqual(self.state(), initial)
+        self.assertEqual(list(ScheduleMoveHistory.objects.values()), histories)
+        self.assertEqual((row.court_id, row.order), original_position)
+
     def test_placement_move_unassign_and_append_count_ghosts(self):
         h = self.move()
         row = self.rows[1]
@@ -640,14 +656,15 @@ class ScheduleMoveScreenTests(TestCase):
                                  f'元に戻す:{expected}'
                                  f'(午後 Bコート第1試合 → {self.block.name} Aコート第4試合)')
 
-    def test_legacy_url_removed_and_edit_warning_retained(self):
+    def test_legacy_url_removed_and_maintenance_has_no_edit_link(self):
         from django.urls import NoReverseMatch
         with self.assertRaises(NoReverseMatch):
             reverse('move_schedule', args=[self.rows[0].pk])
         self.assertEqual(self.client.get(f'/schedule/{self.rows[0].pk}/move/').status_code, 404)
         response = self.client.get(reverse('schedule_maintenance', args=[self.tournament.code]))
-        self.assertContains(response, reverse('edit_schedule', args=[self.rows[0].pk]))
-        self.assertContains(response, '抜け殻と移動履歴は残りません')
+        self.assertNotContains(response, f'/schedule/{self.rows[0].pk}/edit/')
+        self.assertNotContains(response, '抜け殻と移動履歴は残りません')
+        self.assertNotContains(response, '<th>編集</th>')
         self.assertNotContains(response, f'/schedule/{self.rows[0].pk}/move/')
 
     def test_browser_drag_tap_escape_cross_block_confirmation_and_undo(self):

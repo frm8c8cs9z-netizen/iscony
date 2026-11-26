@@ -13,8 +13,6 @@ from .reception import ReceptionMatchSearchForm
 from .schedule import (
     ScheduleBlockSettingsForm,
     ScheduleCreateForm,
-    ScheduleEditForm,
-    ScheduleMoveForm,
 )
 from .setup import (
     CategoryForm,
@@ -51,8 +49,6 @@ __all__ = [
     "ReceptionMatchSearchForm",
     "ScheduleBlockSettingsForm",
     "ScheduleCreateForm",
-    "ScheduleEditForm",
-    "ScheduleMoveForm",
     "StageEditForm",
     "StageForm",
     "StageSlotSetupForm",

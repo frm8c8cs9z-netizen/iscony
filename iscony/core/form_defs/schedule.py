@@ -1,43 +1,13 @@
 """Schedule operation forms.
 
-Schedule forms handle court/order edits, movement, and result-input schedule
-block settings. Keep them focused on schedule placement and state toggles;
+Schedule forms handle new schedule placement and result-input schedule
+block settings. Keep them focused on schedule configuration;
 match result storage and advancement logic belong in services.
 """
 
 from django import forms
 
-from ..models import Court, Schedule, ScheduleBlock
-
-
-class ScheduleEditForm(forms.ModelForm):
-
-    class Meta:
-        model = Schedule
-        fields = [
-            "court",
-            "order",
-            "called",
-            "started",
-            "finished",
-        ]
-
-        labels = {
-            "court": "移動先コート",
-            "order": "挿入位置",
-            "called": "呼出済",
-            "started": "試合中",
-            "finished": "完了",
-        }
-
-        help_texts = {
-            "order": "指定した試合順の前に挿入されます。元のコートは自動で前詰めされます。",
-        }
-
-    def validate_unique(self):
-        # court + order の重複は move_schedule() 側で
-        # 挿入移動として処理するため、フォーム段階では止めない
-        pass
+from ..models import Court, ScheduleBlock
 
 
 class ScheduleCreateForm(forms.Form):
@@ -65,41 +35,6 @@ class ScheduleCreateForm(forms.Form):
         if tournament:
 
             self.fields["court"].queryset = Court.objects.filter(
-                tournament=tournament
-            ).order_by(
-                "display_order",
-                "name"
-            )
-
-
-class ScheduleMoveForm(forms.Form):
-
-    target_court = forms.ModelChoiceField(
-        queryset=Court.objects.none(),
-        label="移動先コート"
-    )
-
-    target_order = forms.IntegerField(
-        min_value=1,
-        label="挿入位置",
-        help_text="指定した試合順の前に挿入します。"
-    )
-
-    def __init__(
-        self,
-        *args,
-        tournament=None,
-        **kwargs
-    ):
-
-        super().__init__(
-            *args,
-            **kwargs
-        )
-
-        if tournament:
-
-            self.fields["target_court"].queryset = Court.objects.filter(
                 tournament=tournament
             ).order_by(
                 "display_order",

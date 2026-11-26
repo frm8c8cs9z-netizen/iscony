@@ -2006,6 +2006,9 @@ def move_schedule(
     target_order
 ):
 
+    if target_court.tournament_id != schedule.schedule_block.tournament_id:
+        raise ValidationError("同じ大会のコートを指定してください。")
+
     target_schedule = Schedule.objects.filter(
         schedule_block=schedule.schedule_block,
         court=target_court,

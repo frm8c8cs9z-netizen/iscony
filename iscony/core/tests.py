@@ -29931,43 +29931,6 @@ class TournamentScheduleBehaviorTests(TestCase):
             ),
         )
 
-    def test_edit_schedule_shows_back_link_to_schedule_maintenance(self):
-        match = TournamentMatch.objects.create(
-            bracket=self.bracket,
-            round_number=1,
-            match_number=1,
-            match_code="M1",
-            pair1=self.entry1,
-            pair2=self.entry2,
-        )
-        schedule = Schedule.objects.create(
-            court=self.court,
-            order=1,
-            tournament_match=match,
-        )
-
-        response = self.client.get(
-            reverse(
-                "edit_schedule",
-                kwargs={"schedule_id": schedule.id},
-            )
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "進行メンテナンスへ戻る")
-        self.assertContains(
-            response,
-            (
-                '<a class="button-link" href="'
-                + reverse(
-                    "schedule_maintenance",
-                    kwargs={"code": self.tournament.code},
-                )
-                + '">進行メンテナンスへ戻る</a>'
-            ),
-            html=True,
-        )
-
     def test_unresolved_advancement_entry_svg_label_aligns_with_number(self):
         self.tournament.default_tournament_entry_display_mode = (
             Tournament.ENTRY_DISPLAY_NAME_ORG_2LINE

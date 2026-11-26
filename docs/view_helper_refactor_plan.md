@@ -206,7 +206,6 @@ core/views/
 - `tournament_settings`
 - `clone_tournament_view`
 - `schedule_maintenance`
-- `edit_schedule`
 - `order_maintenance`
 - `update_schedule_status`
 - `move_schedule_view`
@@ -453,11 +452,9 @@ core/views/
 - `ReceptionMatchSearchForm`
 - `LeagueEntryEditForm`
 - `TournamentEntryEditForm`
-- `ScheduleEditForm`
 - `TournamentMatchEditForm`
 - `BracketGenerateForm`
 - `ScheduleCreateForm`
-- `ScheduleMoveForm`
 - `CategoryForm`
 - `TournamentSettingsForm`
 - `ScheduleBlockSettingsForm`
@@ -472,7 +469,7 @@ core/views/
 | ReceptionMatchSearchForm | `form_defs/search_forms.py` |
 | LeagueEntryEditForm, ExtraRoundRobinMatchForm | `form_defs/league_forms.py` |
 | TournamentEntryEditForm, TournamentMatchEditForm, TournamentBracketForm, BracketGenerateForm | `form_defs/tournament_forms.py` |
-| ScheduleEditForm, ScheduleCreateForm, ScheduleMoveForm, ScheduleBlockSettingsForm | `form_defs/schedule_forms.py` |
+| ScheduleCreateForm, ScheduleBlockSettingsForm | `form_defs/schedule_forms.py` |
 | CategoryForm, TournamentSettingsForm, TournamentCloneForm | `form_defs/settings_forms.py` |
 
 短期的には `forms.py` を互換レイヤとして残し、各分割フォームを再exportします。

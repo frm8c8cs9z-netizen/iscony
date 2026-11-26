@@ -95,7 +95,6 @@
         <th>対戦</th>
         <th>スコア</th>
         <th>状態</th>
-        <th>編集</th>
     </tr>
 
     {% for schedule in schedules %}
@@ -192,16 +191,6 @@
 
             </td>
 
-            <td>
-                <a
-                    href="{% url 'edit_schedule' schedule.id %}"
-                    class="btn btn-sm btn-primary"
-                >
-                    編集
-                </a>
-
-                <small>編集で順番を変えると、抜け殻と移動履歴は残りません。当日の移動は進行表の「移動」を使ってください。</small>
-            </td>
         </tr>
 
         {% endwith %}

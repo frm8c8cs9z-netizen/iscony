@@ -49,7 +49,6 @@ from ..models import (
 )
 
 from ..forms import (
-    ScheduleEditForm,
     CategoryForm,
     DayPlayerChangeForm,
     ParticipantForm,
@@ -80,7 +79,6 @@ from ..services import (
     delete_tournament_bracket,
     is_internal_seed_match,
     merge_schedule_blocks,
-    move_schedule,
     move_schedule_range,
     move_schedule_range_to_block,
     move_schedule_tail_to_block,
@@ -1792,135 +1790,6 @@ def schedule_maintenance(request, code):
             "schedules": schedules,
             "unscheduled_matches": unscheduled_matches,
             "court_statuses": court_statuses,
-        }
-    )
-
-
-def edit_schedule(request, schedule_id):
-    """
-    コート・順番・呼出/試合中/完了を直接書き換える管理用の道具。
-
-    コート・順番の変更は services.operations.move_schedule で動かす。
-    移動元は前に詰め、抜け殻も移動履歴(ScheduleMoveHistory)も残さず、
-    元に戻す対象にもならない。
-    当日の移動は進行表の「移動」モード(抜け殻と履歴が残る)に一本化した。
-    この画面は入力ミスの修正、事前の組み直し、抜け殻を作りたくない調整など、
-    抜け殻を残さず直接直すために残している(2026-11-25 ユーザーと合意)。
-    当日にここで順番を動かすと試合が動いたことが画面から分からないため、
-    本部が必要と判断したときだけ使う前提とする。
-    詳細は docs/design_day_of_schedule_move.md の8節を参照。
-    """
-
-    schedule = get_object_or_404(
-        Schedule,
-        id=schedule_id
-    )
-
-    if request.method == "POST":
-
-        action = request.POST.get("action")
-
-        if action == "delete":
-
-            tournament_code = schedule.court.tournament.code
-
-            schedule.delete()
-
-            return redirect(
-                "schedule_maintenance",
-                code=tournament_code
-            )
-
-        # --------------------------------------
-        # form.save(commit=False) で schedule 自体の
-        # court/order が書き換わるため、
-        # 先に元の位置を退避しておく
-        # --------------------------------------
-        original_court = schedule.court
-        original_order = schedule.order
-
-        form = ScheduleEditForm(
-            request.POST,
-            instance=schedule
-        )
-
-        if form.is_valid():
-
-            new_schedule = form.save(
-                commit=False
-            )
-
-            is_moving = (
-                original_court != new_schedule.court
-                or original_order != new_schedule.order
-            )
-
-            if (
-                is_moving
-                and (
-                    schedule.called
-                    or schedule.started
-                    or schedule.finished
-                )
-            ):
-
-                form.add_error(
-                    None,
-                    "呼出済・試合中・完了の試合は移動できません。"
-                )
-
-            else:
-
-                if is_moving:
-
-                    try:
-
-                        move_schedule(
-                            schedule=schedule,
-                            source_court=original_court,
-                            source_order=original_order,
-                            target_court=new_schedule.court,
-                            target_order=new_schedule.order,
-                        )
-
-                    except ValidationError as e:
-
-                        form.add_error(
-                            None,
-                            e.message
-                        )
-
-                        return render(
-                            request,
-                            "core/edit_schedule.html",
-                            {
-                                "schedule": schedule,
-                                "form": form,
-                            }
-                        )
-
-                schedule.called = new_schedule.called
-                schedule.started = new_schedule.started
-                schedule.finished = new_schedule.finished
-                schedule.save()
-
-                return redirect(
-                    "schedule_maintenance",
-                    code=schedule.court.tournament.code
-                )
-
-    else:
-
-        form = ScheduleEditForm(
-            instance=schedule
-        )
-
-    return render(
-        request,
-        "core/edit_schedule.html",
-        {
-            "schedule": schedule,
-            "form": form,
         }
     )
 
