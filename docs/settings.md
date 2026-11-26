@@ -8,8 +8,8 @@
 
 対象画面:
 
-- `public_category_results`: 公開カテゴリ結果画面
-- `public_schedule_view`: 一般参加者向け進行表
+- `public_category_results_token` / `public_category_results_id_token`: 公開カテゴリ結果画面
+- `public_schedule_view_token`: 一般参加者向け進行表
 
 対象外:
 

@@ -625,31 +625,6 @@ def category_detail(request, category_id):
     )
 
 
-def pair_search(request):
-    """リーグ枠（LeagueEntry）を大会・カテゴリ横断で検索する。"""
-
-    query = request.GET.get("q", "")
-
-    pairs = []
-
-    if query:
-        pairs = LeagueEntry.objects.filter(
-            pair_code__icontains=query
-        ).select_related(
-            "category",
-            "group",
-            "category__tournament",
-            "participant__category__tournament",
-        )
-
-    return render(
-        request,
-        "core/pair_search.html",
-        {
-            "query": query,
-            "pairs": pairs,
-        }
-    )
 
 
 def generate_group_matches(request, category_id):

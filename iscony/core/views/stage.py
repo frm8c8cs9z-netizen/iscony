@@ -1911,28 +1911,6 @@ def edit_stage(request, code, category_id, stage_id):
     )
 
 
-def tournament_stage_overview_index(request, code):
-    """カテゴリごとのStage進行入口をまとめた補助一覧を表示する。"""
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=code,
-    )
-    categories = Category.objects.filter(
-        tournament=tournament,
-    ).order_by(
-        "display_order",
-        "name",
-    )
-
-    return render(
-        request,
-        "core/stage_overview_index.html",
-        {
-            "tournament": tournament,
-            "categories": categories,
-        },
-    )
 
 
 def _public_schedule_url(tournament):
@@ -1967,17 +1945,6 @@ def _render_public_category_results(request, category):
     )
 
 
-@login_not_required
-def public_category_results(request, code, category_id):
-    """一般利用者向けにカテゴリ内の結果入口を表示する。"""
-
-    category = get_object_or_404(
-        Category.objects.select_related("tournament"),
-        id=category_id,
-        tournament__code=code,
-        tournament__is_public=True,
-    )
-    return _render_public_category_results(request, category)
 
 
 @login_not_required

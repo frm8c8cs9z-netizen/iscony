@@ -1,5 +1,8 @@
 # View / Helper 構造整理 詳細設計メモ
 
+2026-11-26: 未使用画面の整理により、`court_status`、`pair_search`、`tournament_schedule_view`、`add_tournament_bracket`、`tournament_stage_overview_index`、単件配置API (`unassign_schedule_slot_api` / `move_schedule_slot_api`)、カテゴリスナップショット互換URL、`stage_group_order_maintenance` を削除。大会コード形式の公開URLも削除し、公開進行表・公開カテゴリ結果はトークン形式を使用する。トーナメント編集画面で共用する `add_tournament_bracket.html` は保持。
+
+
 このメモは、`iscony` の view / helper / service 周りを整理するための詳細設計です。
 
 目的は、今後予定している「手入力での大会作成」「参加者・所属DB整理」「指定審判」「変更履歴」「表示ブロック設定画面化」を進める前に、既存コードの責務を見通しやすくすることです。

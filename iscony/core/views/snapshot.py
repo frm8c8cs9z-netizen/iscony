@@ -198,48 +198,8 @@ def tournament_snapshot_list(request, code):
     )
 
 
-def category_snapshot_list(request, category_id):
-    """カテゴリ単体保存を避け、大会全体スナップショットへ誘導する。"""
-
-    category = get_object_or_404(
-        Category.objects.select_related("tournament"),
-        id=category_id,
-    )
-    messages.warning(
-        request,
-        (
-            "カテゴリ単位のスナップショット作成は事故防止のため停止しています。"
-            "大会全体スナップショットを作成し、復元時にカテゴリや日程区分を指定してください。"
-        ),
-    )
-
-    return redirect(
-        "tournament_snapshot_list",
-        code=category.tournament.code,
-    )
 
 
-def restore_category_snapshot_view(request, snapshot_id):
-    """カテゴリ単体スナップショットの直接復元を停止する。"""
-
-    snapshot = get_object_or_404(
-        OperationSnapshot.objects.select_related(
-            "tournament",
-        ),
-        id=snapshot_id,
-    )
-    messages.error(
-        request,
-        (
-            "カテゴリ単位スナップショットの直接復元は停止しています。"
-            "大会全体スナップショットから復元範囲を指定してください。"
-        ),
-    )
-
-    return redirect(
-        "tournament_snapshot_list",
-        code=snapshot.tournament.code,
-    )
 
 
 def restore_tournament_snapshot_category_view(request, snapshot_id):

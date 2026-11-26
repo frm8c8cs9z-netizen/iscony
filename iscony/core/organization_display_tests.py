@@ -48,7 +48,7 @@ class OrganizationDisplayTests(TestCase):
         return [
             ("category_detail", {"category_id": self.category.pk}, True),
             ("category_stage_overview", {"category_id": self.category.pk}, True),
-            ("public_category_results", {"code": self.tournament.code, "category_id": self.category.pk}, False),
+            ("public_category_results_id_token", {"public_token": self.tournament.public_token, "category_id": self.category.pk}, False),
             ("public_category_results_token", {"public_token": self.tournament.public_token,
                                                "category_public_token": self.category.public_token}, False),
             ("league_stage_print", {"category_id": self.category.pk, "stage_id": self.group.stage_id}, False),
@@ -159,7 +159,7 @@ class OrganizationDisplayTests(TestCase):
                     self.assertIn('fill="#996515"', svg)
                     self.assertIn("元所属1-2-org2", svg)
                     for name, kwargs in [
-                        ("public_category_results", {"code": self.tournament.code, "category_id": self.category.pk}),
+                        ("public_category_results_id_token", {"public_token": self.tournament.public_token, "category_id": self.category.pk}),
                         ("tournament_stage_print", {"category_id": self.category.pk, "stage_id": self.bracket.stage_id}),
                     ]:
                         result = self.get(name, **kwargs)

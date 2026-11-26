@@ -1,5 +1,8 @@
 # Screen Inventory
 
+2026-11-26: 未使用画面の整理により、`court_status`、`pair_search`、`tournament_schedule_view`、`add_tournament_bracket`、`tournament_stage_overview_index`、単件配置API (`unassign_schedule_slot_api` / `move_schedule_slot_api`)、カテゴリスナップショット互換URL、`stage_group_order_maintenance` を削除。大会コード形式の公開URLも削除し、公開進行表・公開カテゴリ結果はトークン形式を使用する。トーナメント編集画面で共用する `add_tournament_bracket.html` は保持。
+
+
 このメモは、現在の画面・URLを「一般公開用」「当日運営」「事前準備」「メンテナンス」「旧実装/整理候補」に棚卸しするための作業メモ。
 
 現時点の認識:
@@ -17,8 +20,8 @@
 | --- | --- | --- | --- |
 | `tournament_list` | `/` | 公開中大会一覧。最小限の一覧表示のみ。 | 一般公開トップ候補。ただし管理導線とは分けたい。 |
 | `tournament_detail` | `/tournament/<code>/` | 大会トップだが、管理メニュー・大会設定・カテゴリ追加など運営導線が混在。 | 将来は公開用大会トップと管理用大会トップを分離する。 |
-| `public_schedule_view` | `/tournament/<code>/public-schedule/` | 一般参加者向けの試合進行表。結果入力・採点票PDF・移動などの運営操作を出さず、カテゴリ結果画面へのリンクだけ出す。 | 公開用進行表として育てる。スマホ/タブレットでの横スクロール、指定審判表示、カテゴリ結果画面との相互アンカーを調整する。 |
-| `public_category_results` | `/tournament/<code>/category/<category_id>/public/` | カテゴリ内のリーグ表・トーナメント表をStage表示順で縦に並べる公開結果画面。状態表示と公開進行表へのリンクあり。 | 一般参加者がカテゴリの流れを追う主画面として育てる。追加対戦表示や文言調整を続ける。 |
+| `public_schedule_view_token` | `/public/<public_token>/schedule/` | 一般参加者向けの試合進行表。結果入力・採点票PDF・移動などの運営操作を出さず、カテゴリ結果画面へのリンクだけ出す。 | 公開用進行表として育てる。スマホ/タブレットでの横スクロール、指定審判表示、カテゴリ結果画面との相互アンカーを調整する。 |
+| `public_category_results_token` | `/public/<public_token>/category/<category_public_token>/` | カテゴリ内のリーグ表・トーナメント表をStage表示順で縦に並べる公開結果画面。状態表示と公開進行表へのリンクあり。 | 一般参加者がカテゴリの流れを追う主画面として育てる。追加対戦表示や文言調整を続ける。 |
 | `category_stage_overview` | `/category/<id>/stages/` | カテゴリ内のStage一覧。リーグ表・トーナメント表への入口があり、運営確認にも使っている。 | 一般公開向けにはStage用語を弱め、カテゴリ内の試合一覧/結果一覧として再設計する候補。 |
 | `tournament_bracket_detail` | `/tournament/<code>/bracket/<id>/` | トーナメント表表示。メンテナンス導線や採点票PDF導線も含む。 | 公開用トーナメント表の土台。運営リンクを隠した公開表示が必要。 |
 | `category_detail` | `/category/<id>/` | リーグ表だが、結果入力・順位計算・追加対戦・順位入力など開発/運営導線が混在。 | 一般向けではなく開発初期の名残。公開用リーグ表は別途作るか、表示モードを分ける。 |
@@ -29,7 +32,6 @@
 | --- | --- | --- | --- |
 | `maintenance_menu` | `/tournament/<code>/maintenance/` | 当日運営・準備・設定への入口。 | 当面の管理トップ。今後も作業目的別に整理する。 |
 | `schedule_view` | `/tournament/<code>/schedule/` | 試合進行表。結果入力・採点票PDF・表確認への入口。 | 当日運営の主導線候補。タブレット対応と操作モード化を検討。 |
-| `court_status` | `/tournament/<code>/courts/` | コート状況確認。 | 進行状況確認用として維持。進行表との役割分担は後で整理。 |
 | `reception_match_search` | `/tournament/<code>/reception/search/` | 受付で試合を探して結果入力する補助画面。 | 混雑時の主導線ではなく、迷った時・例外対応の補助として維持。 |
 | `input_match_score` | `/match/<id>/score/` | リーグ結果入力。 | 当日運営用。公開画面には出さない。 |
 | `input_tournament_match_score` | `/tournament/<code>/tournament-match/<id>/score/` | トーナメント結果入力。 | 当日運営用。未確定試合の保存不可ガードを維持。 |
@@ -63,7 +65,6 @@
 | `swap_advancement_source` | `/tournament/<code>/advancement-sources/swap/` | 進出元入れ替えPOST。 | 権限導入時は慎重に制限する。 |
 | `apply_stage_results` | `/stage/<id>/apply-results/` | Stage結果を後続枠へ反映。 | 重要操作。スナップショット連動と確認導線を維持。 |
 | `tournament_snapshot_list` | `/tournament/<code>/snapshots/` | 大会スナップショット一覧。 | 事故対応用として維持。 |
-| `category_snapshot_list` | `/category/<id>/snapshots/` | 旧カテゴリ別スナップショット入口。 | 現在は大会スナップショット運用に寄せた互換導線。整理候補。 |
 | `restore_*` | `/snapshot/<id>/restore/...` | スナップショット復元。 | 大会全体/カテゴリ/日程区分などの復元入口。今後「結果のみ復元」を検討。 |
 
 ### トーナメント運営・設定
@@ -75,7 +76,6 @@
 | `tournament_match_maintenance` | `/tournament/<code>/bracket/<id>/maintenance/` | トーナメント試合メンテナンス。 | 運営/開発寄り。公開画面には出さない。 |
 | `edit_tournament_match` | `/tournament/<code>/tournament-match/<id>/edit/` | トーナメント試合編集。 | 高度なメンテナンス。通常運営導線からは目立たせない。 |
 | `add_tournament_match_schedule` | `/tournament/<code>/tournament-match/<id>/add-schedule/` | 未配置トーナメント試合を進行表へ追加。 | 進行メンテナンス用として維持。 |
-| `tournament_schedule_view` | `/tournament/<code>/bracket/<id>/schedule/` | トーナメント別進行表示。 | 現在の利用頻度を確認。進行表本体で足りるなら整理候補。 |
 | `tournament_match_score_sheet` | `/tournament/<code>/tournament-match/<id>/score-sheet/` | ブラウザ表示用トーナメント採点票。 | PDF出力に寄せるなら整理候補。 |
 | `tournament_match_score_sheet_pdf` | `/tournament/<code>/tournament-match/<id>/score-sheet-pdf/` | トーナメント1試合PDF。 | 個別PDFとして維持。ただし進行表ベースの採点票と役割整理が必要。 |
 
@@ -84,14 +84,12 @@
 | URL name | URL | 現状 | 方針 |
 | --- | --- | --- | --- |
 | `import_pairs` | `/tournament/<code>/import/pairs/` | Stage対応前の旧リーグ枠CSV取込。 | 高度なメンテナンスに隔離済み。実運用で不要なら削除候補。 |
-| `pair_search` | `/pair-search/` | リーグ枠検索。大会横断の古い補助検索。 | 受付検索に役割を寄せ、削除または管理者向け隠し機能化を検討。 |
 | `generate_group_matches` | `/category/<id>/generate-matches/` | リーグ戦生成。 | 開発/手入力作成導線の名残。通常運用ではCSV推奨なら隠す。 |
 | `add_extra_round_robin_match` | `/group/<id>/extra-match/` | リタイア対応などの追加対戦作成。 | 運営機能として必要。ただし公開リーグ表とは分離。 |
 | `calculate_category_ranking` | `/category/<id>/ranking/` | 順位計算。 | 運営用。公開画面には出さない。 |
 | `edit_group_ranking` | `/group/<id>/ranking/edit/` | 順位手入力。 | 運営用。公開画面には出さない。 |
 | `league_entry_action` / `retire_pair` / `cancel_retire_pair` | `/pair/...` | リーグ枠操作・リタイア。 | 運営用。公開画面には出さない。 |
 | `pair_maintenance` / `edit_pair` | `/category/<id>/pairs/maintenance/`, `/pair/<id>/edit/` | リーグ枠メンテナンス。 | 事前準備/高度メンテとして維持。 |
-| `add_tournament_bracket` | `/tournament/<code>/bracket/add/` | 手入力でトーナメント追加。 | 高度なメンテナンスに隔離済み。手入力作成導線として再設計候補。 |
 | `generate_tournament_matches` | `/tournament/<code>/bracket/<id>/generate/` | トーナメント枠一括作成。 | 手入力作成導線の中に整理する候補。 |
 | `import_tournament_schedule` | `/tournament/<code>/bracket/<id>/import/schedule/` | トーナメント個別進行CSV。 | 現行推奨の試合進行CSVに統合できるなら削除候補。 |
 | `import_bracket_seeds` | `/tournament/<code>/bracket/<id>/import-seeds/` | シードCSV取込。 | 現在のStage枠CSV/位置CSVで代替できるか確認。整理候補。 |
@@ -111,7 +109,6 @@
 | `add_category` | 維持・再設計 | CSVなしで大会を作る場合のカテゴリ作成入口になる。 |
 | `pair_maintenance` / `edit_pair` | 維持・再設計 | リーグ枠作成、参加者貼り付け、枠修正の土台になる。 |
 | `generate_group_matches` | 維持・再設計 | リーグ枠から総当たり試合を作る処理として必要になる。 |
-| `add_tournament_bracket` | 維持・再設計 | トーナメント表を画面から作る入口になる。 |
 | `edit_tournament_bracket` | 維持 | トーナメント表の表示・設定調整で今後も必要。 |
 | `generate_tournament_matches` | 維持・再設計 | トーナメント枠から試合を生成する処理として必要になる。 |
 | `edit_tournament_match` | 維持・再設計 | トーナメント枠、対戦番号、進出元、表示位置の手修正に必要。 |
@@ -140,7 +137,6 @@
 | `import_tournament_schedule` | 一時維持 | トーナメント個別進行CSV。現行は大会全体の試合進行CSVを推奨。 |
 | `import_bracket_seeds` | 一時維持 | シードCSV取込。Stage枠CSVや位置CSVで代替できるか確認する。 |
 | `import_bracket_positions` / `download_bracket_positions_sample` | 一時維持 | トーナメント位置調整に必要か、Stage枠CSVと役割が重複するか確認する。 |
-| `category_snapshot_list` | 一時維持 | 現在は大会スナップショット中心の運用へ寄せているため、互換入口として扱う。 |
 
 ### 削除または隠し機能化を検討
 
@@ -148,8 +144,6 @@
 
 | URL name | 扱い | 理由 |
 | --- | --- | --- |
-| `pair_search` | 削除または隠し機能化 | 大会横断の古い補助検索。受付検索と役割が重なる。 |
-| `tournament_schedule_view` | 整理候補 | 進行表本体でトーナメント別確認が足りるなら不要になる可能性がある。 |
 | `tournament_match_score_sheet` | 整理候補 | ブラウザ表示用採点票。PDF導線に寄せるなら役割が薄い。 |
 | `tournament_match_score_sheet_pdf` | 維持または統合 | 個別PDFとしては有用だが、進行表ベースの採点票PDFと役割整理が必要。 |
 

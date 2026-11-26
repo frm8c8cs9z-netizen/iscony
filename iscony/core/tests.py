@@ -6791,39 +6791,6 @@ class OrderMaintenanceTests(TestCase):
         self.assertEqual(other_category_group.display_order, 1)
         self.assertEqual(other_category_group.name, "A")
 
-    def test_stage_scoped_post_updates_only_stage_groups(self):
-        other_stage_group = Group.objects.create(
-            category=self.category,
-            stage=self.other_stage,
-            name="A",
-            display_order=1,
-        )
-        url = reverse(
-            "stage_group_order_maintenance",
-            kwargs={
-                "code": self.tournament.code,
-                "category_id": self.category.id,
-                "stage_id": self.stage.id,
-            },
-        )
-
-        response = self.client.post(
-            url,
-            {
-                f"group_order_{self.group_a.id}": "3",
-                f"group_name_{self.group_a.id}": "C",
-                f"group_order_{other_stage_group.id}": "9",
-                f"group_name_{other_stage_group.id}": "Z",
-            },
-        )
-
-        self.assertRedirects(response, url)
-        self.group_a.refresh_from_db()
-        other_stage_group.refresh_from_db()
-        self.assertEqual(self.group_a.display_order, 3)
-        self.assertEqual(self.group_a.name, "C")
-        self.assertEqual(other_stage_group.display_order, 1)
-        self.assertEqual(other_stage_group.name, "A")
 
     def test_category_scoped_get_heading_includes_category_name(self):
         response = self.client.get(
@@ -10954,9 +10921,13 @@ class DayOfRefereeTests(TestCase):
             schedule.save()
             schedules.append((schedule, status))
 
-        for view in ("schedule_view", "public_schedule_view"):
+        for view in ("schedule_view", "public_schedule_view_token"):
             response = self.client.get(reverse(
-                view, kwargs={"tournament_code": self.tournament.code},
+                view, kwargs=(
+                    {"public_token": self.tournament.public_token}
+                    if view == "public_schedule_view_token"
+                    else {"tournament_code": self.tournament.code}
+                ),
             ))
             self.assertEqual(response.status_code, 200)
             for schedule, status in schedules:
@@ -11031,9 +11002,13 @@ class DayOfRefereeTests(TestCase):
                     schedule.referee_participant = participant
                 schedule.save()
 
-        for view in ("schedule_view", "public_schedule_view"):
+        for view in ("schedule_view", "public_schedule_view_token"):
             response = self.client.get(reverse(
-                view, kwargs={"tournament_code": self.tournament.code},
+                view, kwargs=(
+                    {"public_token": self.tournament.public_token}
+                    if view == "public_schedule_view_token"
+                    else {"tournament_code": self.tournament.code}
+                ),
             ))
             self.assertEqual(response.status_code, 200)
             for schedule in Schedule.objects.order_by("order"):
@@ -11204,8 +11179,8 @@ class DayOfRefereeTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_schedule_view",
-                kwargs={"tournament_code": self.tournament.code},
+                "public_schedule_view_token",
+                kwargs={"public_token": self.tournament.public_token},
             )
         )
 
@@ -11516,66 +11491,8 @@ class ScheduleSlotApiTests(TestCase):
             "この試合は既に進行表へ割り付けられています。",
         )
 
-    def test_unassign_schedule_slot_api_deletes_schedule(self):
-        schedule = self._create_schedules(1)[0]
 
-        response = self.client.post(
-            reverse(
-                "unassign_schedule_slot_api",
-                kwargs={"schedule_id": schedule.id},
-            ),
-        )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {"success": True, "court_id": self.court1.id},
-        )
-        self.assertFalse(Schedule.objects.filter(id=schedule.id).exists())
-
-    def test_unassign_schedule_slot_api_closes_gap_after_delete(self):
-        schedules = self._create_schedules(5)
-
-        response = self.client.post(
-            reverse(
-                "unassign_schedule_slot_api",
-                kwargs={"schedule_id": schedules[2].id},
-            ),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Schedule.objects.filter(id=schedules[2].id).exists())
-        self.assertEqual(
-            self._ordered_schedule_ids(),
-            [
-                schedules[0].id,
-                schedules[1].id,
-                schedules[3].id,
-                schedules[4].id,
-            ],
-        )
-        self.assertEqual(self._ordered_schedule_orders(), [1, 2, 3, 4])
-
-    def test_unassign_schedule_slot_api_rejects_locked_schedule(self):
-        match = self._create_round_robin_match()
-        schedule = Schedule.objects.create(
-            schedule_block=self.block,
-            court=self.court1,
-            order=1,
-            round_robin_match=match,
-            called=True,
-        )
-
-        response = self.client.post(
-            reverse(
-                "unassign_schedule_slot_api",
-                kwargs={"schedule_id": schedule.id},
-            ),
-        )
-
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(response.json()["success"])
-        self.assertTrue(Schedule.objects.filter(id=schedule.id).exists())
 
     def test_unassign_schedule_range_api_removes_range_and_closes_gap(self):
         schedules = self._create_schedules(5)
@@ -11620,56 +11537,6 @@ class ScheduleSlotApiTests(TestCase):
         )
         self.assertEqual(self._ordered_schedule_orders(), [1, 2, 3, 4, 5])
 
-    def test_move_schedule_slot_api_moves_between_courts_and_reorders(self):
-        first_match = self._create_round_robin_match()
-        moving_match = self._create_round_robin_match()
-        target_match = self._create_round_robin_match()
-        first = Schedule.objects.create(
-            schedule_block=self.block,
-            court=self.court1,
-            order=1,
-            round_robin_match=first_match,
-        )
-        moving = Schedule.objects.create(
-            schedule_block=self.block,
-            court=self.court1,
-            order=2,
-            round_robin_match=moving_match,
-        )
-        target = Schedule.objects.create(
-            schedule_block=self.block,
-            court=self.court2,
-            order=1,
-            round_robin_match=target_match,
-        )
-
-        response = self.client.post(
-            reverse(
-                "move_schedule_slot_api",
-                kwargs={"schedule_id": moving.id},
-            ),
-            {
-                "target_court_id": str(self.court2.id),
-                "target_order": "1",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {
-                "success": True,
-                "schedule_id": moving.id,
-                "court_id": self.court2.id,
-            },
-        )
-        first.refresh_from_db()
-        moving.refresh_from_db()
-        target.refresh_from_db()
-        self.assertEqual(first.order, 1)
-        self.assertEqual(moving.court, self.court2)
-        self.assertEqual(moving.order, 1)
-        self.assertEqual(target.order, 2)
 
     def test_move_schedule_range_api_moves_range_to_other_court_tail(self):
         source_schedules = self._create_schedules(5)
@@ -11932,24 +11799,8 @@ class ScheduleSlotApiTests(TestCase):
         )
 
     def test_schedule_slot_apis_reject_get(self):
-        match = self._create_round_robin_match()
-        schedule = Schedule.objects.create(
-            schedule_block=self.block,
-            court=self.court1,
-            order=1,
-            round_robin_match=match,
-        )
-
         urls = [
             self._assign_url(),
-            reverse(
-                "unassign_schedule_slot_api",
-                kwargs={"schedule_id": schedule.id},
-            ),
-            reverse(
-                "move_schedule_slot_api",
-                kwargs={"schedule_id": schedule.id},
-            ),
             self._unassign_range_url(),
             self._move_range_url(),
             self._move_range_to_block_url(),
@@ -13116,31 +12967,6 @@ class CategorySnapshotTests(TestCase):
         self.assertFalse(hasattr(self.entry1, "player1_name"))
         self.assertFalse(hasattr(self.entry1, "player2_name"))
 
-    def test_category_snapshot_view_redirects_to_tournament_snapshot(self):
-        response = self.client.post(
-            reverse(
-                "category_snapshot_list",
-                kwargs={"category_id": self.category.id},
-            ),
-            {
-                "label": "リタイア前",
-                "note": "テスト",
-            },
-        )
-
-        self.assertRedirects(
-            response,
-            reverse(
-                "tournament_snapshot_list",
-                kwargs={"code": self.tournament.code},
-            ),
-        )
-        self.assertEqual(OperationSnapshot.objects.count(), 0)
-        message_text = " ".join(
-            str(message)
-            for message in get_messages(response.wsgi_request)
-        )
-        self.assertIn("カテゴリ単位のスナップショット作成は事故防止", message_text)
 
     def test_tournament_snapshot_can_be_created_from_view(self):
         other_category = Category.objects.create(
@@ -29302,9 +29128,9 @@ class CategoryStageOverviewTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_category_results",
+                "public_category_results_id_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             )
@@ -29386,9 +29212,9 @@ class CategoryStageOverviewTests(TestCase):
 
         response_with_return = self.client.get(
             reverse(
-                "public_category_results",
+                "public_category_results_id_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             ),
@@ -29480,9 +29306,9 @@ class CategoryStageOverviewTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_category_results",
+                "public_category_results_id_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             )
@@ -29629,9 +29455,9 @@ class CategoryStageOverviewTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_category_results",
+                "public_category_results_id_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             )
@@ -29692,9 +29518,9 @@ class CategoryStageOverviewTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_category_results",
+                "public_category_results_id_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             )
@@ -29783,9 +29609,9 @@ class CategoryStageOverviewTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_category_results",
+                "public_category_results_id_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             )
@@ -29945,9 +29771,9 @@ class CategoryStageOverviewTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_category_results",
+                "public_category_results_id_token",
                 kwargs={
-                    "code": tournament.code,
+                    "public_token": tournament.public_token,
                     "category_id": category.id,
                 },
             )
@@ -33940,8 +33766,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         )
         self.assertNotContains(
             response,
-            reverse("public_category_results", kwargs={
-                "code": self.tournament.code,
+            reverse("public_category_results_id_token", kwargs={
+                "public_token": self.tournament.public_token,
                 "category_id": self.category.id,
             }),
         )
@@ -34285,8 +34111,8 @@ class TournamentScheduleBehaviorTests(TestCase):
         overview_url = reverse("category_stage_overview", args=[self.category.id])
         self.assertIn(f'data-overview-url="{overview_url}"', cell)
         self.assertNotIn(f"#tournament-match-{match.id}", cell)
-        self.assertNotIn(reverse("public_category_results", args=[
-            self.tournament.code, self.category.id,
+        self.assertNotIn(reverse("public_category_results_id_token", args=[
+            self.tournament.public_token, self.category.id,
         ]), cell)
 
     def test_schedule_view_marks_day_changed_player_name_only(self):
@@ -34407,8 +34233,8 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_schedule_view",
-                kwargs={"tournament_code": self.tournament.code},
+                "public_schedule_view_token",
+                kwargs={"public_token": self.tournament.public_token},
             )
         )
 
@@ -34539,8 +34365,8 @@ class TournamentScheduleBehaviorTests(TestCase):
 
         response = self.client.get(
             reverse(
-                "public_schedule_view",
-                kwargs={"tournament_code": self.tournament.code},
+                "public_schedule_view_token",
+                kwargs={"public_token": self.tournament.public_token},
             )
         )
         changed_cell = self._schedule_cell_html(response, changed_schedule)
@@ -34588,8 +34414,8 @@ class TournamentScheduleBehaviorTests(TestCase):
             round_robin_match=league_match,
         )
         url = reverse(
-            "public_schedule_view",
-            kwargs={"tournament_code": self.tournament.code},
+            "public_schedule_view_token",
+            kwargs={"public_token": self.tournament.public_token},
         )
 
         first_response = self.client.get(url)
@@ -34642,8 +34468,8 @@ class TournamentScheduleBehaviorTests(TestCase):
             round_robin_match=league_match,
         )
         url = reverse(
-            "public_schedule_view",
-            kwargs={"tournament_code": self.tournament.code},
+            "public_schedule_view_token",
+            kwargs={"public_token": self.tournament.public_token},
         )
 
         first_response = self.client.get(url)
@@ -36543,8 +36369,8 @@ class LeagueOperationNavigationTests(TestCase):
         response = self.client.get(self.overview_url)
         self.assertEqual(response.status_code, 200)
         public_response = self.client.get(reverse(
-            "public_category_results",
-            kwargs={"code": self.tournament.code, "category_id": self.category.id},
+            "public_category_results_id_token",
+            kwargs={"public_token": self.tournament.public_token, "category_id": self.category.id},
         ))
         self.assertEqual(public_response.status_code, 200)
         for group in (self.group, self.final_group):
@@ -36880,8 +36706,8 @@ class ExtraRoundRobinMatchEditTests(TestCase):
             response = self.client.get(url)
             self.assertContains(response, self.url + "?next=")
             self.assertContains(response, f"%23group-{self.group.pk}")
-        response = self.client.get(reverse("public_category_results", kwargs={
-            "code": self.tournament.code, "category_id": self.category.pk,
+        response = self.client.get(reverse("public_category_results_id_token", kwargs={
+            "public_token": self.tournament.public_token, "category_id": self.category.pk,
         }))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self.url)
@@ -36982,8 +36808,8 @@ class OrganizationPrefetchQueryCountTests(TestCase):
             "overview": reverse("category_stage_overview", kwargs={
                 "category_id": self.category.id,
             }),
-            "public_results": reverse("public_category_results", kwargs={
-                "code": self.tournament.code,
+            "public_results": reverse("public_category_results_id_token", kwargs={
+                "public_token": self.tournament.public_token,
                 "category_id": self.category.id,
             }),
         }
@@ -37169,8 +36995,8 @@ class StageOverviewQueryCountTests(TestCase):
 
     def _count_view(self, name):
         kwargs = {"category_id": self.category.pk}
-        if name == "public_category_results":
-            kwargs["code"] = self.tournament.code
+        if name == "public_category_results_id_token":
+            kwargs["public_token"] = self.tournament.public_token
         with CaptureQueriesContext(connection) as queries:
             response = self.client.get(reverse(name, kwargs=kwargs))
         self.assertEqual(response.status_code, 200)
@@ -37186,7 +37012,7 @@ class StageOverviewQueryCountTests(TestCase):
         self._assert_constant_queries("category_stage_overview")
 
     def test_public_results_queries_do_not_grow(self):
-        self._assert_constant_queries("public_category_results")
+        self._assert_constant_queries("public_category_results_id_token")
 
     def _legacy_readiness_sources(self, stage):
         # 変更前と同じ取得条件で、DBが返す順序を比較基準にする。
@@ -37476,10 +37302,8 @@ class PublicPagesNoOperatorLinksTests(TestCase):
         urls = [
             reverse("public_tournament_detail", args=[token]),
             reverse("public_schedule_view_token", args=[token]),
-            reverse("public_schedule_view", args=[self.tournament.code]),
         ]
         category_urls = [
-            reverse("public_category_results", args=[self.tournament.code, self.category.id]),
             reverse("public_category_results_id_token", args=[token, self.category.id]),
             reverse("public_category_results_token", args=[token, self.category.public_token]),
         ]
@@ -37848,10 +37672,8 @@ class LoginRequiredTests(TestCase):
         token = self.tournament.public_token
         return [
             reverse("public_tournament_detail", args=[token]),
-            reverse("public_category_results", args=[self.tournament.code, self.category.pk]),
             reverse("public_category_results_id_token", args=[token, self.category.pk]),
             reverse("public_category_results_token", args=[token, self.category.public_token]),
-            reverse("public_schedule_view", args=[self.tournament.code]),
             reverse("public_schedule_view_token", args=[token]),
         ]
 
@@ -37890,8 +37712,6 @@ class LoginRequiredTests(TestCase):
             (urls[3], {"pair1_games": 4, "pair2_games": 0}),
             (urls[4], {"pair1_games": 4, "pair2_games": 0}),
             (urls[5], {"action": "retire"}),
-            (reverse("move_schedule_slot_api", args=[self.schedule.pk]),
-             {"target_court_id": self.court.pk, "target_order": 2}),
         ]
         for url, data in posts:
             with self.subTest(post=url):
@@ -37995,9 +37815,9 @@ class LoginRequiredTests(TestCase):
             return names
 
         self.assertCountEqual(exempt_names(urlpatterns), [
-            "login", "public_tournament_detail", "public_category_results",
+            "login", "public_tournament_detail",
             "public_category_results_id_token", "public_category_results_token",
-            "public_schedule_view", "public_schedule_view_token",
+            "public_schedule_view_token",
         ])
         for url in [reverse("login"), *self.public_urls()]:
             self.assertIs(resolve(url).func.login_required, False)
@@ -38144,7 +37964,7 @@ class LeaguePlayerRowsDisplayTests(TestCase):
         for name, kwargs in (
             ("category_detail", {"category_id": self.category.pk}),
             ("category_stage_overview", {"category_id": self.category.pk}),
-            ("public_category_results", {"category_id": self.category.pk, "code": self.tournament.code}),
+            ("public_category_results_id_token", {"category_id": self.category.pk, "public_token": self.tournament.public_token}),
             ("league_stage_print", {"category_id": self.category.pk, "stage_id": self.stage.pk}),
         ):
             with self.subTest(screen=name):
@@ -38237,7 +38057,7 @@ class LeaguePlayerRowsDisplayTests(TestCase):
         screens = (
             ("category_detail", [self.category.pk]),
             ("category_stage_overview", [self.category.pk]),
-            ("public_category_results", [self.tournament.code, self.category.pk]),
+            ("public_category_results_id_token", [self.tournament.public_token, self.category.pk]),
             ("league_stage_print", [self.category.pk, self.stage.pk]),
         )
         script_dir = Path(settings.BASE_DIR) / "core/static/core/js"
@@ -38331,7 +38151,7 @@ class LeaguePlayerRowsDisplayTests(TestCase):
             self._pair(self.groups[0], f"C{index}", "選手", "相方", text, text)
         scripts = Path(settings.BASE_DIR) / "core/static/core/js"
         screens = (
-            ("public_category_results", [self.tournament.code, self.category.pk]),
+            ("public_category_results_id_token", [self.tournament.public_token, self.category.pk]),
             ("league_stage_print", [self.category.pk, self.stage.pk]),
         )
         documents = {}
@@ -38534,9 +38354,9 @@ class LeagueStagePrintAndNameTests(TestCase):
         urls = [
             reverse("category_stage_overview", args=[self.category.id]),
             reverse("category_detail", args=[self.category.id]),
-            reverse("public_category_results", args=[self.tournament.code, self.category.id]),
+            reverse("public_category_results_id_token", args=[self.tournament.public_token, self.category.id]),
             reverse("schedule_view", args=[self.tournament.code]),
-            reverse("public_schedule_view", args=[self.tournament.code]),
+            reverse("public_schedule_view_token", args=[self.tournament.public_token]),
             reverse("input_match_score", args=[self.match.id]),
             reverse("edit_group_ranking", args=[self.groups[0].id]),
             self.url,
@@ -38555,7 +38375,7 @@ class LeagueStagePrintAndNameTests(TestCase):
         urls = [
             reverse("category_stage_overview", args=[self.category.id]),
             reverse("category_detail", args=[self.category.id]),
-            reverse("public_category_results", args=[self.tournament.code, self.category.id]),
+            reverse("public_category_results_id_token", args=[self.tournament.public_token, self.category.id]),
             self.url,
         ]
         for url in urls:
@@ -38577,15 +38397,15 @@ class LeagueStagePrintAndNameTests(TestCase):
                 self.assertIn("-webkit-print-color-adjust: exact;", style)
 
     def test_league_schedule_category_uses_detail_typography(self):
-        for view in ("schedule_view", "public_schedule_view"):
+        for view in ("schedule_view", "public_schedule_view_token"):
             with self.subTest(view=view):
-                response = self.client.get(reverse(view, args=[self.tournament.code]))
+                response = self.client.get(reverse(view, args=[self.tournament.public_token if view == "public_schedule_view_token" else self.tournament.code]))
                 self.assertEqual(response.status_code, 200)
                 html = response.content.decode()
                 context = re.search(r'<div class="schedule-context[^"<>]*">(.*?)</div>', html, re.S)
                 self.assertIsNotNone(context)
                 self.assertNotIn("<strong", context.group(1))
-                if view == "public_schedule_view":
+                if view == "public_schedule_view_token":
                     self.assertIn(
                         f'<span class="schedule-context-detail schedule-context-category">{self.category.name}</span>',
                         context.group(1),
@@ -38602,7 +38422,7 @@ class LeagueStagePrintAndNameTests(TestCase):
                 self.assertIn(f"font-size: {expected_size};", style)
                 self.assertIn(f"color: {expected_color};", style)
                 self.assertIn("font-weight: normal;", style)
-                if view == "public_schedule_view":
+                if view == "public_schedule_view_token":
                     self.assertIn("display: block;", style)
 
     def test_pdf_labels_and_search_json_use_exact_group_name(self):
@@ -38627,7 +38447,7 @@ class LeagueStagePrintAndNameTests(TestCase):
         self.assertContains(response, self.url)
         self.assertNotContains(response, reverse("league_stage_print", args=[self.category.id, self.final_stage.id]))
         self.assertNotContains(response, "stage-order")
-        response = self.client.get(reverse("public_category_results", args=[self.tournament.code, self.category.id]))
+        response = self.client.get(reverse("public_category_results_id_token", args=[self.tournament.public_token, self.category.id]))
         self.assertNotContains(response, self.url)
         self.assertNotContains(response, "stage-order")
 
@@ -38694,7 +38514,7 @@ class LeagueStagePrintAndNameTests(TestCase):
         for url in (
             reverse("category_stage_overview", args=[self.category.pk]),
             reverse("category_detail", args=[self.category.pk]),
-            reverse("public_category_results", args=[self.tournament.code, self.category.pk]),
+            reverse("public_category_results_id_token", args=[self.tournament.public_token, self.category.pk]),
         ):
             with self.subTest(url=url):
                 self.assertContains(self.client.get(url), '未集計')
@@ -38806,7 +38626,7 @@ class StagePrintPaginationTests(TestCase):
 
     def test_print_link_only_on_operator_overview(self):
         self.assertContains(self.client.get(reverse("category_stage_overview", args=[self.category.pk])), self.url)
-        self.assertNotContains(self.client.get(reverse("public_category_results", args=[self.tournament.code, self.category.pk])), self.url)
+        self.assertNotContains(self.client.get(reverse("public_category_results_id_token", args=[self.tournament.public_token, self.category.pk])), self.url)
 
     def test_options_and_empty_stage(self):
         response = self.client.get(self.url, {"paper": "A3", "orientation": "portrait", "winner_placement": "together", "repeat_header": "0"})
@@ -39007,9 +38827,9 @@ class PublicScheduleTournamentHeadingTests(TestCase):
             court=court, order=1, tournament_match=self.match,
         )
 
-    def _heading_detail(self, view_name="public_schedule_view"):
+    def _heading_detail(self, view_name="public_schedule_view_token"):
         response = self.client.get(reverse(
-            view_name, kwargs={"tournament_code": self.tournament.code},
+            view_name, kwargs={"public_token": self.tournament.public_token},
         ))
         self.assertEqual(response.status_code, 200)
         cell = re.search(

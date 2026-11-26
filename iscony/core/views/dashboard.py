@@ -97,7 +97,6 @@ from ..services import (
     schedule_match_participant_ids,
     tournament_pair_organization_sets,
     tournament_result_advances_further,
-    unassign_schedule,
     unassign_schedule_range,
 )
 
@@ -183,76 +182,8 @@ def public_tournament_detail(request, public_token):
     )
 
 
-# =========================================================
-# コート進行表示
-# =========================================================
 
 
-def court_status(request, tournament_code):
-    """コートごとの進行状況を、観客・運営向けに表示する。"""
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=tournament_code
-    )
-
-    courts = Court.objects.filter(
-        tournament=tournament
-    ).order_by(
-        "display_order",
-        "name"
-    )
-
-    blocks = ScheduleBlock.objects.filter(
-        tournament=tournament,
-        schedule__isnull=False,
-    ).distinct()
-
-    block_data = []
-
-    for block in blocks:
-        court_data = []
-
-        for court in courts:
-            schedules = Schedule.objects.filter(
-                schedule_block=block,
-                court=court,
-            ).select_related(
-            "court",
-            "round_robin_match",
-            "round_robin_match__group",
-            "round_robin_match__group__stage",
-            "round_robin_match__group__category",
-            "round_robin_match__pair1",
-            "round_robin_match__pair2",
-            "tournament_match",
-            "tournament_match__bracket",
-            "tournament_match__bracket__stage",
-            "tournament_match__bracket__category",
-            "tournament_match__pair1",
-            "tournament_match__pair2",
-            ).order_by(
-                "order"
-            )
-
-            court_data.append({
-                "court": court,
-                "schedules": schedules,
-            })
-
-        block_data.append({
-            "block": block,
-            "court_data": court_data,
-        })
-
-    return render(
-        request,
-        "core/court_status.html",
-        {
-            "tournament": tournament,
-            "block_data": block_data,
-        }
-    )
 
 
 
@@ -1161,19 +1092,6 @@ def _render_public_schedule(request, tournament):
     )
 
 
-@login_not_required
-def public_schedule_view(
-        request,
-        tournament_code
-    ):
-    """一般参加者向けに、操作リンクを出さない進行表を表示する。"""
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=tournament_code,
-        is_public=True,
-    )
-    return _render_public_schedule(request, tournament)
 
 
 @login_not_required
@@ -4727,88 +4645,8 @@ def move_schedule_range_to_block_api(request, code, schedule_block_id, court_id)
     })
 
 
-def unassign_schedule_slot_api(request, schedule_id):
-    """進行表へ割り付け済みの試合を取り消すJSON API。"""
-
-    if request.method != "POST":
-        return JsonResponse(
-            {"success": False, "error": "POSTで送信してください。"},
-            status=405,
-        )
-
-    schedule = get_object_or_404(Schedule, id=schedule_id)
-
-    if schedule.is_locked_for_move:
-        return JsonResponse(
-            {
-                "success": False,
-                "error": "呼出済・試合中・完了・結果入力済の試合は取り消せません。",
-            },
-            status=400,
-        )
-
-    court_id = schedule.court_id
-
-    try:
-        unassign_schedule(schedule)
-    except ValidationError as error:
-        return JsonResponse(
-            {"success": False, "error": "、".join(error.messages)},
-            status=400,
-        )
-
-    return JsonResponse({"success": True, "court_id": court_id})
 
 
-def move_schedule_slot_api(request, schedule_id):
-    """進行表のScheduleを別コート・別順番へ移動するJSON API。"""
-
-    if request.method != "POST":
-        return JsonResponse(
-            {"success": False, "error": "POSTで送信してください。"},
-            status=405,
-        )
-
-    schedule = get_object_or_404(Schedule, id=schedule_id)
-    source_court = schedule.court
-    source_order = schedule.order
-
-    target_court_id = request.POST.get("target_court_id")
-    target_order_raw = request.POST.get("target_order")
-
-    target_court = get_object_or_404(
-        Court,
-        id=target_court_id,
-        tournament=source_court.tournament,
-    )
-
-    try:
-        target_order = int(target_order_raw)
-    except (TypeError, ValueError):
-        return JsonResponse(
-            {"success": False, "error": "移動先の順番が不正です。"},
-            status=400,
-        )
-
-    try:
-        move_schedule(
-            schedule,
-            source_court=source_court,
-            source_order=source_order,
-            target_court=target_court,
-            target_order=target_order,
-        )
-    except ValidationError as error:
-        return JsonResponse(
-            {"success": False, "error": "、".join(error.messages)},
-            status=400,
-        )
-
-    return JsonResponse({
-        "success": True,
-        "schedule_id": schedule.id,
-        "court_id": target_court.id,
-    })
 
 
 def delete_tournament_confirm(request, code):

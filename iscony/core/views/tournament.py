@@ -29,7 +29,6 @@ from ..models import (
     Court,
     Group,
     Participant,
-    Schedule,
     ScheduleBlock,
     Stage,
     Tournament,
@@ -1413,43 +1412,6 @@ def tournament_match_score_sheet(request, code, match_id):
     )
 
 
-def tournament_schedule_view(request, code, bracket_id):
-    """トーナメントに絞った進行表を表示する。"""
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=code
-    )
-
-    bracket = get_object_or_404(
-        TournamentBracket,
-        id=bracket_id,
-        category__tournament=tournament
-    )
-
-    schedules = Schedule.objects.filter(
-        tournament_match__bracket=bracket
-    ).select_related(
-        "court",
-        "tournament_match",
-        "tournament_match__pair1",
-        "tournament_match__pair2",
-        "tournament_match__bracket",
-    ).order_by(
-        "court__display_order",
-        "court__name",
-        "order"
-    )
-
-    return render(
-        request,
-        "core/tournament_schedule.html",
-        {
-            "tournament": tournament,
-            "bracket": bracket,
-            "schedules": schedules,
-        }
-    )
 
 
 def bracket_list(request, code):
@@ -1484,45 +1446,6 @@ def bracket_list(request, code):
     )
 
 
-def add_tournament_bracket(request, code):
-    """大会に新しいトーナメント表を追加する。"""
-
-    tournament = get_object_or_404(
-        Tournament,
-        code=code
-    )
-
-    if request.method == "POST":
-
-        form = TournamentBracketForm(
-            request.POST,
-            tournament=tournament
-        )
-
-        if form.is_valid():
-
-            form.save()
-
-            return redirect(
-                "bracket_list",
-                code=tournament.code
-            )
-
-    else:
-
-        form = TournamentBracketForm(
-            tournament=tournament
-        )
-
-    return render(
-        request,
-        "core/add_tournament_bracket.html",
-        {
-            "tournament": tournament,
-            "form": form,
-            "page_title": "トーナメント追加",
-        }
-    )
 
 
 def edit_tournament_bracket(request, code, bracket_id):

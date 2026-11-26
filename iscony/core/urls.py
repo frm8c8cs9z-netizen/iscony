@@ -130,17 +130,7 @@ urlpatterns = [
         name="clear_stage_results",
     ),
 
-    path(
-        "tournament/<str:code>/stage-overview/",
-        stage.tournament_stage_overview_index,
-        name="tournament_stage_overview_index",
-    ),
 
-    path(
-        "tournament/<str:code>/category/<int:category_id>/public/",
-        public_view_cache(stage.public_category_results),
-        name="public_category_results",
-    ),
 
     path(
         "public/<str:public_token>/",
@@ -160,11 +150,6 @@ urlpatterns = [
         name="public_category_results_token",
     ),
 
-    path(
-        "category/<int:category_id>/snapshots/",
-        snapshot.category_snapshot_list,
-        name="category_snapshot_list",
-    ),
 
     path(
         "tournament/<str:code>/backups/",
@@ -196,11 +181,6 @@ urlpatterns = [
         name="tournament_snapshot_list",
     ),
 
-    path(
-        "snapshot/<int:snapshot_id>/restore/",
-        snapshot.restore_category_snapshot_view,
-        name="restore_category_snapshot",
-    ),
 
     path(
         "snapshot/<int:snapshot_id>/restore/category/",
@@ -220,23 +200,7 @@ urlpatterns = [
         name="restore_tournament_snapshot_category_block",
     ),
 
-    # =====================================================
-    # コート進行表示
-    # =====================================================
-    path(
-        'tournament/<str:tournament_code>/courts/',
-        dashboard.court_status,
-        name='court_status'
-    ),
 
-    # =====================================================
-    # リーグ枠検索
-    # =====================================================
-    path(
-        'pair-search/',
-        league.pair_search,
-        name='pair_search'
-    ),
 
     # =====================================================
     # CSVインポート
@@ -303,11 +267,6 @@ urlpatterns = [
         name="schedule_view",
     ),
 
-    path(
-        "tournament/<str:tournament_code>/public-schedule/",
-        public_view_cache(dashboard.public_schedule_view),
-        name="public_schedule_view",
-    ),
 
     path(
         "public/<str:public_token>/schedule/",
@@ -593,11 +552,6 @@ urlpatterns = [
         name="edit_schedule",
     ),
 
-    path(
-        "schedule/<int:schedule_id>/unassign/",
-        dashboard.unassign_schedule_slot_api,
-        name="unassign_schedule_slot_api",
-    ),
 
     path(
         "tournament/<str:code>/maintenance/order/",
@@ -633,14 +587,6 @@ urlpatterns = [
         name="category_bracket_name_maintenance",
     ),
 
-    path(
-        (
-            "tournament/<str:code>/category/<int:category_id>/"
-            "stage/<int:stage_id>/maintenance/order/"
-        ),
-        dashboard.order_maintenance,
-        name="stage_group_order_maintenance",
-    ),
 
     path(
         "tournament/<str:code>/categories/order/",
@@ -858,11 +804,6 @@ urlpatterns = [
         name="tournament_first_round_score_sheets_pdf",
     ),
 
-    path(
-        "tournament/<str:code>/bracket/<int:bracket_id>/schedule/",
-        tournament.tournament_schedule_view,
-        name="tournament_schedule_view",
-    ),
 
     path(
         "tournament/<str:tournament_code>/import/participants/",
@@ -876,11 +817,6 @@ urlpatterns = [
         name="bracket_list",
     ),
 
-    path(
-        "tournament/<str:code>/bracket/add/",
-        tournament.add_tournament_bracket,
-        name="add_tournament_bracket",
-    ),
 
     path(
         "tournament/<str:code>/bracket/<int:bracket_id>/edit/",
@@ -911,11 +847,6 @@ urlpatterns = [
         name="undo_schedule_move_api",
     ),
 
-    path(
-        "schedule/<int:schedule_id>/move-slot/",
-        dashboard.move_schedule_slot_api,
-        name="move_schedule_slot_api",
-    ),
 
     path(
         "tournament/<str:code>/category/add/",

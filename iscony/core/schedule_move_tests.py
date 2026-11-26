@@ -545,7 +545,7 @@ class ScheduleMoveScreenTests(TestCase):
         self.tournament.is_public = True
         self.tournament.save(update_fields=['is_public'])
         for name, args in [('schedule_view', [self.tournament.code]),
-                           ('public_schedule_view', [self.tournament.code]),
+                           ("public_schedule_view_token", [self.tournament.public_token]),
                            ('schedule_block_detail', [self.tournament.code, self.block.pk])]:
             response = self.client.get(reverse(name, args=args))
             self.assertEqual(response.status_code, 200)
@@ -764,7 +764,7 @@ class ScheduleMoveScreenTests(TestCase):
         self.tournament.is_public = True
         self.tournament.save(update_fields=['is_public'])
         urls = [reverse('schedule_view', args=[self.tournament.code]),
-                reverse('public_schedule_view', args=[self.tournament.code]),
+                reverse("public_schedule_view_token", args=[self.tournament.public_token]),
                 reverse('schedule_block_detail', args=[self.tournament.code, self.block.pk])]
         self.move(block=self.other_block)
         counts = []

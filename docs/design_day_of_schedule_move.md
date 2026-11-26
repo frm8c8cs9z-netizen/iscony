@@ -1,5 +1,8 @@
 # 設計メモ: 当日の進行表での試合の移動
 
+2026-11-26: 未使用画面の整理により、`court_status`、`pair_search`、`tournament_schedule_view`、`add_tournament_bracket`、`tournament_stage_overview_index`、単件配置API (`unassign_schedule_slot_api` / `move_schedule_slot_api`)、カテゴリスナップショット互換URL、`stage_group_order_maintenance` を削除。大会コード形式の公開URLも削除し、公開進行表・公開カテゴリ結果はトークン形式を使用する。トーナメント編集画面で共用する `add_tournament_bracket.html` は保持。
+
+
 状態: **仕様・データの持ち方・作業の分け方を合意済み(2026-11-25)**。段階1から実装する。
 
 ## 背景
