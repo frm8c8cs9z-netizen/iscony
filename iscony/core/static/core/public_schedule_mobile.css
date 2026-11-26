@@ -1,0 +1,45 @@
+/* PCとJS無効時は既存の表をそのまま使う。 */
+#public-schedule-controls, #public-schedule-mobile { display: none; }
+@media (max-width: 640px) {
+    /* This stylesheet is loaded only by the public schedule page. */
+    .site-chrome, .public-schedule-nav:not(.bottom) { position: static; }
+    .site-brand img { height: 40px; width: auto; }
+    #public-schedule-court-title, #public-schedule-overview { scroll-margin-top: 16px; }
+    body.public-schedule-enhanced #public-schedule-controls:not([hidden]),
+    body.public-schedule-mobile #public-schedule-mobile:not([hidden]) { display: block; }
+    body.public-schedule-mobile #public-schedule-tables { display: none; }
+    #public-schedule-mobile [hidden], #public-schedule-controls [hidden] { display: none; }
+    #public-schedule-controls { margin-bottom: 16px; }
+    #public-schedule-controls button, #public-schedule-mobile button {
+        min-height: 44px; padding: 8px 12px; border: 1px solid #b8c7dc;
+        border-radius: 4px; background: #fff; color: #1565c0; font: inherit;
+    }
+    #public-schedule-mobile button { overflow-wrap: anywhere; }
+    #public-schedule-blocks > details { margin-bottom: 16px; }
+    #public-schedule-blocks > details > summary { padding: 12px 0; font-weight: bold; }
+    .public-court-summary {
+        display: block; position: relative; box-sizing: border-box;
+        width: 100%; text-align: left; margin: 8px 0;
+    }
+    #public-schedule-mobile .public-court-summary { padding: 12px 32px 12px 12px; color: #222; }
+    .public-court-summary:hover, .public-court-summary:focus-visible { background: #f0f6ff; border-color: #1565c0; }
+    .public-court-name { display: block; font-size: 1.2rem; font-weight: bold; color: #1565c0; }
+    .public-court-chevron { position: absolute; right: 12px; top: 12px; font-size: 1.6rem; color: #1565c0; }
+    .public-court-progress { display: block; margin-top: 12px; }
+    .public-court-match-heading { display: flex; align-items: center; gap: 8px; font-weight: bold; }
+    .public-court-match-heading .public-progress-badge { margin-left: 0; }
+    .public-court-pairs { display: block; margin-top: 6px; line-height: 1.4; }
+    .public-court-pair { display: block; }
+    .public-court-vs { display: block; font-size: 0.75rem; color: #667085; }
+    .public-court-context { display: block; margin-top: 4px; font-size: 0.8rem; color: #667085; }
+    .public-court-finished { display: block; margin-top: 8px; color: #667085; font-size: 0.9rem; }
+    #public-schedule-courts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    #public-schedule-courts [aria-current="true"] { background: #e6f1ff; border-color: #1565c0; }
+    .public-mobile-match { border: 1px solid #d8e0ea; border-radius: 4px; margin: 12px 0; padding: 8px; scroll-margin-top: 16px; }
+    .public-mobile-match > summary { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .public-progress-badge { display: inline-block; background: #1565c0; color: white; border-radius: 4px; padding: 2px 8px; margin-left: 8px; }
+    .public-progress-badge-next { background: #e6f1ff; color: #15579c; }
+    #public-schedule-mobile .schedule-match-card { min-width: 0; overflow-wrap: anywhere; }
+    body.public-schedule-enhanced #public-schedule-tables .schedule-table-wrapper { overflow: auto; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); }
+    /* 固定行・列はbase.htmlのschedule-grid-tableのsticky指定を再利用。 */
+}

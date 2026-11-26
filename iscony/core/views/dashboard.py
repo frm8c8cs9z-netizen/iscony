@@ -29,6 +29,7 @@ from ..helpers.view import (
     _tournament_stage_overview_url,
 )
 from ..selectors.advancement_labels import prepare_related_result_labels
+from ..selectors.public_schedule import annotate_public_schedule
 from ..models import (
     Tournament,
     TournamentBackup,
@@ -1064,6 +1065,7 @@ def result_input_select(request, code):
 def _render_public_schedule(request, tournament):
     block_tables = _schedule_block_tables(tournament)
     _attach_resolved_referee_participants(block_tables)
+    annotate_public_schedule(block_tables)
 
     bracket_counts_by_stage = dict(
         TournamentBracket.objects.filter(

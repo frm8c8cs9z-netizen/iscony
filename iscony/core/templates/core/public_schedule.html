@@ -1,10 +1,13 @@
 {% extends "core/base.html" %}
-{% load core_extras %}
+{% load core_extras static %}
+
+{% block viewport_meta %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endblock %}
 
 {% block site_brand_url %}{% url 'public_tournament_detail' tournament.public_token %}{% endblock %}
 
 {% block content %}
 {% include "core/_schedule_move_styles.html" %}
+<link rel="stylesheet" href="{% static 'core/public_schedule_mobile.css' %}">
 
 <style>
     .public-schedule-note {
@@ -178,7 +181,22 @@
     各試合カードを押すと、カテゴリ別の結果画面へ移動できます。
 </p>
 
+<div id="public-schedule-controls" hidden>
+    <button type="button" id="public-schedule-show-table">表で見る</button>
+    <button type="button" id="public-schedule-show-mobile" hidden>スマホ表示に戻る</button>
+</div>
+<section id="public-schedule-mobile" hidden aria-label="スマホ進行表">
+    <div id="public-schedule-overview"><h2>全体の様子</h2><div id="public-schedule-blocks"></div></div>
+    <section id="public-schedule-court" hidden aria-label="コートの縦一覧">
+        <button type="button" id="public-schedule-back">全体へ戻る</button>
+        <nav id="public-schedule-courts" aria-label="同じ日程区分のコート"></nav>
+        <h2 id="public-schedule-court-title" tabindex="-1"></h2>
+        <div id="public-schedule-matches"></div>
+    </section>
+</section>
+<div id="public-schedule-tables">
 {% for block_table in block_tables %}
+<section data-schedule-block="{{ block_table.block.id }}" data-block-name="{{ block_table.block.name }}" data-initial-open="{{ block_table.public_initial_open|yesno:'true,false' }}">
 
 {% if show_block_headings %}
     <h2>{{ block_table.block.name }}</h2>
@@ -191,7 +209,7 @@
                 <th>試合順</th>
 
                 {% for court in block_table.courts %}
-                    <th>{{ court.name }}</th>
+                    <th data-court-id="{{ court.id }}">{{ court.name }}</th>
                 {% endfor %}
             </tr>
         </thead>
@@ -214,7 +232,12 @@
                                     called-cell
                                 {% endif %}
                             {% endif %}
-                        ">
+                        "
+                            {% if schedule %}
+                            data-order="{{ row.order }}" data-court-id="{{ schedule.court_id }}"
+                            data-result-entered="{{ schedule.public_result_entered|yesno:'true,false' }}"
+                            data-progress="{{ schedule.public_progress }}"
+                            {% endif %}>
                             {% if schedule.is_ghost %}
                                 {% include "core/_schedule_ghost.html" %}
                             {% elif schedule %}
@@ -390,9 +413,12 @@
     </table>
 </div>
 
+</section>
 {% empty %}
     <p>進行表はまだ登録されていません。</p>
 {% endfor %}
+</div>
+<script src="{% static 'core/js/public_schedule_mobile.js' %}" defer></script>
 
 <div class="public-schedule-nav bottom">
     <a href="{% url 'public_tournament_detail' tournament.public_token %}">
