@@ -1,6 +1,7 @@
 {% extends "core/base.html" %}
 {% load static %}
 {% block content %}
+<link rel="stylesheet" href="{% static 'core/hq_comment.css' %}">
 {% include "core/_stage_print_style.html" %}
 <div class="stage-print-controls">
     <label>用紙 <select id="print-paper">
@@ -28,14 +29,16 @@
                     <div class="print-diagram" data-split-role="{{ svg_bracket.split_role|default:'whole' }}" data-title="{% if svg_bracket.split_role == 'winner' %}上位トーナメント{% elif svg_bracket.split_role == 'block' %}ブロック{{ svg_bracket.block_number }}{% endif %}">
                         <h3>{{ data.bracket.name }}{% if svg_bracket.split_role == 'winner' or svg_bracket.split_role == 'block' %} / {% endif %}{% if svg_bracket.split_role == 'winner' %}上位トーナメント{% elif svg_bracket.split_role == 'block' %}ブロック{{ svg_bracket.block_number }}{% endif %}</h3>
                         {% include "core/_svg_bracket.html" with svg_bracket=svg_bracket aria_label=data.bracket.name %}
+                        {% if forloop.last %}{% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}{% endif %}
                     </div>
                 {% empty %}
                     {% if data.svg_bracket %}
                         <div class="print-diagram" data-split-role="whole" data-title="">
                             <h3>{{ data.bracket.name }}</h3>
                             {% include "core/_svg_bracket.html" with svg_bracket=data.svg_bracket aria_label=data.bracket.name %}
+                        {% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}
                         </div>
-                    {% else %}<p>対戦表がありません。</p>{% endif %}
+                    {% else %}<p>対戦表がありません。</p>{% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}{% endif %}
                 {% endfor %}
             </section>
         {% empty %}<p>トーナメント表がありません。</p>{% endfor %}

@@ -39745,3 +39745,286 @@ from .schedule_move_tests import ScheduleMoveTests, ScheduleMoveScreenTests  # n
 
 from .public_schedule_mobile_tests import PublicScheduleProgressTests, PublicScheduleMobileTests  # noqa: E402,F401
 from .site_chrome_tests import SiteChromeTests  # noqa: E402,F401
+
+
+@override_settings(PUBLIC_VIEW_CACHE_SECONDS=0)
+class HqCommentTests(TestCase):
+    """本部コメントの権限・表示範囲と復元契約。すべてテストDBで実行する。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+        cls.user = get_user_model().objects.create_user(username="hq_operator")
+        cls.tournament = Tournament.objects.create(name="本部コメント大会", code="HQCOMMENT", is_public=True)
+        cls.category = Category.objects.create(tournament=cls.tournament, name="一般")
+        cls.league_stage = Stage.objects.create(category=cls.category, name="予選", stage_type=Stage.TYPE_LEAGUE)
+        cls.group = Group.objects.create(category=cls.category, stage=cls.league_stage, name="A")
+        cls.final_stage = Stage.objects.create(category=cls.category, name="決勝", stage_type=Stage.TYPE_TOURNAMENT)
+        cls.bracket = TournamentBracket.objects.create(category=cls.category, stage=cls.final_stage, name="本戦")
+        pairs = [create_league_entry_with_participant(
+            category=cls.category, group=cls.group, pair_code=str(i), display_order=i,
+            player1_name=f"選手{i}", player2_name="相方",
+        ) for i in (1, 2)]
+        cls.match = RoundRobinMatch.objects.create(group=cls.group, pair1=pairs[0], pair2=pairs[1])
+        cls.extra = RoundRobinMatch.objects.create(
+            group=cls.group, pair1=pairs[0], pair2=pairs[1], meeting_number=2, counts_for_ranking=False,
+        )
+        finalists = [create_tournament_entry(
+            bracket=cls.bracket, pair_code=str(i), display_order=i, player1_name=f"本戦選手{i}",
+        ) for i in (1, 2)]
+        cls.final = TournamentMatch.objects.create(
+            bracket=cls.bracket, round_number=1, match_number=1, match_code="F",
+            pair1=finalists[0], pair2=finalists[1],
+        )
+        cls.block = ScheduleBlock.objects.create(tournament=cls.tournament, name="日程")
+        cls.court = Court.objects.create(tournament=cls.tournament, name="1")
+        Schedule.objects.create(schedule_block=cls.block, court=cls.court, order=1, round_robin_match=cls.match)
+        cls.other_category = Category.objects.create(tournament=cls.tournament, name="別カテゴリ")
+        cls.other_group = Group.objects.create(category=cls.other_category, name="別A", hq_comment="別カテゴリの連絡")
+        cls.foreign = Tournament.objects.create(name="別大会", code="HQFOREIGN")
+        cls.foreign_category = Category.objects.create(tournament=cls.foreign, name="一般")
+        cls.foreign_group = Group.objects.create(category=cls.foreign_category, name="A", hq_comment="別大会の連絡")
+        cls.foreign_bracket = TournamentBracket.objects.create(category=cls.foreign_category, name="本戦", hq_comment="別大会の連絡")
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.overview = reverse("category_stage_overview", args=[self.category.pk])
+
+    def save_url(self, kind, target, code=None):
+        return reverse("save_hq_comment", args=[code or self.tournament.code, kind, target.pk])
+
+    def set_comments(self, group="リーグ連絡\n<script>alert(1)</script>", bracket="本戦連絡\n<b>抽選</b>"):
+        Group.objects.filter(pk=self.group.pk).update(hq_comment=group)
+        TournamentBracket.objects.filter(pk=self.bracket.pk).update(hq_comment=bracket)
+
+    def assert_comments(self, group, bracket):
+        self.group.refresh_from_db()
+        self.bracket.refresh_from_db()
+        self.assertEqual(self.group.hq_comment, group)
+        self.assertEqual(self.bracket.hq_comment, bracket)
+
+    def test_save_rewrite_clear_and_anchor_for_both_targets(self):
+        for kind, target in (("group", self.group), ("bracket", self.bracket)):
+            for text in ("連絡\n<script>危険</script>", "変更後", ""):
+                with self.subTest(kind=kind, text=text):
+                    response = self.client.post(self.save_url(kind, target), {"hq_comment": text, "next": "https://example.com/"})
+                    self.assertRedirects(response, self.overview + f"#{kind}-{target.pk}")
+                    target.refresh_from_db()
+                    self.assertEqual(target.hq_comment, text)
+
+    def test_get_anonymous_cross_tournament_and_unknown_type_cannot_save(self):
+        for kind, target, foreign in (("group", self.group, self.foreign_group), ("bracket", self.bracket, self.foreign_bracket)):
+            url = self.save_url(kind, target)
+            self.assertEqual(self.client.get(url, {"hq_comment": "変更"}).status_code, 405)
+            self.assertEqual(self.client.post(self.save_url(kind, foreign), {"hq_comment": "変更"}).status_code, 404)
+            self.assertEqual(self.client.post(self.save_url(kind, target, "MISSING"), {"hq_comment": "変更"}).status_code, 404)
+            foreign.refresh_from_db()
+            self.assertEqual(foreign.hq_comment, "別大会の連絡")
+            self.client.logout()
+            self.assertEqual(self.client.post(url, {"hq_comment": "変更"}).status_code, 302)
+            target.refresh_from_db()
+            self.assertEqual(target.hq_comment, "")
+            self.client.force_login(self.user)
+        self.assertEqual(self.client.post(self.save_url("unknown", self.group)).status_code, 404)
+
+    def test_csrf_required_and_valid_token_saves(self):
+        from django.test import Client
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        for kind, target in (("group", self.group), ("bracket", self.bracket)):
+            url = self.save_url(kind, target)
+            self.assertEqual(client.post(url, {"hq_comment": "連絡"}).status_code, 403)
+            client.get(self.overview)
+            response = client.post(url, {"hq_comment": "連絡", "csrfmiddlewaretoken": client.cookies["csrftoken"].value})
+            self.assertEqual(response.status_code, 302)
+            target.refresh_from_db()
+            self.assertEqual(target.hq_comment, "連絡")
+
+    def test_overview_public_tokens_and_print_escape_and_preserve_lines(self):
+        self.set_comments()
+        for name, args, group, bracket in (
+            ("category_stage_overview", [self.category.pk], True, True),
+            ("public_category_results_id_token", [self.tournament.public_token, self.category.pk], True, True),
+            ("public_category_results_token", [self.tournament.public_token, self.category.public_token], True, True),
+            ("league_stage_print", [self.category.pk, self.league_stage.pk], True, False),
+            ("tournament_stage_print", [self.category.pk, self.final_stage.pk], False, True),
+        ):
+            with self.subTest(screen=name):
+                response = self.client.get(reverse(name, args=args))
+                self.assertContains(response, 'class="hq-comment"')
+                if group:
+                    self.assertContains(response, "リーグ連絡<br>&lt;script&gt;alert(1)&lt;/script&gt;")
+                if bracket:
+                    self.assertContains(response, "本戦連絡<br>&lt;b&gt;抽選&lt;/b&gt;")
+                self.assertNotContains(response, "<script>alert(1)</script>")
+                self.assertNotContains(response, "<b>抽選</b>")
+                if name != "category_stage_overview":
+                    self.assertNotContains(response, 'class="hq-comment-button"')
+                    self.assertNotContains(response, 'name="hq_comment"')
+        html = self.client.get(self.overview).content.decode()
+        self.assertLess(html.index("追加試合"), html.index('class="hq-comment"'))
+
+    def test_empty_comments_have_no_box_and_schedules_never_show_comments(self):
+        urls = [self.overview,
+                reverse("public_category_results_token", args=[self.tournament.public_token, self.category.public_token]),
+                reverse("league_stage_print", args=[self.category.pk, self.league_stage.pk]),
+                reverse("tournament_stage_print", args=[self.category.pk, self.final_stage.pk])]
+        for url in urls:
+            self.assertNotContains(self.client.get(url), 'class="hq-comment"')
+        self.set_comments()
+        for url in (reverse("schedule_view", args=[self.tournament.code]),
+                    reverse("public_schedule_view_token", args=[self.tournament.public_token])):
+            response = self.client.get(url)
+            self.assertNotContains(response, "リーグ連絡")
+            self.assertNotContains(response, "本戦連絡")
+            self.assertNotContains(response, 'class="hq-comment"')
+            self.assertNotContains(response, 'class="hq-comment-button"')
+
+    def test_split_and_single_brackets_and_empty_bracket_show_comment(self):
+        self.set_comments()
+        for layout in (TournamentBracket.LAYOUT_SINGLE, TournamentBracket.LAYOUT_SPLIT):
+            self.bracket.use_tournament_defaults = False
+            self.bracket.layout_type = layout
+            self.bracket.save(update_fields=["use_tournament_defaults", "layout_type"])
+            for url in (self.overview, reverse("tournament_stage_print", args=[self.category.pk, self.final_stage.pk])):
+                self.assertContains(self.client.get(url), "本戦連絡<br>")
+        TournamentMatch.objects.filter(bracket=self.bracket).delete()
+        for url in (self.overview, reverse("public_category_results_token", args=[self.tournament.public_token, self.category.public_token]),
+                    reverse("tournament_stage_print", args=[self.category.pk, self.final_stage.pk])):
+            self.assertContains(self.client.get(url), "本戦連絡<br>")
+
+    def test_clone_clears_comments(self):
+        self.set_comments()
+        clone = clone_tournament_without_results(self.tournament, name="複製大会", code="HQCLONE")
+        self.assertTrue(Group.objects.filter(category__tournament=clone).exists())
+        self.assertTrue(TournamentBracket.objects.filter(category__tournament=clone).exists())
+        self.assertFalse(Group.objects.filter(category__tournament=clone).exclude(hq_comment="").exists())
+        self.assertFalse(TournamentBracket.objects.filter(category__tournament=clone).exclude(hq_comment="").exists())
+        self.assert_comments("リーグ連絡\n<script>alert(1)</script>", "本戦連絡\n<b>抽選</b>")
+
+    def test_tournament_and_category_snapshot_restore_and_legacy(self):
+        from .services.snapshots import create_tournament_snapshot, restore_tournament_snapshot, restore_category_from_tournament_snapshot
+        for scope in ("tournament", "category", "legacy"):
+            with self.subTest(scope=scope):
+                self.set_comments("保存リーグ", "保存本戦")
+                snapshot = create_tournament_snapshot(self.tournament, label=scope)
+                if scope == "legacy":
+                    for payload in snapshot.snapshot_json["categories"]:
+                        payload.pop("group_comments", None)
+                        payload.pop("bracket_comments", None)
+                self.set_comments("変更", "変更")
+                self.other_group.hq_comment = "別カテゴリ変更"
+                self.other_group.save()
+                if scope == "tournament":
+                    restore_tournament_snapshot(snapshot)
+                else:
+                    restore_category_from_tournament_snapshot(snapshot, self.category)
+                    self.other_group.refresh_from_db()
+                    self.assertEqual(self.other_group.hq_comment, "別カテゴリ変更")
+                expected = ("", "") if scope == "legacy" else ("保存リーグ", "保存本戦")
+                self.assert_comments(*expected)
+                self.foreign_group.refresh_from_db()
+                self.assertEqual(self.foreign_group.hq_comment, "別大会の連絡")
+
+    def test_schedule_only_snapshot_restore_preserves_comments(self):
+        from .services.snapshots import create_tournament_snapshot, restore_category_schedule_block_from_tournament_snapshot
+        self.set_comments("保存", "保存")
+        snapshot = create_tournament_snapshot(self.tournament, label="日程のみ")
+        self.set_comments("現在", "現在")
+        restore_category_schedule_block_from_tournament_snapshot(snapshot, self.category, self.block)
+        self.assert_comments("現在", "現在")
+
+    def test_backup_restores_comments_and_accepts_pre_comment_schema(self):
+        from .services.backups import create_tournament_backup, restore_tournament_backup
+        for legacy in (False, True):
+            with self.subTest(legacy=legacy):
+                self.set_comments("保存リーグ", "保存本戦")
+                backup = create_tournament_backup(self.tournament, label="本部連絡")
+                if legacy:
+                    backup.schema_version = "0066_schedule_ghost_and_move_history"
+                    for item in backup.payload:
+                        if item["model"] in ("core.group", "core.tournamentbracket"):
+                            item["fields"].pop("hq_comment", None)
+                    backup.save()
+                self.set_comments("変更", "変更")
+                restore_tournament_backup(backup)
+                self.assert_comments(*(("", "") if legacy else ("保存リーグ", "保存本戦")))
+
+    def test_comments_do_not_add_display_queries(self):
+        urls = [self.overview, reverse("public_category_results_token", args=[self.tournament.public_token, self.category.public_token])]
+        def counts():
+            result = []
+            for url in urls:
+                with CaptureQueriesContext(connection) as queries:
+                    self.assertEqual(self.client.get(url).status_code, 200)
+                result.append(len(queries))
+            return result
+        empty = counts()
+        self.set_comments()
+        self.assertEqual(counts(), empty)
+
+    def test_browser_dialog_submit_and_anchor(self):
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            self.skipTest("Playwright is not installed")
+        from urllib.parse import parse_qs, urlsplit
+        from django.db import connections
+        test_connection = connections["default"]
+        # Route browser requests through Django's client so every write stays in the test DB.
+        from unittest.mock import patch
+        # Playwright runs synchronous route callbacks inside its event loop.
+        # Calls here are serialized and use the current test transaction.
+        with patch.dict(os.environ, {"DJANGO_ALLOW_ASYNC_UNSAFE": "true"}), sync_playwright() as playwright:
+            try:
+                browser = playwright.chromium.launch()
+            except Exception as exc:
+                self.skipTest(f"Chromium is unavailable: {exc}")
+            with browser:
+                page = browser.new_page()
+                def serve(route):
+                    # Keep the test transaction visible across Playwright greenlets.
+                    connections["default"] = test_connection
+                    request = route.request
+                    parts = urlsplit(request.url)
+                    if parts.path.startswith("/static/"):
+                        path = Path(settings.BASE_DIR) / "core" / "static" / parts.path.removeprefix("/static/")
+                        if path.is_file():
+                            route.fulfill(path=str(path))
+                        else:
+                            route.fulfill(status=404, body="")
+                        return
+                    if request.method == "POST":
+                        data = {k: v[-1] for k, v in parse_qs(request.post_data or "", keep_blank_values=True).items()}
+                        response = self.client.post(parts.path, data)
+                    else:
+                        response = self.client.get(parts.path)
+                    if response.status_code == 302:
+                        # Fulfilled redirects can bypass routing; navigate explicitly
+                        # to keep the follow-up request inside the test client.
+                        route.fulfill(status=200, content_type="text/html", body=
+                                      "<script>location.replace(" + json.dumps(response["Location"]) + ")</script>")
+                    else:
+                        route.fulfill(status=response.status_code, headers=dict(response.items()), body=response.content)
+                page.route("**/*", serve)
+                page.goto("http://testserver" + self.overview)
+                self.assertIn(f'id="group-{self.group.pk}"', page.content())
+                for kind, target in (("group", self.group), ("bracket", self.bracket)):
+                    box = page.locator(f"#{kind}-{target.pk}")
+                    box.get_by_role("button", name="本部コメント", exact=True).first.click()
+                    dialog = page.locator("dialog[open]")
+                    dialog.locator("textarea").fill("ブラウザ連絡\n抽選で決定")
+                    dialog.get_by_role("button", name="保存", exact=True).click()
+                    page.wait_for_url("**/#" + f"{kind}-{target.pk}")
+                    self.assertEqual(box.locator(".hq-comment-body").first.inner_text(), "ブラウザ連絡\n抽選で決定")
+                for name, stage in (("league_stage_print", self.league_stage), ("tournament_stage_print", self.final_stage)):
+                    page.goto("http://testserver" + reverse(name, args=[self.category.pk, stage.pk]))
+                    comment = page.locator("#print-pages .hq-comment").first
+                    comment.wait_for(state="visible")
+                    self.assertIn("抽選で決定", comment.inner_text())
+                    page.emulate_media(media="print")
+                    self.assertEqual(comment.locator(".hq-comment-body").evaluate("el => getComputedStyle(el).color"), "rgb(0, 0, 0)")
+                    page.emulate_media(media="screen")
+        for target in (self.group, self.bracket):
+            target.refresh_from_db()
+            self.assertEqual(target.hq_comment, "ブラウザ連絡\n抽選で決定")

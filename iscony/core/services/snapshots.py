@@ -31,7 +31,9 @@ import json
 from ..models import (
     AdvancementSource,
     Category,
+    Group,
     GroupRanking,
+    TournamentBracket,
     LeagueEntry,
     OperationSnapshot,
     RoundRobinMatch,
@@ -245,6 +247,8 @@ def build_category_snapshot_payload(category):
         "category_id": category.id,
         "tournament_id": category.tournament_id,
         "created_at": timezone.now().isoformat(),
+        "group_comments": list(Group.objects.filter(category=category).order_by("pk").values("id", "hq_comment")),
+        "bracket_comments": list(TournamentBracket.objects.filter(category=category).order_by("pk").values("id", "hq_comment")),
         "league_entries": league_entries,
         "tournament_entries": tournament_entries,
         "stage_leg_settings": [
@@ -468,6 +472,13 @@ def _restore_category_payload(
         _validate_category_restore_conflicts(category, payload)
 
     with transaction.atomic():
+        # Older snapshots predate comments; their restored state has no comments.
+        for model, key in ((Group, "group_comments"), (TournamentBracket, "bracket_comments")):
+            model.objects.filter(category=category).update(hq_comment="")
+            for item in payload.get(key, []):
+                model.objects.filter(category=category, pk=item["id"]).update(
+                    hq_comment=item.get("hq_comment", ""),
+                )
         current_rr_ids, _ = _current_category_match_ids(category)
 
         _category_replacement_history_queryset(category).delete()

@@ -1,0 +1,6 @@
+{% if comment %}
+<aside class="hq-comment" aria-label="本部より">
+    <strong>本部より</strong>
+    <div class="hq-comment-body">{{ comment|force_escape|linebreaksbr }}</div>
+</aside>
+{% endif %}

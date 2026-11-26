@@ -1,0 +1,13 @@
+<button type="button" class="button-link hq-comment-button" onclick="this.nextElementSibling.showModal()">本部コメント</button>
+<dialog class="hq-comment-dialog">
+    <form method="post" action="{% url 'save_hq_comment' tournament.code target_type target.id %}">
+        {% csrf_token %}
+        <h3>本部コメント — {{ target.name }}</h3>
+        <p><label>本部コメント<textarea name="hq_comment" rows="5">{{ target.hq_comment }}</textarea></label></p>
+        <p class="subtle-text">空にして保存すると消去できます。</p>
+        <div class="hq-comment-dialog-actions">
+            <button type="button" class="button-link" onclick="this.closest('dialog').close()">キャンセル</button>
+            <button type="submit" class="button-link">保存</button>
+        </div>
+    </form>
+</dialog>

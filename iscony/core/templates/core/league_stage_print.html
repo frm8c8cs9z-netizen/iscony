@@ -1,6 +1,7 @@
 {% extends "core/base.html" %}
 {% load tz static %}
 {% block content %}
+<link rel="stylesheet" href="{% static 'core/hq_comment.css' %}">
 {% include "core/_stage_print_style.html" %}
 <style>
     .league-print-controls { display: flex; flex-wrap: wrap; gap: 1em; align-items: center; margin: 1em 0; }
@@ -72,6 +73,7 @@
                 <h3>{{ data.group.name }}</h3>
                 {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="plain" blank_unfinished_stats=True use_league_score_colors=use_league_score_colors table_kind="main" %}
                 {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches link_kind="plain" %}
+                {% include "core/_hq_comment.html" with comment=data.group.hq_comment %}
             </section>
         {% empty %}
             <p>リーグがありません。</p>
@@ -86,6 +88,7 @@
                         <h4>同率順位決定補助表（{{ tie_table.wins }}勝）</h4>
                         {% include "core/_round_robin_table.html" with data=data pairs=tie_table.pairs rows=tie_table.rows row_template="core/_round_robin_tie_row.html" row_score_link_kind="plain" use_league_score_colors=use_league_score_colors table_kind="tie" %}
                     {% endfor %}
+                    {% include "core/_hq_comment.html" with comment=data.group.hq_comment %}
                 </section>
             {% endif %}
         {% endfor %}

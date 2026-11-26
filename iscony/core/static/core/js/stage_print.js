@@ -112,10 +112,12 @@
                 heading.textContent = bracket.dataset.bracketName;
                 heading.style.maxWidth = bodyWidth + "px";
                 const message = document.createElement("p");
-                message.textContent = bracket.textContent.trim();
+                const comment = bracket.querySelector(".hq-comment");
+                message.textContent = comment ? "対戦表がありません。" : bracket.textContent.trim();
                 const diagram = document.createElement("div");
                 diagram.className = "print-diagram";
                 diagram.append(heading, message);
+                if (comment) diagram.append(comment.cloneNode(true));
                 stack.append(diagram);
                 units.push({stack, isolated: false, svgs: [], scale: Infinity});
             }
@@ -139,6 +141,12 @@
                     width = Math.max(width, box.width);
                     height += box.height;
                     headingsHeight += heading.getBoundingClientRect().height + parseFloat(getComputedStyle(heading).marginBottom);
+                    const comment = diagram.querySelector(".hq-comment");
+                    if (comment) {
+                        comment.style.maxWidth = bodyWidth + "px";
+                        const style = getComputedStyle(comment);
+                        headingsHeight += comment.getBoundingClientRect().height + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+                    }
                     svgs.push({svg, width: box.width, height: box.height});
                 });
                 const gap = parseFloat(getComputedStyle(stack).rowGap) * (plan.length - 1);

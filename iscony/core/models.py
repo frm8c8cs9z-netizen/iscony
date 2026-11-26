@@ -1016,6 +1016,8 @@ class ParticipantOrganizationValue(models.Model):
 # =========================================================
 class Group(models.Model):
 
+    hq_comment = models.TextField(blank=True, default="")
+
     planned_slot_count = models.PositiveIntegerField(null=True, blank=True)
 
     category = models.ForeignKey(
@@ -1653,6 +1655,8 @@ class ScheduleBlock(models.Model):
 
 
 class TournamentBracket(models.Model):
+
+    hq_comment = models.TextField(blank=True, default="")
 
     LAYOUT_INHERIT = "inherit"
     LAYOUT_SPLIT = "split"

@@ -287,6 +287,7 @@ def clone_tournament_without_results(source, *, name, code):
             category__tournament=source,
         ).order_by("id"):
             group_map[old.id] = Group.objects.create(
+                hq_comment="",
                 category=category_map[old.category_id],
                 stage=stage_map.get(old.stage_id),
                 planned_slot_count=old.planned_slot_count,
@@ -329,6 +330,7 @@ def clone_tournament_without_results(source, *, name, code):
             category__tournament=source,
         ).order_by("id"):
             bracket_map[old.id] = TournamentBracket.objects.create(
+                hq_comment="",
                 category=category_map[old.category_id],
                 stage=stage_map.get(old.stage_id),
                 name=old.name,

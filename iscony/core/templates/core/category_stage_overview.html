@@ -15,6 +15,7 @@
 {% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="{% static 'core/hq_comment.css' %}">
 
 <style>
     .stage-results {
@@ -280,12 +281,15 @@
                             <h4>同率順位決定補助表（{{ tie_table.wins }}勝）</h4>
                             {% include "core/_round_robin_table.html" with data=data pairs=tie_table.pairs rows=tie_table.rows row_template="core/_round_robin_tie_row.html" use_league_score_colors=use_league_score_colors table_kind="tie" %}
                         {% endfor %}
+                        {% include "core/_hq_comment.html" with comment=data.group.hq_comment %}
+                        {% include "core/_hq_comment_editor.html" with target=data.group target_type="group" %}
                     </div>
                 {% empty %}
                     <p>リーグがありません。</p>
                 {% endfor %}
             {% else %}
                 {% for data in row.display_brackets %}
+                    <div id="bracket-{{ data.bracket.id }}">
                     {% if data.svg_brackets %}
                         {% for svg_bracket in data.svg_brackets %}
                             <div class="group-box">
@@ -297,19 +301,28 @@
                                     {% endif %}
                                 </h4>
                                 {% include "core/_svg_bracket_panel.html" with svg_bracket=svg_bracket aria_label=data.bracket.name %}
+                                {% if forloop.last %}
+                                    {% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}
+                                    {% include "core/_hq_comment_editor.html" with target=data.bracket target_type="bracket" %}
+                                {% endif %}
                             </div>
                         {% endfor %}
                     {% elif data.svg_bracket %}
                         <div class="group-box">
                             <h4>{{ data.bracket.name }}</h4>
                             {% include "core/_svg_bracket_panel.html" with svg_bracket=data.svg_bracket aria_label=data.bracket.name %}
+                            {% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}
+                            {% include "core/_hq_comment_editor.html" with target=data.bracket target_type="bracket" %}
                         </div>
                     {% else %}
                         <div class="group-box">
                             <h4>{{ data.bracket.name }}</h4>
                             <p class="subtle-text">トーナメント枠はありますが、まだ試合がありません。</p>
+                            {% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}
+                            {% include "core/_hq_comment_editor.html" with target=data.bracket target_type="bracket" %}
                         </div>
                     {% endif %}
+                    </div>
                 {% empty %}
                     <p>トーナメントがありません。</p>
                 {% endfor %}

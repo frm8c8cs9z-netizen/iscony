@@ -6,6 +6,7 @@
 {% block site_brand_url %}{% url 'public_tournament_detail' tournament.public_token %}{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="{% static 'core/hq_comment.css' %}">
 
 <style>
     .public-stage-results {
@@ -259,12 +260,14 @@
                         </div>
 
                         {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches title="追加試合" link_kind="plain" table_border=False %}
+                        {% include "core/_hq_comment.html" with comment=data.group.hq_comment %}
                     </div>
                 {% empty %}
                     <p>リーグがありません。</p>
                 {% endfor %}
             {% else %}
                 {% for data in row.display_brackets %}
+                    <div id="bracket-{{ data.bracket.id }}">
                     {% if data.svg_brackets %}
                         {% for svg_bracket in data.svg_brackets %}
                             <div class="public-result-block">
@@ -276,19 +279,23 @@
                                     {% endif %}
                                 </h4>
                                 {% include "core/_svg_bracket_panel.html" with svg_bracket=svg_bracket aria_label=data.bracket.name %}
+                                {% if forloop.last %}{% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}{% endif %}
                             </div>
                         {% endfor %}
                     {% elif data.svg_bracket %}
                         <div class="public-result-block">
                             <h4>{{ data.bracket.name }}</h4>
                             {% include "core/_svg_bracket_panel.html" with svg_bracket=data.svg_bracket aria_label=data.bracket.name %}
+                            {% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}
                         </div>
                     {% else %}
                         <div class="public-result-block">
                             <h4>{{ data.bracket.name }}</h4>
                             <p>トーナメント枠がありません。</p>
+                            {% include "core/_hq_comment.html" with comment=data.bracket.hq_comment %}
                         </div>
                     {% endif %}
+                    </div>
                 {% empty %}
                     <p>トーナメントがありません。</p>
                 {% endfor %}
