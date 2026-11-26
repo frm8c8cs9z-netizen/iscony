@@ -11,6 +11,88 @@
     let mode = "mobile";
     try { mode = localStorage.getItem(key) === "table" ? "table" : "mobile"; } catch (_) { mode = "mobile"; }
     let restored = [];
+    const zoomControls = byId("public-schedule-zoom");
+    const zoomKey = "public-schedule-table-zoom";
+    const zoomSupported = window.CSS && CSS.supports("zoom", "1");
+    const zoomTables = [...document.querySelectorAll("#public-schedule-tables .schedule-table-wrapper")]
+        .map((wrapper) => ({wrapper, table: wrapper.querySelector("table"), pinch: null}));
+    let zoom = 1;
+    try {
+        const saved = Number(localStorage.getItem(zoomKey));
+        if (Number.isFinite(saved) && saved > 0) zoom = saved;
+    } catch (_) { zoom = 1; }
+    const zoomActive = () => zoomSupported && media.matches && mode === "table" && zoomTables.length > 0;
+    function fitZoom() {
+        // 表幅はzoomを除いた値。全日程区分が同じ倍率で収まるよう最も広い表に合わせる。
+        return Math.max(0.2, Math.min(1, ...zoomTables.map(({wrapper, table}) =>
+            (wrapper.clientWidth - 1) / (table.getBoundingClientRect().width / (Number(table.style.zoom) || 1)))));
+    }
+    function applyZoom(value, anchor = null) {
+        if (!zoomActive()) return;
+        const next = Math.max(fitZoom(), Math.min(1.5, value));
+        zoomTables.forEach(({wrapper, table}) => {
+            const previous = Number(table.style.zoom) || 1;
+            const x = anchor && anchor.wrapper === wrapper ? anchor.x : wrapper.clientWidth / 2;
+            const y = anchor && anchor.wrapper === wrapper ? anchor.y : wrapper.clientHeight / 2;
+            const left = (wrapper.scrollLeft + x) * next / previous - x;
+            const top = (wrapper.scrollTop + y) * next / previous - y;
+            table.style.zoom = String(next);
+            wrapper.scrollLeft = left;
+            wrapper.scrollTop = top;
+        });
+        zoom = next;
+        byId("public-schedule-zoom-value").textContent = `${Math.round(zoom * 100)}%`;
+        byId("public-schedule-zoom-out").disabled = zoom <= fitZoom() + 0.001;
+        byId("public-schedule-zoom-in").disabled = zoom >= 1.5;
+    }
+    function saveZoom() {
+        try { localStorage.setItem(zoomKey, String(zoom)); } catch (_) { applyZoom(1); }
+    }
+    function renderZoom() {
+        const active = zoomActive();
+        document.body.classList.toggle("public-schedule-table-zoom", active);
+        zoomControls.hidden = !active;
+        zoomTables.forEach((item) => {
+            item.pinch = null;
+            if (!active) item.table.style.removeProperty("zoom");
+        });
+        if (active) applyZoom(zoom);
+    }
+    [["out", 0.8], ["in", 1.25], ["fit", null]].forEach(([action, factor]) => {
+        byId(`public-schedule-zoom-${action}`).addEventListener("click", () => {
+            applyZoom(factor === null ? fitZoom() : zoom * factor);
+            saveZoom();
+        });
+    });
+    zoomTables.forEach((item) => {
+        const {wrapper} = item;
+        const distance = (touches) => Math.hypot(touches[1].clientX - touches[0].clientX,
+            touches[1].clientY - touches[0].clientY);
+        wrapper.addEventListener("touchstart", (event) => {
+            if (!zoomActive() || event.touches.length !== 2) { item.pinch = null; return; }
+            event.preventDefault();
+            const rect = wrapper.getBoundingClientRect();
+            item.pinch = {distance: distance(event.touches), zoom,
+                anchor: {wrapper, x: (event.touches[0].clientX + event.touches[1].clientX) / 2 - rect.left,
+                    y: (event.touches[0].clientY + event.touches[1].clientY) / 2 - rect.top}};
+        }, {passive: false});
+        wrapper.addEventListener("touchmove", (event) => {
+            if (!zoomActive() || event.touches.length !== 2 || !item.pinch) return;
+            event.preventDefault();
+            if (item.pinch.distance > 0) {
+                applyZoom(item.pinch.zoom * distance(event.touches) / item.pinch.distance, item.pinch.anchor);
+            }
+        }, {passive: false});
+        const endPinch = () => {
+            if (item.pinch) { item.pinch = null; saveZoom(); }
+        };
+        wrapper.addEventListener("touchend", endPinch);
+        wrapper.addEventListener("touchcancel", endPinch);
+        ["gesturestart", "gesturechange"].forEach((name) => wrapper.addEventListener(name, (event) => {
+            if (zoomActive()) event.preventDefault();
+        }, {passive: false}));
+    });
+    window.addEventListener("resize", () => { if (zoomActive()) applyZoom(zoom); });
     const cleanText = (node) => node ? node.textContent.replace(/\s+/g, " ").trim() : "";
     const textList = (cell, selector) => [...cell.querySelectorAll(selector)].map(cleanText).join(" / ");
     const element = (tag, className, text) => {
@@ -90,6 +172,7 @@
         byId("public-schedule-mobile").hidden = !mobile;
         byId("public-schedule-show-table").hidden = mode === "table";
         byId("public-schedule-show-mobile").hidden = mode !== "table";
+        renderZoom();
         if (!mobile) return;
         let selected;
         for (const block of blocks) {

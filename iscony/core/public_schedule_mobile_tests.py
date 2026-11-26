@@ -63,6 +63,8 @@ class PublicScheduleMobileTests(TestCase):
         self.assertContains(response, '<meta name="viewport" content="width=device-width, initial-scale=1">', count=1)
         for marker in ('id="public-schedule-overview"', 'id="public-schedule-court"',
                        'id="public-schedule-show-table"', 'id="public-schedule-show-mobile"',
+                       'id="public-schedule-zoom-out"', 'id="public-schedule-zoom-in"',
+                       'id="public-schedule-zoom-fit"', 'id="public-schedule-zoom-value"',
                        'data-schedule-block=', 'data-progress="now"', 'data-result-entered=',
                        'public_schedule_mobile.js'):
             self.assertContains(response, marker)
@@ -91,7 +93,7 @@ class PublicScheduleMobileTests(TestCase):
         html = re.sub(r'<script[^>]*src=[^>]*></script>', '', response.content.decode())
         root = Path(settings.BASE_DIR) / "core/static/core"
         with sync_playwright() as pw, pw.chromium.launch() as browser:
-            page = browser.new_page(viewport={"width": 390, "height": 844})
+            page = browser.new_page(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.route("http://schedule.test/**", lambda route: route.fulfill(body=html, content_type="text/html"))
@@ -142,6 +144,34 @@ class PublicScheduleMobileTests(TestCase):
             self.assertTrue(page.locator(".schedule-grid-table").first.is_visible())
             self.assertEqual(page.evaluate("localStorage.getItem('public-schedule-display')"), "table")
             self.assertEqual(page.locator("#public-schedule-matches a").count(), 0)
+            zooms = lambda: page.locator(".schedule-grid-table").evaluate_all("tables => tables.map(t => t.style.zoom)")
+            self.assertEqual(zooms(), ["1", "1"])
+            page.locator("#public-schedule-zoom-in").click()
+            self.assertEqual(zooms(), ["1.25", "1.25"])
+            self.assertEqual(page.locator("#public-schedule-zoom-value").inner_text(), "125%")
+            self.assertGreaterEqual(page.locator("#public-schedule-zoom-out").bounding_box()["width"], 44)
+            # 合成touchイベントで2点だけを抑止し、倍率と上限、保存を検証する。
+            prevented = page.locator(".schedule-table-wrapper").first.evaluate("""wrapper => {
+                const rect = wrapper.getBoundingClientRect();
+                const touch = (type, span, count = 2) => {
+                    const event = new Event(type, {bubbles: true, cancelable: true});
+                    const points = [
+                        {clientX: rect.left + 40, clientY: rect.top + 60},
+                        {clientX: rect.left + 40 + span, clientY: rect.top + 60}];
+                    Object.defineProperty(event, 'touches', {value: points.slice(0, count)});
+                    wrapper.dispatchEvent(event);
+                    return event.defaultPrevented;
+                };
+                const single = touch('touchstart', 100, 1);
+                const start = touch('touchstart', 100);
+                const move = touch('touchmove', 200);
+                touch('touchend', 0, 0);
+                return [single, start, move];
+            }""")
+            self.assertEqual(prevented, [False, True, True])
+            self.assertEqual(zooms(), ["1.5", "1.5"])
+            self.assertEqual(page.evaluate("localStorage.getItem('public-schedule-table-zoom')"), "1.5")
+            self.assertTrue(page.locator("#public-schedule-zoom-in").is_disabled())
             self.assertEqual(page.locator(".schedule-grid-table thead th").first.evaluate("e => getComputedStyle(e).position"), "sticky")
             wrappers = page.locator(".schedule-table-wrapper")
             self.assertEqual(wrappers.count(), 2)
@@ -156,11 +186,31 @@ class PublicScheduleMobileTests(TestCase):
                 self.assertAlmostEqual(header.bounding_box()["y"], wrapper.bounding_box()["y"], delta=3)
                 self.assertAlmostEqual(row_header.bounding_box()["x"], wrapper.bounding_box()["x"], delta=3)
             page.screenshot(path="/tmp/public-schedule-mobile-table-390.png")
+            page.locator("#public-schedule-zoom-fit").click()
+            for wrapper in wrappers.all():
+                self.assertLessEqual(wrapper.locator("table").bounding_box()["width"],
+                                     wrapper.evaluate("e => e.clientWidth") + 1)
+            self.assertTrue(page.locator("#public-schedule-zoom-out").is_disabled())
+            page.locator("#public-schedule-zoom-in").click()
+            enlarged = float(zooms()[0])
+            page.locator("#public-schedule-zoom-out").click()
+            self.assertLess(float(zooms()[0]), enlarged)
+            page.locator("#public-schedule-zoom-in").click()
+            saved_zoom = zooms()
             page.reload()
             page.add_style_tag(path=str(root / "public_schedule_mobile.css"))
             page.add_script_tag(path=str(root / "js/public_schedule_mobile.js"))
             self.assertTrue(page.locator("#public-schedule-show-mobile").is_visible())
+            self.assertEqual(zooms(), saved_zoom)
+            page.set_viewport_size({"width": 1200, "height": 900})
+            page.wait_for_function("!document.body.classList.contains('public-schedule-table-zoom')")
+            self.assertEqual(zooms(), ["", ""])
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.wait_for_function("document.body.classList.contains('public-schedule-table-zoom')")
+            self.assertEqual(zooms(), saved_zoom)
             page.locator("#public-schedule-show-mobile").click()
+            self.assertEqual(zooms(), ["", ""])
+            self.assertFalse(page.locator("#public-schedule-zoom").is_visible())
             page.locator("#public-schedule-back").click()
             page.wait_for_function("!document.querySelector('#public-schedule-overview').hidden")
             page.evaluate("hash => { window.location.hash = hash; }", f"#schedule-{schedules[1].pk}")
@@ -184,6 +234,48 @@ class PublicScheduleMobileTests(TestCase):
             self.assertTrue(page.locator("#public-schedule-court").is_visible())
             self.assertFalse(page.locator(".schedule-grid-table").first.is_visible())
             self.assertEqual(errors, [])
+
+    def test_playwright_zoom_storage_failure_and_unsupported_browser(self):
+        import re
+        from pathlib import Path
+        from django.conf import settings
+        from playwright.sync_api import sync_playwright
+
+        html = re.sub(r'<script[^>]*src=[^>]*></script>', '',
+                      self.client.get(self.urls["public_schedule"]).content.decode())
+        root = Path(settings.BASE_DIR) / "core/static/core"
+        with sync_playwright() as pw, pw.chromium.launch() as browser:
+            for supported in (True, False):
+                with self.subTest(zoom_supported=supported):
+                    page = browser.new_page(viewport={"width": 390, "height": 844},
+                                            has_touch=True, is_mobile=True)
+                    page.route("http://schedule.test/**", lambda route: route.fulfill(
+                        body=html, content_type="text/html"))
+                    page.add_init_script("""for (const method of ['getItem', 'setItem']) {
+                        const original = Storage.prototype[method];
+                        Storage.prototype[method] = function(key, ...args) {
+                            if (key === 'public-schedule-table-zoom') throw new Error('zoom storage blocked');
+                            return original.call(this, key, ...args);
+                        };
+                    }""")
+                    if not supported:
+                        page.add_init_script("CSS.supports = () => false;")
+                    page.goto("http://schedule.test/")
+                    page.add_style_tag(path=str(root / "public_schedule_mobile.css"))
+                    page.add_script_tag(path=str(root / "js/public_schedule_mobile.js"))
+                    page.locator("#public-schedule-show-table").click()
+                    table = page.locator(".schedule-grid-table").first
+                    self.assertTrue(table.is_visible())
+                    self.assertEqual(page.locator("#public-schedule-zoom").is_visible(), supported)
+                    if supported:
+                        self.assertEqual(table.evaluate("e => e.style.zoom"), "1")
+                        page.locator("#public-schedule-zoom-in").click()
+                        self.assertEqual(table.evaluate("e => e.style.zoom"), "1")
+                    else:
+                        self.assertEqual(table.evaluate("e => e.style.zoom"), "")
+                        self.assertEqual(page.locator(".schedule-table-wrapper").first.evaluate(
+                            "e => getComputedStyle(e).touchAction"), "auto")
+                    page.close()
 
     def test_moved_cards_keep_ghost_and_origin_and_skip_ghost_for_now(self):
         from .schedule_move_tests import ScheduleMoveTests

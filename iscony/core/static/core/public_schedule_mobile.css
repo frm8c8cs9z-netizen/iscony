@@ -10,6 +10,10 @@
     body.public-schedule-mobile #public-schedule-tables { display: none; }
     #public-schedule-mobile [hidden], #public-schedule-controls [hidden] { display: none; }
     #public-schedule-controls { margin-bottom: 16px; }
+    #public-schedule-zoom:not([hidden]) { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    #public-schedule-zoom button { min-width: 44px; }
+    body.public-schedule-table-zoom #public-schedule-tables .schedule-table-wrapper { touch-action: pan-x pan-y; }
+    body.public-schedule-table-zoom #public-schedule-tables .schedule-grid-table { width: max-content; }
     #public-schedule-controls button, #public-schedule-mobile button {
         min-height: 44px; padding: 8px 12px; border: 1px solid #b8c7dc;
         border-radius: 4px; background: #fff; color: #1565c0; font: inherit;

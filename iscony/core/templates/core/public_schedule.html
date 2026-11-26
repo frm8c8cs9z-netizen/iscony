@@ -184,6 +184,12 @@
 <div id="public-schedule-controls" hidden>
     <button type="button" id="public-schedule-show-table">表で見る</button>
     <button type="button" id="public-schedule-show-mobile" hidden>スマホ表示に戻る</button>
+    <span id="public-schedule-zoom" role="group" aria-label="表の拡大・縮小" hidden>
+        <button type="button" id="public-schedule-zoom-out" aria-label="表を縮小">−</button>
+        <button type="button" id="public-schedule-zoom-in" aria-label="表を拡大">＋</button>
+        <button type="button" id="public-schedule-zoom-fit">広く見る</button>
+        <output id="public-schedule-zoom-value" aria-label="表の倍率">100%</output>
+    </span>
 </div>
 <section id="public-schedule-mobile" hidden aria-label="スマホ進行表">
     <div id="public-schedule-overview"><h2>全体の様子</h2><div id="public-schedule-blocks"></div></div>
