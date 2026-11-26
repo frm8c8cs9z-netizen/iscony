@@ -29,7 +29,7 @@ from ..helpers.view import (
     _tournament_stage_overview_url,
 )
 from ..selectors.advancement_labels import prepare_related_result_labels
-from ..selectors.public_schedule import annotate_public_schedule
+from ..selectors.public_schedule import annotate_public_schedule, build_public_search_data, public_search_script
 from ..models import (
     Tournament,
     TournamentBackup,
@@ -1064,6 +1064,7 @@ def _render_public_schedule(request, tournament):
     block_tables = _schedule_block_tables(tournament)
     _attach_resolved_referee_participants(block_tables)
     annotate_public_schedule(block_tables)
+    public_search_data = build_public_search_data(block_tables)
 
     bracket_counts_by_stage = dict(
         TournamentBracket.objects.filter(
@@ -1088,6 +1089,7 @@ def _render_public_schedule(request, tournament):
             "tournament": tournament,
             "block_tables": block_tables,
             "show_block_headings": len(block_tables) > 1,
+            "public_search_script": public_search_script(public_search_data),
         }
     )
 

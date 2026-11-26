@@ -297,3 +297,137 @@ class PublicScheduleMobileTests(TestCase):
         self.assertContains(response, 'data-ghost="true"')
         self.assertContains(response, 'class="schedule-move-origin"')
         self.assertContains(response, f'data-schedule-block="{self.other_block.pk}"')
+
+    def test_playwright_search_data_matching_navigation_and_storage(self):
+        import json
+        import re
+        from pathlib import Path
+        from django.conf import settings
+        from playwright.sync_api import sync_playwright
+        from .models import Category, LeagueEntry, ParticipantOrganizationValue, Schedule
+        from .services.schedule_moves import move_schedule_with_ghost
+
+        self._add_pairs_and_matches(2)
+        self._add_pairs_and_matches(3)
+        pairs = list(LeagueEntry.objects.filter(group=self.group).order_by("display_order"))
+        pairs[0].pair_code = "5"
+        pairs[0].save(update_fields=["pair_code"])
+        pairs[2].pair_code = "15"
+        pairs[2].save(update_fields=["pair_code"])
+        participant = pairs[0].participant
+        participant.current_player1_name = "ムラカミ"
+        participant.current_player1_short_name = "ムラカミ"
+        participant.save(update_fields=["current_player1_name", "current_player1_short_name"])
+        ParticipantOrganizationValue.objects.filter(participant=participant, field__code="org1").update(
+            current_value="正式クラブ")
+        ParticipantOrganizationValue.objects.filter(participant=participant, field__code="org2").update(
+            current_value="ABC・クラブ")
+        other_category = Category.objects.create(tournament=self.tournament, name="別カテゴリ")
+        self.bracket.category = other_category
+        self.bracket.save(update_fields=["category"])
+        rows = list(Schedule.objects.order_by("order"))
+        rows[0].round_robin_match.pair1_games = 4
+        rows[0].round_robin_match.pair2_games = 2
+        rows[0].round_robin_match.save(update_fields=["pair1_games", "pair2_games"])
+        move_schedule_with_ghost(rows[1], self.block, self.court, 12)
+        response = self.client.get(self.urls["public_schedule"])
+        html = re.sub(r'<script[^>]*src=[^>]*></script>', '', response.content.decode())
+        payload = re.search(r'<script id="public-schedule-search-data"[^>]*>(.*?)</script>', html).group(1)
+        data = json.loads(payload)
+        entry = data["entries"][f"l{pairs[0].pk}"]
+        self.assertEqual(entry[:2], [str(self.category.pk), "5"])
+        self.assertTrue(any("正式クラブ" in text for text in entry[2]))
+        self.assertTrue(any("ABC・クラブ" in text for text in entry[2]))
+        self.assertContains(response, 'id="public-schedule-query"')
+        self.assertEqual(len(data["entries"]), 12)  # repeated matches reuse entry records
+        attributes = re.findall(r'\s*data-search-entries="[^"]*"', html)
+        overhead = len(payload.encode()) + sum(len(value.encode()) for value in attributes)
+        print(f"PUBLIC_SEARCH_HTML: {overhead} bytes for 9 matches / 12 unique entries; "
+              f"2800-match linear projection: {round(overhead * 2800 / 9)} bytes (before compression, plus fixed controls)")
+        root = Path(settings.BASE_DIR) / "core/static/core"
+        with sync_playwright() as pw, pw.chromium.launch() as browser:
+            page = browser.new_page(viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True)
+            page.set_default_timeout(5000)
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.route("http://schedule.test/**", lambda route: route.fulfill(body=html, content_type="text/html"))
+
+            def load():
+                page.goto("http://schedule.test/")
+                page.add_style_tag(path=str(root / "public_schedule_mobile.css"))
+                page.add_script_tag(path=str(root / "js/public_schedule_mobile.js"))
+
+            load()
+            query = page.locator("#public-schedule-query")
+            category = page.locator("#public-schedule-category")
+            results = page.locator(".public-search-match")
+            category.select_option(str(self.category.pk))
+            self.assertTrue(page.locator("#public-schedule-overview").is_visible())
+            self.assertFalse(page.locator("#public-schedule-search-results").is_visible())
+            for value in ("むらかみ", "ﾑﾗｶﾐ", "ム ラ・カミ", "正式クラブ", "ａｂｃ ·くらぶ"):
+                query.fill(value)
+                page.wait_for_function("!document.querySelector('#public-schedule-search-results').hidden")
+                self.assertEqual(results.count(), 2, value)
+                self.assertFalse(page.locator("#public-schedule-overview").is_visible())
+            query.fill("１５")
+            self.assertEqual(results.count(), 2)
+            query.fill("５")
+            self.assertEqual(results.count(), 2)
+            targets = results.evaluate_all("nodes => nodes.map(n => n.dataset.scheduleTarget)")
+            self.assertEqual(set(targets), {f"schedule-{rows[0].pk}", f"schedule-{rows[1].pk}"})
+            self.assertEqual(page.locator(".public-search-completed > summary").inner_text(), "終わった試合(1)")
+            self.assertIn("4 - 2", page.locator(".public-search-completed").text_content())
+            self.assertIn("あと7試合", results.first.inner_text())
+            results.first.click()
+            page.wait_for_function("document.querySelector('.public-search-highlight') !== null")
+            self.assertEqual(page.locator("#public-schedule-matches .public-search-highlight").count(), 1)
+            page.wait_for_function("""() => {
+                const item = document.querySelector('.public-search-highlight');
+                return item && item.getBoundingClientRect().top >= 0 && item.getBoundingClientRect().top < 844;
+            }""")
+            page.locator("#public-schedule-back").click()
+            page.wait_for_function("!document.querySelector('#public-schedule-search-results').hidden")
+            page.locator(".public-search-completed > summary").click()
+            page.locator(".public-search-completed button").click()
+            page.wait_for_function("document.querySelector('#public-schedule-matches details.public-search-highlight[open]') !== null")
+            page.locator("#public-schedule-back").click()
+            page.wait_for_function("!document.querySelector('#public-schedule-search-results').hidden")
+            category.select_option(str(other_category.pk))
+            self.assertEqual(results.count(), 0)
+            self.assertIn("見つかりませんでした", page.locator("#public-schedule-search-results").inner_text())
+            category.select_option("")
+            query.fill("むらかみ")
+            self.assertEqual(results.count(), 3)
+            category.select_option(str(self.category.pk))
+            load()
+            self.assertEqual(query.input_value(), "むらかみ")
+            self.assertEqual(category.input_value(), str(self.category.pk))
+            self.assertEqual(results.count(), 2)
+            page.locator("#public-schedule-show-table").click()
+            self.assertFalse(query.is_visible())
+            page.set_viewport_size({"width": 1200, "height": 900})
+            self.assertFalse(query.is_visible())
+            page.set_viewport_size({"width": 390, "height": 844})
+            page.locator("#public-schedule-show-mobile").click()
+            query.fill("")
+            page.locator("#public-schedule-overview").wait_for(state="visible")
+            page.add_init_script("""for (const method of ['getItem', 'setItem']) {
+                const original = Storage.prototype[method];
+                Storage.prototype[method] = function(key, ...args) {
+                    if (key === 'public-schedule-search') throw new Error('blocked');
+                    return original.call(this, key, ...args);
+                };
+            }""")
+            load()
+            self.assertEqual(query.input_value(), "")
+            self.assertEqual(category.input_value(), "")
+            query.fill("むらかみ")
+            self.assertEqual(results.count(), 3)
+            self.assertEqual(errors, [])
+            page.close()
+            page = browser.new_page(viewport={"width": 390, "height": 844}, java_script_enabled=False)
+            page.route("**/*", lambda route: route.fulfill(body=""))
+            nojs_html = html.replace("</head>", "<style>" + (root / "public_schedule_mobile.css").read_text() + "</style></head>")
+            page.set_content(nojs_html, wait_until="domcontentloaded", timeout=5000)
+            self.assertTrue(page.locator(".schedule-grid-table").is_visible())
+            self.assertFalse(page.locator("#public-schedule-mobile").is_visible())

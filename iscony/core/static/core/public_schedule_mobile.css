@@ -47,3 +47,17 @@
     body.public-schedule-enhanced #public-schedule-tables .schedule-table-wrapper { overflow: auto; max-height: calc(100vh - 80px); max-height: calc(100dvh - 80px); }
     /* 固定行・列はbase.htmlのschedule-grid-tableのsticky指定を再利用。 */
 }
+
+@media (max-width: 640px) {
+    #public-schedule-search { margin: 16px 0; scroll-margin-top: 16px; }
+    #public-schedule-search label { display: block; margin: 10px 0 4px; }
+    #public-schedule-search input, #public-schedule-search select {
+        box-sizing: border-box; width: 100%; min-height: 44px; font: inherit;
+        padding: 8px; border: 1px solid #b8c7dc; border-radius: 4px;
+    }
+    #public-schedule-mobile .public-search-match {
+        display: block; width: 100%; margin: 8px 0; padding: 12px; text-align: left; color: #222;
+    }
+    .public-search-completed > summary { padding: 12px 0; cursor: pointer; }
+    .public-search-highlight { background: #fff3bf; outline: 3px solid #d99a00; }
+}

@@ -94,7 +94,7 @@
     });
     window.addEventListener("resize", () => { if (zoomActive()) applyZoom(zoom); });
     const cleanText = (node) => node ? node.textContent.replace(/\s+/g, " ").trim() : "";
-    const textList = (cell, selector) => [...cell.querySelectorAll(selector)].map(cleanText).join(" / ");
+    const textList = (cell, selector, separator = " / ") => [...cell.querySelectorAll(selector)].map(cleanText).join(separator);
     const element = (tag, className, text) => {
         const node = document.createElement(tag);
         node.className = className;
@@ -115,6 +115,84 @@
             cells: [...section.querySelectorAll("tbody td[data-court-id]")].filter((cell) => cell.dataset.courtId === header.dataset.courtId),
         })),
     }));
+    const searchPanel = byId("public-schedule-search");
+    const searchResults = byId("public-schedule-search-results");
+    const queryInput = byId("public-schedule-query");
+    const categoryInput = byId("public-schedule-category");
+    const searchKey = "public-schedule-search";
+    const searchData = JSON.parse(byId("public-schedule-search-data").textContent);
+    const normalize = (value) => String(value).normalize("NFKC").toLowerCase()
+        .replace(/[ぁ-ゖ]/g, (char) => String.fromCharCode(char.charCodeAt(0) + 0x60))
+        .replace(/[\s・･··•‧∙⋅●･]/g, "");
+    const entries = Object.fromEntries(Object.entries(searchData.entries).map(([id, entry]) =>
+        [id, {category: entry[0], code: normalize(entry[1]), texts: entry[2].map(normalize)}]));
+    Object.entries(searchData.categories).forEach(([id, name]) => {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = name;
+        categoryInput.appendChild(option);
+    });
+    try {
+        const saved = JSON.parse(localStorage.getItem(searchKey) || "null");
+        if (saved && typeof saved.query === "string" && typeof saved.category === "string") {
+            queryInput.value = saved.query;
+            categoryInput.value = saved.category;
+        }
+    } catch (_) { queryInput.value = ""; categoryInput.value = ""; }
+    const searchMatches = [];
+    blocks.forEach((block, blockIndex) => block.courts.forEach((court, courtIndex) => {
+        let pending = 0;
+        court.cells.forEach((cell) => {
+            if (cell.querySelector("[data-ghost]")) return;
+            const done = cell.dataset.resultEntered === "true";
+            searchMatches.push({cell, block, court, blockIndex, courtIndex, done,
+                ahead: done ? null : pending++, ids: (cell.dataset.searchEntries || "").split(" ")});
+        });
+    }));
+    searchMatches.sort((a, b) => a.blockIndex - b.blockIndex
+        || Number(a.cell.dataset.order) - Number(b.cell.dataset.order) || a.courtIndex - b.courtIndex);
+    function renderSearch() {
+        const query = normalize(queryInput.value);
+        const list = byId("public-schedule-search-list");
+        list.replaceChildren();
+        if (!query) return false;
+        const numeric = /^[0-9]+$/.test(query);
+        const found = searchMatches.filter((match) => match.ids.some((id) => {
+            const entry = entries[id];
+            return entry && (!categoryInput.value || entry.category === categoryInput.value)
+                && (numeric ? entry.code === query : entry.texts.some((text) => text.includes(query)));
+        }));
+        byId("public-schedule-search-count").textContent = `「${queryInput.value}」の試合 ${found.length}件`;
+        if (!found.length) list.appendChild(element("p", "", "見つかりませんでした"));
+        const completed = element("details", "public-search-completed");
+        completed.appendChild(element("summary", "", `終わった試合(${found.filter((item) => item.done).length})`));
+        found.forEach(({cell, block, court, done, ahead}) => {
+            const button = element("button", "public-search-match");
+            button.type = "button";
+            button.dataset.scheduleTarget = cell.id;
+            const heading = element("span", "public-court-match-heading",
+                `${blocks.length > 1 ? block.name + " / " : ""}${courtName(court)} 第${cell.dataset.order}試合`);
+            if (!done) heading.appendChild(ahead < 2 ? progressBadge(ahead === 0 ? "now" : "next")
+                : element("span", "public-search-ahead", `あと${ahead}試合`));
+            button.append(heading,
+                element("span", "public-court-pairs", textList(cell, ".schedule-entry-name", " vs ") || "未確定"),
+                element("span", "public-court-context", textList(cell, ".schedule-context")));
+            if (done) button.appendChild(element("span", "public-search-score", score(cell)));
+            button.addEventListener("click", () => navigate(`#${cell.id}`));
+            (done ? completed : list).appendChild(button);
+        });
+        if (completed.children.length > 1) list.appendChild(completed);
+        return true;
+    }
+    function searchChanged() {
+        try {
+            localStorage.setItem(searchKey, JSON.stringify({query: queryInput.value, category: categoryInput.value}));
+        } catch (_) { /* Search remains usable without storage. */ }
+        if (window.location.hash !== "#schedule-overview") navigate("#schedule-overview");
+        else render();
+    }
+    queryInput.addEventListener("input", searchChanged);
+    categoryInput.addEventListener("change", searchChanged);
     function restoreCards() {
         restored.forEach(({cell, nodes}) => nodes.forEach((node) => cell.appendChild(node)));
         restored = [];
@@ -181,7 +259,10 @@
                 || court.cells.some((cell) => `#${cell.id}` === window.location.hash));
             if (court) selected = {block, court};
         }
-        overview.hidden = Boolean(selected);
+        searchPanel.hidden = Boolean(selected);
+        const searching = !selected && renderSearch();
+        searchResults.hidden = !searching;
+        overview.hidden = Boolean(selected) || searching;
         courtView.hidden = !selected;
         if (!selected) return;
         const {block, court} = selected;
@@ -215,7 +296,12 @@
             nodes.forEach((node) => item.appendChild(node));
             matches.appendChild(item);
             if (cell.dataset.progress === "now") current = item;
-            if (`#${cell.id}` === window.location.hash) anchored = item;
+            if (`#${cell.id}` === window.location.hash) {
+                anchored = item;
+                if (completed) item.open = true;
+                item.classList.add("public-search-highlight");
+                window.setTimeout(() => item.classList.remove("public-search-highlight"), 3000);
+            }
         });
         title.focus({preventScroll: true});
         const destination = anchored || current || title;
@@ -234,7 +320,7 @@
     byId("public-schedule-show-mobile").addEventListener("click", () => chooseMode("mobile"));
     byId("public-schedule-back").addEventListener("click", () => {
         navigate("#schedule-overview");
-        requestAnimationFrame(() => overview.scrollIntoView({block: "start"}));
+        requestAnimationFrame(() => searchPanel.scrollIntoView({block: "start"}));
     });
     window.addEventListener("hashchange", render);
     media.addEventListener("change", render);

@@ -1,5 +1,19 @@
 """公開進行表を先読み済みの表から整える。追加のDBアクセスはしない。"""
 
+from django.core.serializers.json import DjangoJSONEncoder
+from django.utils.html import json_script
+
+
+class _CompactSearchEncoder(DjangoJSONEncoder):
+    def __init__(self, *args, **kwargs):
+        kwargs.update(ensure_ascii=False, separators=(",", ":"))
+        super().__init__(*args, **kwargs)
+
+
+def public_search_script(data):
+    # Keep Japanese compact while retaining json_script's escaping of <, > and &.
+    return json_script(data, "public-schedule-search-data", encoder=_CompactSearchEncoder)
+
 
 def annotate_public_schedule(block_tables):
     first_active = None
@@ -26,3 +40,38 @@ def annotate_public_schedule(block_tables):
         first_active = block_tables[0]
     for block_table in block_tables:
         block_table["public_initial_open"] = block_table is first_active
+
+
+def build_public_search_data(block_tables):
+    """Deduplicate search entries; use only relations already prefetched by the view."""
+    entries = {}
+    categories = {}
+    for block in block_tables:
+        for row in block["table"]:
+            for schedule in row["cells"]:
+                if not schedule or schedule.is_ghost:
+                    continue
+                match = schedule.match
+                container = match.group if schedule.is_round_robin else match.bracket
+                category = container.category
+                categories[str(category.pk)] = category.name
+                keys = []
+                for pair in (match.pair1, match.pair2):
+                    if not pair:
+                        continue
+                    key = ("l" if schedule.is_round_robin else "t") + str(pair.pk)
+                    keys.append(key)
+                    if key in entries:
+                        continue
+                    participant = pair.participant
+                    # The displayed short name includes resolved advancement sources.
+                    texts = [pair.short_name, pair.formal_organization, pair.display_organization]
+                    if participant:
+                        for value in participant.organization_values.all():
+                            if value.field.code == "org2":
+                                texts.append(value.current_value if participant.has_day_player_change
+                                             and value.current_value is not None else value.original_value)
+                    entries[key] = [str(category.pk), str(pair.code or ""),
+                                    list(dict.fromkeys(text for text in texts if text))]
+                schedule.public_search_entries = " ".join(keys)
+    return {"entries": entries, "categories": categories}

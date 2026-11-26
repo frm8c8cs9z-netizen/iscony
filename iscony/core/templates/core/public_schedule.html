@@ -192,6 +192,16 @@
     </span>
 </div>
 <section id="public-schedule-mobile" hidden aria-label="スマホ進行表">
+    <div id="public-schedule-search">
+        <label for="public-schedule-query">名前・所属・番号で探す</label>
+        <input type="search" id="public-schedule-query" autocomplete="off" aria-controls="public-schedule-search-results">
+        <label for="public-schedule-category">カテゴリ</label>
+        <select id="public-schedule-category"><option value="">すべてのカテゴリ</option></select>
+    </div>
+    <section id="public-schedule-search-results" aria-label="検索結果" hidden>
+        <p id="public-schedule-search-count" role="status" aria-live="polite"></p>
+        <div id="public-schedule-search-list"></div>
+    </section>
     <div id="public-schedule-overview"><h2>全体の様子</h2><div id="public-schedule-blocks"></div></div>
     <section id="public-schedule-court" hidden aria-label="コートの縦一覧">
         <button type="button" id="public-schedule-back">全体へ戻る</button>
@@ -243,6 +253,7 @@
                             data-order="{{ row.order }}" data-court-id="{{ schedule.court_id }}"
                             data-result-entered="{{ schedule.public_result_entered|yesno:'true,false' }}"
                             data-progress="{{ schedule.public_progress }}"
+                            data-search-entries="{{ schedule.public_search_entries }}"
                             {% endif %}>
                             {% if schedule.is_ghost %}
                                 {% include "core/_schedule_ghost.html" %}
@@ -424,6 +435,7 @@
     <p>進行表はまだ登録されていません。</p>
 {% endfor %}
 </div>
+{{ public_search_script }}
 <script src="{% static 'core/js/public_schedule_mobile.js' %}" defer></script>
 
 <div class="public-schedule-nav bottom">
