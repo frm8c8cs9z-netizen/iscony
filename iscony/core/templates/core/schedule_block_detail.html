@@ -1998,34 +1998,29 @@
     }
 
     function setupScheduleStickyOffsets() {
-        const siteChrome = document.querySelector(".site-chrome");
         const stickyControls = document.querySelector(
             ".schedule-sticky-controls"
         );
 
-        if (!siteChrome || !stickyControls) {
+        if (!stickyControls) {
             return;
         }
 
         function updateOffset() {
-            const chromeHeight = siteChrome.offsetHeight;
-
-            document.documentElement.style.setProperty(
-                "--schedule-sticky-top",
-                chromeHeight + "px"
-            );
-
             const controlsHeight = stickyControls.offsetHeight;
 
             document.documentElement.style.setProperty(
                 "--schedule-table-head-top",
-                (chromeHeight + controlsHeight) + "px"
+                "calc(var(--schedule-sticky-top) + " + controlsHeight + "px)"
             );
         }
 
         updateOffset();
         window.addEventListener("load", updateOffset);
         window.addEventListener("resize", updateOffset);
+        if (window.ResizeObserver) {
+            new ResizeObserver(updateOffset).observe(stickyControls);
+        }
     }
 
     function setupTournamentBracketAssignDialog() {

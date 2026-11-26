@@ -34059,7 +34059,7 @@ class TournamentScheduleBehaviorTests(TestCase):
                 }""")
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 toolbar_box = page.locator("#scheduleModeToolbar").bounding_box()
-                chrome_box = page.locator(".site-chrome").bounding_box()
+                chrome_box = page.locator(".site-chrome-sticky").bounding_box()
                 self.assertGreaterEqual(toolbar_box["y"], chrome_box["y"] + chrome_box["height"] - 1)
                 self.assertLess(toolbar_box["y"], page.viewport_size["height"])
                 page.locator('[data-mode="pdf"]').click()
@@ -39781,3 +39781,4 @@ from .score_sheet_preprint_tests import ScoreSheetPreprintTests  # noqa: F401,E4
 from .schedule_move_tests import ScheduleMoveTests, ScheduleMoveScreenTests  # noqa: F401,E402
 
 from .public_schedule_mobile_tests import PublicScheduleProgressTests, PublicScheduleMobileTests  # noqa: E402,F401
+from .site_chrome_tests import SiteChromeTests  # noqa: E402,F401

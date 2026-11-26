@@ -1892,17 +1892,15 @@
         }
 
         function syncPoolPanelTopOffset() {
-            const chrome = document.querySelector(".site-chrome");
             const panel = document.querySelector(
                 ".pair-assignment-layout > div:last-child"
             );
-            if (!chrome || !panel) {
+            if (!panel) {
                 return;
             }
 
-            const offset = chrome.getBoundingClientRect().height + 16;
-            panel.style.top = offset + "px";
-            panel.style.maxHeight = "calc(100vh - " + (offset + 16) + "px)";
+            panel.style.top = "calc(var(--site-chrome-sticky-height) + 16px)";
+            panel.style.maxHeight = "calc(100vh - var(--site-chrome-sticky-height) - 32px)";
         }
 
         document.addEventListener("DOMContentLoaded", function() {

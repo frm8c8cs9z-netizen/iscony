@@ -2,7 +2,7 @@
 #public-schedule-controls, #public-schedule-mobile { display: none; }
 @media (max-width: 640px) {
     /* This stylesheet is loaded only by the public schedule page. */
-    .site-chrome, .public-schedule-nav:not(.bottom) { position: static; }
+    .site-chrome-sticky, .public-schedule-nav:not(.bottom) { position: static; }
     .site-brand img { height: 40px; width: auto; }
     #public-schedule-court-title, #public-schedule-overview { scroll-margin-top: 16px; }
     body.public-schedule-enhanced #public-schedule-controls:not([hidden]),

@@ -1170,20 +1170,15 @@
     }
 
     function setupScheduleStickyOffsets() {
-        const siteChrome = document.querySelector(".site-chrome");
         const stickyControls = document.querySelector(".schedule-sticky-controls");
-        if (!siteChrome || !stickyControls) {
+        if (!stickyControls) {
             return;
         }
 
         function updateOffset() {
-            const chromeHeight = siteChrome.offsetHeight;
-            document.documentElement.style.setProperty(
-                "--schedule-sticky-top", chromeHeight + "px"
-            );
             document.documentElement.style.setProperty(
                 "--schedule-table-head-top",
-                (chromeHeight + stickyControls.offsetHeight) + "px"
+                "calc(var(--schedule-sticky-top) + " + stickyControls.offsetHeight + "px)"
             );
             document.querySelectorAll(".schedule-operation-table-wrapper").forEach(
                 function(wrapper) {
@@ -1208,7 +1203,6 @@
         window.addEventListener("resize", updateOffset);
         if (window.ResizeObserver) {
             const observer = new ResizeObserver(updateOffset);
-            observer.observe(siteChrome);
             observer.observe(stickyControls);
         }
     }

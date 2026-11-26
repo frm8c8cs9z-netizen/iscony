@@ -335,11 +335,20 @@
         background: #f0f0f0;
     }
 
-    .site-chrome {
+    :root {
+        --site-chrome-sticky-height: 0px;
+        --schedule-sticky-top: var(--site-chrome-sticky-height);
+    }
+
+    .site-chrome-sticky {
         position: sticky;
         top: 0;
         z-index: 30;
         background: #fff;
+    }
+
+    /* Empty chrome (public pages and tournament list) has no height or line. */
+    .site-chrome-sticky:has(> *) {
         border-bottom: 1px solid #d8e0ea;
     }
 
@@ -1226,19 +1235,44 @@
         cursor: pointer;
     }
 
+    .pair-assignment-layout--tournament {
+        /* Leave 8px below navigation and the existing 20px body bottom margin. */
+        --assignment-panel-height: calc(100vh - var(--site-chrome-sticky-height, 0px) - 28px);
+    }
+
+    @supports (height: 100dvh) {
+        .pair-assignment-layout--tournament {
+            --assignment-panel-height: calc(100dvh - var(--site-chrome-sticky-height, 0px) - 28px);
+        }
+    }
+
+    .pair-assignment-layout--tournament > ul.tournament-assign-participants,
+    .pair-assignment-layout--tournament > div.tournament-assign-board {
+        position: sticky;
+        top: calc(var(--site-chrome-sticky-height, 0px) + 8px);
+        height: var(--assignment-panel-height);
+        max-height: var(--assignment-panel-height);
+        box-sizing: border-box;
+        margin: 0;
+    }
+
     .pair-assignment-layout--tournament > ul.tournament-assign-participants {
         flex: 0 0 260px;
         max-width: 260px;
-        position: sticky;
-        top: 16px;
-        max-height: calc(100vh - 32px);
         overflow-y: auto;
     }
 
     .pair-assignment-layout--tournament > div.tournament-assign-board {
         flex: 1 1 auto;
         min-width: 0;
-        position: static;
+    }
+
+    .pair-assignment-layout--tournament > .tournament-assign-board > .svg-bracket-wrap--with-slots {
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: none;
+        box-sizing: border-box;
+        margin: 0;
     }
 
     .svg-bracket-wrap--with-slots {
@@ -2229,10 +2263,21 @@
             overflow-y: visible;
         }
 
-        .pair-assignment-layout--tournament > ul.tournament-assign-participants {
+        .pair-assignment-layout--tournament > ul.tournament-assign-participants,
+        .pair-assignment-layout--tournament > div.tournament-assign-board {
             position: static;
+            height: auto;
             max-height: none;
+            flex: 0 1 auto;
+            width: 100%;
+        }
+
+        .pair-assignment-layout--tournament > ul.tournament-assign-participants {
             overflow-y: visible;
+        }
+
+        .pair-assignment-layout--tournament > .tournament-assign-board > .svg-bracket-wrap--with-slots {
+            max-height: var(--assignment-panel-height);
         }
 
         .tournament-bracket {
@@ -2306,6 +2351,9 @@
         </div>
     {% endif %}
 
+</div>
+
+<div class="site-chrome-sticky">
     {% admin_menu_code as shortcut_code %}
     {% admin_menu_public_token as public_token %}
     {% if shortcut_code %}
@@ -2357,6 +2405,23 @@
 
     {% block site_chrome_context %}{% endblock %}
 </div>
+
+<script>
+(function () {
+    const stickyChrome = document.querySelector(".site-chrome-sticky");
+    function updateStickyChromeHeight() {
+        document.documentElement.style.setProperty(
+            "--site-chrome-sticky-height", stickyChrome.offsetHeight + "px"
+        );
+    }
+    updateStickyChromeHeight();
+    window.addEventListener("resize", updateStickyChromeHeight);
+    window.addEventListener("load", updateStickyChromeHeight);
+    if (window.ResizeObserver) {
+        new ResizeObserver(updateStickyChromeHeight).observe(stickyChrome);
+    }
+})();
+</script>
 
 {% if messages %}
     <div class="messages">
