@@ -3,8 +3,9 @@
     max-width: 100%;
     margin: 10px 0;
     padding: 10px 12px;
-    border: 2px solid #8a6500;
-    background: #fff2a8;
+    border: 1px solid #ecd9a0;
+    border-radius: 4px;
+    background: #fffbea;
     overflow-wrap: anywhere;
     white-space: normal;
     break-inside: avoid;
@@ -14,7 +15,7 @@
 .hq-comment-dialog textarea { display: block; width: 100%; box-sizing: border-box; }
 .hq-comment-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 @media print {
-    .hq-comment { background: #fff; color: #000; border: 2px solid #000; font-weight: 700; }
+    .hq-comment { background: #fff; color: #000; border: 1px solid #000; font-weight: 700; }
     .hq-comment-body { color: #000; }
     .hq-comment-button, .hq-comment-dialog { display: none !important; }
 }
