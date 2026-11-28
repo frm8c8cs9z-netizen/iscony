@@ -1,5 +1,7 @@
 {% extends "core/base.html" %}
 
+{% block viewport_meta %}{% if public_mode %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endif %}{% endblock %}
+
 {% block title %}{{ tournament.name }}{% endblock %}
 
 {% block site_brand_url %}{% if public_mode %}{% url 'public_tournament_detail' tournament.public_token %}{% else %}{{ block.super }}{% endif %}{% endblock %}

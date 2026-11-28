@@ -281,8 +281,10 @@
                             <h4>同率順位決定補助表（{{ tie_table.wins }}勝）</h4>
                             {% include "core/_round_robin_table.html" with data=data pairs=tie_table.pairs rows=tie_table.rows row_template="core/_round_robin_tie_row.html" use_league_score_colors=use_league_score_colors table_kind="tie" %}
                         {% endfor %}
-                        {% include "core/_hq_comment.html" with comment=data.group.hq_comment %}
-                        {% include "core/_hq_comment_editor.html" with target=data.group target_type="group" %}
+                        <div class="hq-comment-area">
+                            {% include "core/_hq_comment.html" with comment=data.group.hq_comment %}
+                            {% include "core/_hq_comment_editor.html" with target=data.group target_type="group" %}
+                        </div>
                     </div>
                 {% empty %}
                     <p>リーグがありません。</p>

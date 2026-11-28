@@ -27224,45 +27224,56 @@ class ReceptionMatchSearchTests(TestCase):
         self.assertContains(response, "該当する試合が見つかりませんでした。")
 
     def test_reception_search_finds_match_by_match_key(self):
-        response = self.client.get(
-            reverse(
-                "reception_match_search",
-                kwargs={"code": self.tournament.code},
-            ),
-            {
-                "search_mode": "key",
-                "match_key": format_match_key_display(
-                    self.tournament_match.match_key
-                ),
-            },
-        )
+        from urllib.parse import parse_qs, urlsplit
+        overview = reverse("category_stage_overview", args=[self.category.pk])
+        for match, anchor in ((self.round_robin_match, f"group-{self.group.pk}"),
+                              (self.tournament_match, f"tournament-match-{self.tournament_match.pk}")):
+            with self.subTest(match=anchor):
+                response = self.client.get(
+                    reverse("reception_match_search", args=[self.tournament.code]),
+                    {"search_mode": "key", "match_key": format_match_key_display(match.match_key)},
+                )
+                self.assertEqual(response.status_code, 302)
+                input_url = response.url
+                next_url = parse_qs(urlsplit(input_url).query)["next"][0]
+                self.assertEqual(next_url, f"{overview}#{anchor}")
+                self.assertEqual(self.client.get(next_url).status_code, 200)
+                page = self.client.get(input_url)
+                self.assertContains(page, f'href="{next_url}"')
+                self.assertEqual(page.context["back_url"], next_url)
+                response = self.client.post(input_url, {
+                    "pair1_games": match.match_games // 2 + 1, "pair2_games": 0,
+                })
+                self.assertRedirects(response, next_url, fetch_redirect_response=False)
+                match.refresh_from_db()
+                self.assertEqual(match.pair1_games, match.match_games // 2 + 1)
 
-        self.assertRedirects(
-            response,
-            (
-                reverse(
-                    "input_tournament_match_score",
-                    kwargs={
-                        "code": self.tournament.code,
-                        "match_id": self.tournament_match.id,
-                    },
+    def test_schedule_selection_return_url_keeps_block_and_court_for_both_kinds(self):
+        from urllib.parse import parse_qs, urlsplit
+        Schedule.objects.create(schedule_block=self.block, court=self.court, order=4,
+                                round_robin_match=self.round_robin_match)
+        for order, match in ((3, self.tournament_match), (4, self.round_robin_match)):
+            with self.subTest(order=order):
+                response = self.client.get(
+                    reverse("result_input_select", args=[self.tournament.code]),
+                    {"schedule_block": self.block.pk, "court": self.court.pk, "order": order},
                 )
-                + "?"
-                + urlencode(
-                    {
-                        "next": (
-                            reverse(
-                                "reception_match_search",
-                                kwargs={"code": self.tournament.code},
-                            )
-                            + "?search_mode=key&match_key="
-                            + format_match_key_display(self.tournament_match.match_key)
-                        )
-                    }
-                )
-            ),
-            fetch_redirect_response=False,
-        )
+                self.assertEqual(response.status_code, 302)
+                input_url = response.url
+                next_url = parse_qs(urlsplit(input_url).query)["next"][0]
+                self.assertEqual(parse_qs(urlsplit(next_url).query), {
+                    "schedule_block": [str(self.block.pk)], "court": [str(self.court.pk)],
+                })
+                self.assertEqual(self.client.get(next_url).status_code, 200)
+                page = self.client.get(input_url)
+                self.assertEqual(page.context["back_url"], next_url)
+                self.assertContains(page, f'href="{next_url.replace("&", "&amp;")}"')
+                response = self.client.post(input_url, {
+                    "pair1_games": match.match_games // 2 + 1, "pair2_games": 0,
+                })
+                self.assertRedirects(response, next_url, fetch_redirect_response=False)
+                match.refresh_from_db()
+                self.assertEqual(match.pair1_games, match.match_games // 2 + 1)
 
     def test_reception_search_result_links_keep_search_as_return_destination(self):
         search_url = reverse(
@@ -28486,7 +28497,7 @@ class ResultInputSelectTests(TestCase):
                                 "result_input_select",
                                 kwargs={"code": self.tournament.code},
                             )
-                            + f"?court={self.court.id}&order=3"
+                            + f"?schedule_block={self.block.id}&court={self.court.id}"
                         )
                     }
                 )
@@ -39802,6 +39813,34 @@ class HqCommentTests(TestCase):
         self.bracket.refresh_from_db()
         self.assertEqual(self.group.hq_comment, group)
         self.assertEqual(self.bracket.hq_comment, bracket)
+
+    def test_public_viewport_is_limited_to_public_pages(self):
+        viewport = '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        for name, args in (
+            ("public_category_results_token", [self.tournament.public_token, self.category.public_token]),
+            ("public_tournament_detail", [self.tournament.public_token]),
+        ):
+            with self.subTest(page=name):
+                self.assertContains(self.client.get(reverse(name, args=args)), viewport, count=1)
+        self.assertNotContains(self.client.get(reverse("tournament_detail", args=[self.tournament.code])), viewport)
+
+    def test_league_comment_and_editor_share_a_block_after_tie_table(self):
+        from .services.operations import update_group_ranking
+        self.match.pair1_games = 3
+        self.match.pair2_games = 0
+        self.match.save()
+        self.extra.pair1_games = 0
+        self.extra.pair2_games = 3
+        self.extra.counts_for_ranking = True
+        self.extra.save()
+        update_group_ranking(self.group, reset_rank=True)
+        self.set_comments()
+        html = self.client.get(self.overview).content.decode()
+        self.assertIn("同率順位決定補助表（", html)
+        area = html.split('<div class="hq-comment-area">', 1)[1]
+        self.assertIn('class="hq-comment"', area)
+        self.assertIn('class="button-link hq-comment-button"', area)
+        self.assertLess(html.index("同率順位決定補助表（"), html.index('<div class="hq-comment-area">'))
 
     def test_save_rewrite_clear_and_anchor_for_both_targets(self):
         for kind, target in (("group", self.group), ("bracket", self.bracket)):

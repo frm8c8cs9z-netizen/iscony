@@ -1,3 +1,6 @@
+.hq-comment-area {
+    display: block;
+}
 .hq-comment {
     box-sizing: border-box;
     max-width: 100%;

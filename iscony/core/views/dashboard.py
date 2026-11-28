@@ -6,6 +6,7 @@ core.views.dashboard
 """
 
 import json
+from urllib.parse import urlencode
 from collections import defaultdict
 
 from ..services.draw_confirmation import stage_draw_confirmed, DRAW_CONFIRMED_REASON
@@ -1038,7 +1039,12 @@ def result_input_select(request, code):
             return redirect(
                 url_with_next(
                     results[0]["input_url"],
-                    request.get_full_path(),
+                    reverse("result_input_select", kwargs={"code": code})
+                    + "?"
+                    + urlencode({
+                        "schedule_block": selected_block.id,
+                        "court": selected_court.id,
+                    }),
                 )
             )
 
@@ -1444,7 +1450,7 @@ def reception_match_search(request, code):
                 return redirect(
                     url_with_next(
                         results[0]["input_url"],
-                        request.get_full_path(),
+                        results[0]["detail_url"],
                     )
                 )
 

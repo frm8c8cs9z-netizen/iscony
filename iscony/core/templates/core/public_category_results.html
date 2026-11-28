@@ -1,6 +1,8 @@
 {% extends "core/base.html" %}
 {% load static %}
 
+{% block viewport_meta %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endblock %}
+
 {% block title %}{{ category.name }} 結果{% endblock %}
 
 {% block site_brand_url %}{% url 'public_tournament_detail' tournament.public_token %}{% endblock %}
@@ -49,7 +51,7 @@
 
     .public-result-toolbar {
         position: sticky;
-        top: 116px;
+        top: var(--site-chrome-sticky-height, 0px);
         z-index: 10;
         display: flex;
         flex-wrap: wrap;
@@ -137,10 +139,6 @@
     }
 
     @media (max-width: 640px) {
-        .public-result-toolbar {
-            top: 102px;
-        }
-
         .public-result-nav a {
             flex: 1 1 100%;
         }
@@ -259,7 +257,9 @@
                             {% include "core/_round_robin_table.html" with data=data pairs=data.pairs rows=data.table_rows row_template="core/_round_robin_main_row.html" row_score_link_kind="public" public_schedule_url=public_schedule_url use_league_score_colors=use_league_score_colors score_blank_html="&nbsp;" table_kind="main" %}
                         </div>
 
-                        {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches title="追加試合" link_kind="plain" table_border=False %}
+                        <div class="table-wrapper">
+                            {% include "core/_round_robin_extra_matches.html" with extra_matches=data.extra_matches title="追加試合" link_kind="plain" table_border=False %}
+                        </div>
                         {% include "core/_hq_comment.html" with comment=data.group.hq_comment %}
                     </div>
                 {% empty %}
