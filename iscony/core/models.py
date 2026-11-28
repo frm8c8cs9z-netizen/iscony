@@ -3168,11 +3168,13 @@ class TournamentBackup(models.Model):
     KIND_MANUAL = "manual"
     KIND_AUTO_BEFORE_DELETE = "auto_before_delete"
     KIND_AUTO_BEFORE_RESTORE = "auto_before_restore"
+    KIND_AUTO_BEFORE_DAY_ADDITION = "auto_before_day_addition"
 
     KIND_CHOICES = [
         (KIND_MANUAL, "手動"),
         (KIND_AUTO_BEFORE_DELETE, "削除前自動"),
         (KIND_AUTO_BEFORE_RESTORE, "復元前自動"),
+        (KIND_AUTO_BEFORE_DAY_ADDITION, "当日追加前自動"),
     ]
 
     tournament = models.ForeignKey(

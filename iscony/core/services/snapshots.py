@@ -57,6 +57,42 @@ SNAPSHOT_STRUCTURE_DELETED_MESSAGE = (
 )
 
 
+SNAPSHOT_DAY_ADDITION_MESSAGE = (
+    "このスナップショットを取った後に、当日追加でペアが増えています(またはグループを移動しています)。"
+    "スナップショットでは戻せません。大会バックアップから戻してください"
+    "(当日追加の直前に自動で取ったバックアップがあります)。"
+    "バックアップから戻すと、その後に入力した結果も戻るため、入れ直しが必要です。"
+)
+
+
+def _validate_category_day_addition(category, payload):
+    """スナップショットでは戻せない枠の追加・移動を、変更前に検出する。"""
+    entries = dict(LeagueEntry.objects.filter(category=category).values_list("id", "group_id"))
+    for current_ids, key in (
+        (set(entries), "league_entries"),
+        (set(TournamentEntry.objects.filter(bracket__category=category).values_list("id", flat=True)), "tournament_entries"),
+        (set(TournamentMatch.objects.filter(bracket__category=category).values_list("id", flat=True)), "tournament_matches"),
+    ):
+        if current_ids - {item["id"] for item in payload.get(key, [])}:
+            raise ValidationError(f"{category.name}: {SNAPSHOT_DAY_ADDITION_MESSAGE}")
+
+    # 古い保存形式は、試合から一意に推定できる枠だけ比較する。
+    inferred_groups = {}
+    for match in payload.get("round_robin_matches", []):
+        for key in ("pair1_id", "pair2_id"):
+            inferred_groups.setdefault(match[key], set()).add(match["group_id"])
+    for item in payload.get("league_entries", []):
+        if "group_id" in item:
+            group_id = item["group_id"]
+        else:
+            groups = inferred_groups.get(item["id"], set())
+            if len(groups) != 1:
+                continue
+            group_id = next(iter(groups))
+        if item["id"] in entries and entries[item["id"]] != group_id:
+            raise ValidationError(f"{category.name}: {SNAPSHOT_DAY_ADDITION_MESSAGE}")
+
+
 def _category_schedule_queryset(category):
     """カテゴリに属する試合の進行表だけを取得する。"""
 
@@ -108,6 +144,7 @@ def build_category_snapshot_payload(category):
     ).order_by("id"):
         league_entries.append({
             "id": entry.id,
+            "group_id": entry.group_id,
             "participant_id": entry.participant_id,
             "display_order": entry.display_order,
             "retired": entry.retired,
@@ -671,6 +708,7 @@ def restore_category_from_tournament_snapshot(snapshot, category):
 
     try:
         with transaction.atomic():
+            _validate_category_day_addition(category, payload)
             result = _restore_category_payload(category, payload)
             connection.check_constraints()
     except IntegrityError as error:
@@ -728,6 +766,8 @@ def restore_tournament_snapshot(snapshot):
 
     try:
         with transaction.atomic():
+            for category_payload in category_payloads:
+                _validate_category_day_addition(categories[category_payload["category_id"]], category_payload)
             Tournament.objects.filter(pk=snapshot.tournament_id).update(
                 score_sheet_print_match_code=payload.get("score_sheet_print_match_code", True),
             )
@@ -794,6 +834,7 @@ def restore_category_schedule_block_from_tournament_snapshot(
         if item["schedule_block_id"] == schedule_block.id
     ]
 
+    _validate_category_day_addition(category, payload)
     _validate_schedule_restore_conflicts(category, schedule_items)
 
     try:

@@ -9,6 +9,8 @@ from ..models import (AdvancementSource, Category, LeagueEntry, Participant, Sta
                       Schedule, TournamentEntry, TournamentMatch)
 from .operations import advance_tournament_bye_winners, stage_has_results
 from .participants import save_participant_organization_values
+from .backups import create_tournament_backup
+from ..models import TournamentBackup
 
 
 def unavailable_reason(stage):
@@ -169,6 +171,11 @@ def add(bracket, target_entry, participant_form, expected):
         raise ValidationError("試合が作られていません。")
     if participant_form.instance.pk or not participant_form.is_valid():
         raise ValidationError("名簿の入力内容を確認してください。")
+    create_tournament_backup(
+        stage.category.tournament,
+        label=f"当日追加前自動: {stage.category.name} / {stage.name}"[:TournamentBackup._meta.get_field("label").max_length],
+        kind=TournamentBackup.KIND_AUTO_BEFORE_DAY_ADDITION,
+    )
     participant = participant_form.save(commit=False)
     participant.category_id = stage.category_id
     participant.entry_code = row["code"]

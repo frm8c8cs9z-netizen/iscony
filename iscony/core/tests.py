@@ -40067,3 +40067,232 @@ class HqCommentTests(TestCase):
         for target in (self.group, self.bracket):
             target.refresh_from_db()
             self.assertEqual(target.hq_comment, "ブラウザ連絡\n抽選で決定")
+
+
+class DayAdditionSnapshotSafetyMixin:
+    def operation_snapshot(self):
+        return create_tournament_snapshot(self.tournament, label="追加前")
+
+    def database_state(self):
+        from django.apps import apps
+        # 復元が止まった際は、バックアップや履歴を含む全coreモデルを比較する。
+        return {model._meta.label: list(model._base_manager.order_by("pk").values())
+                for model in apps.get_app_config("core").get_models()}
+
+    def restores(self, snapshot):
+        from .services.snapshots import restore_tournament_snapshot
+        return (
+            lambda: restore_tournament_snapshot(snapshot),
+            lambda: restore_category_from_tournament_snapshot(snapshot, self.category),
+            lambda: restore_category_schedule_block_from_tournament_snapshot(snapshot, self.category, self.block),
+        )
+
+    def assert_restores_blocked(self, snapshot):
+        from .services.snapshots import SNAPSHOT_DAY_ADDITION_MESSAGE
+        before = self.database_state()
+        for index, restore in enumerate(self.restores(snapshot)):
+            with self.subTest(scope=index):
+                with self.assertRaisesMessage(ValidationError, SNAPSHOT_DAY_ADDITION_MESSAGE):
+                    restore()
+                self.assertEqual(self.database_state(), before)
+
+    def assert_backup_before(self, before, count=1):
+        from .models import TournamentBackup
+        backups = TournamentBackup.objects.filter(kind=TournamentBackup.KIND_AUTO_BEFORE_DAY_ADDITION)
+        self.assertEqual(backups.count(), count)
+        backup = backups.latest("pk")
+        self.assertEqual(backup.payload, before.payload)
+        self.assertEqual(backup.label, f"当日追加前自動: {self.category.name} / {self.stage.name}")
+        self.assertEqual(backup.get_kind_display(), "当日追加前自動")
+        page = self.client.get(reverse("tournament_backup_list", args=[self.tournament.code]))
+        self.assertContains(page, "当日追加前自動")
+
+    def backup_reference(self):
+        from .services.backups import create_tournament_backup
+        return create_tournament_backup(self.tournament, label="比較用")
+
+
+class LeagueDayAdditionSnapshotSafetyTests(DayAdditionSnapshotSafetyMixin, TestCase):
+    # 既存の当日追加テストのデータ・画面操作を再利用する。
+    setUp = DayAdditionTests.setUp
+    url = DayAdditionTests.url
+    data = DayAdditionTests.data
+    confirm = DayAdditionTests.confirm
+    add = DayAdditionTests.add
+
+    def test_add_blocks_all_restores_without_changes_and_creates_backup(self):
+        snapshot = self.operation_snapshot()
+        before = self.backup_reference()
+        self.add()
+        GroupRanking.objects.create(group=self.groups[0], pair=self.groups[0].leagueentry_set.first(), rank=1)
+        self.assert_restores_blocked(snapshot)
+        self.assert_backup_before(before)
+
+    def test_move_blocks_all_restores_without_changes_and_creates_backup(self):
+        from .services import day_addition
+        entries, _ = self.add()
+        snapshot = self.operation_snapshot()
+        self.assertTrue(all("group_id" in row for row in snapshot.snapshot_json["categories"][0]["league_entries"]))
+        before = self.backup_reference()
+        day_addition.move(self.stage, entries[0].pk, self.groups[2].pk)
+        self.assert_restores_blocked(snapshot)
+        self.assert_backup_before(before, count=2)
+
+    def test_legacy_snapshot_infers_group_from_matches(self):
+        from .services import day_addition
+        entries, _ = self.add()
+        snapshot = self.operation_snapshot()
+        for row in snapshot.snapshot_json["categories"][0]["league_entries"]:
+            del row["group_id"]
+        day_addition.move(self.stage, entries[0].pk, self.groups[2].pk)
+        self.assert_restores_blocked(snapshot)
+
+    def test_legacy_snapshot_skips_unknown_and_ambiguous_groups(self):
+        from .services import day_addition
+        entries, _ = self.add()
+        entry = entries[0]
+        snapshot = self.operation_snapshot()
+        payload = snapshot.snapshot_json["categories"][0]
+        for row in payload["league_entries"]:
+            del row["group_id"]
+        payload["round_robin_matches"] = [m for m in payload["round_robin_matches"]
+                                          if entry.pk not in (m["pair1_id"], m["pair2_id"])]
+        day_addition.move(self.stage, entry.pk, self.groups[2].pk)
+        from .services.snapshots import _validate_category_day_addition
+        _validate_category_day_addition(self.category, payload)
+        payload["round_robin_matches"].extend([
+            {"pair1_id": entry.pk, "pair2_id": None, "group_id": group.pk}
+            for group in self.groups[:2]
+        ])
+        _validate_category_day_addition(self.category, payload)
+        payload["round_robin_matches"] = payload["round_robin_matches"][:-2]
+        for restore in self.restores(snapshot):
+            restore()
+
+    def test_cancel_allows_all_restores_and_does_not_create_backup(self):
+        from .models import TournamentBackup
+        from .services import day_addition
+        snapshot = self.operation_snapshot()
+        entries, _ = self.add()
+        day_addition.cancel(self.stage, entries[0].pk)
+        for restore in self.restores(snapshot):
+            restore()
+        self.assertEqual(TournamentBackup.objects.count(), 1)
+
+    def test_failed_add_and_move_leave_no_backup(self):
+        from .models import TournamentBackup
+        from .services import day_addition
+        from unittest.mock import patch
+        invalid = self.data()
+        invalid["rows-0-player1_name"] = ""
+        self.assertEqual(self.client.post(self.url(), invalid).status_code, 400)
+        self.assertEqual(TournamentBackup.objects.count(), 0)
+        data = self.confirm()
+        before = self.database_state()
+        with patch("core.services.day_addition.save_participant_organization_values", side_effect=ValidationError("入力エラー")):
+            self.client.post(self.url(), data)
+        self.assertEqual(self.database_state(), before)
+        entries, _ = self.add()
+        before = self.database_state()
+        with self.assertRaises(ValidationError):
+            day_addition.move(self.stage, entries[0].pk, entries[0].group_id)
+        self.assertEqual(self.database_state(), before)
+        with patch("core.services.day_addition.RoundRobinMatch.objects.create", side_effect=ValidationError("作成失敗")):
+            with self.assertRaises(ValidationError):
+                day_addition.move(self.stage, entries[0].pk, self.groups[2].pk)
+        self.assertEqual(self.database_state(), before)
+
+    def test_each_restore_view_displays_message(self):
+        from .services.snapshots import SNAPSHOT_DAY_ADDITION_MESSAGE
+        snapshot = self.operation_snapshot()
+        self.add()
+        before = self.database_state()
+        for name in ("restore_tournament_snapshot", "restore_tournament_snapshot_category", "restore_tournament_snapshot_category_block"):
+            with self.subTest(view=name):
+                response = self.client.post(reverse(name, args=[snapshot.pk]),
+                                            {"category_id": self.category.pk, "schedule_block_id": self.block.pk}, follow=True)
+                self.assertContains(response, SNAPSHOT_DAY_ADDITION_MESSAGE)
+                self.assertEqual(self.database_state(), before)
+
+    def test_other_category_addition_does_not_block_selected_category(self):
+        from .services.snapshots import restore_tournament_snapshot
+        other = Category.objects.create(tournament=self.tournament, name="別カテゴリ")
+        stage = Stage.objects.create(category=other, name="別予選", stage_type=Stage.TYPE_LEAGUE)
+        group = Group.objects.create(category=other, stage=stage, name="A")
+        snapshot = self.operation_snapshot()
+        LeagueEntry.objects.create(category=other, group=group, pair_code="other")
+        before = self.database_state()
+        with self.assertRaises(ValidationError):
+            restore_tournament_snapshot(snapshot)
+        self.assertEqual(self.database_state(), before)
+        for restore in self.restores(snapshot)[1:]:
+            restore()
+
+    def test_pre_day_addition_kind_schema_backup_remains_restorable(self):
+        from .services.backups import restore_tournament_backup
+        backup = self.backup_reference()
+        backup.schema_version = "0067_group_hq_comment_tournamentbracket_hq_comment"
+        backup.save(update_fields=["schema_version"])
+        self.add()
+        restore_tournament_backup(backup)
+        self.assertFalse(LeagueEntry.objects.filter(added_on_day=True).exists())
+        self.assertEqual(LeagueEntry.objects.count(), 9)
+
+    def test_backup_label_fits_field_limit(self):
+        from .models import TournamentBackup
+        self.category.name = "カ" * 50
+        self.category.save(update_fields=["name"])
+        self.stage.name = "ス" * 100
+        self.stage.save(update_fields=["name"])
+        self.add()
+        backup = TournamentBackup.objects.get()
+        self.assertEqual(backup.label, f"当日追加前自動: {self.category.name} / {self.stage.name}"[:200])
+        self.assertLessEqual(len(backup.label), TournamentBackup._meta.get_field("label").max_length)
+
+
+class TournamentDayAdditionSnapshotSafetyTests(DayAdditionSnapshotSafetyMixin, TestCase):
+    bracket = TournamentDayAdditionTests.bracket
+    form = TournamentDayAdditionTests.form
+    add = TournamentDayAdditionTests.add
+
+    def setUp(self):
+        TournamentDayAdditionTests.setUp(self)
+        self.block = ScheduleBlock.objects.create(tournament=self.tournament, name="午前")
+
+    def test_add_blocks_restores_for_bye_and_round_expansion(self):
+        from .models import TournamentBackup
+        from .services import tournament_day_addition
+        for count in (5, 8):
+            with self.subTest(count=count):
+                bracket = self.bracket(count)
+                snapshot = self.operation_snapshot()
+                before = self.backup_reference()
+                new, _ = self.add(bracket)
+                self.assert_restores_blocked(snapshot)
+                self.assert_backup_before(before)
+                tournament_day_addition.cancel(bracket, new.pk)
+                for restore in self.restores(snapshot):
+                    restore()
+                self.assertEqual(TournamentBackup.objects.filter(kind=TournamentBackup.KIND_AUTO_BEFORE_DAY_ADDITION).count(), 1)
+                bracket.delete()
+                TournamentBackup.objects.all().delete()
+
+    def test_extra_match_alone_blocks_all_restores(self):
+        bracket = self.bracket(5)
+        snapshot = self.operation_snapshot()
+        TournamentMatch.objects.create(bracket=bracket, round_number=9, match_number=1, match_code="追加")
+        self.assert_restores_blocked(snapshot)
+
+    def test_failed_add_leaves_no_backup(self):
+        from .services import tournament_day_addition
+        from unittest.mock import patch
+        bracket = self.bracket(5)
+        before = self.database_state()
+        expected = tournament_day_addition.preview(bracket, None)
+        with self.assertRaises(ValidationError):
+            tournament_day_addition.add(bracket, None, self.form(), {})
+        self.assertEqual(self.database_state(), before)
+        with patch("core.services.tournament_day_addition.save_participant_organization_values", side_effect=ValidationError("入力エラー")):
+            with self.assertRaises(ValidationError):
+                tournament_day_addition.add(bracket, None, self.form(), expected)
+        self.assertEqual(self.database_state(), before)

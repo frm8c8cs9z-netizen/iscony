@@ -254,6 +254,7 @@ def _compatible_schema_version(saved, current):
         "0065_tournament_score_sheet_print_match_code",
         "0066_schedule_ghost_and_move_history",
         "0067_group_hq_comment_tournamentbracket_hq_comment",
+        "0068_tournamentbackup_auto_before_day_addition",
     ]
     return saved == current or (
         saved in compatible and current in compatible

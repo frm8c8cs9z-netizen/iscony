@@ -7,6 +7,8 @@ from django.utils import timezone
 from ..models import AdvancementSource, Schedule, Category, Group, LeagueEntry, Participant, RoundRobinMatch, Stage, TournamentEntry
 from .operations import stage_has_results
 from .participants import save_participant_organization_values
+from .backups import create_tournament_backup
+from ..models import TournamentBackup
 
 
 def unavailable_reason(stage):
@@ -90,6 +92,11 @@ def add(stage, forms, expected):
     order = Participant.objects.filter(category=stage.category).aggregate(value=Max("display_order"))["value"]
     order = order if order is not None else 0
     games = RoundRobinMatch.objects.filter(group__stage=stage).order_by("pk").values_list("match_games", flat=True).first() or 7
+    create_tournament_backup(
+        stage.category.tournament,
+        label=f"当日追加前自動: {stage.category.name} / {stage.name}"[:TournamentBackup._meta.get_field("label").max_length],
+        kind=TournamentBackup.KIND_AUTO_BEFORE_DAY_ADDITION,
+    )
     entries = []
     for row in rows:
         group = stage.group_set.get(pk=row["group"].pk)
@@ -160,6 +167,11 @@ def move(stage, entry_id, group_id):
         source_count = source.leagueentry_set.count()
     others = list(destination.leagueentry_set.order_by("display_order", "pk"))
     games = RoundRobinMatch.objects.filter(group__stage=stage).order_by("pk").values_list("match_games", flat=True).first() or 7
+    create_tournament_backup(
+        stage.category.tournament,
+        label=f"当日追加前自動: {stage.category.name} / {stage.name}"[:TournamentBackup._meta.get_field("label").max_length],
+        kind=TournamentBackup.KIND_AUTO_BEFORE_DAY_ADDITION,
+    )
     # Entry自体は残し、取り消しと同じCASCADEで対象試合の日程も消す。
     RoundRobinMatch.objects.filter(Q(pair1=entry) | Q(pair2=entry)).delete()
     entry.group = destination
